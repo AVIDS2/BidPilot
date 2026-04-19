@@ -1,0 +1,9 @@
+{
+  "name": "docpilot",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  }
+}

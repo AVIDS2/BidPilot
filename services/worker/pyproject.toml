@@ -1,0 +1,12 @@
+[project]
+name = "docpilot-worker"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "celery[redis]>=5.5.0"
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3.5"
+]
