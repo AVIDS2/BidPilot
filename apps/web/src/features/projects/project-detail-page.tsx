@@ -1118,17 +1118,17 @@ export function ProjectDetailPage() {
                     </EmptyHeader>
                   </Empty>
                 )}
-                {reviewThreads?.map((t) => (
+                {reviewThreads?.map((thread) => (
                   <button
-                    key={t.id}
+                    key={thread.id}
                     className={cn(
                       "flex items-center justify-between rounded-md border p-3 text-left text-sm hover:bg-accent transition-colors",
-                      selectedThreadId === t.id && "border-primary bg-accent"
+                      selectedThreadId === thread.id && "border-primary bg-accent"
                     )}
-                    onClick={() => setSelectedThreadId(t.id)}
+                    onClick={() => setSelectedThreadId(thread.id)}
                   >
-                    <span className="font-medium">{t("review.thread", { id: t.id.slice(0, 8) })}</span>
-                    <Badge variant={t.status === "resolved" ? "default" : "secondary"}>{t.status}</Badge>
+                    <span className="font-medium">{t("review.thread", { id: thread.id.slice(0, 8) })}</span>
+                    <Badge variant={thread.status === "resolved" ? "default" : "secondary"}>{thread.status}</Badge>
                   </button>
                 ))}
 
