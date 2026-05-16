@@ -11,7 +11,7 @@ import { listProjects, createProject, updateProjectStatus, deleteProject, type P
 import { useAuth } from "@/lib/auth";
 import { ScenarioSelector } from "@/features/scenarios/scenario-selector";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
 import {
   Table,
   TableBody,
@@ -362,6 +362,9 @@ export function ProjectListPage() {
       {filtered.length === 0 && (
         <Empty>
           <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <SearchIcon />
+            </EmptyMedia>
             <EmptyTitle>{search ? "No matching projects" : "No projects yet"}</EmptyTitle>
             <EmptyDescription>{search ? "Try a different search term." : "Create a project to get started."}</EmptyDescription>
           </EmptyHeader>

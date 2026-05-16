@@ -93,7 +93,7 @@ import {
   type SearchResult,
   type KnowledgeChunkRead,
 } from "@/lib/api";
-import { ActivityIcon, AlertTriangleIcon, ClipboardCheckIcon, DownloadIcon, FileIcon, MessageCircleIcon, MoreHorizontalIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
+import { ActivityIcon, AlertTriangleIcon, ClipboardCheckIcon, DownloadIcon, FileIcon, LayersIcon, MessageCircleIcon, MoreHorizontalIcon, PackageIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
 import { useState } from "react";
 
 export function ProjectDetailPage() {
@@ -529,7 +529,7 @@ export function ProjectDetailPage() {
                   Register Bundle
                 </Button>
               </FieldGroup>
-              {bundles?.length === 0 && <Empty><EmptyHeader><EmptyTitle>No bundles yet</EmptyTitle><EmptyDescription>Create a bundle to start uploading documents.</EmptyDescription></EmptyHeader></Empty>}
+              {bundles?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><PackageIcon /></EmptyMedia><EmptyTitle>No bundles yet</EmptyTitle><EmptyDescription>Create a bundle to start uploading documents.</EmptyDescription></EmptyHeader></Empty>}
               <Accordion multiple onValueChange={(v) => setSelectedBundleId(v[v.length - 1] ?? null)}>
                 {bundles?.map((b) => (
                   <AccordionItem key={b.id} value={b.id}>
@@ -630,6 +630,7 @@ export function ProjectDetailPage() {
                   Add Deliverable
                 </Button>
               </FieldGroup>
+              {deliverables?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><LayersIcon /></EmptyMedia><EmptyTitle>No deliverables yet</EmptyTitle><EmptyDescription>Create a deliverable to organize proposal sections.</EmptyDescription></EmptyHeader></Empty>}
               <Accordion multiple onValueChange={(v) => setSelectedDeliverableId(v[v.length - 1] ?? null)}>
                 {deliverables?.map((d) => (
                   <AccordionItem key={d.id} value={d.id}>
@@ -708,7 +709,7 @@ export function ProjectDetailPage() {
                   Add
                 </Button>
               </FieldGroup>
-              {requirements?.length === 0 && <Empty><EmptyHeader><EmptyTitle>No requirements</EmptyTitle><EmptyDescription>Extract or add requirements from your documents.</EmptyDescription></EmptyHeader></Empty>}
+              {requirements?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><ClipboardCheckIcon /></EmptyMedia><EmptyTitle>No requirements</EmptyTitle><EmptyDescription>Extract or add requirements from your documents.</EmptyDescription></EmptyHeader></Empty>}
               <div className="flex flex-col gap-2">
                 {requirements?.map((r) => (
                   <div key={r.id} className="border rounded-md p-3 flex flex-col gap-1">
@@ -935,7 +936,7 @@ export function ProjectDetailPage() {
               <CardTitle className="text-lg">Evidence</CardTitle>
             </CardHeader>
             <CardContent>
-              {evidence?.length === 0 && knowledgeChunks?.length === 0 && <Empty><EmptyHeader><EmptyTitle>No evidence</EmptyTitle><EmptyDescription>Ingest documents to generate evidence.</EmptyDescription></EmptyHeader></Empty>}
+              {evidence?.length === 0 && knowledgeChunks?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><FileIcon /></EmptyMedia><EmptyTitle>No evidence</EmptyTitle><EmptyDescription>Ingest documents to generate evidence.</EmptyDescription></EmptyHeader></Empty>}
               {evidence && evidence.length > 0 && (
                 <div className="flex flex-col gap-3 mb-6">
                   <h3 className="text-sm font-semibold">Citation Evidence</h3>
@@ -1029,7 +1030,7 @@ export function ProjectDetailPage() {
               <CardTitle className="text-lg">Execution Runs</CardTitle>
             </CardHeader>
             <CardContent>
-              {runs?.length === 0 && <Empty><EmptyHeader><EmptyTitle>No runs yet</EmptyTitle><EmptyDescription>Draft a section to see execution runs.</EmptyDescription></EmptyHeader></Empty>}
+              {runs?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><ActivityIcon /></EmptyMedia><EmptyTitle>No runs yet</EmptyTitle><EmptyDescription>Draft a section to see execution runs.</EmptyDescription></EmptyHeader></Empty>}
               <Table>
                 <TableHeader>
                   <TableRow>

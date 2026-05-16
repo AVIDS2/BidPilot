@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
 import {
   Table,
   TableBody,
@@ -110,7 +111,15 @@ export function UserManagementPage() {
         </CardHeader>
         <CardContent>
           {!users?.length ? (
-            <p className="text-muted-foreground text-center py-8">No users found.</p>
+            <Empty className="min-h-32">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <UsersIcon />
+                </EmptyMedia>
+                <EmptyTitle>No users found</EmptyTitle>
+                <EmptyDescription>Users will appear here once they sign up.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <Table>
               <TableHeader>
