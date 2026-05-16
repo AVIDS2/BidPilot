@@ -1,0 +1,63 @@
+{
+  "back": {
+    "projects": "项目",
+    "home": "首页"
+  },
+  "title": "定价方案",
+  "description": "选择适合您方案工作流的计划。",
+  "tiers": {
+    "starter": {
+      "name": "入门版",
+      "price": "免费",
+      "description": "体验单次招标响应。",
+      "features": [
+        "最多 3 个项目",
+        "1 个场景包（BidPilot）",
+        "社区支持",
+        "基础审计追踪"
+      ],
+      "cta": "开始使用"
+    },
+    "professional": {
+      "name": "专业版",
+      "price": "¥699",
+      "period": "/月",
+      "description": "适合经常响应招标的团队。",
+      "features": [
+        "无限项目",
+        "全部场景包",
+        "优先支持",
+        "完整审计与合规追踪",
+        "DOCX 和 PDF 导出",
+        "团队协作"
+      ],
+      "cta": "开始试用"
+    },
+    "enterprise": {
+      "name": "企业版",
+      "price": "定制",
+      "description": "适合需要高度可控和可扩展的组织。",
+      "features": [
+        "定制化部署",
+        "SSO 和 SCIM 配置",
+        "专属支持和 SLA",
+        "数据驻留选项",
+        "定制场景包",
+        "API 访问和集成",
+        "备份和恢复 SLA"
+      ],
+      "cta": "联系销售"
+    }
+  },
+  "badges": {
+    "recommended": "推荐",
+    "currentPlan": "当前方案"
+  },
+  "button": {
+    "currentPlan": "当前方案"
+  },
+  "toast": {
+    "notAvailable": "在线支付暂不可用。请联系管理员升级。",
+    "checkoutFailed": "无法启动支付。请重试。"
+  }
+}

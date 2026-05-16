@@ -22,17 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-
-const PLAN_LABELS: Record<string, string> = {
-  starter: "Starter (Free)",
-  professional: "Professional",
-  enterprise: "Enterprise",
-};
+import { useTranslation } from "react-i18next"
 
 const sidebarNavItems = [
-  { title: "Profile", href: "profile", icon: UserIcon },
-  { title: "Security", href: "security", icon: KeyIcon },
-  { title: "Notifications", href: "notifications", icon: BellIcon },
+  { titleKey: "nav.profile" as const, href: "profile", icon: UserIcon },
+  { titleKey: "nav.security" as const, href: "security", icon: KeyIcon },
+  { titleKey: "nav.notifications" as const, href: "notifications", icon: BellIcon },
 ]
 
 function AccountPageSkeleton() {
@@ -76,6 +71,32 @@ function AccountPageSkeleton() {
   );
 }
 
+function getPlanLabel(plan: string | undefined, t: (key: string) => string): string {
+  switch (plan) {
+    case "starter":
+      return t("plan.starterFree");
+    case "professional":
+      return t("plan.professional");
+    case "enterprise":
+      return t("plan.enterprise");
+    default:
+      return t("plan.starterFree");
+  }
+}
+
+function getPlanSelectLabel(plan: string, t: (key: string) => string): string {
+  switch (plan) {
+    case "starter":
+      return t("plan.starter");
+    case "professional":
+      return t("plan.professional");
+    case "enterprise":
+      return t("plan.enterprise");
+    default:
+      return plan;
+  }
+}
+
 export function AccountPage() {
   const { user, logout, setUser } = useAuth()
   const navigate = useNavigate()
@@ -83,21 +104,22 @@ export function AccountPage() {
   const [displayName, setDisplayName] = useState(user?.display_name || "")
   const [currentPw, setCurrentPw] = useState("")
   const [newPw, setNewPw] = useState("")
+  const { t } = useTranslation("account")
 
   const updateMut = useMutation({
     mutationFn: updateCurrentUser,
     onSuccess: (updated) => {
       setUser(updated)
-      toast.success("Profile updated")
+      toast.success(t("profile.updated"))
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes("Display name cannot be empty")) {
-        toast.error("Display name cannot be empty")
+        toast.error(t("profile.emptyName"))
       } else if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-        toast.error("Cannot connect to server")
+        toast.error(t("toast.networkError"))
       } else {
-        toast.error("Update failed. Please try again.")
+        toast.error(t("profile.updateFailed"))
       }
     },
   })
@@ -111,16 +133,16 @@ export function AccountPage() {
     updateMut.mutate({ display_name: displayName.trim() })
   }
 
-  const initials = (user?.display_name || "U").charAt(0).toUpperCase()
+  const initials = (user?.display_name || t("profile.userFallback")).charAt(0).toUpperCase()
 
   if (!user) return <AccountPageSkeleton />;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
         <p className="text-muted-foreground">
-          Manage your account settings and preferences.
+          {t("description")}
         </p>
       </div>
       <Separator />
@@ -144,7 +166,7 @@ export function AccountPage() {
                   )}
                 >
                   <Icon className="size-4" />
-                  {item.title}
+                  {t(item.titleKey)}
                 </Link>
               )
             })}
@@ -156,9 +178,9 @@ export function AccountPage() {
             <>
               <section className="space-y-4">
                 <div>
-                  <h2 className="text-lg font-medium">Profile</h2>
+                  <h2 className="text-lg font-medium">{t("profile.title")}</h2>
                   <p className="text-sm text-muted-foreground">
-                    This is how others will see you on the platform.
+                    {t("profile.description")}
                   </p>
                 </div>
                 <Separator />
@@ -168,7 +190,7 @@ export function AccountPage() {
                     <AvatarFallback className="text-xl">{initials}</AvatarFallback>
                   </Avatar>
                   <div className="space-y-1">
-                    <p className="text-sm font-medium leading-none">{user?.display_name || "User"}</p>
+                    <p className="text-sm font-medium leading-none">{user?.display_name || t("profile.userFallback")}</p>
                     <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
                     <Badge variant="outline" className="mt-1">
                       <ShieldIcon className="mr-1 size-3" />
@@ -176,7 +198,7 @@ export function AccountPage() {
                     </Badge>
                     <Badge variant="secondary" className="mt-1">
                       <CreditCardIcon className="mr-1 size-3" />
-                      {PLAN_LABELS[user?.plan ?? "starter"] ?? "Starter (Free)"}
+                      {getPlanLabel(user?.plan, t)}
                     </Badge>
                   </div>
                 </div>
@@ -184,13 +206,13 @@ export function AccountPage() {
                 {user?.plan === "starter" && (
                   <div className="flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-4">
                     <div>
-                      <p className="text-sm font-medium">Upgrade to Professional</p>
+                      <p className="text-sm font-medium">{t("upgrade.title")}</p>
                       <p className="text-xs text-muted-foreground">
-                        Unlimited projects, all scenario packages, and priority support.
+                        {t("upgrade.description")}
                       </p>
                     </div>
                     <Link to="/pricing">
-                      <Button size="sm">View Plans</Button>
+                      <Button size="sm">{t("upgrade.viewPlans")}</Button>
                     </Link>
                   </div>
                 )}
@@ -198,9 +220,9 @@ export function AccountPage() {
                 {user?.role === "admin" && (
                   <div className="rounded-md border bg-muted/30 p-4 space-y-3">
                     <div>
-                      <p className="text-sm font-medium">Admin: Change Plan</p>
+                      <p className="text-sm font-medium">{t("admin.changePlan")}</p>
                       <p className="text-xs text-muted-foreground">
-                        Manually update your subscription plan.
+                        {t("admin.changePlanDesc")}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -210,10 +232,10 @@ export function AccountPage() {
                           if (user && newPlan) {
                             updateSubscription({ user_id: user.id ?? "", plan: newPlan })
                               .then(() => {
-                                toast.success(`Plan updated to ${newPlan}`);
+                                toast.success(t("admin.planUpdated", { plan: getPlanSelectLabel(newPlan, t) }));
                                 window.location.reload();
                               })
-                              .catch(() => toast.error("Failed to update plan"));
+                              .catch(() => toast.error(t("admin.planUpdateFailed")));
                           }
                         }}
                       >
@@ -221,9 +243,9 @@ export function AccountPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="starter">Starter</SelectItem>
-                          <SelectItem value="professional">Professional</SelectItem>
-                          <SelectItem value="enterprise">Enterprise</SelectItem>
+                          <SelectItem value="starter">{t("plan.starter")}</SelectItem>
+                          <SelectItem value="professional">{t("plan.professional")}</SelectItem>
+                          <SelectItem value="enterprise">{t("plan.enterprise")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -232,28 +254,28 @@ export function AccountPage() {
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="display-name">Display Name</Label>
+                    <Label htmlFor="display-name">{t("profile.displayName")}</Label>
                     <Input
                       id="display-name"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Your name"
+                      placeholder={t("profile.displayNamePlaceholder")}
                     />
                     <p className="text-xs text-muted-foreground">
-                      This is your public display name.
+                      {t("profile.displayNameHelp")}
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email">{t("profile.email")}</Label>
                     <div className="flex items-center gap-2">
                       <Input id="email" value={user?.email || ""} disabled />
                       <Badge variant="secondary" className="shrink-0">
                         <MailIcon className="mr-1 size-3" />
-                        Verified
+                        {t("profile.verified")}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Your primary email address.
+                      {t("profile.emailHelp")}
                     </p>
                   </div>
                 </div>
@@ -268,37 +290,37 @@ export function AccountPage() {
                     }
                   >
                     {updateMut.isPending && <Spinner data-icon="inline-start" />}
-                    Update Profile
+                    {t("profile.updateProfile")}
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => setDisplayName(user?.display_name || "")}
                     disabled={displayName === user?.display_name || updateMut.isPending}
                   >
-                    Reset
+                    {t("reset")}
                   </Button>
                 </div>
               </section>
 
               <section className="space-y-4">
                 <div>
-                  <h2 className="text-lg font-medium text-destructive">Danger Zone</h2>
+                  <h2 className="text-lg font-medium text-destructive">{t("danger.title")}</h2>
                   <p className="text-sm text-muted-foreground">
-                    Irreversible actions for your account.
+                    {t("danger.description")}
                   </p>
                 </div>
                 <Separator />
 
                 <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 p-4">
                   <div>
-                    <p className="text-sm font-medium">Sign Out</p>
+                    <p className="text-sm font-medium">{t("danger.signOut")}</p>
                     <p className="text-xs text-muted-foreground">
-                      Sign out of your account on this device.
+                      {t("danger.signOutDesc")}
                     </p>
                   </div>
                   <Button variant="destructive" onClick={handleLogout} size="sm" className="gap-2">
                     <LogOutIcon className="size-4" />
-                    Sign Out
+                    {t("danger.signOutButton")}
                   </Button>
                 </div>
               </section>
@@ -308,35 +330,35 @@ export function AccountPage() {
           {activeSection === "security" && (
             <section className="space-y-4">
               <div>
-                <h2 className="text-lg font-medium">Security</h2>
+                <h2 className="text-lg font-medium">{t("security.title")}</h2>
                 <p className="text-sm text-muted-foreground">
-                  Manage your password and authentication settings.
+                  {t("security.description")}
                 </p>
               </div>
               <Separator />
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="current-password">Current Password</Label>
+                  <Label htmlFor="current-password">{t("security.currentPassword")}</Label>
                   <Input
                     id="current-password"
                     type="password"
-                    placeholder="••••••••"
+                    placeholder={t("security.passwordPlaceholder")}
                     value={currentPw}
                     onChange={(e) => setCurrentPw(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="new-password">New Password</Label>
+                  <Label htmlFor="new-password">{t("security.newPassword")}</Label>
                   <Input
                     id="new-password"
                     type="password"
-                    placeholder="••••••••"
+                    placeholder={t("security.passwordPlaceholder")}
                     value={newPw}
                     onChange={(e) => setNewPw(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    At least 8 characters with uppercase, lowercase, and a digit.
+                    {t("security.passwordHint")}
                   </p>
                 </div>
               </div>
@@ -347,13 +369,13 @@ export function AccountPage() {
                       { current_password: currentPw, new_password: newPw },
                       {
                         onSuccess: () => {
-                          toast.success("Password changed successfully");
+                          toast.success(t("security.changed"));
                           setCurrentPw("");
                           setNewPw("");
                         },
                         onError: (err: unknown) => {
                           const msg = err instanceof Error ? err.message : String(err);
-                          toast.error(msg.includes("incorrect") ? "Current password is incorrect" : "Failed to change password");
+                          toast.error(msg.includes("incorrect") ? t("security.currentIncorrect") : t("security.changeFailed"));
                         },
                       },
                     );
@@ -361,7 +383,7 @@ export function AccountPage() {
                   disabled={!currentPw || !newPw || updateMut.isPending}
                 >
                   {updateMut.isPending && <Spinner data-icon="inline-start" />}
-                  Change Password
+                  {t("security.changePassword")}
                 </Button>
               </div>
             </section>
@@ -370,14 +392,14 @@ export function AccountPage() {
           {activeSection === "notifications" && (
             <section className="space-y-4">
               <div>
-                <h2 className="text-lg font-medium">Notifications</h2>
+                <h2 className="text-lg font-medium">{t("notifications.title")}</h2>
                 <p className="text-sm text-muted-foreground">
-                  Configure how you receive notifications.
+                  {t("notifications.description")}
                 </p>
               </div>
               <Separator />
               <p className="text-sm text-muted-foreground">
-                Notification settings will be available in a future release.
+                {t("notifications.placeholder")}
               </p>
             </section>
           )}

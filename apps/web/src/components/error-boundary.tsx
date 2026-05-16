@@ -2,6 +2,7 @@ import { Component, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AlertTriangleIcon } from "lucide-react";
+import i18n from "@/lib/i18n";
 
 interface Props {
   children: ReactNode;
@@ -29,10 +30,10 @@ export class ErrorBoundary extends Component<Props, State> {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <AlertTriangleIcon className="size-5 text-destructive" />
-                <CardTitle>Something went wrong</CardTitle>
+                <CardTitle>{i18n.t("error.title")}</CardTitle>
               </div>
               <CardDescription>
-                {this.state.error?.message ?? "An unexpected error occurred."}
+                {this.state.error?.message ?? i18n.t("error.fallback")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -42,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   window.location.reload();
                 }}
               >
-                Reload Page
+                {i18n.t("error.reload")}
               </Button>
             </CardContent>
           </Card>

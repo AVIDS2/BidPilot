@@ -8,6 +8,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { createCheckout } from "@/lib/api";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import { useMemo } from "react";
 
 interface PricingTier {
   name: string;
@@ -19,55 +21,7 @@ interface PricingTier {
   cta: string;
 }
 
-const TIERS: PricingTier[] = [
-  {
-    name: "Starter",
-    price: "Free",
-    period: "",
-    description: "Try DocPilot on a single RFP response.",
-    features: [
-      "Up to 3 projects",
-      "1 scenario package (BidPilot)",
-      "Community support",
-      "Basic audit trail",
-    ],
-    cta: "Get Started",
-  },
-  {
-    name: "Professional",
-    price: "$99",
-    period: "/month",
-    description: "For teams that respond to RFPs regularly.",
-    recommended: true,
-    features: [
-      "Unlimited projects",
-      "All scenario packages",
-      "Priority support",
-      "Full audit and compliance trail",
-      "DOCX and PDF export",
-      "Team collaboration",
-    ],
-    cta: "Start Trial",
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    period: "",
-    description: "For organizations that need control and scale.",
-    features: [
-      "Custom deployment",
-      "SSO and SCIM provisioning",
-      "Dedicated support and SLA",
-      "Data residency options",
-      "Custom scenario packages",
-      "API access and integrations",
-      "Backup and restore SLA",
-    ],
-    cta: "Contact Sales",
-  },
-];
-
-function TierCard({ tier, current, onUpgrade }: { tier: PricingTier; current: boolean; onUpgrade: (plan: string) => void }) {
+function TierCard({ tier, current, onUpgrade, t }: { tier: PricingTier; current: boolean; onUpgrade: (plan: string) => void; t: (key: string) => string }) {
   return (
     <Card
       className={`flex flex-col${tier.recommended ? " border-primary shadow-lg" : ""}${current ? " ring-2 ring-primary" : ""}`}
@@ -75,8 +29,8 @@ function TierCard({ tier, current, onUpgrade }: { tier: PricingTier; current: bo
       <CardHeader>
         <div className="flex items-center gap-2">
           <CardTitle className="text-xl">{tier.name}</CardTitle>
-          {tier.recommended && !current && <Badge>Recommended</Badge>}
-          {current && <Badge variant="secondary">Current Plan</Badge>}
+          {tier.recommended && !current && <Badge>{t("badges.recommended")}</Badge>}
+          {current && <Badge variant="secondary">{t("badges.currentPlan")}</Badge>}
         </div>
         <CardDescription>{tier.description}</CardDescription>
       </CardHeader>
@@ -104,7 +58,7 @@ function TierCard({ tier, current, onUpgrade }: { tier: PricingTier; current: bo
           disabled={current}
           onClick={() => onUpgrade(tier.name.toLowerCase())}
         >
-          {current ? "Current Plan" : tier.cta}
+          {current ? t("button.currentPlan") : tier.cta}
         </Button>
       </CardFooter>
     </Card>
@@ -115,6 +69,35 @@ export function PricingPage() {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const currentPlan = user?.plan?.toLowerCase() ?? "";
+  const { t } = useTranslation("pricing");
+
+  const TIERS: PricingTier[] = useMemo(() => [
+    {
+      name: t("tiers.starter.name"),
+      price: t("tiers.starter.price"),
+      period: t("tiers.starter.period"),
+      description: t("tiers.starter.description"),
+      features: t("tiers.starter.features", { returnObjects: true }) as unknown as string[],
+      cta: t("tiers.starter.cta"),
+    },
+    {
+      name: t("tiers.professional.name"),
+      price: t("tiers.professional.price"),
+      period: t("tiers.professional.period"),
+      description: t("tiers.professional.description"),
+      recommended: true,
+      features: t("tiers.professional.features", { returnObjects: true }) as unknown as string[],
+      cta: t("tiers.professional.cta"),
+    },
+    {
+      name: t("tiers.enterprise.name"),
+      price: t("tiers.enterprise.price"),
+      period: t("tiers.enterprise.period"),
+      description: t("tiers.enterprise.description"),
+      features: t("tiers.enterprise.features", { returnObjects: true }) as unknown as string[],
+      cta: t("tiers.enterprise.cta"),
+    },
+  ], [t]);
 
   const checkoutMut = useMutation({
     mutationFn: createCheckout,
@@ -124,9 +107,9 @@ export function PricingPage() {
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("501") || msg.includes("not configured")) {
-        toast.error("Online payments are not yet available. Contact your admin to upgrade.");
+        toast.error(t("toast.notAvailable"));
       } else {
-        toast.error("Could not start checkout. Please try again.");
+        toast.error(t("toast.checkoutFailed"));
       }
     },
   });
@@ -152,7 +135,7 @@ export function PricingPage() {
           className="inline-flex items-center gap-1 rounded-lg px-2.5 h-7 text-[0.8rem] font-medium hover:bg-muted hover:text-foreground transition-colors"
         >
           <ArrowLeftIcon className="size-3.5" />
-          {isAuthenticated ? "Projects" : "Home"}
+          {isAuthenticated ? t("back.projects") : t("back.home")}
         </Link>
         <Link to="/" className="flex items-center gap-2 font-medium">
           <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -163,14 +146,14 @@ export function PricingPage() {
         <div className="w-20" />
       </div>
       <div className="text-center mb-10">
-        <h1 className="text-3xl font-bold tracking-tight">Pricing</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
         <p className="mt-2 text-muted-foreground">
-          Choose the plan that fits your proposal workflow.
+          {t("description")}
         </p>
       </div>
       <div className="grid gap-6 md:grid-cols-3">
         {TIERS.map((tier) => (
-          <TierCard key={tier.name} tier={tier} current={tier.name.toLowerCase() === currentPlan} onUpgrade={handleUpgrade} />
+          <TierCard key={tier.name} tier={tier} current={tier.name.toLowerCase() === currentPlan} onUpgrade={handleUpgrade} t={t} />
         ))}
       </div>
     </div>

@@ -1,0 +1,23 @@
+{
+  "badge": "Now in Pilot",
+  "hero": {
+    "title": "AI-Powered Document Execution",
+    "description": "Turn source materials into reviewable draft packages with source attribution and workflow state -- without leaving the product.",
+    "getStarted": "Get Started",
+    "viewPricing": "View Pricing"
+  },
+  "features": {
+    "extraction": {
+      "title": "Smart Extraction",
+      "description": "Automatically extract structured requirements from RFPs, SOWs, and presales bundles."
+    },
+    "drafts": {
+      "title": "Evidence-Backed Drafts",
+      "description": "Generate section drafts with source attribution and missing-evidence markers."
+    },
+    "audit": {
+      "title": "Audit Trail",
+      "description": "Full traceability from source documents through generation runs to final export."
+    }
+  }
+}

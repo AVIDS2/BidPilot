@@ -1,0 +1,70 @@
+{
+  "title": "设置",
+  "description": "管理您的账户设置和偏好。",
+  "nav": {
+    "profile": "个人信息",
+    "security": "安全设置",
+    "notifications": "通知"
+  },
+  "profile": {
+    "title": "个人信息",
+    "description": "这是其他用户在平台上看到的信息。",
+    "displayName": "显示名称",
+    "displayNamePlaceholder": "您的名字",
+    "displayNameHelp": "这是您的公开显示名称。",
+    "email": "邮箱",
+    "emailHelp": "您的主要邮箱地址。",
+    "verified": "已验证",
+    "userFallback": "用户",
+    "updateProfile": "更新个人信息",
+    "updated": "个人信息已更新",
+    "emptyName": "显示名称不能为空",
+    "updateFailed": "更新失败，请重试。"
+  },
+  "upgrade": {
+    "title": "升级到专业版",
+    "description": "无限项目、全部场景包、优先支持。",
+    "viewPlans": "查看方案"
+  },
+  "admin": {
+    "changePlan": "管理员：更改方案",
+    "changePlanDesc": "手动更新您的订阅方案。",
+    "planUpdated": "方案已更新为 {{plan}}",
+    "planUpdateFailed": "更新方案失败"
+  },
+  "security": {
+    "title": "安全设置",
+    "description": "管理您的密码和认证设置。",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "passwordPlaceholder": "••••••••",
+    "passwordHint": "至少 8 位字符，包含大写字母、小写字母和数字。",
+    "changePassword": "修改密码",
+    "changed": "密码修改成功",
+    "currentIncorrect": "当前密码不正确",
+    "changeFailed": "修改密码失败"
+  },
+  "notifications": {
+    "title": "通知",
+    "description": "配置您接收通知的方式。",
+    "placeholder": "通知设置将在后续版本中提供。"
+  },
+  "danger": {
+    "title": "危险区域",
+    "description": "对您账户的不可逆操作。",
+    "signOut": "退出登录",
+    "signOutDesc": "在此设备上退出您的账户。",
+    "signOutButton": "退出登录"
+  },
+  "plan": {
+    "starterFree": "入门版（免费）",
+    "professional": "专业版",
+    "enterprise": "企业版",
+    "starter": "入门版",
+    "starter_short": "入门版"
+  },
+  "toast": {
+    "networkError": "无法连接服务器"
+  },
+  "reset": "重置"
+}

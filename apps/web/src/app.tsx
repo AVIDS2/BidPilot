@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ProjectListPage } from "./features/projects/project-list-page";
 import { ProjectDetailPage } from "./features/projects/project-detail-page";
 import { AccountPage } from "./features/account/account-page";
@@ -22,16 +23,6 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { FileTextIcon, CreditCardIcon, UsersIcon } from "lucide-react";
 
 const queryClient = new QueryClient();
-
-const navItems = [
-  { title: "Projects", url: "/projects", icon: <FileTextIcon /> },
-  { title: "Pricing", url: "/pricing", icon: <CreditCardIcon /> },
-  { title: "Users", url: "/admin/users", icon: <UsersIcon /> },
-];
-
-const teams = [
-  { name: "DocPilot", logo: <FileTextIcon className="size-3" />, plan: "AI Document Execution" },
-];
 
 function LoginPage() {
   return (
@@ -67,6 +58,7 @@ function SignupPage() {
 
 function AppLayout() {
   const { user, isAuthenticated } = useAuth();
+  const { t } = useTranslation();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -74,12 +66,22 @@ function AppLayout() {
 
   const isAdmin = user?.role === "admin";
 
+  const navItems = [
+    { title: t("nav.projects"), url: "/projects", icon: <FileTextIcon /> },
+    { title: t("nav.pricing"), url: "/pricing", icon: <CreditCardIcon /> },
+    { title: t("nav.users"), url: "/admin/users", icon: <UsersIcon /> },
+  ];
+
+  const teams = [
+    { name: "DocPilot", logo: <FileTextIcon className="size-3" />, plan: t("app.tagline") },
+  ];
+
   const visibleNavItems = navItems.filter(
-    (item) => item.title !== "Users" || isAdmin
+    (item) => item.title !== t("nav.users") || isAdmin
   );
 
   const sidebarUser = {
-    name: user?.display_name || "User",
+    name: user?.display_name || t("user.fallbackName"),
     email: user?.email || "",
     avatar: "",
   };

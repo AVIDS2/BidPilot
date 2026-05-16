@@ -41,6 +41,8 @@ export interface ProjectRead {
   name: string;
   scenario_package: string;
   status: string;
+  org_id?: string;
+  org_slug?: string;
 }
 
 export function listProjects() {
@@ -331,6 +333,8 @@ export interface CurrentUser {
   plan?: string;
   disabled?: boolean;
   email_verified?: boolean;
+  org_id?: string;
+  org_slug?: string;
 }
 
 export interface TokenResponse {

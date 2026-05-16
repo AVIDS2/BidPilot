@@ -1,0 +1,70 @@
+{
+  "title": "Settings",
+  "description": "Manage your account settings and preferences.",
+  "nav": {
+    "profile": "Profile",
+    "security": "Security",
+    "notifications": "Notifications"
+  },
+  "profile": {
+    "title": "Profile",
+    "description": "This is how others will see you on the platform.",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "Your name",
+    "displayNameHelp": "This is your public display name.",
+    "email": "Email",
+    "emailHelp": "Your primary email address.",
+    "verified": "Verified",
+    "userFallback": "User",
+    "updateProfile": "Update Profile",
+    "updated": "Profile updated",
+    "emptyName": "Display name cannot be empty",
+    "updateFailed": "Update failed. Please try again."
+  },
+  "upgrade": {
+    "title": "Upgrade to Professional",
+    "description": "Unlimited projects, all scenario packages, and priority support.",
+    "viewPlans": "View Plans"
+  },
+  "admin": {
+    "changePlan": "Admin: Change Plan",
+    "changePlanDesc": "Manually update your subscription plan.",
+    "planUpdated": "Plan updated to {{plan}}",
+    "planUpdateFailed": "Failed to update plan"
+  },
+  "security": {
+    "title": "Security",
+    "description": "Manage your password and authentication settings.",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "passwordPlaceholder": "••••••••",
+    "passwordHint": "At least 8 characters with uppercase, lowercase, and a digit.",
+    "changePassword": "Change Password",
+    "changed": "Password changed successfully",
+    "currentIncorrect": "Current password is incorrect",
+    "changeFailed": "Failed to change password"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "description": "Configure how you receive notifications.",
+    "placeholder": "Notification settings will be available in a future release."
+  },
+  "danger": {
+    "title": "Danger Zone",
+    "description": "Irreversible actions for your account.",
+    "signOut": "Sign Out",
+    "signOutDesc": "Sign out of your account on this device.",
+    "signOutButton": "Sign Out"
+  },
+  "plan": {
+    "starterFree": "Starter (Free)",
+    "professional": "Professional",
+    "enterprise": "Enterprise",
+    "starter": "Starter",
+    "starter_short": "Starter"
+  },
+  "toast": {
+    "networkError": "Cannot connect to server"
+  },
+  "reset": "Reset"
+}

@@ -1,0 +1,23 @@
+{
+  "badge": "Pilot 公测中",
+  "hero": {
+    "title": "AI 驱动的文档执行",
+    "description": "将源材料转化为带来源归属与工作流状态的可审核草稿包——无需离开产品。",
+    "getStarted": "开始使用",
+    "viewPricing": "查看定价"
+  },
+  "features": {
+    "extraction": {
+      "title": "智能提取",
+      "description": "自动从招标书、工作说明书和售前素材包中提取结构化需求。"
+    },
+    "drafts": {
+      "title": "有据可查的草稿",
+      "description": "生成带来源归属和缺失证据标记的章节草稿。"
+    },
+    "audit": {
+      "title": "审计追踪",
+      "description": "从源文档到生成运行再到最终导出的完整可追溯性。"
+    }
+  }
+}

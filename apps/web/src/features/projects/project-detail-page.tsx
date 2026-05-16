@@ -94,12 +94,14 @@ import {
 } from "@/lib/api";
 import { ActivityIcon, AlertTriangleIcon, ClipboardCheckIcon, DownloadIcon, FileIcon, LayersIcon, MessageCircleIcon, MoreHorizontalIcon, PackageIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const showGovernance = canViewGovernance(user);
+  const { t } = useTranslation(["projects", "common"]);
   const [bundleLabel, setBundleLabel] = useState("");
   const [deliverableTitle, setDeliverableTitle] = useState("");
   const [sectionKey, setSectionKey] = useState("");
@@ -199,7 +201,7 @@ export function ProjectDetailPage() {
       const results = await searchKnowledge({ project_id: id, query: searchQuery.trim() });
       setSearchResults(results);
     } catch {
-      toast.error("Search failed");
+      toast.error(t("search.failed"));
     } finally {
       setIsSearching(false);
     }
@@ -210,10 +212,10 @@ export function ProjectDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["review-comments", selectedThreadId] });
       setReviewCommentBody("");
-      toast.success("Comment added");
+      toast.success(t("review.commentAdded"));
     },
     onError: () => {
-      toast.error("Failed to add comment");
+      toast.error(t("review.commentFailed"));
     },
   });
 
@@ -222,10 +224,10 @@ export function ProjectDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["review-threads", selectedSectionId] });
       setReviewDecisionComment("");
-      toast.success("Review decision submitted");
+      toast.success(t("review.decisionSubmitted"));
     },
     onError: () => {
-      toast.error("Failed to submit review decision");
+      toast.error(t("review.decisionFailed"));
     },
   });
 
@@ -254,10 +256,10 @@ export function ProjectDetailPage() {
     mutationFn: createBundle,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bundles", id] });
-      toast.success("Bundle registered");
+      toast.success(t("bundles.registered"));
     },
     onError: () => {
-      toast.error("Failed to register bundle");
+      toast.error(t("bundles.registerFailed"));
     },
   });
 
@@ -265,10 +267,10 @@ export function ProjectDetailPage() {
     mutationFn: createDeliverable,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["deliverables", id] });
-      toast.success("Deliverable created");
+      toast.success(t("deliverables.created"));
     },
     onError: () => {
-      toast.error("Failed to create deliverable");
+      toast.error(t("deliverables.createFailed"));
     },
   });
 
@@ -276,10 +278,10 @@ export function ProjectDetailPage() {
     mutationFn: draftSection,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["runs", id] });
-      toast.success("Draft requested");
+      toast.success(t("drafting.draftRequested"));
     },
     onError: () => {
-      toast.error("Failed to request draft");
+      toast.error(t("drafting.draftFailed"));
     },
   });
 
@@ -288,10 +290,10 @@ export function ProjectDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["runs", id] });
       queryClient.invalidateQueries({ queryKey: ["versions", selectedSectionId] });
-      toast.success("Re-draft requested");
+      toast.success(t("drafting.redraftRequested"));
     },
     onError: () => {
-      toast.error("Failed to request re-draft");
+      toast.error(t("drafting.redraftFailed"));
     },
   });
 
@@ -306,10 +308,10 @@ export function ProjectDetailPage() {
     mutationFn: createRequirement,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["requirements", id] });
-      toast.success("Requirement added");
+      toast.success(t("requirements.added"));
     },
     onError: () => {
-      toast.error("Failed to add requirement");
+      toast.error(t("requirements.addFailed"));
     },
   });
 
@@ -318,10 +320,10 @@ export function ProjectDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["requirements", id] });
       setEditingReqId(null);
-      toast.success("Requirement updated");
+      toast.success(t("requirements.updated"));
     },
     onError: () => {
-      toast.error("Failed to update requirement");
+      toast.error(t("requirements.updateFailed"));
     },
   });
 
@@ -329,10 +331,10 @@ export function ProjectDetailPage() {
     mutationFn: reingestBundle,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bundles", id] });
-      toast.success("Re-ingest started");
+      toast.success(t("bundles.reingestStarted"));
     },
     onError: () => {
-      toast.error("Failed to start re-ingest");
+      toast.error(t("bundles.reingestFailed"));
     },
   });
 
@@ -340,10 +342,10 @@ export function ProjectDetailPage() {
     mutationFn: retryExecutionRun,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["runs", id] });
-      toast.success("Retry started");
+      toast.success(t("runs.retryStarted"));
     },
     onError: () => {
-      toast.error("Failed to retry run");
+      toast.error(t("runs.retryFailed"));
     },
   });
 
@@ -354,7 +356,7 @@ export function ProjectDetailPage() {
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink render={<Link to="/projects" />}>Projects</BreadcrumbLink>
+            <BreadcrumbLink render={<Link to="/projects" />}>{t("detail.projects")}</BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
@@ -371,17 +373,17 @@ export function ProjectDetailPage() {
           </p>
         </div>
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Project actions" />}>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={t("detail.projectActions")} />}>
             <MoreHorizontalIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Project Actions</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("detail.projectActions")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => {
                 setConfirmAction({
-                  title: "Re-ingest All Bundles",
-                  description: "This will re-process all bundles that haven't been ingested yet. Continue?",
+                  title: t("detail.reingestAllTitle"),
+                  description: t("detail.reingestAllDesc"),
                   onConfirm: () => {
                     bundles?.filter((b) => b.ingest_status !== "ingested").forEach((b) => reingestMut.mutate(b.id));
                   },
@@ -390,7 +392,7 @@ export function ProjectDetailPage() {
               }}
             >
               <RefreshCwIcon className="mr-2 size-4" />
-              Re-ingest All
+              {t("detail.reingestAll")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -400,66 +402,66 @@ export function ProjectDetailPage() {
       <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
         <Card className="@container/card">
           <CardHeader>
-            <CardDescription>Bundles</CardDescription>
+            <CardDescription>{t("summary.bundles")}</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
               {bundles?.length ?? 0}
             </CardTitle>
             <CardAction>
               <Badge variant="outline">
-                {bundles?.filter((b) => b.ingest_status === "ingested").length ?? 0} ingested
+                {t("summary.ingested", { count: bundles?.filter((b) => b.ingest_status === "ingested").length ?? 0 })}
               </Badge>
             </CardAction>
           </CardHeader>
           <CardFooter className="text-sm text-muted-foreground">
-            Document bundles for this project
+            {t("summary.bundlesDesc")}
           </CardFooter>
         </Card>
         <Card className="@container/card">
           <CardHeader>
-            <CardDescription>Deliverables</CardDescription>
+            <CardDescription>{t("summary.deliverables")}</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
               {deliverables?.length ?? 0}
             </CardTitle>
             <CardAction>
               <Badge variant="outline">
-                {sections?.length ?? 0} sections
+                {t("summary.sections", { count: sections?.length ?? 0 })}
               </Badge>
             </CardAction>
           </CardHeader>
           <CardFooter className="text-sm text-muted-foreground">
-            Proposal deliverables and sections
+            {t("summary.deliverablesDesc")}
           </CardFooter>
         </Card>
         <Card className="@container/card">
           <CardHeader>
-            <CardDescription>Evidence</CardDescription>
+            <CardDescription>{t("summary.evidence")}</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
               {evidence?.length ?? 0}
             </CardTitle>
             <CardAction>
               <Badge variant="outline">
-                {requirements?.filter((r) => r.status === "confirmed").length ?? 0} confirmed
+                {t("summary.confirmed", { count: requirements?.filter((r) => r.status === "confirmed").length ?? 0 })}
               </Badge>
             </CardAction>
           </CardHeader>
           <CardFooter className="text-sm text-muted-foreground">
-            Extracted evidence and requirements
+            {t("summary.evidenceDesc")}
           </CardFooter>
         </Card>
         <Card className="@container/card">
           <CardHeader>
-            <CardDescription>Execution Runs</CardDescription>
+            <CardDescription>{t("summary.runs")}</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
               {runs?.length ?? 0}
             </CardTitle>
             <CardAction>
               <Badge variant={runs?.some((r) => r.status === "failed") ? "destructive" : "outline"}>
-                {runs?.filter((r) => r.status === "succeeded").length ?? 0} succeeded
+                {t("summary.succeeded", { count: runs?.filter((r) => r.status === "succeeded").length ?? 0 })}
               </Badge>
             </CardAction>
           </CardHeader>
           <CardFooter className="text-sm text-muted-foreground">
-            Draft and processing runs
+            {t("summary.runsDesc")}
           </CardFooter>
         </Card>
       </div>
@@ -467,35 +469,35 @@ export function ProjectDetailPage() {
       {/* Workflow Hint Banner */}
       <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
         <CardContent className="flex flex-wrap items-center gap-2 py-3 text-xs">
-          <span className="font-medium text-muted-foreground">Workflow:</span>
-          <Badge variant={bundles?.length ? "default" : "outline"} className="font-normal">1. Bundles ({bundles?.length ?? 0})</Badge>
+          <span className="font-medium text-muted-foreground">{t("detail.workflow")}</span>
+          <Badge variant={bundles?.length ? "default" : "outline"} className="font-normal">{t("detail.wfBundles", { count: bundles?.length ?? 0 })}</Badge>
           <span className="text-muted-foreground">→</span>
-          <Badge variant={deliverables?.length ? "default" : "outline"} className="font-normal">2. Deliverables ({deliverables?.length ?? 0})</Badge>
+          <Badge variant={deliverables?.length ? "default" : "outline"} className="font-normal">{t("detail.wfDeliverables", { count: deliverables?.length ?? 0 })}</Badge>
           <span className="text-muted-foreground">→</span>
-          <Badge variant={requirements?.length ? "default" : "outline"} className="font-normal">3. Requirements ({requirements?.length ?? 0})</Badge>
+          <Badge variant={requirements?.length ? "default" : "outline"} className="font-normal">{t("detail.wfRequirements", { count: requirements?.length ?? 0 })}</Badge>
           <span className="text-muted-foreground">→</span>
-          <Badge variant={runs?.length ? "default" : "outline"} className="font-normal">4. Drafting ({runs?.length ?? 0} runs)</Badge>
+          <Badge variant={runs?.length ? "default" : "outline"} className="font-normal">{t("detail.wfDrafting", { count: runs?.length ?? 0 })}</Badge>
           <span className="text-muted-foreground">→</span>
-          <Badge variant={sections?.some((s) => s.status === "approved") ? "default" : "outline"} className="font-normal">5. Review ({sections?.filter((s) => s.status === "approved").length ?? 0} approved)</Badge>
+          <Badge variant={sections?.some((s) => s.status === "approved") ? "default" : "outline"} className="font-normal">{t("detail.wfReview", { count: sections?.filter((s) => s.status === "approved").length ?? 0 })}</Badge>
           <span className="text-muted-foreground">→</span>
-          <Badge variant={deliverables?.some((d) => d.export_status === "exported") ? "default" : "outline"} className="font-normal">6. Export</Badge>
+          <Badge variant={deliverables?.some((d) => d.export_status === "exported") ? "default" : "outline"} className="font-normal">{t("detail.wfExport")}</Badge>
         </CardContent>
       </Card>
 
       <Tabs defaultValue="bundles">
         <ScrollArea className="w-full">
           <TabsList className="w-max min-w-full justify-start">
-            <TabsTrigger value="bundles">Bundles</TabsTrigger>
-            <TabsTrigger value="deliverables">Deliverables</TabsTrigger>
-            <TabsTrigger value="requirements">Requirements</TabsTrigger>
-            <TabsTrigger value="drafting">Drafting</TabsTrigger>
-            <TabsTrigger value="evidence">Evidence</TabsTrigger>
-            <TabsTrigger value="search">Search</TabsTrigger>
-            <TabsTrigger value="runs">Runs</TabsTrigger>
-            <TabsTrigger value="review">Review</TabsTrigger>
-            {showGovernance && <TabsTrigger value="audit">Audit</TabsTrigger>}
-            <TabsTrigger value="export">Export</TabsTrigger>
-            {showGovernance && <TabsTrigger value="ops">System</TabsTrigger>}
+            <TabsTrigger value="bundles">{t("tabs.bundles")}</TabsTrigger>
+            <TabsTrigger value="deliverables">{t("tabs.deliverables")}</TabsTrigger>
+            <TabsTrigger value="requirements">{t("tabs.requirements")}</TabsTrigger>
+            <TabsTrigger value="drafting">{t("tabs.drafting")}</TabsTrigger>
+            <TabsTrigger value="evidence">{t("tabs.evidence")}</TabsTrigger>
+            <TabsTrigger value="search">{t("tabs.search")}</TabsTrigger>
+            <TabsTrigger value="runs">{t("tabs.runs")}</TabsTrigger>
+            <TabsTrigger value="review">{t("tabs.review")}</TabsTrigger>
+            {showGovernance && <TabsTrigger value="audit">{t("tabs.audit")}</TabsTrigger>}
+            <TabsTrigger value="export">{t("tabs.export")}</TabsTrigger>
+            {showGovernance && <TabsTrigger value="ops">{t("tabs.system")}</TabsTrigger>}
           </TabsList>
         </ScrollArea>
 
@@ -503,17 +505,17 @@ export function ProjectDetailPage() {
         <TabsContent value="bundles">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Bundles</CardTitle>
+              <CardTitle className="text-lg">{t("bundles.title")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="bundle-label">Bundle Label</FieldLabel>
+                  <FieldLabel htmlFor="bundle-label">{t("bundles.label")}</FieldLabel>
                   <Input
                     id="bundle-label"
                     value={bundleLabel}
                     onChange={(e) => setBundleLabel(e.target.value)}
-                    placeholder="Bundle label"
+                    placeholder={t("bundles.labelPlaceholder")}
                     className="max-w-xs"
                   />
                 </Field>
@@ -525,10 +527,10 @@ export function ProjectDetailPage() {
                     setBundleLabel("");
                   }}
                 >
-                  Register Bundle
+                  {t("bundles.register")}
                 </Button>
               </FieldGroup>
-              {bundles?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><PackageIcon /></EmptyMedia><EmptyTitle>No bundles yet</EmptyTitle><EmptyDescription>Create a bundle to start uploading documents.</EmptyDescription></EmptyHeader></Empty>}
+              {bundles?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><PackageIcon /></EmptyMedia><EmptyTitle>{t("bundles.emptyTitle")}</EmptyTitle><EmptyDescription>{t("bundles.emptyDesc")}</EmptyDescription></EmptyHeader></Empty>}
               <Accordion multiple onValueChange={(v) => setSelectedBundleId(v[v.length - 1] ?? null)}>
                 {bundles?.map((b) => (
                   <AccordionItem key={b.id} value={b.id}>
@@ -542,15 +544,15 @@ export function ProjectDetailPage() {
                           <Button size="sm" variant="outline" onClick={(e) => {
                             e.stopPropagation();
                             setConfirmAction({
-                              title: "Re-ingest Bundle",
-                              description: `Re-process bundle "${b.label}"? This will re-parse all documents.`,
+                              title: t("bundles.reingestTitle"),
+                              description: t("bundles.reingestDesc", { label: b.label }),
                               onConfirm: () => {
                                 reingestMut.mutate(b.id);
                               },
                             });
                             setConfirmDialogOpen(true);
                           }}>
-                            Re-ingest
+                            {t("bundles.reingest")}
                           </Button>
                         )}
                       </div>
@@ -558,7 +560,7 @@ export function ProjectDetailPage() {
                     <AccordionContent>
                       <div className="flex flex-col gap-2">
                         <Field>
-                          <FieldLabel htmlFor={`file-upload-${b.id}`} className="text-xs">Upload Document</FieldLabel>
+                          <FieldLabel htmlFor={`file-upload-${b.id}`} className="text-xs">{t("bundles.uploadDocument")}</FieldLabel>
                           <Input
                             id={`file-upload-${b.id}`}
                             type="file"
@@ -567,11 +569,11 @@ export function ProjectDetailPage() {
                               const file = e.target.files?.[0];
                               if (file) {
                                 uploadDocument(b.id, file).then(() => {
-                                  toast.success(`Uploaded ${file.name}`);
+                                  toast.success(t("bundles.uploaded", { filename: file.name }));
                                   queryClient.invalidateQueries({ queryKey: ["documents", b.id] });
                                 }).catch((err) => {
                                   const msg = err instanceof Error ? err.message : "Upload failed";
-                                  toast.error(`Upload failed: ${msg}`);
+                                  toast.error(t("bundles.uploadFailed", { message: msg }));
                                 });
                               }
                             }}
@@ -589,7 +591,7 @@ export function ProjectDetailPage() {
                           </div>
                         ))}
                         {documents?.items.length === 0 && (
-                          <p className="text-xs text-muted-foreground ml-2">No documents uploaded.</p>
+                          <p className="text-xs text-muted-foreground ml-2">{t("bundles.noDocuments")}</p>
                         )}
                       </div>
                     </AccordionContent>
@@ -604,17 +606,17 @@ export function ProjectDetailPage() {
         <TabsContent value="deliverables">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Deliverables</CardTitle>
+              <CardTitle className="text-lg">{t("deliverables.title")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="deliverable-title">Deliverable Title</FieldLabel>
+                  <FieldLabel htmlFor="deliverable-title">{t("deliverables.label")}</FieldLabel>
                   <Input
                     id="deliverable-title"
                     value={deliverableTitle}
                     onChange={(e) => setDeliverableTitle(e.target.value)}
-                    placeholder="Deliverable title"
+                    placeholder={t("deliverables.labelPlaceholder")}
                     className="max-w-xs"
                   />
                 </Field>
@@ -626,10 +628,10 @@ export function ProjectDetailPage() {
                     setDeliverableTitle("");
                   }}
                 >
-                  Add Deliverable
+                  {t("deliverables.add")}
                 </Button>
               </FieldGroup>
-              {deliverables?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><LayersIcon /></EmptyMedia><EmptyTitle>No deliverables yet</EmptyTitle><EmptyDescription>Create a deliverable to organize proposal sections.</EmptyDescription></EmptyHeader></Empty>}
+              {deliverables?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><LayersIcon /></EmptyMedia><EmptyTitle>{t("deliverables.emptyTitle")}</EmptyTitle><EmptyDescription>{t("deliverables.emptyDesc")}</EmptyDescription></EmptyHeader></Empty>}
               <Accordion multiple onValueChange={(v) => setSelectedDeliverableId(v[v.length - 1] ?? null)}>
                 {deliverables?.map((d) => (
                   <AccordionItem key={d.id} value={d.id}>
@@ -673,27 +675,27 @@ export function ProjectDetailPage() {
         <TabsContent value="requirements">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Requirements</CardTitle>
+              <CardTitle className="text-lg">{t("requirements.title")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <FieldGroup>
                 <Field>
-                  <FieldLabel htmlFor="req-section-key">Section Key</FieldLabel>
+                  <FieldLabel htmlFor="req-section-key">{t("requirements.sectionKey")}</FieldLabel>
                   <Input
                     id="req-section-key"
                     value={reqSectionKey}
                     onChange={(e) => setReqSectionKey(e.target.value)}
-                    placeholder="Section key"
+                    placeholder={t("requirements.sectionKeyPlaceholder")}
                     className="max-w-[140px]"
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="req-text">Requirement Text</FieldLabel>
+                  <FieldLabel htmlFor="req-text">{t("requirements.requirementText")}</FieldLabel>
                   <Input
                     id="req-text"
                     value={reqText}
                     onChange={(e) => setReqText(e.target.value)}
-                    placeholder="Requirement text"
+                    placeholder={t("requirements.requirementTextPlaceholder")}
                     className="flex-1 min-w-[200px]"
                   />
                 </Field>
@@ -705,10 +707,10 @@ export function ProjectDetailPage() {
                     setReqText("");
                   }}
                 >
-                  Add
+                  {t("requirements.add")}
                 </Button>
               </FieldGroup>
-              {requirements?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><ClipboardCheckIcon /></EmptyMedia><EmptyTitle>No requirements</EmptyTitle><EmptyDescription>Extract or add requirements from your documents.</EmptyDescription></EmptyHeader></Empty>}
+              {requirements?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><ClipboardCheckIcon /></EmptyMedia><EmptyTitle>{t("requirements.emptyTitle")}</EmptyTitle><EmptyDescription>{t("requirements.emptyDesc")}</EmptyDescription></EmptyHeader></Empty>}
               <div className="flex flex-col gap-2">
                 {requirements?.map((r) => (
                   <div key={r.id} className="border rounded-md p-3 flex flex-col gap-1">
@@ -723,9 +725,9 @@ export function ProjectDetailPage() {
                           size="sm"
                           onClick={() => updateReqMut.mutate({ id: r.id, data: { requirement_text: editingReqText } })}
                         >
-                          Save
+                          {t("requirements.save")}
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => setEditingReqId(null)}>Cancel</Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingReqId(null)}>{t("requirements.cancel")}</Button>
                       </div>
                     ) : (
                       <>
@@ -742,7 +744,7 @@ export function ProjectDetailPage() {
                             className="h-5 px-1 text-xs"
                             onClick={() => { setEditingReqId(r.id); setEditingReqText(r.requirement_text); }}
                           >
-                            Edit
+                            {t("requirements.edit")}
                           </Button>
                           {r.status !== "confirmed" && (
                             <Button
@@ -751,7 +753,7 @@ export function ProjectDetailPage() {
                               className="h-5 px-1 text-xs"
                               onClick={() => updateReqMut.mutate({ id: r.id, data: { status: "confirmed" } })}
                             >
-                              Confirm
+                              {t("requirements.confirm")}
                             </Button>
                           )}
                         </div>
@@ -768,7 +770,7 @@ export function ProjectDetailPage() {
         <TabsContent value="drafting">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Draft Section</CardTitle>
+              <CardTitle className="text-lg">{t("drafting.title")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <PromptInput
@@ -780,16 +782,16 @@ export function ProjectDetailPage() {
                 isLoading={draftMut.isPending}
                 className="max-w-xl"
               >
-                <PromptInputTextarea placeholder="Enter section key to draft (e.g. technical-approach)" />
+                <PromptInputTextarea placeholder={t("drafting.placeholder")} />
                 <PromptInputActions>
-                  <PromptInputAction tooltip="Generate Draft">
+                  <PromptInputAction tooltip={t("drafting.generateDraft")}>
                     <Button
                       size="sm"
                       disabled={!sectionKey || draftMut.isPending}
                       onClick={() => draftMut.mutate({ project_id: id!, section_key: sectionKey })}
                     >
                       {draftMut.isPending && <Spinner data-icon="inline-start" />}
-                      Generate
+                      {t("drafting.generate")}
                     </Button>
                   </PromptInputAction>
                 </PromptInputActions>
@@ -799,21 +801,21 @@ export function ProjectDetailPage() {
               {selectedSectionId && sectionVersions && sectionVersions.length > 0 && (
                 <div className="flex flex-col gap-3">
                   <Message>
-                    <MessageAvatar src="" alt="AI Assistant" fallback="AI" />
+                    <MessageAvatar src="" alt={t("drafting.aiAssistant")} fallback={t("drafting.aiFallback")} />
                     <div className="flex flex-col gap-3 flex-1">
                       <div className="flex gap-2 text-xs text-muted-foreground">
-                        <span>Version {sectionVersions[0].version_number}</span>
-                        <span>by {sectionVersions[0].created_by_actor}</span>
+                        <span>{t("drafting.version", { number: sectionVersions[0].version_number })}</span>
+                        <span>{t("drafting.by", { actor: sectionVersions[0].created_by_actor })}</span>
                       </div>
                       <MessageContent markdown className="flex-1">
                         {sectionVersions[0].content_markdown || ""}
                       </MessageContent>
                       <MessageActions>
-                        <MessageAction tooltip="Re-draft section">
+                        <MessageAction tooltip={t("drafting.redraft")}>
                           <Button
                             size="sm"
                             variant="outline"
-                            aria-label="Re-draft section"
+                            aria-label={t("drafting.redraft")}
                             disabled={redraftMut.isPending}
                             onClick={() => {
                               const section = sections?.find((s) => s.id === selectedSectionId);
@@ -831,7 +833,7 @@ export function ProjectDetailPage() {
                       {/* Evidence for this section version */}
                       {evidence?.filter((ev) => ev.quote_text).length ? (
                         <div className="flex flex-col gap-2">
-                          <p className="text-xs font-medium text-muted-foreground">Evidence</p>
+                          <p className="text-xs font-medium text-muted-foreground">{t("drafting.evidence")}</p>
                           {evidence
                             ?.filter((ev) => ev.quote_text)
                             .slice(0, 5)
@@ -839,7 +841,7 @@ export function ProjectDetailPage() {
                               <Source key={ev.id} href={`#evidence-${ev.id}`}>
                                 <p className="text-xs">{ev.quote_text}</p>
                                 <span className="text-[10px] text-muted-foreground">
-                                  Confidence: {ev.confidence?.toFixed(2) ?? "N/A"}
+                                  {t("drafting.confidence", { value: ev.confidence?.toFixed(2) ?? t("common:notAvailable") })}
                                 </span>
                               </Source>
                             ))}
@@ -847,18 +849,18 @@ export function ProjectDetailPage() {
                       ) : (
                         <div className="flex items-center gap-2 rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 px-3 py-2">
                           <AlertTriangleIcon className="size-4 text-yellow-600 shrink-0" />
-                          <p className="text-xs text-yellow-700 dark:text-yellow-400">No evidence linked to this section. Consider adding source citations before approving.</p>
+                          <p className="text-xs text-yellow-700 dark:text-yellow-400">{t("drafting.noEvidence")}</p>
                         </div>
                       )}
 
                       {/* Version diff */}
                       {sectionVersions.length > 1 && (
                         <div className="flex flex-col gap-2">
-                          <p className="text-xs font-medium text-muted-foreground">Version History</p>
+                          <p className="text-xs font-medium text-muted-foreground">{t("drafting.versionHistory")}</p>
                           <div className="flex gap-2 text-xs">
                             {(() => {
                               const versionItems = sectionVersions.map((v) => ({
-                                label: `v${v.version_number}`,
+                                label: t("drafting.versionLabel", { number: v.version_number }),
                                 value: v.version_number.toString(),
                               }));
                               return (
@@ -875,7 +877,7 @@ export function ProjectDetailPage() {
                                       </SelectGroup>
                                     </SelectContent>
                                   </Select>
-                                  <span className="self-center">vs</span>
+                                  <span className="self-center">{t("drafting.vs")}</span>
                                   <Select items={versionItems} value={diffVersionB?.toString() ?? ""} onValueChange={(v) => setDiffVersionB(v ? Number(v) : null)}>
                                     <SelectTrigger size="sm" className="w-28">
                                       <SelectValue />
@@ -898,7 +900,7 @@ export function ProjectDetailPage() {
                                 {(() => {
                                   const a = sectionVersions.find((v) => v.version_number === diffVersionA);
                                   const b = sectionVersions.find((v) => v.version_number === diffVersionB);
-                                  if (!a || !b) return "Select two versions";
+                                  if (!a || !b) return t("drafting.selectTwo");
                                   const linesA = (a.content_markdown || "").split("\n");
                                   const linesB = (b.content_markdown || "").split("\n");
                                   const maxLen = Math.max(linesA.length, linesB.length);
@@ -913,7 +915,7 @@ export function ProjectDetailPage() {
                                       if (lb) diff.push(`+ ${lb}`);
                                     }
                                   }
-                                  return diff.join("\n") || "No differences";
+                                  return diff.join("\n") || t("drafting.noDifferences");
                                 })()}
                               </div>
                             </ScrollArea>
@@ -932,18 +934,18 @@ export function ProjectDetailPage() {
         <TabsContent value="evidence">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Evidence</CardTitle>
+              <CardTitle className="text-lg">{t("evidence.title")}</CardTitle>
             </CardHeader>
             <CardContent>
-              {evidence?.length === 0 && knowledgeChunks?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><FileIcon /></EmptyMedia><EmptyTitle>No evidence</EmptyTitle><EmptyDescription>Ingest documents to generate evidence.</EmptyDescription></EmptyHeader></Empty>}
+              {evidence?.length === 0 && knowledgeChunks?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><FileIcon /></EmptyMedia><EmptyTitle>{t("evidence.emptyTitle")}</EmptyTitle><EmptyDescription>{t("evidence.emptyDesc")}</EmptyDescription></EmptyHeader></Empty>}
               {evidence && evidence.length > 0 && (
                 <div className="flex flex-col gap-3 mb-6">
-                  <h3 className="text-sm font-semibold">Citation Evidence</h3>
+                  <h3 className="text-sm font-semibold">{t("evidence.citationEvidence")}</h3>
                   {evidence.map((e) => (
                     <Source key={e.id} href={`#evidence-${e.id}`}>
                       <p className="text-sm">{e.quote_text}</p>
                       <div className="flex gap-2 text-xs text-muted-foreground">
-                        <span>Confidence: {e.confidence?.toFixed(2) ?? "N/A"}</span>
+                        <span>{t("evidence.confidence", { value: e.confidence?.toFixed(2) ?? t("common:notAvailable") })}</span>
                       </div>
                     </Source>
                   ))}
@@ -951,14 +953,14 @@ export function ProjectDetailPage() {
               )}
               {knowledgeChunks && knowledgeChunks.length > 0 && (
                 <div className="flex flex-col gap-3">
-                  <h3 className="text-sm font-semibold">Knowledge Chunks ({knowledgeChunks.length})</h3>
+                  <h3 className="text-sm font-semibold">{t("evidence.knowledgeChunks", { count: knowledgeChunks.length })}</h3>
                   <ScrollArea className="h-96">
                     <div className="flex flex-col gap-2">
                       {knowledgeChunks.map((chunk) => (
                         <div key={chunk.id} className="rounded-md border p-3 text-sm">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                             <FileIcon className="size-3" />
-                            <span>Chunk #{chunk.chunk_index}</span>
+                            <span>{t("evidence.chunkLabel", { index: chunk.chunk_index })}</span>
                           </div>
                           <p className="text-xs whitespace-pre-wrap line-clamp-4">{chunk.content}</p>
                         </div>
@@ -975,7 +977,7 @@ export function ProjectDetailPage() {
         <TabsContent value="search">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Knowledge Search</CardTitle>
+              <CardTitle className="text-lg">{t("search.title")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="flex gap-2">
@@ -985,22 +987,22 @@ export function ProjectDetailPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                    placeholder="Search knowledge base..."
+                    placeholder={t("search.placeholder")}
                     className="pl-9"
                   />
                 </div>
                 <Button onClick={handleSearch} disabled={isSearching || !searchQuery.trim()}>
                   {isSearching && <Spinner data-icon="inline-start" />}
-                  Search
+                  {t("search.search")}
                 </Button>
               </div>
               {searchResults.length > 0 && (
                 <div className="flex flex-col gap-3">
-                  <p className="text-sm font-medium">{searchResults.length} results</p>
+                  <p className="text-sm font-medium">{t("search.results", { count: searchResults.length })}</p>
                   {searchResults.map((r) => (
                     <div key={r.chunk_id} className="rounded-md border p-3">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                        <span>Score: {r.score.toFixed(3)}</span>
+                        <span>{t("search.score", { value: r.score.toFixed(3) })}</span>
                       </div>
                       <p className="text-sm whitespace-pre-wrap line-clamp-6">{r.content}</p>
                     </div>
@@ -1013,8 +1015,8 @@ export function ProjectDetailPage() {
                     <EmptyMedia variant="icon">
                       <SearchIcon />
                     </EmptyMedia>
-                    <EmptyTitle>No search results</EmptyTitle>
-                    <EmptyDescription>Try a different phrase or upload more source documents.</EmptyDescription>
+                    <EmptyTitle>{t("search.emptyTitle")}</EmptyTitle>
+                    <EmptyDescription>{t("search.emptyDesc")}</EmptyDescription>
                   </EmptyHeader>
                 </Empty>
               )}
@@ -1026,16 +1028,16 @@ export function ProjectDetailPage() {
         <TabsContent value="runs">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Execution Runs</CardTitle>
+              <CardTitle className="text-lg">{t("runs.title")}</CardTitle>
             </CardHeader>
             <CardContent>
-              {runs?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><ActivityIcon /></EmptyMedia><EmptyTitle>No runs yet</EmptyTitle><EmptyDescription>Draft a section to see execution runs.</EmptyDescription></EmptyHeader></Empty>}
+              {runs?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><ActivityIcon /></EmptyMedia><EmptyTitle>{t("runs.emptyTitle")}</EmptyTitle><EmptyDescription>{t("runs.emptyDesc")}</EmptyDescription></EmptyHeader></Empty>}
               <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("runs.type")}</TableHead>
+                    <TableHead>{t("runs.status")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1053,15 +1055,15 @@ export function ProjectDetailPage() {
                         {r.status === "failed" && (
                           <Button size="sm" variant="outline" className="ml-2" onClick={() => {
                             setConfirmAction({
-                              title: "Retry Execution Run",
-                              description: `Retry this ${r.run_type} run?`,
+                              title: t("runs.retryTitle"),
+                              description: t("runs.retryDesc", { runType: r.run_type }),
                               onConfirm: () => {
                                 retryMut.mutate(r.id);
                               },
                             });
                             setConfirmDialogOpen(true);
                           }}>
-                            Retry
+                            {t("runs.retry")}
                           </Button>
                         )}
                       </TableCell>
@@ -1080,12 +1082,12 @@ export function ProjectDetailPage() {
             {/* Section selector + threads */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Review Threads</CardTitle>
+                <CardTitle className="text-lg">{t("review.title")}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 <FieldGroup>
                   <Field>
-                    <FieldLabel>Section</FieldLabel>
+                    <FieldLabel>{t("review.section")}</FieldLabel>
                     <Select
                       value={selectedSectionId ?? ""}
                       onValueChange={(v) => {
@@ -1093,7 +1095,7 @@ export function ProjectDetailPage() {
                         setSelectedThreadId(null);
                       }}
                     >
-                      <SelectTrigger><SelectValue placeholder="Select a section" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={t("review.selectSection")} /></SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
                           {sections?.map((s) => (
@@ -1111,8 +1113,8 @@ export function ProjectDetailPage() {
                       <EmptyMedia variant="icon">
                         <MessageCircleIcon />
                       </EmptyMedia>
-                      <EmptyTitle>No review threads</EmptyTitle>
-                      <EmptyDescription>Approve or reject this section to create a review thread.</EmptyDescription>
+                      <EmptyTitle>{t("review.emptyTitle")}</EmptyTitle>
+                      <EmptyDescription>{t("review.emptyDesc")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 )}
@@ -1125,7 +1127,7 @@ export function ProjectDetailPage() {
                     )}
                     onClick={() => setSelectedThreadId(t.id)}
                   >
-                    <span className="font-medium">Thread {t.id.slice(0, 8)}</span>
+                    <span className="font-medium">{t("review.thread", { id: t.id.slice(0, 8) })}</span>
                     <Badge variant={t.status === "resolved" ? "default" : "secondary"}>{t.status}</Badge>
                   </button>
                 ))}
@@ -1133,11 +1135,11 @@ export function ProjectDetailPage() {
                 {/* Approve / Reject actions */}
                 {selectedSectionId && (
                   <div className="flex flex-col gap-2 pt-2 border-t">
-                    <p className="text-xs font-medium text-muted-foreground">Submit Decision</p>
+                    <p className="text-xs font-medium text-muted-foreground">{t("review.submitDecision")}</p>
                     <Input
                       value={reviewDecisionComment}
                       onChange={(e) => setReviewDecisionComment(e.target.value)}
-                      placeholder="Optional comment..."
+                      placeholder={t("review.commentPlaceholder")}
                     />
                     <div className="flex gap-2">
                       <Button
@@ -1151,7 +1153,7 @@ export function ProjectDetailPage() {
                         })}
                       >
                         {submitDecisionMut.isPending && <Spinner data-icon="inline-start" />}
-                        Approve
+                        {t("review.approve")}
                       </Button>
                       <Button
                         size="sm"
@@ -1164,7 +1166,7 @@ export function ProjectDetailPage() {
                         })}
                       >
                         {submitDecisionMut.isPending && <Spinner data-icon="inline-start" />}
-                        Reject
+                        {t("review.reject")}
                       </Button>
                     </div>
                   </div>
@@ -1175,7 +1177,7 @@ export function ProjectDetailPage() {
             {/* Comments panel */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Comments</CardTitle>
+                <CardTitle className="text-lg">{t("review.comments")}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 {!selectedThreadId ? (
@@ -1184,8 +1186,8 @@ export function ProjectDetailPage() {
                       <EmptyMedia variant="icon">
                         <MessageCircleIcon />
                       </EmptyMedia>
-                      <EmptyTitle>No thread selected</EmptyTitle>
-                      <EmptyDescription>Select a review thread to view and add comments.</EmptyDescription>
+                      <EmptyTitle>{t("review.noThreadSelected")}</EmptyTitle>
+                      <EmptyDescription>{t("review.noThreadDesc")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 ) : (
@@ -1210,8 +1212,8 @@ export function ProjectDetailPage() {
                               <EmptyMedia variant="icon">
                                 <MessageCircleIcon />
                               </EmptyMedia>
-                              <EmptyTitle>No comments yet</EmptyTitle>
-                              <EmptyDescription>Add the first comment to start the discussion.</EmptyDescription>
+                              <EmptyTitle>{t("review.noComments")}</EmptyTitle>
+                              <EmptyDescription>{t("review.noCommentsDesc")}</EmptyDescription>
                             </EmptyHeader>
                           </Empty>
                         )}
@@ -1221,7 +1223,7 @@ export function ProjectDetailPage() {
                       <Input
                         value={reviewCommentBody}
                         onChange={(e) => setReviewCommentBody(e.target.value)}
-                        placeholder="Add a comment..."
+                        placeholder={t("review.addComment")}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && reviewCommentBody.trim() && !addCommentMut.isPending) {
                             addCommentMut.mutate({ thread_id: selectedThreadId, body: reviewCommentBody.trim() });
@@ -1234,7 +1236,7 @@ export function ProjectDetailPage() {
                         onClick={() => addCommentMut.mutate({ thread_id: selectedThreadId, body: reviewCommentBody.trim() })}
                       >
                         {addCommentMut.isPending && <Spinner data-icon="inline-start" />}
-                        Send
+                        {t("review.send")}
                       </Button>
                     </div>
                   </>
@@ -1248,7 +1250,7 @@ export function ProjectDetailPage() {
         <TabsContent value="audit">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Audit Trail</CardTitle>
+              <CardTitle className="text-lg">{t("audit.title")}</CardTitle>
             </CardHeader>
             <CardContent>
               {auditEvents?.length === 0 ? (
@@ -1257,8 +1259,8 @@ export function ProjectDetailPage() {
                     <EmptyMedia variant="icon">
                       <ClipboardCheckIcon />
                     </EmptyMedia>
-                    <EmptyTitle>No audit events</EmptyTitle>
-                    <EmptyDescription>Project activity will appear here as bundles, drafts, reviews and exports are created.</EmptyDescription>
+                    <EmptyTitle>{t("audit.emptyTitle")}</EmptyTitle>
+                    <EmptyDescription>{t("audit.emptyDesc")}</EmptyDescription>
                   </EmptyHeader>
                 </Empty>
               ) : (
@@ -1291,7 +1293,7 @@ export function ProjectDetailPage() {
         <TabsContent value="export">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Export Deliverables</CardTitle>
+              <CardTitle className="text-lg">{t("export.title")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               {deliverables?.length === 0 ? (
@@ -1300,8 +1302,8 @@ export function ProjectDetailPage() {
                     <EmptyMedia variant="icon">
                       <DownloadIcon />
                     </EmptyMedia>
-                    <EmptyTitle>No deliverables to export</EmptyTitle>
-                    <EmptyDescription>Create a deliverable and approve all sections before exporting DOCX.</EmptyDescription>
+                    <EmptyTitle>{t("export.emptyTitle")}</EmptyTitle>
+                    <EmptyDescription>{t("export.emptyDesc")}</EmptyDescription>
                   </EmptyHeader>
                 </Empty>
               ) : (
@@ -1311,7 +1313,7 @@ export function ProjectDetailPage() {
                       <p className="font-medium">{d.title}</p>
                       <p className="text-xs text-muted-foreground">
                         {d.type} &middot; {d.status}
-                        {d.export_status && d.export_status !== "none" && ` · export: ${d.export_status}`}
+                        {d.export_status && d.export_status !== "none" && ` · ${t("export.statusLabel", { status: d.export_status })}`}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -1321,13 +1323,13 @@ export function ProjectDetailPage() {
                         onClick={async () => {
                           try {
                             await exportDeliverableDocx(d.id);
-                            toast.success("DOCX export started");
+                            toast.success(t("export.docxStarted"));
                           } catch {
-                            toast.error("Failed to export DOCX");
+                            toast.error(t("export.docxFailed"));
                           }
                         }}
                       >
-                        Export DOCX
+                        {t("export.exportDocx")}
                       </Button>
                       <Button
                         size="sm"
@@ -1336,13 +1338,13 @@ export function ProjectDetailPage() {
                         onClick={async () => {
                           try {
                             await exportDeliverablePdf(d.id);
-                            toast.success("PDF export started");
+                            toast.success(t("export.pdfStarted"));
                           } catch {
-                            toast.error("Failed to export PDF");
+                            toast.error(t("export.pdfFailed"));
                           }
                         }}
                       >
-                        Export PDF
+                        {t("export.exportPdf")}
                       </Button>
                     </div>
                   </div>
@@ -1359,7 +1361,7 @@ export function ProjectDetailPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Execution Trace</CardTitle>
+                <CardTitle className="text-lg">{t("system.title")}</CardTitle>
               </CardHeader>
               <CardContent>
                 {runs?.length === 0 ? (
@@ -1368,8 +1370,8 @@ export function ProjectDetailPage() {
                       <EmptyMedia variant="icon">
                         <ActivityIcon />
                       </EmptyMedia>
-                      <EmptyTitle>No execution runs</EmptyTitle>
-                      <EmptyDescription>Drafting, retry and processing runs will appear here.</EmptyDescription>
+                      <EmptyTitle>{t("system.emptyTitle")}</EmptyTitle>
+                      <EmptyDescription>{t("system.emptyDesc")}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 ) : (
@@ -1385,12 +1387,12 @@ export function ProjectDetailPage() {
                           </div>
                           {r.input_json && (
                             <p className="text-xs text-muted-foreground font-mono bg-muted rounded p-1.5 mt-1 line-clamp-2">
-                              Input: {JSON.stringify(r.input_json)}
+                              {t("system.input")} {JSON.stringify(r.input_json)}
                             </p>
                           )}
                           {r.output_json && (
                             <p className="text-xs text-muted-foreground font-mono bg-muted rounded p-1.5 mt-1 line-clamp-2">
-                              Output: {JSON.stringify(r.output_json)}
+                              {t("system.output")} {JSON.stringify(r.output_json)}
                             </p>
                           )}
                         </div>
@@ -1411,14 +1413,14 @@ export function ProjectDetailPage() {
             <AlertDialogDescription>{confirmAction?.description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 confirmAction?.onConfirm();
                 setConfirmDialogOpen(false);
               }}
             >
-              Confirm
+              {t("confirm.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

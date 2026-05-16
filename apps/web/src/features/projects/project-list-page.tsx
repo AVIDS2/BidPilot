@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -73,6 +74,7 @@ function ProjectListSkeleton() {
 }
 
 export function ProjectListPage() {
+  const { t } = useTranslation(["projects", "common"]);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -108,17 +110,17 @@ export function ProjectListPage() {
       setName("");
       setScenario("bidpilot");
       setShowForm(false);
-      toast.success("Project created");
+      toast.success(t("create.created"));
       navigate(`/projects/${data.id}`);
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("plan limit") || msg.includes("403")) {
-        toast.error("Project limit reached. Upgrade your plan to create more projects.", {
-          action: { label: "Upgrade", onClick: () => navigate("/pricing") },
+        toast.error(t("create.limitReached"), {
+          action: { label: t("list.upgrade"), onClick: () => navigate("/pricing") },
         });
       } else {
-        toast.error("Failed to create project");
+        toast.error(t("create.createFailed"));
       }
     },
   });
@@ -127,10 +129,10 @@ export function ProjectListPage() {
     mutationFn: deleteProject,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success("Project deleted");
+      toast.success(t("delete.deleted"));
     },
     onError: () => {
-      toast.error("Failed to delete project");
+      toast.error(t("delete.deleteFailed"));
     },
   });
 
@@ -138,10 +140,10 @@ export function ProjectListPage() {
     mutationFn: ({ id, status }: { id: string; status: string }) => updateProjectStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success("Status updated");
+      toast.success(t("status.updated"));
     },
     onError: () => {
-      toast.error("Failed to update status");
+      toast.error(t("status.updateFailed"));
     },
   });
 
@@ -168,17 +170,17 @@ export function ProjectListPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Projects</h1>
+        <h1 className="text-2xl font-bold">{t("list.title")}</h1>
         <div className="flex items-center gap-2">
           {!showGuide && (
             <Button variant="outline" size="sm" onClick={() => { localStorage.removeItem("docpilot_guide_dismissed"); setShowGuide(true); }}>
               <BookOpenIcon className="size-4" />
-              Show Guide
+              {t("list.showGuide")}
             </Button>
           )}
           <Button onClick={() => setShowForm(!showForm)}>
             <PlusIcon className="size-4" />
-            New Project
+            {t("list.newProject")}
           </Button>
         </div>
       </div>
@@ -188,12 +190,12 @@ export function ProjectListPage() {
           <CardContent className="pt-6">
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="name">Project Name</FieldLabel>
+                <FieldLabel htmlFor="name">{t("create.projectName")}</FieldLabel>
                 <Input
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Acme Bid"
+                  placeholder={t("create.projectNamePlaceholder")}
                 />
               </Field>
               <ScenarioSelector value={scenario} onChange={setScenario} />
@@ -202,7 +204,7 @@ export function ProjectListPage() {
                 disabled={!name || createMut.isPending}
               >
                 {createMut.isPending && <Spinner data-icon="inline-start" />}
-                Create
+                {t("create.create")}
               </Button>
             </FieldGroup>
           </CardContent>
@@ -224,15 +226,15 @@ export function ProjectListPage() {
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <BookOpenIcon className="size-5 text-primary" />
-              <CardTitle className="text-lg">Quick Start Guide</CardTitle>
+              <CardTitle className="text-lg">{t("guide.title")}</CardTitle>
             </div>
-            <Button variant="ghost" size="icon" onClick={dismissGuide} className="-mt-1 -mr-2 size-7" aria-label="Dismiss">
+            <Button variant="ghost" size="icon" onClick={dismissGuide} className="-mt-1 -mr-2 size-7" aria-label={t("guide.dismiss")}>
               <XIcon className="size-4" />
             </Button>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              Welcome to DocPilot! Follow these steps to turn source materials into a reviewable, exported deliverable:
+              {t("guide.welcome")}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
@@ -240,8 +242,8 @@ export function ProjectListPage() {
                   <PlusIcon className="size-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">1. Create Project</p>
-                  <p className="text-xs text-muted-foreground">Click "+ New Project" and pick a scenario package (e.g. BidPilot).</p>
+                  <p className="text-sm font-medium">{t("guide.step1Title")}</p>
+                  <p className="text-xs text-muted-foreground">{t("guide.step1Desc")}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
@@ -249,8 +251,8 @@ export function ProjectListPage() {
                   <FileUpIcon className="size-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">2. Upload Bundle</p>
-                  <p className="text-xs text-muted-foreground">Open project → Bundles tab → register bundle → upload PDF/DOCX.</p>
+                  <p className="text-sm font-medium">{t("guide.step2Title")}</p>
+                  <p className="text-xs text-muted-foreground">{t("guide.step2Desc")}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
@@ -258,8 +260,8 @@ export function ProjectListPage() {
                   <FileTextIcon className="size-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">3. Draft Sections</p>
-                  <p className="text-xs text-muted-foreground">Deliverables → create one. Drafting tab → generate sections with AI.</p>
+                  <p className="text-sm font-medium">{t("guide.step3Title")}</p>
+                  <p className="text-xs text-muted-foreground">{t("guide.step3Desc")}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
@@ -267,8 +269,8 @@ export function ProjectListPage() {
                   <CheckIcon className="size-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">4. Review & Approve</p>
-                  <p className="text-xs text-muted-foreground">Review tab → comment, approve or reject each section.</p>
+                  <p className="text-sm font-medium">{t("guide.step4Title")}</p>
+                  <p className="text-xs text-muted-foreground">{t("guide.step4Desc")}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
@@ -276,8 +278,8 @@ export function ProjectListPage() {
                   <DownloadIcon className="size-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">5. Export</p>
-                  <p className="text-xs text-muted-foreground">When all sections approved, Export tab → download DOCX.</p>
+                  <p className="text-sm font-medium">{t("guide.step5Title")}</p>
+                  <p className="text-xs text-muted-foreground">{t("guide.step5Desc")}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
@@ -285,8 +287,8 @@ export function ProjectListPage() {
                   <BookOpenIcon className="size-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">6. Inspect Audit</p>
-                  <p className="text-xs text-muted-foreground">Audit tab → see every event. System tab → execution traces & costs.</p>
+                  <p className="text-sm font-medium">{t("guide.step6Title")}</p>
+                  <p className="text-xs text-muted-foreground">{t("guide.step6Desc")}</p>
                 </div>
               </div>
             </div>
@@ -298,19 +300,19 @@ export function ProjectListPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader>
-            <CardDescription>Total Projects</CardDescription>
+            <CardDescription>{t("list.totalProjects")}</CardDescription>
             <CardTitle className="text-2xl">{projects?.length ?? 0}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Active</CardDescription>
+            <CardDescription>{t("list.active")}</CardDescription>
             <CardTitle className="text-2xl">{statusCounts["active"] ?? 0}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Completed</CardDescription>
+            <CardDescription>{t("list.completed")}</CardDescription>
             <CardTitle className="text-2xl">{statusCounts["completed"] ?? 0}</CardTitle>
           </CardHeader>
         </Card>
@@ -322,12 +324,14 @@ export function ProjectListPage() {
           <CardContent className="flex items-center justify-between pt-6">
             <div>
               <p className="text-sm font-medium">
-                {(projects?.length ?? 0) >= 3 ? "Project limit reached" : `${3 - (projects?.length ?? 0)} of 3 projects remaining`}
+                {(projects?.length ?? 0) >= 3
+                  ? t("list.projectLimitReached")
+                  : t("list.projectsRemaining", { count: 3 - (projects?.length ?? 0) })}
               </p>
-              <p className="text-xs text-muted-foreground">Starter plan allows up to 3 projects. Upgrade for unlimited.</p>
+              <p className="text-xs text-muted-foreground">{t("list.upgradeHint")}</p>
             </div>
             <Link to="/pricing">
-              <Button variant="outline" size="sm">Upgrade</Button>
+              <Button variant="outline" size="sm">{t("list.upgrade")}</Button>
             </Link>
           </CardContent>
         </Card>
@@ -340,20 +344,20 @@ export function ProjectListPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search projects..."
+            placeholder={t("list.searchPlaceholder")}
             className="pl-9"
           />
         </div>
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as string)}>
           <SelectTrigger className="w-36">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder={t("list.statusFilter")} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="archived">Archived</SelectItem>
+              <SelectItem value="all">{t("list.allStatus")}</SelectItem>
+              <SelectItem value="active">{t("list.active")}</SelectItem>
+              <SelectItem value="completed">{t("list.completed")}</SelectItem>
+              <SelectItem value="archived">{t("list.archived")}</SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -365,8 +369,8 @@ export function ProjectListPage() {
             <EmptyMedia variant="icon">
               <SearchIcon />
             </EmptyMedia>
-            <EmptyTitle>{search ? "No matching projects" : "No projects yet"}</EmptyTitle>
-            <EmptyDescription>{search ? "Try a different search term." : "Create a project to get started."}</EmptyDescription>
+            <EmptyTitle>{search ? t("list.emptySearchTitle") : t("list.emptyTitle")}</EmptyTitle>
+            <EmptyDescription>{search ? t("list.emptySearchDesc") : t("list.emptyDesc")}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}
@@ -376,12 +380,12 @@ export function ProjectListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Scenario</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">Slug</TableHead>
+                <TableHead>{t("list.name")}</TableHead>
+                <TableHead>{t("list.scenario")}</TableHead>
+                <TableHead>{t("list.status")}</TableHead>
+                <TableHead className="hidden md:table-cell">{t("list.slug")}</TableHead>
                 <TableHead className="w-10">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("list.actions")}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -392,7 +396,7 @@ export function ProjectListPage() {
                   className="cursor-pointer hover:bg-accent/50"
                   role="link"
                   tabIndex={0}
-                  aria-label={`Open project ${p.name}`}
+                  aria-label={t("list.openProject", { name: p.name })}
                   onClick={() => navigate(`/projects/${p.id}`)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
@@ -423,18 +427,18 @@ export function ProjectListPage() {
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="size-7" aria-label={`Project actions for ${p.name}`} />}>
+                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="size-7" aria-label={t("list.projectActions", { name: p.name })} />}>
                         <MoreHorizontalIcon className="size-4" />
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => statusMut.mutate({ id: p.id, status: "completed" })}>
-                          <CheckCircleIcon className="size-4 mr-2" /> Mark Completed
+                          <CheckCircleIcon className="size-4 mr-2" /> {t("list.markCompleted")}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => statusMut.mutate({ id: p.id, status: "archived" })}>
-                          <ArchiveIcon className="size-4 mr-2" /> Archive
+                          <ArchiveIcon className="size-4 mr-2" /> {t("list.archive")}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setDeleteTarget(p)} className="text-destructive">
-                          <TrashIcon className="size-4 mr-2" /> Delete
+                          <TrashIcon className="size-4 mr-2" /> {t("list.delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -445,7 +449,7 @@ export function ProjectListPage() {
           </Table>
           {filtered.length > 50 && (
             <CardContent className="pt-4 text-center text-sm text-muted-foreground">
-              Showing 50 of {filtered.length} projects
+              {t("list.showingCount", { count: filtered.length })}
             </CardContent>
           )}
         </Card>
@@ -454,13 +458,13 @@ export function ProjectListPage() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogTitle>{t("delete.title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <span className="font-medium text-foreground">{deleteTarget?.name}</span>? This action cannot be undone and will remove all associated bundles, sections and audit events.
+              {t("delete.description", { name: deleteTarget?.name ?? "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
               onClick={() => {
@@ -468,7 +472,7 @@ export function ProjectListPage() {
                 setDeleteTarget(null);
               }}
             >
-              Delete
+              {t("confirm.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

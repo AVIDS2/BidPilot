@@ -1,13 +1,16 @@
 {
   "app": {
     "title": "DocPilot",
-    "documents": "Documents"
+    "documents": "Documents",
+    "tagline": "AI Document Execution"
   },
   "nav": {
     "projects": "Projects",
     "pricing": "Pricing",
     "users": "Users",
-    "account": "Account"
+    "account": "Account",
+    "navigation": "Navigation",
+    "teams": "Teams"
   },
   "actions": {
     "save": "Save",
@@ -22,6 +25,10 @@
     "search": "Search",
     "loading": "Loading..."
   },
+  "confirm": {
+    "cancel": "Cancel",
+    "delete": "Delete"
+  },
   "pagination": {
     "pageInfo": "Page {{page}} of {{totalPages}} ({{total}} total)",
     "goToPage": "Go to page"
@@ -29,5 +36,16 @@
   "language": {
     "switch": "中文",
     "label": "Language"
+  },
+  "notAvailable": "N/A",
+  "error": {
+    "title": "Something went wrong",
+    "fallback": "An unexpected error occurred.",
+    "reload": "Reload Page"
+  },
+  "user": {
+    "fallbackName": "User",
+    "account": "Account",
+    "logOut": "Log out"
   }
 }
