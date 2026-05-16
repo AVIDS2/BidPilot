@@ -97,3 +97,6 @@ def test_export_includes_all_entity_types(test_db, client):
     assert "review_comments" in data
     assert "documents" in data
     assert "bundles" in data
+    assert "projects" in data
+    assert "section_versions" in data
+    assert "audit_events" in data
