@@ -7,6 +7,8 @@ import { AccountPage } from "./features/account/account-page";
 import { PricingPage } from "./features/pricing/pricing-page";
 import { LandingPage } from "./features/landing/landing-page";
 import { UserManagementPage } from "./features/admin/user-management-page";
+import { TeamManagementPage } from "./features/admin/team-management-page";
+import { InvitationManagementPage } from "./features/admin/invitation-management-page";
 import { ForgotPasswordPage } from "./features/auth/forgot-password-page";
 import { ResetPasswordPage } from "./features/auth/reset-password-page";
 import { VerifyEmailPromptPage } from "./features/auth/verify-email-prompt-page";
@@ -20,7 +22,7 @@ import { LoginForm } from "@/components/login-form";
 import { SignupForm } from "@/components/signup-form";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { FileTextIcon, CreditCardIcon, UsersIcon } from "lucide-react";
+import { FileTextIcon, CreditCardIcon, UsersIcon, UserPlusIcon, MailIcon } from "lucide-react";
 
 const queryClient = new QueryClient();
 
@@ -69,6 +71,8 @@ function AppLayout() {
   const navItems = [
     { title: t("nav.projects"), url: "/projects", icon: <FileTextIcon /> },
     { title: t("nav.pricing"), url: "/pricing", icon: <CreditCardIcon /> },
+    { title: t("nav.teams"), url: "/admin/teams", icon: <UserPlusIcon /> },
+    { title: t("nav.invitations"), url: "/admin/invitations", icon: <MailIcon /> },
     { title: t("nav.users"), url: "/admin/users", icon: <UsersIcon /> },
   ];
 
@@ -76,8 +80,9 @@ function AppLayout() {
     { name: "DocPilot", logo: <FileTextIcon className="size-3" />, plan: t("app.tagline") },
   ];
 
+  const adminOnlyUrls = ["/admin/users", "/admin/teams", "/admin/invitations"];
   const visibleNavItems = navItems.filter(
-    (item) => item.title !== t("nav.users") || isAdmin
+    (item) => !adminOnlyUrls.includes(item.url) || isAdmin
   );
 
   const sidebarUser = {
@@ -127,6 +132,8 @@ export function App() {
                   <Route path="/projects/:id" element={<ProjectDetailPage />} />
                   <Route path="/account" element={<AccountPage />} />
                   <Route path="/admin/users" element={<UserManagementPage />} />
+                  <Route path="/admin/teams" element={<TeamManagementPage />} />
+                  <Route path="/admin/invitations" element={<InvitationManagementPage />} />
                 </Route>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />

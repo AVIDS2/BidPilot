@@ -6,7 +6,7 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, displayName: string, password: string) => Promise<void>;
+  register: (email: string, displayName: string, password: string, invitationToken?: string, orgName?: string, orgSlug?: string) => Promise<void>;
   logout: () => void;
   setUser: (user: CurrentUser) => void;
 }
@@ -59,8 +59,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
   }, []);
 
-  const register = useCallback(async (email: string, displayName: string, password: string) => {
-    await registerUser({ email, display_name: displayName, password });
+  const register = useCallback(async (
+    email: string,
+    displayName: string,
+    password: string,
+    invitationToken?: string,
+    orgName?: string,
+    orgSlug?: string,
+  ) => {
+    await registerUser({
+      email,
+      display_name: displayName,
+      password,
+      invitation_token: invitationToken || null,
+      org_name: orgName || null,
+      org_slug: orgSlug || null,
+    });
     // Don't auto-login — user must verify email first
   }, []);
 

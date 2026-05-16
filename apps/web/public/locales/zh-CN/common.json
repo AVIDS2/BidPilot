@@ -8,9 +8,10 @@
     "projects": "项目",
     "pricing": "定价",
     "users": "用户管理",
+    "teams": "团队",
+    "invitations": "邀请",
     "account": "账户",
-    "navigation": "导航",
-    "teams": "团队"
+    "navigation": "导航"
   },
   "actions": {
     "save": "保存",

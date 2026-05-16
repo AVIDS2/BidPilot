@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
@@ -20,10 +20,17 @@ export function SignupForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
+  const [searchParams] = useSearchParams()
+  const invToken = searchParams.get("invitation") || ""
+
   const [email, setEmail] = useState("")
   const [displayName, setDisplayName] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [invitationToken, setInvitationToken] = useState(invToken)
+  const createOrg = !invitationToken
+  const [orgName, setOrgName] = useState("")
+  const [orgSlug, setOrgSlug] = useState("")
   const [loading, setLoading] = useState(false)
   const { register } = useAuth()
   const navigate = useNavigate()
@@ -39,9 +46,22 @@ export function SignupForm({
       toast.error(t("toast.passwordTooShort"))
       return
     }
+    if (createOrg && !invitationToken) {
+      if (!orgName || !orgSlug) {
+        toast.error("Please provide both organization name and slug")
+        return
+      }
+    }
     setLoading(true)
     try {
-      await register(email, displayName, password)
+      await register(
+        email,
+        displayName,
+        password,
+        invitationToken || undefined,
+        createOrg ? orgName || undefined : undefined,
+        createOrg ? orgSlug || undefined : undefined,
+      )
       toast.success(t("toast.accountCreated"))
       navigate("/verify-email-prompt", { state: { email } })
     } catch (err: unknown) {
@@ -59,6 +79,8 @@ export function SignupForm({
       setLoading(false)
     }
   }
+
+  const hasInvitation = !!invitationToken
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -96,6 +118,59 @@ export function SignupForm({
                   {t("signup.emailDescription")}
                 </FieldDescription>
               </Field>
+
+              {/* Organization Section */}
+              <Field>
+                <FieldLabel>{t("signup.orgLabel")}</FieldLabel>
+                <FieldDescription className="mb-2">
+                  {t("signup.orgDescription")}
+                </FieldDescription>
+
+                {!hasInvitation && (
+                  <div className="flex flex-col gap-3">
+                    <Field>
+                      <FieldLabel htmlFor="org-name">{t("signup.orgNameLabel")}</FieldLabel>
+                      <Input
+                        id="org-name"
+                        placeholder={t("signup.orgNamePlaceholder")}
+                        value={orgName}
+                        onChange={(e) => setOrgName(e.target.value)}
+                        required={createOrg}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="org-slug">{t("signup.orgSlugLabel")}</FieldLabel>
+                      <Input
+                        id="org-slug"
+                        placeholder={t("signup.orgSlugPlaceholder")}
+                        value={orgSlug}
+                        onChange={(e) => setOrgSlug(e.target.value.replace(/[^a-z0-9-]/g, "").toLowerCase())}
+                        required={createOrg}
+                      />
+                      <FieldDescription>
+                        {t("signup.orgSlugDescription")}
+                      </FieldDescription>
+                    </Field>
+                  </div>
+                )}
+
+                {hasInvitation && (
+                  <div className="rounded-md border p-3 bg-muted/50">
+                    <FieldLabel htmlFor="invitation-token">{t("signup.invitationTokenLabel")}</FieldLabel>
+                    <Input
+                      id="invitation-token"
+                      placeholder={t("signup.invitationTokenPlaceholder")}
+                      value={invitationToken}
+                      onChange={(e) => setInvitationToken(e.target.value)}
+                      className="mt-1"
+                    />
+                    <FieldDescription>
+                      {t("signup.invitationTokenDescription")}
+                    </FieldDescription>
+                  </div>
+                )}
+              </Field>
+
               <Field>
                 <Field className="grid grid-cols-2 gap-4">
                   <Field>
