@@ -1031,6 +1031,7 @@ export function ProjectDetailPage() {
             </CardHeader>
             <CardContent>
               {runs?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><ActivityIcon /></EmptyMedia><EmptyTitle>No runs yet</EmptyTitle><EmptyDescription>Draft a section to see execution runs.</EmptyDescription></EmptyHeader></Empty>}
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1069,6 +1070,7 @@ export function ProjectDetailPage() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

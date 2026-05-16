@@ -372,7 +372,7 @@ export function ProjectListPage() {
       )}
 
       {filtered.length > 0 && (
-        <Card>
+        <Card className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

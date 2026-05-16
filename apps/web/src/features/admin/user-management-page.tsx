@@ -121,6 +121,7 @@ export function UserManagementPage() {
               </EmptyHeader>
             </Empty>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -185,6 +186,7 @@ export function UserManagementPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
