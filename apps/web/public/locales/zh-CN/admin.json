@@ -1,0 +1,41 @@
+{
+  "userManagement": {
+    "title": "用户管理",
+    "allUsers": "全部用户",
+    "noUsers": "暂无用户",
+    "noUsersHint": "用户注册后将在此处显示。",
+    "adminRequired": "需要管理员权限。",
+    "usersCount": "{{count}} 个用户",
+    "usersCount_one": "{{count}} 个用户",
+    "usersCount_other": "{{count}} 个用户"
+  },
+  "table": {
+    "user": "用户",
+    "email": "邮箱",
+    "role": "角色",
+    "plan": "方案",
+    "status": "状态",
+    "actions": "操作"
+  },
+  "role": {
+    "admin": "管理员",
+    "member": "成员",
+    "updated": "角色已更新",
+    "updateFailed": "角色更新失败"
+  },
+  "status": {
+    "active": "正常",
+    "disabled": "已禁用",
+    "you": "你",
+    "disabledAction": "用户已禁用",
+    "reenabledAction": "用户已启用",
+    "updateFailed": "状态更新失败",
+    "disable": "禁用",
+    "reenable": "启用"
+  },
+  "plan": {
+    "starter": "入门版",
+    "professional": "专业版",
+    "enterprise": "企业版"
+  }
+}

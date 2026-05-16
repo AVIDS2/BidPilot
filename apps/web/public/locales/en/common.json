@@ -1,0 +1,33 @@
+{
+  "app": {
+    "title": "DocPilot",
+    "documents": "Documents"
+  },
+  "nav": {
+    "projects": "Projects",
+    "pricing": "Pricing",
+    "users": "Users",
+    "account": "Account"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "confirm": "Confirm",
+    "previous": "Previous",
+    "next": "Next",
+    "goTo": "Go to",
+    "search": "Search",
+    "loading": "Loading..."
+  },
+  "pagination": {
+    "pageInfo": "Page {{page}} of {{totalPages}} ({{total}} total)",
+    "goToPage": "Go to page"
+  },
+  "language": {
+    "switch": "中文",
+    "label": "Language"
+  }
+}

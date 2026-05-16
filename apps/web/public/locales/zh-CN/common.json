@@ -1,0 +1,33 @@
+{
+  "app": {
+    "title": "DocPilot",
+    "documents": "文档"
+  },
+  "nav": {
+    "projects": "项目",
+    "pricing": "定价",
+    "users": "用户管理",
+    "account": "账户"
+  },
+  "actions": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "close": "关闭",
+    "confirm": "确认",
+    "previous": "上一页",
+    "next": "下一页",
+    "goTo": "跳转",
+    "search": "搜索",
+    "loading": "加载中..."
+  },
+  "pagination": {
+    "pageInfo": "第 {{page}} 页，共 {{totalPages}} 页（总计 {{total}} 个用户）",
+    "goToPage": "跳转到指定页"
+  },
+  "language": {
+    "switch": "English",
+    "label": "语言"
+  }
+}

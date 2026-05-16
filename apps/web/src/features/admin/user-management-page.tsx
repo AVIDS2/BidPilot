@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { listUsers, updateUserRole, setUserStatus } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,11 +27,6 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { UsersIcon, ShieldIcon, UserIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-
-const ROLE_OPTIONS = [
-  { label: "Admin", value: "admin" },
-  { label: "Member", value: "member" },
-];
 
 function UserManagementSkeleton() {
   return (
@@ -62,11 +58,17 @@ function UserManagementSkeleton() {
 }
 
 export function UserManagementPage() {
+  const { t } = useTranslation(["admin", "common"]);
   const { user: currentUser } = useAuth();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [jumpInput, setJumpInput] = useState("");
   const pageSize = 20;
+
+  const roleOptions = useMemo(() => [
+    { label: t("role.admin"), value: "admin" },
+    { label: t("role.member"), value: "member" },
+  ], [t]);
 
   const { data, isLoading } = useQuery({
     queryFn: () => listUsers(page, pageSize),
@@ -77,20 +79,20 @@ export function UserManagementPage() {
     mutationFn: ({ userId, role }: { userId: string; role: string }) =>
       updateUserRole(userId, role),
     onSuccess: () => {
-      toast.success("Role updated");
+      toast.success(t("role.updated"));
       qc.invalidateQueries({ queryKey: ["admin-users"] });
     },
-    onError: () => toast.error("Failed to update role"),
+    onError: () => toast.error(t("role.updateFailed")),
   });
 
   const statusMut = useMutation({
     mutationFn: ({ userId, disabled }: { userId: string; disabled: boolean }) =>
       setUserStatus(userId, disabled),
     onSuccess: (_, vars) => {
-      toast.success(vars.disabled ? "User disabled" : "User re-enabled");
+      toast.success(vars.disabled ? t("status.disabledAction") : t("status.reenabledAction"));
       qc.invalidateQueries({ queryKey: ["admin-users"] });
     },
-    onError: () => toast.error("Failed to update status"),
+    onError: () => toast.error(t("status.updateFailed")),
   });
 
   if (isLoading) return <UserManagementSkeleton />;
@@ -101,7 +103,7 @@ export function UserManagementPage() {
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             <ShieldIcon className="mx-auto size-10 mb-3 opacity-40" />
-            <p>Admin access required.</p>
+            <p>{t("userManagement.adminRequired")}</p>
           </CardContent>
         </Card>
       </div>
@@ -116,13 +118,13 @@ export function UserManagementPage() {
     <div className="mx-auto max-w-5xl py-8">
       <div className="flex items-center gap-3 mb-6">
         <UsersIcon className="size-6" />
-        <h1 className="text-2xl font-bold tracking-tight">User Management</h1>
-        <Badge variant="secondary">{total} users</Badge>
+        <h1 className="text-2xl font-bold tracking-tight">{t("userManagement.title")}</h1>
+        <Badge variant="secondary">{t("userManagement.usersCount", { count: total })}</Badge>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>All Users</CardTitle>
+          <CardTitle>{t("userManagement.allUsers")}</CardTitle>
         </CardHeader>
         <CardContent>
           {!users.length ? (
@@ -131,8 +133,8 @@ export function UserManagementPage() {
                 <EmptyMedia variant="icon">
                   <UsersIcon />
                 </EmptyMedia>
-                <EmptyTitle>No users found</EmptyTitle>
-                <EmptyDescription>Users will appear here once they sign up.</EmptyDescription>
+                <EmptyTitle>{t("userManagement.noUsers")}</EmptyTitle>
+                <EmptyDescription>{t("userManagement.noUsersHint")}</EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : (
@@ -140,12 +142,12 @@ export function UserManagementPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("table.user")}</TableHead>
+                  <TableHead>{t("table.email")}</TableHead>
+                  <TableHead>{t("table.role")}</TableHead>
+                  <TableHead>{t("table.plan")}</TableHead>
+                  <TableHead>{t("table.status")}</TableHead>
+                  <TableHead className="text-right">{t("table.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -161,7 +163,7 @@ export function UserManagementPage() {
                     <TableCell>
                       <Select
                         value={u.role}
-                        items={ROLE_OPTIONS}
+                        items={roleOptions}
                         onValueChange={(newRole) => { if (newRole) roleMut.mutate({ userId: u.id, role: newRole }); }}
                         disabled={u.id === currentUser?.id}
                       >
@@ -170,7 +172,7 @@ export function UserManagementPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            {ROLE_OPTIONS.map((opt) => (
+                            {roleOptions.map((opt) => (
                               <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                             ))}
                           </SelectGroup>
@@ -179,15 +181,15 @@ export function UserManagementPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="capitalize">
-                        {u.plan ?? "starter"}
+                        {t(`plan.${u.plan ?? "starter"}`, { ns: "admin" })}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       {u.id === currentUser?.id ? (
-                        <Badge variant="secondary">You</Badge>
+                        <Badge variant="secondary">{t("status.you")}</Badge>
                       ) : (
                         <Badge variant={u.disabled ? "destructive" : "default"}>
-                          {u.disabled ? "Disabled" : "Active"}
+                          {u.disabled ? t("status.disabled") : t("status.active")}
                         </Badge>
                       )}
                     </TableCell>
@@ -198,7 +200,7 @@ export function UserManagementPage() {
                           size="sm"
                           onClick={() => statusMut.mutate({ userId: u.id, disabled: !u.disabled })}
                         >
-                          {u.disabled ? "Re-enable" : "Disable"}
+                          {u.disabled ? t("status.reenable") : t("status.disable")}
                         </Button>
                       )}
                     </TableCell>
@@ -208,7 +210,7 @@ export function UserManagementPage() {
             </Table>
             <div className="flex items-center justify-between pt-4">
               <p className="text-sm text-muted-foreground">
-                Page {page} of {totalPages} ({total} total users)
+                {t("common:pagination.pageInfo", { page, totalPages, total })}
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -218,9 +220,9 @@ export function UserManagementPage() {
                   onClick={() => { setPage((p) => p - 1); setJumpInput(""); }}
                 >
                   <ChevronLeftIcon className="size-4" />
-                  Previous
+                  {t("common:actions.previous")}
                 </Button>
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Go to</span>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common:actions.goTo")}</span>
                 <Input
                   type="number"
                   min={1}
@@ -242,7 +244,7 @@ export function UserManagementPage() {
                   disabled={page >= totalPages}
                   onClick={() => { setPage((p) => p + 1); setJumpInput(""); }}
                 >
-                  Next
+                  {t("common:actions.next")}
                   <ChevronRightIcon className="size-4" />
                 </Button>
               </div>

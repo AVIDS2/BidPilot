@@ -1,0 +1,41 @@
+{
+  "userManagement": {
+    "title": "User Management",
+    "allUsers": "All Users",
+    "noUsers": "No users found",
+    "noUsersHint": "Users will appear here once they sign up.",
+    "adminRequired": "Admin access required.",
+    "usersCount": "{{count}} users",
+    "usersCount_one": "{{count}} user",
+    "usersCount_other": "{{count}} users"
+  },
+  "table": {
+    "user": "User",
+    "email": "Email",
+    "role": "Role",
+    "plan": "Plan",
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "role": {
+    "admin": "Admin",
+    "member": "Member",
+    "updated": "Role updated",
+    "updateFailed": "Failed to update role"
+  },
+  "status": {
+    "active": "Active",
+    "disabled": "Disabled",
+    "you": "You",
+    "disabledAction": "User disabled",
+    "reenabledAction": "User re-enabled",
+    "updateFailed": "Failed to update status",
+    "disable": "Disable",
+    "reenable": "Re-enable"
+  },
+  "plan": {
+    "starter": "Starter",
+    "professional": "Professional",
+    "enterprise": "Enterprise"
+  }
+}
