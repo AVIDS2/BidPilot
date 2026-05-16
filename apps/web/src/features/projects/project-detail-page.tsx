@@ -92,7 +92,7 @@ import {
   type SearchResult,
   type KnowledgeChunkRead,
 } from "@/lib/api";
-import { ActivityIcon, AlertTriangleIcon, ClipboardCheckIcon, DownloadIcon, FileIcon, LayersIcon, MessageCircleIcon, MoreHorizontalIcon, PackageIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
+import { ActivityIcon, AlertTriangleIcon, ChevronLeft, ChevronRight, ClipboardCheckIcon, DownloadIcon, FileIcon, LayersIcon, MessageCircleIcon, MoreHorizontalIcon, PackageIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -122,6 +122,9 @@ export function ProjectDetailPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [docPage, setDocPage] = useState(1);
+  const [docTotalPages, setDocTotalPages] = useState(0);
+  const DOC_PAGE_SIZE = 20;
 
   const { data: project } = useQuery({
     queryKey: ["project", id],
@@ -246,8 +249,12 @@ export function ProjectDetailPage() {
   });
 
   const { data: documents } = useQuery<DocumentsPaginatedResponse>({
-    queryKey: ["documents", selectedBundleId],
-    queryFn: () => listDocuments(selectedBundleId!),
+    queryKey: ["documents", selectedBundleId, docPage],
+    queryFn: async () => {
+      const result = await listDocuments(selectedBundleId!, docPage, DOC_PAGE_SIZE);
+      setDocTotalPages(result.pages);
+      return result;
+    },
     enabled: !!selectedBundleId,
     staleTime: 30 * 1000,
   });
@@ -531,7 +538,11 @@ export function ProjectDetailPage() {
                 </Button>
               </FieldGroup>
               {bundles?.length === 0 && <Empty><EmptyHeader><EmptyMedia variant="icon"><PackageIcon /></EmptyMedia><EmptyTitle>{t("bundles.emptyTitle")}</EmptyTitle><EmptyDescription>{t("bundles.emptyDesc")}</EmptyDescription></EmptyHeader></Empty>}
-              <Accordion multiple onValueChange={(v) => setSelectedBundleId(v[v.length - 1] ?? null)}>
+              <Accordion multiple onValueChange={(v) => {
+                const newId = v[v.length - 1] ?? null;
+                if (newId !== selectedBundleId) setDocPage(1);
+                setSelectedBundleId(newId);
+              }}>
                 {bundles?.map((b) => (
                   <AccordionItem key={b.id} value={b.id}>
                     <AccordionTrigger className="hover:no-underline">
@@ -592,6 +603,17 @@ export function ProjectDetailPage() {
                         ))}
                         {documents?.items.length === 0 && (
                           <p className="text-xs text-muted-foreground ml-2">{t("bundles.noDocuments")}</p>
+                        )}
+                        {docTotalPages > 1 && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Button size="sm" variant="outline" disabled={docPage <= 1} onClick={() => setDocPage((p) => p - 1)}>
+                              <ChevronLeft className="size-4" />
+                            </Button>
+                            <span className="text-sm text-muted-foreground">Page {docPage} of {docTotalPages}</span>
+                            <Button size="sm" variant="outline" disabled={docPage >= docTotalPages} onClick={() => setDocPage((p) => p + 1)}>
+                              <ChevronRight className="size-4" />
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </AccordionContent>

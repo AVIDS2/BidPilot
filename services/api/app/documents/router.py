@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -13,8 +13,8 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 @router.get("", response_model=DocumentsPaginatedResponse)
 def list_documents(
     bundle_id: str,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> DocumentsPaginatedResponse:
     """List documents in a bundle with pagination support for large bundles."""
