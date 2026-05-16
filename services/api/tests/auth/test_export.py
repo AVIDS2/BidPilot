@@ -34,7 +34,7 @@ def test_export_includes_all_entity_types(test_db, client):
     rc_id = f"exp-rc-{suffix}"
     sv_id = f"exp-sv-{suffix}"
 
-    p = Project(id=pid, slug=f"export-proj-{suffix}", name="Export Project", scenario_package="bidpilot")
+    p = Project(id=pid, slug=f"export-proj-{suffix}", name="Export Project", scenario_package="bidpilot", org_id="00000000-0000-0000-0000-000000000001")
     test_db.add(p)
     test_db.flush()
 

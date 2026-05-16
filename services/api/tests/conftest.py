@@ -55,3 +55,24 @@ def test_db():
     finally:
         db.rollback()
         db.close()
+
+
+@pytest.fixture
+def default_org_id() -> str:
+    """Ensure the default organization exists and return its stable UUID."""
+    from app.db import SessionLocal
+    from app.models import Organization
+    db = SessionLocal()
+    try:
+        org = db.query(Organization).filter_by(slug="default").first()
+        if org is None:
+            org = Organization(id="00000000-0000-0000-0000-000000000001", slug="default", name="Default Organization")
+            db.add(org)
+            db.commit()
+            db.refresh(org)
+        return org.id
+    finally:
+        db.close()
+
+
+DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"

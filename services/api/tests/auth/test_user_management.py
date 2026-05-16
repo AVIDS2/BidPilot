@@ -118,19 +118,25 @@ def test_password_reset_confirm_invalid_token():
 
 # --- Admin user management ---
 
+def _get_users_list():
+    """Get the flat list of users from the paginated admin endpoint."""
+    resp = client.get("/auth/users?page_size=100")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, dict)
+    return data["items"]
+
 def test_admin_can_list_users():
     # In dev mode, auth is not required; admin endpoints use dev fallback
-    resp = client.get("/auth/users")
-    assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+    users = _get_users_list()
+    assert isinstance(users, list)
 
 
 def test_admin_can_update_user_role():
     # Register a member user first
     email, _ = _register_and_login()
     # Get user list to find the user id
-    resp = client.get("/auth/users")
-    users = resp.json()
+    users = _get_users_list()
     user_id = next(u["id"] for u in users if u["email"] == email)
     assert user_id is not None
 
@@ -147,8 +153,7 @@ def test_admin_update_role_invalid():
 
 def test_admin_can_disable_user():
     email, _ = _register_and_login()
-    resp = client.get("/auth/users")
-    users = resp.json()
+    users = _get_users_list()
     user_id = next(u["id"] for u in users if u["email"] == email)
 
     resp = client.patch(f"/auth/users/{user_id}/status?disabled=true")
@@ -162,8 +167,7 @@ def test_admin_can_disable_user():
 
 def test_admin_can_re_enable_user():
     email, _ = _register_and_login()
-    resp = client.get("/auth/users")
-    users = resp.json()
+    users = _get_users_list()
     user_id = next(u["id"] for u in users if u["email"] == email)
 
     # Disable

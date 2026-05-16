@@ -16,10 +16,23 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
+class Organization(Base):
+    __tablename__ = "organization"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    users: Mapped[list["User"]] = relationship(back_populates="organization")
+    projects: Mapped[list["Project"]] = relationship(back_populates="organization")
+
+
 class Project(Base):
     __tablename__ = "project"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organization.id"), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     scenario_package: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -27,6 +40,7 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
+    organization: Mapped["Organization"] = relationship(back_populates="projects")
     bundles: Mapped[list["Bundle"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
 
@@ -203,6 +217,7 @@ class User(Base):
     __tablename__ = "user"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organization.id"), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(30), nullable=False, default="member")
@@ -211,6 +226,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
+    organization: Mapped["Organization"] = relationship(back_populates="users")
     subscription: Mapped["Subscription"] = relationship(back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 

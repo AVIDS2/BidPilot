@@ -120,9 +120,11 @@ def list_users(
     admin: CurrentUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> UsersPaginatedResponse:
-    total = db.query(User).count()
+    org_id = admin.org_id or "default"
+    total = db.query(User).filter(User.org_id == org_id).count()
     users = (
         db.query(User)
+        .filter(User.org_id == org_id)
         .order_by(User.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

@@ -12,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import User, Subscription, Project, RefreshToken
+from app.models import Organization, User, Subscription, Project, RefreshToken
 
 from .repository import create_user, get_user_by_email, get_user_by_id
 from .schemas import CurrentUser, TokenResponse, UserRegister, UserUpdate
@@ -79,6 +79,11 @@ def _get_user_plan(db: Session, user: User) -> str:
     return sub.plan if sub else "starter"
 
 
+def _get_org_slug(db: Session, org_id: str) -> str:
+    org = db.get(Organization, org_id)
+    return org.slug if org else ""
+
+
 def _user_to_current(db: Session, user: User, plan: str | None = None) -> CurrentUser:
     """Build CurrentUser from a User ORM object."""
     return CurrentUser(
@@ -88,6 +93,9 @@ def _user_to_current(db: Session, user: User, plan: str | None = None) -> Curren
         role=user.role,
         plan=plan or _get_user_plan(db, user),
         email_verified=user.email_verified,
+        disabled=user.disabled,
+        org_id=user.org_id,
+        org_slug=_get_org_slug(db, user.org_id),
     )
 
 
@@ -106,7 +114,9 @@ def check_plan_limit(db: Session, user_id: str, resource: str = "projects", delt
         return  # unlimited
 
     if resource == "projects":
-        current_count = db.query(Project).filter_by(status="active").count()
+        user = get_user_by_id(db, user_id)
+        org_id = user.org_id if user else None
+        current_count = db.query(Project).filter_by(status="active", org_id=org_id).count() if org_id else db.query(Project).filter_by(status="active").count()
     else:
         current_count = 0
 
@@ -132,15 +142,30 @@ def update_subscription_command(db: Session, user_id: str, new_plan: str) -> Sub
     return sub
 
 
+DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
+
+
+def _get_or_create_default_org(db: Session) -> Organization:
+    """Return the default organization, creating it if it doesn't exist."""
+    org = db.query(Organization).filter_by(slug="default").first()
+    if org is None:
+        org = Organization(id=DEFAULT_ORG_ID, slug="default", name="Default Organization")
+        db.add(org)
+        db.flush()
+    return org
+
+
 def register_user_command(db: Session, payload: UserRegister) -> CurrentUser:
     existing = get_user_by_email(db, payload.email)
     if existing is not None:
         raise ValueError("Email already registered")
     _validate_password_strength(payload.password)
+    org = _get_or_create_default_org(db)
     user = User(
         email=payload.email,
         display_name=payload.display_name,
         password_hash=_hash_password(payload.password),
+        org_id=org.id,
     )
     user = create_user(db, user)
     sub = Subscription(user_id=user.id, plan="starter")
@@ -210,7 +235,11 @@ def get_current_user_from_token(db: Session, token: str) -> CurrentUser | None:
 
 def get_dev_user() -> CurrentUser:
     """Fallback dev user when no auth middleware is active."""
-    return CurrentUser(id="dev-user", email="dev@docpilot.local", display_name="Dev User", role="admin", plan="professional")
+    return CurrentUser(
+        id="dev-user", email="dev@docpilot.local", display_name="Dev User",
+        role="admin", plan="professional",
+        org_id="00000000-0000-0000-0000-000000000001", org_slug="default",
+    )
 
 
 def create_password_reset_token(db: Session, email: str) -> str | None:
@@ -389,12 +418,14 @@ def bootstrap_admin_command(
     """
     existing = get_user_by_email(db, email)
     if existing is None:
+        org = _get_or_create_default_org(db)
         user = User(
             email=email,
             display_name=display_name,
             password_hash=_hash_password(password),
             role="admin",
             email_verified=True,
+            org_id=org.id,
         )
         user = create_user(db, user)
         sub = Subscription(user_id=user.id, plan="professional")

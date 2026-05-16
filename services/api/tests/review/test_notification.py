@@ -17,7 +17,7 @@ def test_approve_sends_notification(test_db):
     did = f"d-notify-{uid}"
     sid = f"s-notify-{uid}"
 
-    p = Project(id=pid, slug=f"nt-{uid}", name="Notify Test", scenario_package="bidpilot")
+    p = Project(id=pid, slug=f"nt-{uid}", name="Notify Test", org_id="00000000-0000-0000-0000-000000000001", scenario_package="bidpilot")
     test_db.add(p)
     test_db.flush()
     d = Deliverable(id=did, project_id=pid, type="proposal", title="Test Del")
@@ -58,7 +58,7 @@ def test_reject_sends_notification(test_db):
     did = f"d-notify-{uid}"
     sid = f"s-notify-{uid}"
 
-    p = Project(id=pid, slug=f"nt-{uid}", name="Notify Test 2", scenario_package="bidpilot")
+    p = Project(id=pid, slug=f"nt-{uid}", name="Notify Test 2", org_id="00000000-0000-0000-0000-000000000001", scenario_package="bidpilot")
     test_db.add(p)
     test_db.flush()
     d = Deliverable(id=did, project_id=pid, type="proposal", title="Test Del 2")

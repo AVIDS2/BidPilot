@@ -25,6 +25,9 @@ class CurrentUser(BaseModel):
     role: str
     plan: str = "starter"
     email_verified: bool = False
+    disabled: bool = False
+    org_id: str = ""
+    org_slug: str = ""
 
 
 class UserUpdate(BaseModel):
