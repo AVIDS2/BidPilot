@@ -122,8 +122,19 @@ export interface SourceDocumentRead {
   parse_status: string;
 }
 
-export function listDocuments(bundleId: string) {
-  return request<SourceDocumentRead[]>(`/documents?bundle_id=${bundleId}`);
+export interface DocumentsPaginatedResponse {
+  items: SourceDocumentRead[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export function listDocuments(bundleId: string, page?: number, pageSize?: number) {
+  const params = new URLSearchParams({ bundle_id: bundleId });
+  if (page !== undefined) params.set("page", String(page));
+  if (pageSize !== undefined) params.set("page_size", String(pageSize));
+  return request<DocumentsPaginatedResponse>(`/documents?${params.toString()}`);
 }
 
 export async function uploadDocument(bundleId: string, file: File): Promise<SourceDocumentRead> {

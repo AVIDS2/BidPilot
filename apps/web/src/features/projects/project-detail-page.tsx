@@ -80,6 +80,7 @@ import {
   type BundleRead,
   type DeliverableRead,
   type DeliverableSectionRead,
+  type DocumentsPaginatedResponse,
   type SourceDocumentRead,
   type ExecutionRunRead,
   type EvidenceRead,
@@ -243,7 +244,7 @@ export function ProjectDetailPage() {
     staleTime: 30 * 1000,
   });
 
-  const { data: documents } = useQuery<SourceDocumentRead[]>({
+  const { data: documents } = useQuery<DocumentsPaginatedResponse>({
     queryKey: ["documents", selectedBundleId],
     queryFn: () => listDocuments(selectedBundleId!),
     enabled: !!selectedBundleId,
@@ -577,7 +578,7 @@ export function ProjectDetailPage() {
                             }}
                           />
                         </Field>
-                        {documents?.map((d) => (
+                        {documents?.items.map((d) => (
                           <div key={d.id} className="flex items-center gap-2 text-xs ml-2">
                             <a
                               href={getDocumentDownloadUrl(d.id)}
@@ -588,7 +589,7 @@ export function ProjectDetailPage() {
                             <Badge variant="outline">{d.parse_status}</Badge>
                           </div>
                         ))}
-                        {documents?.length === 0 && (
+                        {documents?.items.length === 0 && (
                           <p className="text-xs text-muted-foreground ml-2">No documents uploaded.</p>
                         )}
                       </div>
