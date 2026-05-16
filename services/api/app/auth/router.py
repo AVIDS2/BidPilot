@@ -279,6 +279,9 @@ def delete_current_user(
     if orm_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     email = orm_user.email
+    # Clean up refresh tokens before deleting user (FK constraint)
+    from app.models import RefreshToken
+    db.query(RefreshToken).filter(RefreshToken.user_id == orm_user.id).delete()
     db.delete(orm_user)
     db.commit()
     send_account_deletion_confirmation_email(email)
