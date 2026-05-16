@@ -4,6 +4,7 @@ import { listUsers, updateUserRole, setUserStatus } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
@@ -64,6 +65,7 @@ export function UserManagementPage() {
   const { user: currentUser } = useAuth();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [jumpInput, setJumpInput] = useState("");
   const pageSize = 20;
 
   const { data, isLoading } = useQuery({
@@ -208,21 +210,37 @@ export function UserManagementPage() {
               <p className="text-sm text-muted-foreground">
                 Page {page} of {totalPages} ({total} total users)
               </p>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
+                  onClick={() => { setPage((p) => p - 1); setJumpInput(""); }}
                 >
                   <ChevronLeftIcon className="size-4" />
                   Previous
                 </Button>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">Go to</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={jumpInput}
+                  onChange={(e) => setJumpInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const n = parseInt(jumpInput, 10);
+                      if (n >= 1 && n <= totalPages) { setPage(n); setJumpInput(""); }
+                    }
+                  }}
+                  placeholder={`1-${totalPages}`}
+                  className="w-20 h-8 text-sm text-center"
+                />
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
+                  onClick={() => { setPage((p) => p + 1); setJumpInput(""); }}
                 >
                   Next
                   <ChevronRightIcon className="size-4" />
