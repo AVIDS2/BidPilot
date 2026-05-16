@@ -81,7 +81,6 @@ import {
   type DeliverableRead,
   type DeliverableSectionRead,
   type DocumentsPaginatedResponse,
-  type SourceDocumentRead,
   type ExecutionRunRead,
   type EvidenceRead,
   type RuntimeSummary,
