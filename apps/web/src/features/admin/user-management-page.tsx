@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listUsers, updateUserRole, setUserStatus } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -17,12 +18,18 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { UsersIcon, ShieldIcon, UserIcon } from "lucide-react";
+import { UsersIcon, ShieldIcon, UserIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+
+const ROLE_OPTIONS = [
+  { label: "Admin", value: "admin" },
+  { label: "Member", value: "member" },
+];
 
 function UserManagementSkeleton() {
   return (
@@ -56,10 +63,12 @@ function UserManagementSkeleton() {
 export function UserManagementPage() {
   const { user: currentUser } = useAuth();
   const qc = useQueryClient();
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
-  const { data: users, isLoading } = useQuery({
-    queryFn: listUsers,
-    queryKey: ["admin-users"],
+  const { data, isLoading } = useQuery({
+    queryFn: () => listUsers(page, pageSize),
+    queryKey: ["admin-users", page],
   });
 
   const roleMut = useMutation({
@@ -97,12 +106,16 @@ export function UserManagementPage() {
     );
   }
 
+  const users = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.pages ?? 1;
+
   return (
     <div className="mx-auto max-w-5xl py-8">
       <div className="flex items-center gap-3 mb-6">
         <UsersIcon className="size-6" />
         <h1 className="text-2xl font-bold tracking-tight">User Management</h1>
-        {users && <Badge variant="secondary">{users.length} users</Badge>}
+        <Badge variant="secondary">{total} users</Badge>
       </div>
 
       <Card>
@@ -110,7 +123,7 @@ export function UserManagementPage() {
           <CardTitle>All Users</CardTitle>
         </CardHeader>
         <CardContent>
-          {!users?.length ? (
+          {!users.length ? (
             <Empty className="min-h-32">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -146,14 +159,19 @@ export function UserManagementPage() {
                     <TableCell>
                       <Select
                         value={u.role}
+                        items={ROLE_OPTIONS}
                         onValueChange={(newRole) => { if (newRole) roleMut.mutate({ userId: u.id, role: newRole }); }}
+                        disabled={u.id === currentUser?.id}
                       >
                         <SelectTrigger className="w-28">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="member">Member</SelectItem>
+                          <SelectGroup>
+                            {ROLE_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </TableCell>
@@ -186,6 +204,31 @@ export function UserManagementPage() {
                 ))}
               </TableBody>
             </Table>
+            <div className="flex items-center justify-between pt-4">
+              <p className="text-sm text-muted-foreground">
+                Page {page} of {totalPages} ({total} total users)
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  <ChevronLeftIcon className="size-4" />
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                  <ChevronRightIcon className="size-4" />
+                </Button>
+              </div>
+            </div>
             </div>
           )}
         </CardContent>

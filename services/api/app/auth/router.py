@@ -6,7 +6,8 @@ from app.db import get_db
 from app.email.service import send_password_reset_email, send_email_verification_email, send_account_deletion_confirmation_email
 from app.models import Subscription, User
 
-from .schemas import CurrentUser, TokenResponse, UserLogin, UserRegister, UserUpdate, SubscriptionRead, SubscriptionUpdate, PasswordResetRequest, PasswordResetConfirm
+import math
+from .schemas import CurrentUser, TokenResponse, UserLogin, UserRegister, UserUpdate, SubscriptionRead, SubscriptionUpdate, PasswordResetRequest, PasswordResetConfirm, UsersPaginatedResponse
 from .service import get_current_user_from_token, get_dev_user, login_command, register_user_command, update_user_command, update_subscription_command, _get_user_plan, _user_to_current, require_admin, create_password_reset_token, confirm_password_reset, create_email_verification_token, verify_email_command, refresh_token_command, login_rate_limiter, resend_rate_limiter, admin_verify_user_command
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -112,13 +113,28 @@ def update_subscription(
 
 # --- Admin user management ---
 
-@router.get("/users", response_model=list[CurrentUser])
+@router.get("/users", response_model=UsersPaginatedResponse)
 def list_users(
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
     admin: CurrentUser = Depends(require_admin),
     db: Session = Depends(get_db),
-) -> list[CurrentUser]:
-    users = db.query(User).order_by(User.created_at.desc()).all()
-    return [_user_to_current(db, u) for u in users]
+) -> UsersPaginatedResponse:
+    total = db.query(User).count()
+    users = (
+        db.query(User)
+        .order_by(User.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return UsersPaginatedResponse(
+        items=[_user_to_current(db, u) for u in users],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=max(1, math.ceil(total / page_size)) if total > 0 else 1,
+    )
 
 
 @router.patch("/users/{user_id}", response_model=CurrentUser)

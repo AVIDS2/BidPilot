@@ -381,8 +381,20 @@ export function confirmPasswordReset(token: string, new_password: string) {
 }
 
 // Admin user management
-export function listUsers() {
-  return request<CurrentUser[]>("/auth/users");
+export interface UsersPaginatedResponse {
+  items: CurrentUser[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+export function listUsers(page?: number, pageSize?: number) {
+  const params = new URLSearchParams();
+  if (page !== undefined) params.set("page", String(page));
+  if (pageSize !== undefined) params.set("page_size", String(pageSize));
+  const qs = params.toString();
+  return request<UsersPaginatedResponse>(`/auth/users${qs ? `?${qs}` : ""}`);
 }
 
 export function updateUserRole(userId: string, role: string) {
