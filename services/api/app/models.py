@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, ForeignKey, String, Text, Float, Integer, JSON, DateTime, func
+from sqlalchemy import Boolean, ForeignKey, String, Text, Float, Integer, JSON, DateTime, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -26,6 +26,41 @@ class Organization(Base):
 
     users: Mapped[list["User"]] = relationship(back_populates="organization")
     projects: Mapped[list["Project"]] = relationship(back_populates="organization")
+    teams: Mapped[list["Team"]] = relationship(back_populates="organization", cascade="all, delete-orphan")
+
+
+class Team(Base):
+    __tablename__ = "team"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organization.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    organization: Mapped["Organization"] = relationship(back_populates="teams")
+    members: Mapped[list["TeamMember"]] = relationship(back_populates="team", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "slug", name="uq_team_org_slug"),
+    )
+
+
+class TeamMember(Base):
+    __tablename__ = "team_member"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(String(36), ForeignKey("team.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(30), nullable=False, default="member")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    team: Mapped["Team"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", name="uq_team_member_team_user"),
+    )
 
 
 class Project(Base):
