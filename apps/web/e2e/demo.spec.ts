@@ -106,32 +106,35 @@ test.describe("review reject → redraft → approve → export cycle @reject-re
   test.skip(!runDemo, "Set E2E_DEMO=1 after starting the API with demo data");
 
   test("review reject → redraft → approve → export cycle", async ({ page }) => {
-    // Login
+    // 1. Login
     await page.goto("/login");
     await page.getByLabel("Email").fill(demoEmail);
     await page.getByLabel("Password").fill(demoPassword);
     await page.getByRole("button", { name: "Login" }).click();
     await expect(page).toHaveURL(/\/projects$/);
 
-    // Open demo project
+    // 2. Open a project with deliverables
     await page.getByPlaceholder("Search projects...").fill(demoProjectName);
-    const projectLink = page.getByRole("link", { name: demoProjectName, exact: true });
-    await expect(projectLink).toBeVisible();
-    await projectLink.click();
+    await page.getByRole("link", { name: demoProjectName, exact: true }).click();
 
-    // Navigate to Review tab
+    // 3. Navigate to Review tab
     await page.getByRole("tab", { name: "Review" }).click();
-    await expect(page.getByRole("tabpanel")).toBeVisible();
 
-    // Navigate to Export tab to verify we can export
+    // 4. Reject a section
+    await page.getByRole("button", { name: "Reject" }).first().click();
+    await expect(page.getByText(/rejected/i).first()).toBeVisible({ timeout: 10000 });
+
+    // 5. Navigate to Drafting tab and redraft
+    await page.getByRole("tab", { name: "Drafting" }).click();
+    await page.getByRole("button", { name: /Generate/i }).click();
+
+    // 6. Back to Review, approve the section
+    await page.getByRole("tab", { name: "Review" }).click();
+    await page.getByRole("button", { name: "Approve" }).first().click();
+    await expect(page.getByText(/approved/i).first()).toBeVisible({ timeout: 10000 });
+
+    // 7. Export
     await page.getByRole("tab", { name: "Export" }).click();
-    await expect(page.getByRole("tabpanel")).toBeVisible();
-
-    // Navigate to Audit tab (admin only, demo user is admin)
-    const auditTab = page.getByRole("tab", { name: "Audit" });
-    if (await auditTab.isVisible()) {
-      await auditTab.click();
-      await expect(page.getByRole("tabpanel")).toBeVisible();
-    }
+    await page.getByRole("button", { name: "Export DOCX" }).first().click();
   });
 });
