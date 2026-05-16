@@ -26,6 +26,7 @@ from app.versions.router import router as versions_router
 from app.export.router import router as export_router
 from app.billing.router import router as billing_router
 from app.teams.router import router as teams_router
+from app.organizations.router import router as organizations_router
 from app.logging import setup_logging
 
 setup_logging()
@@ -90,6 +91,7 @@ app.include_router(parsed_assets_router, dependencies=_protected)
 app.include_router(versions_router, dependencies=_protected)
 app.include_router(export_router, dependencies=_protected)
 app.include_router(teams_router, dependencies=_protected)
+app.include_router(organizations_router, dependencies=_protected)
 app.include_router(billing_router)
 
 
