@@ -346,6 +346,9 @@ export interface UserRegister {
   email: string;
   display_name: string;
   password: string;
+  invitation_token?: string | null;
+  org_name?: string | null;
+  org_slug?: string | null;
 }
 
 export interface UserLogin {
@@ -569,4 +572,94 @@ export interface KnowledgeChunkRead {
 
 export function listKnowledgeChunks(projectId: string) {
   return request<KnowledgeChunkRead[]>(`/evidence/chunks?project_id=${projectId}`);
+}
+
+// Teams
+export interface TeamMemberRead {
+  id: string;
+  user_id: string;
+  user_email: string;
+  user_display_name: string;
+  role: string;
+}
+
+export interface TeamRead {
+  id: string;
+  org_id: string;
+  name: string;
+  slug: string;
+  members?: TeamMemberRead[];
+}
+
+export interface TeamListResponse {
+  items: TeamRead[];
+  total: number;
+}
+
+export function createTeam(data: { name: string; slug: string }) {
+  return request<TeamRead>("/teams", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function listTeams() {
+  return request<TeamListResponse>("/teams");
+}
+
+export function getTeam(id: string) {
+  return request<TeamRead>(`/teams/${id}`);
+}
+
+export function updateTeam(id: string, data: { name?: string }) {
+  return request<TeamRead>(`/teams/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteTeam(id: string) {
+  return request<void>(`/teams/${id}`, { method: "DELETE" });
+}
+
+export function addTeamMember(teamId: string, data: { user_id: string; role?: string }) {
+  return request<TeamMemberRead>(`/teams/${teamId}/members`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export function removeTeamMember(teamId: string, userId: string) {
+  return request<void>(`/teams/${teamId}/members/${userId}`, { method: "DELETE" });
+}
+
+// Organizations
+export interface OrganizationRead {
+  id: string;
+  slug: string;
+  name: string;
+}
+
+export function createOrganization(data: { name: string; slug: string }) {
+  return request<OrganizationRead>("/organizations", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function listOrganizations() {
+  return request<OrganizationRead[]>("/organizations");
+}
+
+export function switchOrganization(orgId: string) {
+  return request<CurrentUser>("/organizations/switch", { method: "POST", body: JSON.stringify({ org_id: orgId }) });
+}
+
+// Invitations
+export interface InvitationRead {
+  id: string;
+  org_id: string;
+  email: string;
+  status: string;
+  created_at?: string;
+}
+
+export function createInvitation(data: { email: string }) {
+  return request<InvitationRead>("/invitations", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function listInvitations() {
+  return request<InvitationRead[]>("/invitations");
+}
+
+export function revokeInvitation(id: string) {
+  return request<void>(`/invitations/${id}`, { method: "DELETE" });
 }

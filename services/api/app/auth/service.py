@@ -160,12 +160,46 @@ def register_user_command(db: Session, payload: UserRegister) -> CurrentUser:
     if existing is not None:
         raise ValueError("Email already registered")
     _validate_password_strength(payload.password)
-    org = _get_or_create_default_org(db)
+
+    org_id: str | None = None
+
+    # 1. Invitation token takes highest priority
+    if payload.invitation_token:
+        from app.models import Invitation as InvitationModel
+        invitation = db.query(InvitationModel).filter_by(
+            token=payload.invitation_token, status="pending"
+        ).first()
+        if invitation is not None:
+            from datetime import UTC, datetime
+            if invitation.expires_at > datetime.now(UTC).replace(tzinfo=None):
+                org_id = invitation.org_id
+                invitation.status = "accepted"
+            else:
+                invitation.status = "expired"
+        if org_id is None:
+            raise ValueError("Invalid or expired invitation token")
+
+    # 2. Explicit org creation during registration
+    elif payload.org_name and payload.org_slug:
+        from app.models import Organization as OrgModel
+        existing_org = db.query(OrgModel).filter_by(slug=payload.org_slug).first()
+        if existing_org is not None:
+            raise ValueError("An organization with this slug already exists")
+        org = OrgModel(name=payload.org_name, slug=payload.org_slug)
+        db.add(org)
+        db.flush()
+        org_id = org.id
+
+    # 3. Fall back to default org
+    if org_id is None:
+        org = _get_or_create_default_org(db)
+        org_id = org.id
+
     user = User(
         email=payload.email,
         display_name=payload.display_name,
         password_hash=_hash_password(payload.password),
-        org_id=org.id,
+        org_id=org_id,
     )
     user = create_user(db, user)
     sub = Subscription(user_id=user.id, plan="starter")

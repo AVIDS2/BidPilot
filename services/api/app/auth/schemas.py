@@ -5,6 +5,9 @@ class UserRegister(BaseModel):
     email: str
     display_name: str
     password: str
+    invitation_token: str | None = None
+    org_name: str | None = None
+    org_slug: str | None = None
 
 
 class UserLogin(BaseModel):
