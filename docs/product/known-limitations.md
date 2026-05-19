@@ -30,7 +30,7 @@ This document lists known limitations that must be acknowledged before onboardin
 ## Operations
 
 - No horizontal scaling strategy; the system runs as a single API process.
-- Celery worker must be started separately; no health check integrates worker status.
+- Celery worker must be started separately; health-detailed endpoint includes worker status.
 - Object storage (MinIO/S3) must be configured for file uploads to persist beyond local disk.
 - Celery Beat schedules daily database backup at 3 AM.
 
