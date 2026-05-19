@@ -79,3 +79,34 @@ def default_org_id() -> str:
 
 
 DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
+
+
+@pytest.fixture
+def default_user_id(default_org_id: str) -> str:
+    """Ensure the dev fallback user exists in the DB and return its stable UUID.
+
+    The auth service's get_dev_user() returns CurrentUser(id='dev-user', ...).
+    This fixture creates a matching User row so FK constraints (e.g. provider_config.user_id) pass.
+    """
+    from app.db import SessionLocal
+    from app.models import User
+    import bcrypt
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter_by(id="dev-user").first()
+        if user is None:
+            user = User(
+                id="dev-user",
+                email="dev@docpilot.local",
+                display_name="Dev User",
+                role="admin",
+                org_id=default_org_id,
+                password_hash=bcrypt.hashpw(b"dummy", bcrypt.gensalt()).decode(),
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        return user.id
+    finally:
+        db.close()

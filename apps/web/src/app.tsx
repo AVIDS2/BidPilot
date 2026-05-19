@@ -9,6 +9,7 @@ import { LandingPage } from "./features/landing/landing-page";
 import { UserManagementPage } from "./features/admin/user-management-page";
 import { TeamManagementPage } from "./features/admin/team-management-page";
 import { InvitationManagementPage } from "./features/admin/invitation-management-page";
+import { ProviderSettingsPage } from "./features/settings/provider-settings-page";
 import { ForgotPasswordPage } from "./features/auth/forgot-password-page";
 import { ResetPasswordPage } from "./features/auth/reset-password-page";
 import { VerifyEmailPromptPage } from "./features/auth/verify-email-prompt-page";
@@ -138,6 +139,7 @@ export function App() {
                   <Route path="/admin/users" element={<UserManagementPage />} />
                   <Route path="/admin/teams" element={<TeamManagementPage />} />
                   <Route path="/admin/invitations" element={<InvitationManagementPage />} />
+                  <Route path="/settings/providers" element={<ProviderSettingsPage />} />
                 </Route>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />

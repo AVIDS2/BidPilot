@@ -4,8 +4,10 @@ import logging
 from datetime import UTC, datetime
 
 from app.adapters.embedding import generate_embedding
-from app.adapters.llm import draft_section
+from app.adapters.llm import draft_section as draft_section_openai
+from app.adapters.anthropic_llm import draft_section as draft_section_anthropic
 from app.db import SessionLocal
+from app.provider_registry import get_provider_by_id
 from app.models import (
     DeliverableSection,
     Evidence,
@@ -86,8 +88,14 @@ def _link_evidence(db, project_id: str, section_version_id: str, chunks: list[Kn
         db.add(ev)
 
 
-def run_draft(run_id: str, project_id: str, section_key: str, review_feedback: str | None = None) -> dict[str, str]:
-    """Execute the full drafting pipeline for a section."""
+def run_draft(run_id: str, project_id: str, section_key: str, review_feedback: str | None = None, provider_config_id: str | None = None) -> dict[str, str]:
+    """Execute the full drafting pipeline for a section.
+
+    Args:
+        provider_config_id: Optional user provider config ID. When provided,
+                            resolves the provider from the DB and uses its
+                            credentials instead of env-var defaults.
+    """
     db = SessionLocal()
     try:
         run = db.get(ExecutionRun, run_id)
@@ -115,8 +123,34 @@ def run_draft(run_id: str, project_id: str, section_key: str, review_feedback: s
     except Exception:
         pass  # Fallback to default prompt
 
-    # Call LLM adapter
-    result = draft_section(section_key, evidence_texts, project_id, review_feedback=review_feedback, system_prompt=system_prompt)
+    # Call LLM adapter with optional user-provided provider config
+    provider_params = None
+    if provider_config_id:
+        provider_params = get_provider_by_id(provider_config_id)
+
+    provider_config_dict = None
+    if provider_params:
+        provider_config_dict = {
+            "api_key": provider_params.api_key,
+            "api_url": provider_params.api_url,
+            "model": provider_params.model,
+        }
+
+    if provider_params and provider_params.provider_type == "anthropic":
+        result = draft_section_anthropic(
+            section_key, evidence_texts, project_id,
+            review_feedback=review_feedback,
+            system_prompt=system_prompt,
+            provider_config=provider_config_dict,
+        )
+    else:
+        # Default to OpenAI-compatible (also handles fallback when no provider_config)
+        result = draft_section_openai(
+            section_key, evidence_texts, project_id,
+            review_feedback=review_feedback,
+            system_prompt=system_prompt,
+            provider_config=provider_config_dict,
+        )
 
     # Write section version if a matching section exists
     section_version_id = None

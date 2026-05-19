@@ -269,9 +269,23 @@ All planned phases are complete. Next work should deepen existing stubs rather t
 - All existing tests updated to verify email after registration
 - All tests pass: API 106, frontend 17; typecheck and build succeed
 
+## Deepening: user-customizable AI API providers
+
+- Added `ProviderConfig` model (id, user_id, provider_type, api_key, api_url, model, label, is_active) with Alembic migration `8f929f4a7307`
+- Added CRUD endpoints at `/auth/me/providers` (GET list, POST create, GET by id, PUT update, DELETE, POST test-connection)
+- Created worker `provider_registry.py` — resolves user provider configs from DB by id or by active status
+- Created `services/worker/app/adapters/anthropic_llm.py` — real Anthropic Messages API adapter with env-var/DB-provided credentials, falls back to stub
+- Refactored `services/worker/app/adapters/llm.py` to accept optional `provider_config` dict (api_key, api_url, model)
+- Refactored `services/worker/app/execution/drafting.py` to resolve `provider_config_id` from DB and route to OpenAI or Anthropic adapter based on `provider_type`
+- Updated Celery task `worker.draft_section` to accept and pass `provider_config_id` through kwargs
+- Updated frontend drafting schemas (`DraftSectionRequest`, `RedraftSectionRequest`) to include optional `provider_config_id`
+- Added `ProviderSettingsPage` at `/settings/providers` — card grid, add/edit dialog, test connection, active toggle
+- Frontend API client types and functions for all provider CRUD + test-connection
+- All tests pass: API 141/141, frontend 26/26, TypeScript zero errors
+
 ## Pilot readiness validation
 
-- All automated checks green: API 106/106, frontend 17/17, Playwright E2E 15/15, typecheck + build pass
+- All automated checks green: API 141/141, frontend 26/26, Playwright E2E 15/15, typecheck + build pass
 - MinIO credentials fixed in `.env` and `.env.example` (docpilot/docpilot123)
 - Project creation now navigates to detail page (`project-list-page.tsx` onSuccess)
 - E2E full flow test fixed: register bundle → expand accordion → upload file
@@ -281,6 +295,7 @@ All planned phases are complete. Next work should deepen existing stubs rather t
 - Commercial readiness documented in `docs/product/pilot-commercial-readiness.md`: data handling, support tiers, pricing, success criteria
 - Non-developer demo guide created at `docs/product/non-developer-demo-guide.md`
 - Known limitations updated: email verification now enforced, SMTP configured, Aliyun DashScope provider configured
+- User-customizable API providers implemented: users can bring their own OpenAI-compatible or Anthropic/Claude API keys via settings UI
 - Remaining: non-developer demo walkthrough (requires human), [OWNER] fields in commercial readiness doc
 
 ## Update rule

@@ -425,6 +425,14 @@ async def require_auth(
     return user
 
 
+async def get_current_user(current_user: CurrentUser = Depends(require_auth)) -> CurrentUser:
+    """Dependency that returns the current authenticated user.
+
+    Relies on require_auth for enforcement; caches the same result within a request.
+    """
+    return current_user
+
+
 async def require_admin(current_user: CurrentUser = Depends(require_auth)) -> CurrentUser:
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin role required")

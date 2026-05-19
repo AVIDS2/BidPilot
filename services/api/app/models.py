@@ -263,6 +263,7 @@ class User(Base):
 
     organization: Mapped["Organization"] = relationship(back_populates="users")
     subscription: Mapped["Subscription"] = relationship(back_populates="user", uselist=False, cascade="all, delete-orphan")
+    provider_configs: Mapped[list["ProviderConfig"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class Subscription(Base):
@@ -277,6 +278,23 @@ class Subscription(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user: Mapped["User"] = relationship(back_populates="subscription")
+
+
+class ProviderConfig(Base):
+    __tablename__ = "provider_config"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id"), nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "openai" or "anthropic"
+    api_key: Mapped[str] = mapped_column(Text, nullable=False)
+    api_url: Mapped[str | None] = mapped_column(String(500))
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    user: Mapped["User"] = relationship(back_populates="provider_configs")
 
 
 class RefreshToken(Base):

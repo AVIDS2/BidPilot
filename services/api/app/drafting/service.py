@@ -16,9 +16,13 @@ def draft_section_command(db: Session, payload: DraftSectionRequest) -> DraftSec
     )
     run = create_run(db, run)
     # Dispatch async drafting task
+    kwargs: dict = {}
+    if payload.provider_config_id:
+        kwargs["provider_config_id"] = payload.provider_config_id
     celery.send_task(
         "worker.draft_section",
         args=[run.id, payload.project_id, payload.section_key],
+        kwargs=kwargs or None,
     )
     # Record audit event
     record_audit_event(db, project_id=payload.project_id, event_type="draft.requested", payload={"run_id": run.id, "section_key": payload.section_key})
@@ -34,10 +38,15 @@ def redraft_section_command(db: Session, payload: RedraftSectionRequest) -> Draf
     )
     run = create_run(db, run)
     # Dispatch async drafting task with feedback
+    task_kwargs: dict = {}
+    if payload.review_feedback:
+        task_kwargs["review_feedback"] = payload.review_feedback
+    if payload.provider_config_id:
+        task_kwargs["provider_config_id"] = payload.provider_config_id
     celery.send_task(
         "worker.draft_section",
         args=[run.id, payload.project_id, payload.section_key],
-        kwargs={"review_feedback": payload.review_feedback} if payload.review_feedback else {},
+        kwargs=task_kwargs or None,
     )
     # Record audit event
     record_audit_event(db, project_id=payload.project_id, event_type="draft.redraft", payload={"run_id": run.id, "section_key": payload.section_key, "has_feedback": payload.review_feedback is not None})

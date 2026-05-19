@@ -643,6 +643,55 @@ export function switchOrganization(orgId: string) {
   return request<CurrentUser>("/organizations/switch", { method: "POST", body: JSON.stringify({ org_id: orgId }) });
 }
 
+// Provider Configuration
+export interface ProviderConfig {
+  id: string;
+  user_id: string;
+  provider_type: "openai" | "anthropic";
+  api_key: string;
+  api_url: string | null;
+  model: string;
+  label: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderConfigCreate {
+  provider_type: "openai" | "anthropic";
+  api_key: string;
+  api_url?: string;
+  model: string;
+  label: string;
+  is_active?: boolean;
+}
+
+export interface TestConnectionResult {
+  success: boolean;
+  message: string;
+  model: string | null;
+}
+
+export function listProviderConfigs() {
+  return request<{ data: ProviderConfig[] }>("/auth/me/providers");
+}
+
+export function createProviderConfig(payload: ProviderConfigCreate) {
+  return request<{ data: ProviderConfig }>("/auth/me/providers", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateProviderConfig(id: string, payload: Partial<ProviderConfigCreate>) {
+  return request<{ data: ProviderConfig }>(`/auth/me/providers/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+
+export function deleteProviderConfig(id: string) {
+  return request<{ data: { deleted: boolean } }>(`/auth/me/providers/${id}`, { method: "DELETE" });
+}
+
+export function testProviderConnection(payload: { provider_type: string; api_key: string; api_url?: string; model: string }) {
+  return request<{ data: TestConnectionResult }>("/auth/me/providers/test", { method: "POST", body: JSON.stringify(payload) });
+}
+
 // Invitations
 export interface InvitationRead {
   id: string;

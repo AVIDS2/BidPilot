@@ -15,9 +15,9 @@ def ingest_bundle(bundle_id: str) -> dict[str, str]:
 
 
 @celery_app.task(name="worker.draft_section")
-def draft_section(run_id: str, project_id: str, section_key: str, review_feedback: str | None = None) -> dict[str, str]:
+def draft_section(run_id: str, project_id: str, section_key: str, review_feedback: str | None = None, provider_config_id: str | None = None) -> dict[str, str]:
     """Draft a section: retrieve evidence, call LLM, write section version."""
-    return run_draft(run_id, project_id, section_key, review_feedback=review_feedback)
+    return run_draft(run_id, project_id, section_key, review_feedback=review_feedback, provider_config_id=provider_config_id)
 
 
 @celery_app.task(name="worker.record_dead_letter", queue="dead_letter")

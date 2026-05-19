@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ForeignKey, String, Text, Float, Integer, JSON, DateTime, func
+from sqlalchemy import Boolean, ForeignKey, String, Text, Float, Integer, JSON, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -121,6 +121,21 @@ class ExecutionRun(Base):
     output_json: Mapped[dict | None] = mapped_column(JSON)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class ProviderConfig(Base):
+    __tablename__ = "provider_config"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    api_key: Mapped[str] = mapped_column(Text, nullable=False)
+    api_url: Mapped[str | None] = mapped_column(String(500))
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class Evidence(Base):
