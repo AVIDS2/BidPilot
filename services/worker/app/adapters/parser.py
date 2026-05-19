@@ -1,7 +1,8 @@
 """Parser adapter for document ingestion.
 
-Extracts text from PDF (PyMuPDF) and DOCX (python-docx), splits into
-overlapping chunks, and persists as KnowledgeChunk rows.
+Extracts text from PDF (PyMuPDF) and DOCX (python-docx), then splits into
+hierarchical chunks with heading-aware boundaries, table detection, and
+structured metadata for retrieval quality.
 """
 
 import io
@@ -14,8 +15,8 @@ from app.models import Bundle, KnowledgeChunk, SourceDocument
 
 logger = logging.getLogger(__name__)
 
-CHUNK_SIZE_CHARS = 1200
-CHUNK_OVERLAP_CHARS = 200
+CHUNK_SIZE_CHARS = 1500   # Slightly larger to keep sections together
+MAX_SECTION_CHARS = 3000  # Hard cap for a single section before sub-splitting
 
 
 @dataclass
@@ -23,6 +24,16 @@ class ParsedChunk:
     chunk_index: int
     content: str
     metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class _ContentBlock:
+    """Internal representation of a parsed content block."""
+    type: str  # "heading", "paragraph", "table"
+    content: str
+    heading_level: int = 0
+    heading_path: list[str] = field(default_factory=list)
+    table_data: dict | None = None
 
 
 def _download_from_minio(storage_key: str) -> bytes | None:
@@ -103,42 +114,189 @@ def _extract_text(storage_key: str, mime_type: str) -> str:
         return ""
 
 
-def _split_into_chunks(text: str, size: int = CHUNK_SIZE_CHARS, overlap: int = CHUNK_OVERLAP_CHARS) -> list[str]:
-    """Split text into overlapping chunks of roughly `size` characters."""
+# ── Heading & table detection helpers ──────────────────────────────────
+
+
+def _heading_level(line: str) -> int:
+    """Return markdown heading level (1-6) or 0 if not a heading."""
+    m = re.match(r"^(#{1,6})\s+", line)
+    return len(m.group(1)) if m else 0
+
+
+def _is_table_row(line: str) -> bool:
+    """True if the line looks like part of a markdown table."""
+    s = line.strip()
+    if not s:
+        return False
+    # Normal table row: |...|
+    if s.startswith("|") and s.endswith("|"):
+        return True
+    # Separator row: |---|---|
+    stripped = s.replace("|", "").replace("-", "").replace(":", "").strip()
+    return not stripped
+
+
+def _parse_table(lines: list[str]) -> dict:
+    """Parse markdown table lines into {headers, rows}."""
+    if not lines:
+        return {"headers": [], "rows": []}
+    headers = [c.strip() for c in lines[0].strip().strip("|").split("|")]
+    rows: list[list[str]] = []
+    for line in lines[2:]:
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        rows.append(cells)
+    return {"headers": headers, "rows": rows}
+
+
+# ── Document → content blocks ─────────────────────────────────────────
+
+
+def _to_blocks(text: str) -> list[_ContentBlock]:
+    """Tokenise plain text into a list of heading / paragraph / table blocks.
+
+    Headings become natural section boundaries; tables are kept atomic.
+    Each block carries its heading path so downstream retrieval knows the
+    structural context of every chunk.
+    """
+    lines = text.split("\n")
+    blocks: list[_ContentBlock] = []
+    heading_path: list[str] = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+
+        # Heading
+        level = _heading_level(line)
+        if level > 0:
+            title = re.sub(r"^#+\s*", "", line).strip()
+            heading_path = heading_path[: level - 1] + [title]
+            blocks.append(_ContentBlock(
+                type="heading",
+                content=line,
+                heading_level=level,
+                heading_path=list(heading_path),
+            ))
+            i += 1
+            continue
+
+        # Table (greedily consume consecutive table lines)
+        if _is_table_row(line):
+            tbl: list[str] = []
+            while i < len(lines) and _is_table_row(lines[i]):
+                tbl.append(lines[i])
+                i += 1
+            blocks.append(_ContentBlock(
+                type="table",
+                content="\n".join(tbl),
+                heading_path=list(heading_path),
+                table_data=_parse_table(tbl),
+            ))
+            continue
+
+        # Blank line → skip (acts as paragraph separator implicitly)
+        if not line.strip():
+            i += 1
+            continue
+
+        # Regular paragraph
+        blocks.append(_ContentBlock(
+            type="paragraph",
+            content=line,
+            heading_path=list(heading_path),
+        ))
+        i += 1
+
+    return blocks
+
+
+# ── Blocks → (content, metadata) chunks ───────────────────────────────
+
+
+def _split_into_chunks(text: str, size: int = CHUNK_SIZE_CHARS) -> list[tuple[str, dict]]:
+    """Split document text into hierarchical chunks with structured metadata.
+
+    Returns a list of ``(content, metadata_dict)`` pairs.
+
+    **Strategy**
+    - Headings (``#`` / ``##`` / …) are **always** chunk boundaries.
+    - Tables are kept as **atomic** units — never split across chunks.
+    - Paragraphs accumulate until *size* is reached, then flush.
+    - Each chunk records its ``heading_path`` so the retriever knows the
+      structural context of every fragment.
+
+    **Metadata keys**
+    - ``chunk_type`` — ``"paragraphs"`` | ``"table"``
+    - ``heading_path`` — ``["Section", "Sub-section"]``
+    - ``heading_level`` — depth of the nearest heading (0 for orphans)
+    - ``table_headers`` / ``table_row_count`` — only for table chunks
+    """
     if not text.strip():
         return []
-    # Split on paragraph boundaries when possible
-    paragraphs = re.split(r"\n{2,}", text)
-    chunks: list[str] = []
-    current: list[str] = []
+
+    blocks = _to_blocks(text)
+    result: list[tuple[str, dict]] = []
+    current_paras: list[str] = []
     current_len = 0
+    current_heading: tuple[list[str], int] = ([], 0)
 
-    for para in paragraphs:
-        para = para.strip()
-        if not para:
-            continue
-        if current_len + len(para) > size and current:
-            chunks.append("\n\n".join(current))
-            # Keep overlap
-            overlap_text = "\n\n".join(current)
-            if len(overlap_text) > overlap:
-                overlap_text = overlap_text[-overlap:]
-            current = [overlap_text]
-            current_len = len(overlap_text)
-        current.append(para)
-        current_len += len(para)
+    def _flush():
+        nonlocal current_paras, current_len
+        if not current_paras:
+            return
+        result.append((
+            "\n\n".join(current_paras),
+            {
+                "chunk_type": "paragraphs",
+                "heading_path": list(current_heading[0]),
+                "heading_level": current_heading[1],
+            },
+        ))
+        current_paras = []
+        current_len = 0
 
-    if current:
-        chunks.append("\n\n".join(current))
+    for blk in blocks:
+        if blk.type == "heading":
+            _flush()
+            current_heading = (blk.heading_path, blk.heading_level)
 
-    return chunks
+        elif blk.type == "table":
+            _flush()
+            td = blk.table_data or {}
+            result.append((
+                blk.content,
+                {
+                    "chunk_type": "table",
+                    "heading_path": list(current_heading[0]),
+                    "heading_level": current_heading[1],
+                    "table_headers": td.get("headers", []),
+                    "table_row_count": len(td.get("rows", [])),
+                },
+            ))
+
+        elif blk.type == "paragraph":
+            txt = blk.content.strip()
+            if not txt:
+                continue
+            # If adding this paragraph would exceed the cap, flush first
+            if current_len + len(txt) > size and current_paras:
+                _flush()
+            current_paras.append(txt)
+            current_len += len(txt)
+
+    _flush()
+    return result
+
+
+# ── Public API ────────────────────────────────────────────────────────
 
 
 def parse_bundle_documents(bundle_id: str) -> list[ParsedChunk]:
-    """Parse all source documents in a bundle and return chunks.
+    """Parse all source documents in a bundle and return hierarchical chunks.
 
-    Extracts text from each document, splits into overlapping chunks,
-    and records source metadata.
+    Extracts text from each document, splits into heading-aware chunks,
+    detects tables, and records structural metadata (heading path, etc.)
+    so the retriever can rank by context depth.
     """
     db = SessionLocal()
     try:
@@ -155,22 +313,21 @@ def parse_bundle_documents(bundle_id: str) -> list[ParsedChunk]:
                 logger.info("No text extracted from %s", doc.original_filename)
                 continue
 
-            doc_chunks = _split_into_chunks(text)
-            for i, chunk_text in enumerate(doc_chunks):
+            for chunk_text, extra_meta in _split_into_chunks(text):
+                meta = {
+                    "source_document_id": doc.id,
+                    "mime_type": doc.mime_type,
+                    "original_filename": doc.original_filename,
+                    "parser_name": "docpilot-hierarchical-v2",
+                }
+                meta.update(extra_meta)
                 all_chunks.append(ParsedChunk(
                     chunk_index=global_idx,
                     content=chunk_text,
-                    metadata={
-                        "source_document_id": doc.id,
-                        "mime_type": doc.mime_type,
-                        "original_filename": doc.original_filename,
-                        "local_chunk_index": i,
-                        "parser_name": "docpilot-text-v1",
-                    },
+                    metadata=meta,
                 ))
                 global_idx += 1
 
-            # Update parse status
             doc.parse_status = "parsed"
             db.commit()
 

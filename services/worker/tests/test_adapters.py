@@ -19,12 +19,42 @@ class TestParserChunking:
         text = "Short paragraph."
         chunks = _split_into_chunks(text)
         assert len(chunks) == 1
-        assert chunks[0] == text
+        content, meta = chunks[0]
+        assert content == "Short paragraph."
+        assert meta["chunk_type"] == "paragraphs"
+        assert isinstance(meta["heading_path"], list)
 
-    def test_split_long_text_into_multiple_chunks(self) -> None:
-        paragraphs = [f"Paragraph {i} with some content here." for i in range(50)]
+    def test_split_heading_boundaries(self) -> None:
+        text = "# Section 1\n\nPara one.\n\n## Sub 1.1\n\nPara two."
+        chunks = _split_into_chunks(text)
+        assert len(chunks) >= 2
+        # Each chunk should have heading_path reflecting its section
+        paths = [meta["heading_path"] for _, meta in chunks]
+        assert any("Section 1" in p for p in paths)
+        assert any("Sub 1.1" in p for p in paths)
+
+    def test_table_atomic(self) -> None:
+        text = "# Data\n\n| Name | Value |\n|------|-------|\n| A    | 1     |\n| B    | 2     |"
+        chunks = _split_into_chunks(text)
+        table_chunks = [(c, m) for c, m in chunks if m["chunk_type"] == "table"]
+        assert len(table_chunks) >= 1
+        _, meta = table_chunks[0]
+        assert meta["table_headers"] == ["Name", "Value"]
+        assert meta["table_row_count"] == 2
+
+    def test_heading_path_tracking(self) -> None:
+        text = "# Level 1\n\n## Level 2\n\n### Level 3\n\nContent here."
+        chunks = _split_into_chunks(text)
+        assert len(chunks) >= 1
+        _, meta = chunks[-1]
+        assert "Level 3" in meta["heading_path"]
+        assert "Level 2" in meta["heading_path"]
+        assert "Level 1" in meta["heading_path"]
+
+    def test_long_text_multiple_chunks(self) -> None:
+        paragraphs = [f"Paragraph {i} with some content here for testing purposes." for i in range(50)]
         text = "\n\n".join(paragraphs)
-        chunks = _split_into_chunks(text, size=200, overlap=50)
+        chunks = _split_into_chunks(text, size=200)
         assert len(chunks) > 1
 
     def test_extract_text_plain_file(self) -> None:
