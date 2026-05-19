@@ -26,13 +26,14 @@ If two documents conflict materially, pause and update the docs before continuin
 ## Execution loop for each session
 
 1. identify the active phase
-2. read the current phase plan and relevant supporting docs
-3. choose the next unchecked or unimplemented slice that unblocks future work
-4. verify uncertain APIs, schema details, or tool usage before coding
-5. implement the smallest coherent slice
-6. run the best available verification
-7. update docs if architecture, operations, scope, or contracts changed
-8. leave the repository in a state the next session can continue from
+2. pass the preflight in `docs/development/development-preflight-checklist.md`
+3. read the current phase plan and relevant supporting docs
+4. choose the next unchecked or unimplemented slice that unblocks future work
+5. verify uncertain APIs, schema details, or tool usage before coding
+6. implement the smallest coherent slice
+7. run the best available verification
+8. update docs if architecture, operations, scope, or contracts changed
+9. leave the repository in a state the next session can continue from
 
 For meaningful frontend work, also read:
 
@@ -53,6 +54,7 @@ For meaningful workflow, queue, execution-run, or export-pipeline work, also rea
 For repository structure, backend layering, or environment-shape work, also read:
 
 - `docs/development/final-technology-baseline.md`
+- `docs/development/first-run-bootstrap-runbook.md`
 - `docs/architecture/backend-application-architecture.md`
 - `docs/architecture/repository-blueprint.md`
 - `docs/ops/environment-matrix.md`

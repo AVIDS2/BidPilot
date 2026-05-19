@@ -13,6 +13,7 @@ Provide one repeatable gate before promoting DocPilot between environments.
 
 ## Staging promotion checklist
 
+- release rehearsal core gate passes (`python scripts/release_rehearsal.py --run`)
 - release candidate images built
 - migration plan reviewed
 - smoke checks pass
@@ -23,8 +24,9 @@ Provide one repeatable gate before promoting DocPilot between environments.
 
 ## Production promotion checklist
 
-- backup confirmed
-- rollback path confirmed
+- `python scripts/production_readiness.py --target production` passes with production secret injection
+- backup dry-run and staging restore drill confirmed per `docs/ops/backup-restore-drill.md`
+- rollback path and release owner confirmed
 - secrets and environment config reviewed
 - SLO and alert coverage checked
 - error budget is not already exhausted

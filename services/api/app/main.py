@@ -5,6 +5,19 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+
+import os
+import uuid
+import time
+import structlog
+import traceback
+
+logger = structlog.get_logger()
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.audit.router import router as audit_router
 from app.auth.router import router as auth_router
@@ -32,7 +45,26 @@ from app.logging import setup_logging
 
 setup_logging()
 
+class RequestContextMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = str(uuid.uuid4())[:8]
+        structlog.contextvars.bind_contextvars(request_id=request_id)
+        start = time.time()
+        response = await call_next(request)
+        duration_ms = int((time.time() - start) * 1000)
+        logger.info("request", method=request.method, path=request.url.path, status=response.status_code, duration_ms=duration_ms)
+        return response
+
+
 app = FastAPI(title="DocPilot API")
+
+app.add_middleware(RequestContextMiddleware)
+
+rate_limit = os.environ.get("DOCPILOT_RATE_LIMIT", "60/minute")
+limiter = Limiter(key_func=get_remote_address, default_limits=[rate_limit])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 
 @app.exception_handler(HTTPException)
@@ -59,6 +91,15 @@ async def value_error_handler(request: Request, exc: ValueError):
             "detail": str(exc),
             "details": None,
         },
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception", path=request.url.path, method=request.method)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_error", "message": "An internal error occurred", "details": None},
     )
 
 

@@ -1,0 +1,20 @@
+{
+  "steps": {
+    "welcome": {
+      "title": "欢迎使用 DocPilot",
+      "description": "DocPilot 帮助您将 RFP 和售前文档包转化为可审核的草稿包。让我们设置您的第一个项目。"
+    },
+    "createProject": {
+      "title": "创建您的第一个项目",
+      "description": "项目用于存放源文档、提取的需求和生成的草稿。您可以从\"项目\"页面创建项目。"
+    },
+    "allSet": {
+      "title": "准备就绪",
+      "description": "一切准备就绪。上传文档包，审核提取的需求，然后生成您的第一个草稿章节。"
+    }
+  },
+  "buttons": {
+    "next": "下一步",
+    "done": "完成"
+  }
+}

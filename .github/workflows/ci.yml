@@ -1,0 +1,86 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api-lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: docpilot_test
+          POSTGRES_USER: docpilot
+          POSTGRES_PASSWORD: docpilot123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DOCPILOT_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
+      DOCPILOT_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install uv
+      - name: Install API deps
+        run: uv sync --directory services/api
+      - name: Lint
+        run: uv run --directory services/api ruff check app/ tests/
+      - name: Type check
+        run: uv run --directory services/api mypy app/ --ignore-missing-imports || true
+      - name: Run migrations
+        run: uv run --directory services/api alembic upgrade head
+      - name: Test
+        run: uv run --directory services/api pytest tests/ -v --tb=short
+
+  worker-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install uv
+      - name: Install Worker deps
+        run: uv sync --directory services/worker
+      - name: Lint
+        run: uv run --directory services/worker ruff check app/ tests/
+      - name: Test
+        run: uv run --directory services/worker pytest tests/ -v --tb=short
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install deps
+        run: pnpm install
+        working-directory: .
+      - name: Typecheck
+        run: pnpm --filter @docpilot/web exec tsc --noEmit
+      - name: Unit tests
+        run: pnpm --filter @docpilot/web exec vitest run
+      - name: Build
+        run: pnpm --filter @docpilot/web run build
+      - name: Lint
+        run: pnpm --filter @docpilot/web exec eslint src/ --ext .ts,.tsx || true

@@ -3,7 +3,14 @@ name = "docpilot-worker"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "celery[redis]>=5.5.0"
+  "celery[redis]>=5.5.0",
+  "httpx>=0.28.1",
+  "minio>=7.2.20",
+  "pgvector>=0.4.0",
+  "psycopg[binary]>=3.2.0",
+  "pymupdf>=1.27.2.2",
+  "python-docx>=1.2.0",
+  "sqlalchemy>=2.0.39",
 ]
 
 [dependency-groups]

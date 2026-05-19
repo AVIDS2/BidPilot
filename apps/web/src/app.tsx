@@ -22,6 +22,7 @@ import { LoginForm } from "@/components/login-form";
 import { SignupForm } from "@/components/signup-form";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ThemeProvider } from "next-themes";
 import { FileTextIcon, CreditCardIcon, UsersIcon, UserPlusIcon, MailIcon } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -108,7 +109,9 @@ function AppLayout() {
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 px-4 lg:px-6">
-              <Outlet />
+              <ErrorBoundary>
+                <Outlet />
+              </ErrorBoundary>
             </div>
           </div>
         </div>
@@ -120,6 +123,7 @@ function AppLayout() {
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <AuthProvider>
         <TooltipProvider>
           <BrowserRouter>
@@ -147,6 +151,7 @@ export function App() {
           <Toaster />
         </TooltipProvider>
       </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

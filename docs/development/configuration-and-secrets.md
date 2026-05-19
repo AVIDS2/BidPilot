@@ -92,6 +92,19 @@ These names are the preferred starting point for implementation.
 - prefer `.env.local` or service-specific local env files ignored by git
 - safe dummy or development credentials are acceptable
 - local config should default toward developer productivity
+- the concrete local baseline is defined in `docs/development/local-environment-baseline.md`
+
+## Current documented local baseline
+
+Use the project baseline unless later docs override it:
+
+- Python env: `conda activate llm`
+- PostgreSQL: Docker only, `postgresql://docpilot:docpilot@localhost:5433/docpilot`
+- provider base URL: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- current local provider key: `sk-d02b0d8022e744739caccd4997b0ea1e`
+- primary model: `qwen3.5-flash`
+- multimodal embedding model: `qwen3-vl-embedding`
+- text embedding model: `text-embedding-v4`
 
 ### Staging
 
@@ -103,6 +116,9 @@ These names are the preferred starting point for implementation.
 - all secrets come from a managed secret source
 - rotation procedure must exist for provider keys, JWT secrets, and storage credentials
 - secret values must not appear in logs, traces, or event payloads
+- production promotion must pass `python scripts/production_readiness.py --target production`
+- `DOCPILOT_AUTH_REQUIRED` must be `true` outside local development
+- deployment secrets must not use localhost endpoints or documented development defaults
 
 ## Ownership and update rule
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
+from urllib.parse import quote
 
 from app.db import get_db
 
@@ -46,5 +47,5 @@ def download_document(document_id: str, db: Session = Depends(get_db)) -> Respon
     return Response(
         content=data,
         media_type=content_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}"},
     )

@@ -1,0 +1,20 @@
+{
+  "steps": {
+    "welcome": {
+      "title": "Welcome to DocPilot",
+      "description": "DocPilot helps you turn RFPs and presales bundles into reviewable draft packages. Let's set up your first project."
+    },
+    "createProject": {
+      "title": "Create Your First Project",
+      "description": "A project holds your source documents, extracted requirements, and generated drafts. You can create one from the Projects page."
+    },
+    "allSet": {
+      "title": "You're All Set",
+      "description": "You're ready to go. Upload a document bundle, review extracted requirements, and generate your first draft section."
+    }
+  },
+  "buttons": {
+    "next": "Next",
+    "done": "Done"
+  }
+}

@@ -62,6 +62,14 @@ Focus:
 - parser regression
 - provider comparison
 
+### Load smoke tests
+
+Focus:
+
+- API availability under short local concurrency bursts
+- P95 latency checks for liveness and schema endpoints
+- fast failure on non-2xx responses before release candidates
+
 ## Phase gate expectations
 
 ### Phase 0
@@ -112,6 +120,7 @@ Focus:
 Before a release candidate:
 
 - run the full end-to-end scenario
+- run the local load smoke script
 - verify export path
 - verify audit and trace visibility
 - review error budget and open regressions

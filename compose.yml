@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: docpilot
       POSTGRES_PASSWORD: docpilot
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - docpilot-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -23,11 +23,8 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+    volumes:
+      - docpilot-redis-data:/data
 
   minio:
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
@@ -42,12 +39,8 @@ services:
       - "9001:9001"
     volumes:
       - docpilot-minio-data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
 volumes:
   docpilot-postgres-data:
+  docpilot-redis-data:
   docpilot-minio-data:

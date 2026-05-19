@@ -609,7 +609,7 @@ export function ProjectDetailPage() {
                             <Button size="sm" variant="outline" disabled={docPage <= 1} onClick={() => setDocPage((p) => p - 1)}>
                               <ChevronLeft className="size-4" />
                             </Button>
-                            <span className="text-sm text-muted-foreground">Page {docPage} of {docTotalPages}</span>
+                            <span className="text-sm text-muted-foreground">{t("common:pagination.pageInfo", { page: docPage, totalPages: docTotalPages, total: documents?.total ?? 0 })}</span>
                             <Button size="sm" variant="outline" disabled={docPage >= docTotalPages} onClick={() => setDocPage((p) => p + 1)}>
                               <ChevronRight className="size-4" />
                             </Button>
@@ -823,7 +823,7 @@ export function ProjectDetailPage() {
               {selectedSectionId && sectionVersions && sectionVersions.length > 0 && (
                 <div className="flex flex-col gap-3">
                   <Message>
-                    <MessageAvatar src="" alt={t("drafting.aiAssistant")} fallback={t("drafting.aiFallback")} />
+                    <MessageAvatar alt={t("drafting.aiAssistant")} fallback={t("drafting.aiFallback")} />
                     <div className="flex flex-col gap-3 flex-1">
                       <div className="flex gap-2 text-xs text-muted-foreground">
                         <span>{t("drafting.version", { number: sectionVersions[0].version_number })}</span>

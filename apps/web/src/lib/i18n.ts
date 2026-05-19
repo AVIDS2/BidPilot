@@ -10,7 +10,7 @@ i18n
   .init({
     fallbackLng: "en",
     supportedLngs: ["en", "zh-CN"],
-    ns: ["common", "admin", "auth", "projects", "landing", "account", "pricing"],
+    ns: ["common", "admin", "auth", "projects", "landing", "account", "pricing", "onboarding"],
     defaultNS: "common",
     interpolation: { escapeValue: false },
     detection: {

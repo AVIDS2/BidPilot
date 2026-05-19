@@ -14,6 +14,10 @@ Local development should support:
 - database migrations
 - parser and drafting job debugging
 
+Local assumptions are defined in:
+
+- `docs/development/local-environment-baseline.md`
+
 ## Expected local services
 
 - PostgreSQL
@@ -25,12 +29,13 @@ Local development should support:
 
 ## Default workflow
 
-1. start infrastructure stack
-2. apply database migrations
-3. start API service
-4. start worker service
-5. start web service
-6. run smoke checks
+1. `conda activate llm`
+2. start infrastructure stack from this repository
+3. apply database migrations
+4. start API service
+5. start worker service
+6. start web service
+7. run smoke checks
 
 ## Feature workflow
 
@@ -96,3 +101,4 @@ Before considering a change complete:
 - local mode must not require a cloud-only managed service
 - local env vars should default to development-safe values
 - local queue and object storage should mimic production contracts closely enough to avoid drift
+- do not use a host-installed PostgreSQL instance for DocPilot when the project Docker Postgres is the documented source

@@ -9,13 +9,14 @@ import enLanding from "./public/locales/en/landing.json";
 import enProjects from "./public/locales/en/projects.json";
 import enAccount from "./public/locales/en/account.json";
 import enPricing from "./public/locales/en/pricing.json";
+import enOnboarding from "./public/locales/en/onboarding.json";
 
 vi.mock("@/lib/i18n", () => ({ default: i18n }));
 
 i18n.use(initReactI18next).init({
   lng: "en",
   fallbackLng: "en",
-  ns: ["common", "admin", "auth", "landing", "projects", "account", "pricing"],
+  ns: ["common", "admin", "auth", "landing", "projects", "account", "pricing", "onboarding"],
   defaultNS: "common",
   resources: {
     en: {
@@ -26,6 +27,7 @@ i18n.use(initReactI18next).init({
       projects: enProjects,
       account: enAccount,
       pricing: enPricing,
+      onboarding: enOnboarding,
     },
   },
   interpolation: { escapeValue: false },

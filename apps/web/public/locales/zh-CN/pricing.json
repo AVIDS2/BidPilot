@@ -9,6 +9,7 @@
     "starter": {
       "name": "入门版",
       "price": "免费",
+      "period": "",
       "description": "体验单次招标响应。",
       "features": [
         "最多 3 个项目",
@@ -36,6 +37,7 @@
     "enterprise": {
       "name": "企业版",
       "price": "定制",
+      "period": "",
       "description": "适合需要高度可控和可扩展的组织。",
       "features": [
         "定制化部署",

@@ -48,7 +48,7 @@ export function SignupForm({
     }
     if (createOrg && !invitationToken) {
       if (!orgName || !orgSlug) {
-        toast.error("Please provide both organization name and slug")
+        toast.error(t("signup.missingOrgFields"))
         return
       }
     }

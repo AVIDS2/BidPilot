@@ -1,0 +1,74 @@
+name: release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  api-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: docpilot_test
+          POSTGRES_USER: docpilot
+          POSTGRES_PASSWORD: docpilot123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DOCPILOT_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
+      DOCPILOT_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install uv
+      - run: uv sync --directory services/api
+      - run: uv run --directory services/api alembic upgrade head
+      - run: uv run --directory services/api pytest tests/ -q
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pnpm install
+      - run: pnpm --filter @docpilot/web exec tsc --noEmit
+      - run: pnpm --filter @docpilot/web exec vitest run
+      - run: pnpm --filter @docpilot/web run build
+
+  production-readiness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate production readiness
+        run: python scripts/production_readiness.py --target production
+        env:
+          DOCPILOT_DATABASE_URL: postgresql+psycopg://docpilot:${{ secrets.DOCPILOT_DATABASE_PASSWORD }}@${{ secrets.DOCPILOT_DATABASE_HOST }}:5432/docpilot
+          DOCPILOT_REDIS_URL: redis://${{ secrets.DOCPILOT_REDIS_HOST }}:6379/0
+          DOCPILOT_MINIO_ENDPOINT: ${{ secrets.DOCPILOT_MINIO_ENDPOINT }}
+          DOCPILOT_MINIO_ACCESS_KEY: ${{ secrets.DOCPILOT_MINIO_ACCESS_KEY }}
+          DOCPILOT_MINIO_SECRET_KEY: ${{ secrets.DOCPILOT_MINIO_SECRET_KEY }}
+          DOCPILOT_JWT_SECRET: ${{ secrets.DOCPILOT_JWT_SECRET }}
+          DOCPILOT_AUTH_REQUIRED: "true"
+          DOCPILOT_PROVIDER_DOMESTIC_API_KEY: ${{ secrets.DOCPILOT_PROVIDER_DOMESTIC_API_KEY }}

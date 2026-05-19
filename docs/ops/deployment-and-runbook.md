@@ -56,6 +56,36 @@ Requirements:
 5. run smoke and migration checks
 6. promote to production
 
+Run the local release-candidate rehearsal before staging promotion:
+
+```powershell
+python scripts/release_rehearsal.py --run
+```
+
+See `docs/ops/release-rehearsal-runbook.md` for optional browser, load, and production-readiness gates.
+
+## Production readiness gate
+
+Before promotion, inject production-equivalent secrets and run:
+
+```powershell
+python scripts/production_readiness.py --target production
+```
+
+The checker validates that required deployment variables are present, auth is enforced, localhost endpoints are not used, and known development defaults are not promoted.
+
+Required secret-backed values:
+
+- `DOCPILOT_DATABASE_URL`
+- `DOCPILOT_REDIS_URL`
+- `DOCPILOT_MINIO_ENDPOINT`
+- `DOCPILOT_MINIO_ACCESS_KEY`
+- `DOCPILOT_MINIO_SECRET_KEY`
+- `DOCPILOT_JWT_SECRET`
+- one provider API key such as `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `DOCPILOT_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY`, or `LLM_API_KEY`
+
+`DOCPILOT_AUTH_REQUIRED` must be `true`.
+
 ## Migration policy
 
 - schema changes are applied through Alembic
@@ -68,6 +98,7 @@ Requirements:
 - object storage versioning enabled
 - weekly restore verification in staging
 - recovery targets should stay aligned with `docs/product/non-functional-requirements.md`
+- staging restore drills should follow `docs/ops/backup-restore-drill.md`
 
 ## Incident priorities
 

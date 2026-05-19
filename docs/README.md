@@ -76,6 +76,12 @@ It is organized to support three goals:
   - repository structure, coding rules, and service ownership guidance
 - `docs/development/local-development-workflow.md`
   - how to work locally from first clone to feature delivery
+- `docs/development/local-environment-baseline.md`
+  - the concrete local environment, ports, Docker services, conda env, and provider settings to use
+- `docs/development/first-run-bootstrap-runbook.md`
+  - first-day startup and environment verification before implementation begins
+- `docs/development/development-preflight-checklist.md`
+  - the checklist to pass before meaningful development or environment changes
 - `docs/development/configuration-and-secrets.md`
   - environment variables, secret ownership, and config discipline
 - `docs/development/agent-execution-manual.md`
