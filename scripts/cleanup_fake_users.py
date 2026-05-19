@@ -138,9 +138,9 @@ USER_DELETION_STEPS: list[tuple[str, str]] = [
     ("invitation",              "DELETE FROM invitation WHERE invited_by = ANY(:user_ids)"),
     # Non-FK string references -- safe to clean up without FK trouble.
     ("audit_event (actor)",     "DELETE FROM audit_event WHERE actor_id = ANY(:user_ids)"),
+    ("review_comment (author)", "DELETE FROM review_comment WHERE author_id = ANY(:user_ids)"),
     ("review_thread (opener)",  "DELETE FROM review_thread WHERE opened_by = ANY(:user_ids)"),
     ("review_thread (resolver)","DELETE FROM review_thread WHERE resolved_by = ANY(:user_ids)"),
-    ("review_comment (author)", "DELETE FROM review_comment WHERE author_id = ANY(:user_ids)"),
     ("user",                    "DELETE FROM \"user\" WHERE id = ANY(:user_ids)"),
 ]
 # fmt: on
