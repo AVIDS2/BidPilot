@@ -161,14 +161,14 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
     @apply bg-background text-foreground;
-    }
+  }
   html {
     @apply font-sans;
     scroll-behavior: smooth;
-    }
+  }
 
   ::selection {
     background-color: oklch(0.45 0.18 255 / 0.15);
