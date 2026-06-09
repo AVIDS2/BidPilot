@@ -28,9 +28,9 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "next-themes";
 import { FileTextIcon, SettingsIcon, UsersIcon, UserPlusIcon, MailIcon, LayoutDashboardIcon, CreditCardIcon, BookOpenIcon } from "lucide-react";
-import { CommandPalette } from "@/components/command-palette";
-import { AIAssistant } from "@/components/ai-assistant/AIAssistant";
-import { useCommandPalette } from "@/hooks/use-command-palette";
+import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
+import { CommandPalette, AIAssistantPanel, FloatingAssistant, InlineSuggestionBar } from "@/components/ai-assistant";
+import { useAIAssistantHotkeys } from "@/hooks/use-ai-assistant-hotkeys";
 
 const queryClient = new QueryClient();
 
@@ -56,7 +56,8 @@ function PublicLayout() {
 function AppLayout() {
   const { user, isAuthenticated } = useAuth();
   const { t } = useTranslation();
-  const { open, setOpen } = useCommandPalette();
+  const { state, toggle } = useAIAssistant();
+  useAIAssistantHotkeys();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -97,7 +98,7 @@ function AppLayout() {
         "--header-height": "calc(var(--spacing) * 12)",
       } as React.CSSProperties}
     >
-      <CommandPalette open={open} onOpenChange={setOpen} />
+      <CommandPalette open={state.isOpen && state.mode === "command"} onOpenChange={(open) => { if (!open) toggle(); }} />
       <AppSidebar
         navItems={visibleNavItems}
         teams={teams}
@@ -105,6 +106,7 @@ function AppLayout() {
       />
       <SidebarInset>
         <SiteHeader />
+        <InlineSuggestionBar />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 px-4 lg:px-6">
@@ -115,7 +117,8 @@ function AppLayout() {
           </div>
         </div>
       </SidebarInset>
-      <AIAssistant />
+      <AIAssistantPanel />
+      <FloatingAssistant />
     </SidebarProvider>
   );
 }
@@ -125,6 +128,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <AuthProvider>
+      <AIAssistantProvider>
         <TooltipProvider>
           <BrowserRouter>
             <ErrorBoundary>
@@ -158,6 +162,7 @@ export function App() {
           </BrowserRouter>
           <Toaster />
         </TooltipProvider>
+      </AIAssistantProvider>
       </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

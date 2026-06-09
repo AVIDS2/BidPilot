@@ -21,5 +21,47 @@
     "howToUsePrompt": "How to use DocPilot?",
     "send": "Send",
     "stop": "Stop"
+  },
+  "panel": {
+    "openCommand": "Command palette",
+    "close": "Close panel",
+    "enterToSend": "Enter to send",
+    "escToClose": "Esc to close"
+  },
+  "floating": {
+    "ariaLabel": "DocPilot AI Assistant",
+    "openPanel": "Open panel",
+    "commandPalette": "Command palette",
+    "aiChat": "AI chat"
+  },
+  "commands": {
+    "groups": {
+      "ai": "AI Assistant"
+    },
+    "createProject": "Create New Project",
+    "uploadDoc": "Upload Document",
+    "generateSection": "Generate Section",
+    "searchKnowledge": "Search Knowledge Base",
+    "exportDoc": "Export Document",
+    "viewStatus": "View Status",
+    "aiChat": "AI Chat",
+    "aiSuggest": "AI Suggestions",
+    "aiSuggestPrompt": "Give me suggestions for the current page",
+    "help": "Help"
+  },
+  "suggestions": {
+    "createProject": "Create a new project",
+    "projectTips": "Project management tips",
+    "projectTipsPrompt": "Give me tips on managing my projects effectively",
+    "generateSection": "Generate a section",
+    "uploadDocument": "Upload a document",
+    "exportProject": "Export project",
+    "exportProjectPrompt": "How do I export my project?",
+    "dashboardOverview": "Platform overview",
+    "dashboardOverviewPrompt": "Give me an overview of the platform status and recent activity",
+    "userManagement": "User management help",
+    "userManagementPrompt": "How do I manage users and permissions?",
+    "providerSetup": "Provider setup help",
+    "providerSetupPrompt": "Help me configure an AI provider"
   }
 }

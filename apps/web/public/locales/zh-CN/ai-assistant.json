@@ -21,5 +21,47 @@
     "howToUsePrompt": "怎么使用DocPilot？",
     "send": "发送",
     "stop": "停止"
+  },
+  "panel": {
+    "openCommand": "命令面板",
+    "close": "关闭面板",
+    "enterToSend": "回车发送",
+    "escToClose": "Esc 关闭"
+  },
+  "floating": {
+    "ariaLabel": "DocPilot AI 助手",
+    "openPanel": "打开面板",
+    "commandPalette": "命令面板",
+    "aiChat": "AI 对话"
+  },
+  "commands": {
+    "groups": {
+      "ai": "AI 助手"
+    },
+    "createProject": "创建新项目",
+    "uploadDoc": "上传文档",
+    "generateSection": "生成章节",
+    "searchKnowledge": "搜索知识库",
+    "exportDoc": "导出文档",
+    "viewStatus": "查看状态",
+    "aiChat": "AI 对话",
+    "aiSuggest": "AI 建议",
+    "aiSuggestPrompt": "给我当前页面的操作建议",
+    "help": "帮助"
+  },
+  "suggestions": {
+    "createProject": "创建新项目",
+    "projectTips": "项目管理技巧",
+    "projectTipsPrompt": "给我一些高效管理项目的建议",
+    "generateSection": "生成章节",
+    "uploadDocument": "上传文档",
+    "exportProject": "导出项目",
+    "exportProjectPrompt": "如何导出我的项目？",
+    "dashboardOverview": "平台概览",
+    "dashboardOverviewPrompt": "给我一个平台状态和最近活动的概览",
+    "userManagement": "用户管理帮助",
+    "userManagementPrompt": "如何管理用户和权限？",
+    "providerSetup": "供应商配置帮助",
+    "providerSetupPrompt": "帮我配置一个AI供应商"
   }
 }
