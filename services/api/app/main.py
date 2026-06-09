@@ -40,6 +40,7 @@ from app.export.router import router as export_router
 from app.billing.router import router as billing_router
 from app.teams.router import router as teams_router
 from app.organizations.router import router as organizations_router
+from app.chat.router import router as chat_router
 from app.providers.router import router as providers_router
 from app.invitations.router import router as invitations_router
 from app.logging import setup_logging
@@ -138,6 +139,7 @@ app.include_router(organizations_router, dependencies=_protected)
 app.include_router(providers_router)
 app.include_router(invitations_router, dependencies=_protected)
 app.include_router(billing_router)
+app.include_router(chat_router, dependencies=_protected)
 
 
 @app.get("/health")

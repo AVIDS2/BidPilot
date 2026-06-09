@@ -1,0 +1,25 @@
+{
+  "title": "DocPilot AI",
+  "subtitle": "您的文档助手",
+  "inputPlaceholder": "问我任何问题...",
+  "thinking": "思考中",
+  "welcome": {
+    "title": "欢迎使用 DocPilot！",
+    "description": "我可以帮您创建项目、上传文档、生成章节等。"
+  },
+  "error": {
+    "network": "抱歉，发生了错误，请稍后重试。"
+  },
+  "actions": {
+    "createProject": "创建项目",
+    "createProjectPrompt": "创建一个新项目",
+    "uploadDoc": "上传文档",
+    "uploadDocPrompt": "帮我上传RFP文档",
+    "generateSection": "生成章节",
+    "generateSectionPrompt": "生成执行摘要",
+    "howToUse": "如何使用？",
+    "howToUsePrompt": "怎么使用DocPilot？",
+    "send": "发送",
+    "stop": "停止"
+  }
+}

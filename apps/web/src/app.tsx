@@ -29,6 +29,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "next-themes";
 import { FileTextIcon, SettingsIcon, UsersIcon, UserPlusIcon, MailIcon, LayoutDashboardIcon, CreditCardIcon, BookOpenIcon } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette";
+import { AIAssistant } from "@/components/ai-assistant/AIAssistant";
 import { useCommandPalette } from "@/hooks/use-command-palette";
 
 const queryClient = new QueryClient();
@@ -114,6 +115,7 @@ function AppLayout() {
           </div>
         </div>
       </SidebarInset>
+      <AIAssistant />
     </SidebarProvider>
   );
 }
