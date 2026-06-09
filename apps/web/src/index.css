@@ -93,7 +93,6 @@
     --shadow-xl: 0 20px 25px -5px oklch(0.55 0.18 250 / 0.10), 0 8px 10px -6px oklch(0.55 0.18 250 / 0.08);
     --shadow-card: 0 1px 3px oklch(0.55 0.18 250 / 0.06), 0 1px 2px oklch(0.55 0.18 250 / 0.04);
     --shadow-card-hover: 0 10px 25px -5px oklch(0.55 0.18 250 / 0.10), 0 4px 10px -4px oklch(0.55 0.18 250 / 0.08);
-}
 
     /* --- Custom Theme Variables --- */
     /* 晴空蓝 + 雪雾白 */
