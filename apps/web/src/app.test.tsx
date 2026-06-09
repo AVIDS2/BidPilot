@@ -22,7 +22,8 @@ describe("App", () => {
   it("renders the signup page without unavailable social auth actions", () => {
     window.history.pushState({}, "", "/signup");
     render(<App />);
-    expect(screen.getByRole("heading", { name: "Create your account" })).toBeInTheDocument();
+    // 新的注册页面使用DocPilot作为标题
+    expect(screen.getByText("DocPilot")).toBeInTheDocument();
     expect(screen.queryByText(/Sign up with (Apple|Google|Meta)/)).not.toBeInTheDocument();
   });
 });

@@ -12,6 +12,8 @@ import { TeamManagementPage } from "./features/admin/team-management-page";
 import { InvitationManagementPage } from "./features/admin/invitation-management-page";
 import { ProviderSettingsPage } from "./features/settings/provider-settings-page";
 import { DocsPage } from "./features/docs/docs-page";
+import { LoginPage } from "./features/auth/login-page";
+import { SignupPage } from "./features/auth/signup-page";
 import { ForgotPasswordPage } from "./features/auth/forgot-password-page";
 import { ResetPasswordPage } from "./features/auth/reset-password-page";
 import { VerifyEmailPromptPage } from "./features/auth/verify-email-prompt-page";
@@ -21,8 +23,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { LoginForm } from "@/components/login-form";
-import { SignupForm } from "@/components/signup-form";
+import { Nav } from "@/components/layout/Nav";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "next-themes";
@@ -31,38 +32,6 @@ import { CommandPalette } from "@/components/command-palette";
 import { useCommandPalette } from "@/hooks/use-command-palette";
 
 const queryClient = new QueryClient();
-
-function LoginPage() {
-  return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10">
-      <div className="flex w-full max-w-md flex-col gap-6">
-        <a href="#" className="flex items-center gap-2 self-center font-medium">
-          <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <FileTextIcon className="size-4" />
-          </div>
-          DocPilot
-        </a>
-        <LoginForm />
-      </div>
-    </div>
-  );
-}
-
-function SignupPage() {
-  return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10">
-      <div className="flex w-full max-w-3xl flex-col gap-6">
-        <a href="#" className="flex items-center gap-2 self-center font-medium">
-          <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <FileTextIcon className="size-4" />
-          </div>
-          DocPilot
-        </a>
-        <SignupForm />
-      </div>
-    </div>
-  );
-}
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth();
@@ -140,10 +109,11 @@ function AppLayout() {
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <AuthProvider>
         <TooltipProvider>
           <BrowserRouter>
+            <Nav />
             <ErrorBoundary>
               <Routes>
                 <Route path="/" element={<RootRedirect />} />

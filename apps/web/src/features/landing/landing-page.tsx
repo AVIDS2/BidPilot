@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, FileText, PenTool, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { CinematicHero } from "@/components/hero/CinematicHero";
 
 // 完全复刻老师blog的逐字动画组件
 function AnimatedTitle({ text, className }: { text: string; className?: string }) {
@@ -11,8 +12,8 @@ function AnimatedTitle({ text, className }: { text: string; className?: string }
     if (!titleRef.current) return;
 
     const el = titleRef.current;
-    const text = el.textContent || '';
-    el.innerHTML = text.split('').map((char, i) =>
+    const content = el.textContent || '';
+    el.innerHTML = content.split('').map((char, i) =>
       `<span class="anim-char" style="--i:${i}">${char === ' ' ? '&nbsp;' : char}</span>`
     ).join('');
 
@@ -96,102 +97,63 @@ function ScrollReveal({
   );
 }
 
-// Hero区域 - 完全复刻老师的设计
+// Hero区域 - 使用CinematicHero（视频背景 + 粒子 + 网格）
 function HeroSection() {
   const { t } = useTranslation("landing");
 
   return (
-    <section className="relative h-screen overflow-hidden">
-      {/* 背景 - 老师的纯黑 + 很淡纹理 */}
-      <div className="absolute inset-0">
-        <div
-          className="w-full h-full"
-          style={{
-            background: "#0a0a0a",
-            backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="rgba(132,204,22,0.03)"/><circle cx="75" cy="75" r="1" fill="rgba(132,204,22,0.03)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>')`,
-          }}
-        />
-      </div>
+    <CinematicHero variant="mixed">
+      {/* 区域标签 */}
+      <span
+        className="text-sm font-medium tracking-widest uppercase"
+        style={{ color: "#84cc16" }}
+      >
+        / AI-Powered Document Execution
+      </span>
 
-      {/* 青柠绿色彩叠加层 - 老师的hero-overlay */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: "rgba(132, 204, 22, 0.15)",
-          mixBlendMode: "multiply",
-        }}
+      {/* 标题 - 使用逐字动画 */}
+      <AnimatedTitle
+        text={t("hero.title")}
+        className="mt-8 text-6xl md:text-8xl font-medium leading-[0.85] tracking-[-0.04em] text-white"
       />
 
-      {/* 影视画框标注 - 老师的风格 */}
-      <div className="absolute inset-0 pointer-events-none z-10">
-        <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">
-          DocPilot v1.0
-        </span>
-        <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">
-          [16:9]
-        </span>
-        <span className="absolute bottom-6 left-6 text-[10px] text-white/30 font-mono">
-          OVERSCAN: 1920 × 1080
-        </span>
-        <span className="absolute bottom-6 right-6 text-[10px] text-white/30 font-mono">
-          100%
-        </span>
-      </div>
+      {/* 副标题 */}
+      <p className="mt-6 text-xl md:text-2xl text-white/80 max-w-2xl">
+        {t("hero.description")}
+      </p>
 
-      {/* 内容 */}
-      <div className="relative z-20 flex flex-col justify-center h-full px-8 max-w-7xl mx-auto">
-        {/* 区域标签 - 老师的风格 */}
-        <span
-          className="text-sm font-medium tracking-widest uppercase"
-          style={{ color: "#84cc16" }}
+      {/* CTA 按钮 */}
+      <div className="mt-12 flex gap-6">
+        <Link
+          to="/signup"
+          className="inline-flex items-center gap-3 text-lg font-medium px-8 py-4 transition-all duration-300 hover:scale-[0.98]"
+          style={{
+            background: "#84cc16",
+            color: "#0a0a0a",
+          }}
         >
-          / AI-Powered Document Execution
-        </span>
-
-        {/* 标题 - 使用老师的逐字动画 */}
-        <AnimatedTitle
-          text={t("hero.title")}
-          className="mt-8 text-6xl md:text-8xl font-medium leading-[0.85] tracking-[-0.04em] text-white"
-        />
-
-        {/* 副标题 */}
-        <p className="mt-6 text-xl md:text-2xl text-white/80 max-w-2xl">
-          {t("hero.description")}
-        </p>
-
-        {/* CTA 按钮 - 老师的风格 */}
-        <div className="mt-12 flex gap-6">
-          <Link
-            to="/signup"
-            className="inline-flex items-center gap-3 text-lg font-medium px-8 py-4 transition-all duration-300 hover:scale-[0.98]"
-            style={{
-              background: "#84cc16",
-              color: "#0a0a0a",
-            }}
-          >
-            {t("hero.getStarted")}
-            <span className="text-sm">→</span>
-          </Link>
-          <Link
-            to="/pricing"
-            className="inline-flex items-center gap-3 text-lg font-medium text-white px-8 py-4 transition-all duration-300"
-            style={{
-              border: "1px solid rgba(163, 163, 163, 0.1)",
-            }}
-          >
-            {t("hero.viewPricing")}
-          </Link>
-        </div>
+          {t("hero.getStarted")}
+          <span className="text-sm">→</span>
+        </Link>
+        <Link
+          to="/pricing"
+          className="inline-flex items-center gap-3 text-lg font-medium text-white px-8 py-4 transition-all duration-300"
+          style={{
+            border: "1px solid rgba(163, 163, 163, 0.1)",
+          }}
+        >
+          {t("hero.viewPricing")}
+        </Link>
       </div>
 
-      {/* 滚动提示 - 老师的风格 */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20">
+      {/* 滚动提示 */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
         <div className="flex flex-col items-center gap-2 text-white/30">
           <span className="text-xs tracking-widest uppercase">Scroll to content</span>
           <div className="w-px h-8 animate-pulse" style={{ background: "#84cc16" }} />
         </div>
       </div>
-    </section>
+    </CinematicHero>
   );
 }
 
