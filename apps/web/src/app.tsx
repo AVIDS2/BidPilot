@@ -27,7 +27,7 @@ import { Nav } from "@/components/layout/Nav";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "next-themes";
-import { FileTextIcon, CreditCardIcon, UsersIcon, UserPlusIcon, MailIcon, LayoutDashboardIcon, BookOpenIcon } from "lucide-react";
+import { FileTextIcon, SettingsIcon, UsersIcon, UserPlusIcon, MailIcon, LayoutDashboardIcon, CreditCardIcon, BookOpenIcon } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette";
 import { useCommandPalette } from "@/hooks/use-command-palette";
 
@@ -41,6 +41,17 @@ function RootRedirect() {
   return <LandingPage />;
 }
 
+// PublicLayout - Nav only on public pages (landing, auth, pricing, docs)
+function PublicLayout() {
+  return (
+    <>
+      <Nav />
+      <Outlet />
+    </>
+  );
+}
+
+// AppLayout - Sidebar navigation for platform pages
 function AppLayout() {
   const { user, isAuthenticated } = useAuth();
   const { t } = useTranslation();
@@ -55,8 +66,9 @@ function AppLayout() {
   const navItems = [
     { title: t("nav.dashboard"), url: "/dashboard", icon: <LayoutDashboardIcon /> },
     { title: t("nav.projects"), url: "/projects", icon: <FileTextIcon /> },
-    { title: t("nav.docs"), url: "/docs", icon: <BookOpenIcon /> },
-    { title: t("nav.pricing"), url: "/pricing", icon: <CreditCardIcon /> },
+    { title: t("nav.settings"), url: "/settings/providers", icon: <SettingsIcon /> },
+    { title: t("nav.pricing", { defaultValue: "定价" }), url: "/pricing", icon: <CreditCardIcon /> },
+    { title: t("nav.docs", { defaultValue: "文档" }), url: "/docs", icon: <BookOpenIcon /> },
     { title: t("nav.teams"), url: "/admin/teams", icon: <UserPlusIcon /> },
     { title: t("nav.invitations"), url: "/admin/invitations", icon: <MailIcon /> },
     { title: t("nav.users"), url: "/admin/users", icon: <UsersIcon /> },
@@ -113,11 +125,22 @@ export function App() {
       <AuthProvider>
         <TooltipProvider>
           <BrowserRouter>
-            <Nav />
             <ErrorBoundary>
               <Routes>
-                <Route path="/" element={<RootRedirect />} />
-                <Route path="/pricing" element={<PricingPage />} />
+                {/* Public pages - Nav navigation */}
+                <Route element={<PublicLayout />}>
+                  <Route path="/" element={<RootRedirect />} />
+                  <Route path="/pricing" element={<PricingPage />} />
+                  <Route path="/docs" element={<DocsPage />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/signup" element={<SignupPage />} />
+                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                  <Route path="/reset-password" element={<ResetPasswordPage />} />
+                  <Route path="/verify-email-prompt" element={<VerifyEmailPromptPage />} />
+                  <Route path="/verify-email" element={<VerifyEmailPage />} />
+                </Route>
+
+                {/* Platform pages - Sidebar navigation */}
                 <Route element={<AppLayout />}>
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/projects" element={<ProjectListPage />} />
@@ -127,14 +150,7 @@ export function App() {
                   <Route path="/admin/teams" element={<TeamManagementPage />} />
                   <Route path="/admin/invitations" element={<InvitationManagementPage />} />
                   <Route path="/settings/providers" element={<ProviderSettingsPage />} />
-                  <Route path="/docs" element={<DocsPage />} />
                 </Route>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/signup" element={<SignupPage />} />
-                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-                <Route path="/reset-password" element={<ResetPasswordPage />} />
-                <Route path="/verify-email-prompt" element={<VerifyEmailPromptPage />} />
-                <Route path="/verify-email" element={<VerifyEmailPage />} />
               </Routes>
             </ErrorBoundary>
           </BrowserRouter>

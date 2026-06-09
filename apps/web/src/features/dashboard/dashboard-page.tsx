@@ -78,11 +78,11 @@ function RecentActivityItem({
   event: { project: string; action: string; time: string; type: string };
 }) {
   const typeColors: Record<string, string> = {
-    project_created: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    status_changed: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    draft_started: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    draft_completed: "bg-green-500/10 text-green-600 dark:text-green-400",
-    export: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    project_created: "bg-[#84cc16]/10 text-[#84cc16]",
+    status_changed: "bg-amber-500/10 text-amber-400",
+    draft_started: "bg-emerald-500/10 text-emerald-400",
+    draft_completed: "bg-[#84cc16]/10 text-[#84cc16]",
+    export: "bg-orange-500/10 text-orange-400",
   };
 
   return (
@@ -269,7 +269,7 @@ export function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+            <div className="flex items-center gap-1.5 text-xs text-[#84cc16]">
               <CheckCircleIcon className="size-3" />
               {t("dashboard:stats.done")}
             </div>

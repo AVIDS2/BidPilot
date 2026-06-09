@@ -408,7 +408,7 @@ export function ProjectDetailPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 *:data-[slot=card]:bg-linear-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs @xl/main:grid-cols-2 @5xl/main:grid-cols-4 dark:*:data-[slot=card]:bg-card">
+      <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
         <Card className="@container/card">
           <CardHeader>
             <CardDescription>{t("summary.bundles")}</CardDescription>
@@ -476,7 +476,7 @@ export function ProjectDetailPage() {
       </div>
 
       {/* Workflow Hint Banner */}
-      <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
+      <Card className="border-[rgba(132,204,22,0.2)] bg-gradient-to-r from-[rgba(132,204,22,0.04)] to-transparent">
         <CardContent className="flex flex-wrap items-center gap-2 py-3 text-xs">
           <span className="font-medium text-muted-foreground">{t("detail.workflow")}</span>
           <Badge variant={bundles?.length ? "default" : "outline"} className="font-normal">{t("detail.wfBundles", { count: bundles?.length ?? 0 })}</Badge>

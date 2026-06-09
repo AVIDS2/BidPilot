@@ -39,36 +39,60 @@ export function TeamSwitcher({
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <SidebarMenuButton className="w-fit px-1.5 aria-expanded:bg-muted aria-expanded:text-foreground" />
+              <SidebarMenuButton
+                className="w-fit px-2 transition-all duration-200"
+                style={{
+                  color: "#ffffff",
+                }}
+              />
             }
           >
-            <div className="flex aspect-square size-5 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+            <div
+              className="flex aspect-square size-6 items-center justify-center rounded-md"
+              style={{
+                background: "#84cc16",
+                color: "#0a0a0a",
+              }}
+            >
               {activeTeam.logo}
             </div>
-            <span className="truncate font-medium">{activeTeam.name}</span>
-            <ChevronDownIcon className="opacity-50" />
+            <span className="truncate font-medium text-sm">{activeTeam.name}</span>
+            <ChevronDownIcon className="opacity-50 size-3.5" style={{ color: "#737373" }} />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="w-64 rounded-lg"
             align="start"
             side="bottom"
             sideOffset={4}
+            style={{
+              background: "#171717",
+              borderColor: "rgba(163, 163, 163, 0.1)",
+            }}
           >
             <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-xs text-muted-foreground">
+              <DropdownMenuLabel
+                className="text-xs font-medium tracking-widest uppercase"
+                style={{ color: "#525252" }}
+              >
                 {t("nav.teams")}
               </DropdownMenuLabel>
               {teams.map((team, index) => (
                 <DropdownMenuItem
                   key={team.name}
                   onClick={() => setActiveTeam(team)}
-                  className="gap-2 p-2"
+                  className="gap-2 p-2 text-[#a3a3a3] focus:text-white focus:bg-[rgba(163,163,163,0.08)]"
                 >
-                  <div className="flex size-6 items-center justify-center rounded-xs border">
+                  <div
+                    className="flex size-6 items-center justify-center rounded-xs"
+                    style={{
+                      background: "rgba(132, 204, 22, 0.1)",
+                      border: "1px solid rgba(132, 204, 22, 0.2)",
+                    }}
+                  >
                     {team.logo}
                   </div>
                   {team.name}
-                  <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
+                  <DropdownMenuShortcut style={{ color: "#525252" }}>⌘{index + 1}</DropdownMenuShortcut>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>

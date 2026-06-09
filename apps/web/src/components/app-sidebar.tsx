@@ -30,19 +30,42 @@ export function AppSidebar({
   const { t } = useTranslation()
 
   return (
-    <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
+    <Sidebar
+      collapsible="icon"
+      className="border-r"
+      style={{
+        borderColor: "rgba(163, 163, 163, 0.06)",
+        background: "#0a0a0a",
+      }}
+      {...props}
+    >
+      <SidebarHeader
+        className="p-4"
+        style={{
+          borderBottom: "1px solid rgba(163, 163, 163, 0.06)",
+        }}
+      >
         <TeamSwitcher teams={teams} />
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="px-2 py-3">
         <SidebarGroup>
-          <SidebarGroupLabel>{t("nav.navigation")}</SidebarGroupLabel>
+          <SidebarGroupLabel
+            className="text-xs font-medium tracking-widest uppercase mb-2 px-2"
+            style={{ color: "#525252" }}
+          >
+            {t("nav.navigation")}
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <NavMain items={navItems} />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter
+        className="p-3"
+        style={{
+          borderTop: "1px solid rgba(163, 163, 163, 0.06)",
+        }}
+      >
         <NavUser user={user} />
       </SidebarFooter>
       <SidebarRail />

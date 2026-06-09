@@ -158,11 +158,13 @@ export function AccountPage() {
                   key={item.href}
                   to="/account"
                   onClick={(e) => { e.preventDefault(); setActiveSection(item.href); }}
+                  style={{
+                    background: active ? "rgba(132, 204, 22, 0.1)" : "transparent",
+                    color: active ? "#84cc16" : "#a3a3a3",
+                  }}
                   className={cn(
                     "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    !active && "hover:text-white"
                   )}
                 >
                   <Icon className="size-4" />
@@ -204,7 +206,7 @@ export function AccountPage() {
                 </div>
 
                 {user?.plan === "starter" && (
-                  <div className="flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-4">
+                  <div className="flex items-center justify-between rounded-md p-4" style={{ background: "rgba(132, 204, 22, 0.06)", border: "1px solid rgba(132, 204, 22, 0.2)" }}>
                     <div>
                       <p className="text-sm font-medium">{t("upgrade.title")}</p>
                       <p className="text-xs text-muted-foreground">
@@ -218,7 +220,7 @@ export function AccountPage() {
                 )}
 
                 {user?.role === "admin" && (
-                  <div className="rounded-md border bg-muted/30 p-4 space-y-3">
+                  <div className="rounded-md p-4 space-y-3" style={{ background: "rgba(163, 163, 163, 0.04)", border: "1px solid rgba(163, 163, 163, 0.08)" }}>
                     <div>
                       <p className="text-sm font-medium">{t("admin.changePlan")}</p>
                       <p className="text-xs text-muted-foreground">

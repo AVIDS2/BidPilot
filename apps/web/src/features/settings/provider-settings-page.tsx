@@ -259,44 +259,40 @@ export function ProviderSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">AI Provider Settings</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-bold tracking-tight text-white">AI Provider Settings</h1>
+        <p style={{ color: "#a3a3a3" }}>
           Configure your AI provider connections for document drafting and analysis.
         </p>
       </div>
-      <Separator />
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Settings2 className="size-5 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">
+          <Settings2 className="size-5" style={{ color: "#a3a3a3" }} />
+          <span className="text-sm" style={{ color: "#a3a3a3" }}>
             {providers.length} provider{providers.length !== 1 ? "s" : ""} configured
           </span>
         </div>
-        <Button onClick={handleAddProvider}>
+        <Button onClick={handleAddProvider} className="bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d]">
           <Plus className="size-4" />
           Add Provider
         </Button>
       </div>
 
       {providers.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <Settings2 className="mx-auto size-10 mb-3 opacity-40" />
-            <p className="text-sm">No providers configured yet.</p>
-            <p className="text-xs mt-1">
-              Add an AI provider to get started with document drafting.
-            </p>
-            <Button
-              onClick={handleAddProvider}
-              className="mt-4"
-              variant="outline"
-            >
-              <Plus className="size-4" />
-              Add Your First Provider
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl py-12 text-center" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
+          <Settings2 className="mx-auto size-10 mb-3 opacity-40" style={{ color: "#737373" }} />
+          <p className="text-sm" style={{ color: "#a3a3a3" }}>No providers configured yet.</p>
+          <p className="text-xs mt-1" style={{ color: "#737373" }}>
+            Add an AI provider to get started with document drafting.
+          </p>
+          <Button
+            onClick={handleAddProvider}
+            className="mt-4 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d]"
+          >
+            <Plus className="size-4" />
+            Add Your First Provider
+          </Button>
+        </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {providers.map((provider) => (
@@ -312,13 +308,10 @@ export function ProviderSettingsPage() {
                       {provider.provider_type}
                     </Badge>
                     {provider.is_active && (
-                      <Badge
-                        variant="default"
-                        className="gap-1 bg-green-600 hover:bg-green-600"
-                      >
+                      <span className="text-xs px-2 py-0.5 rounded flex items-center gap-1" style={{ background: "rgba(132, 204, 22, 0.15)", color: "#84cc16" }}>
                         <CheckCircle2 className="size-3" />
                         Active
-                      </Badge>
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center gap-1">
@@ -378,13 +371,13 @@ export function ProviderSettingsPage() {
                   )}
                 </div>
                 {!provider.is_active && (
-                  <div className="mt-3 pt-3 border-t">
+                  <div className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(163, 163, 163, 0.08)" }}>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setActiveMut.mutate(provider.id)}
                       disabled={setActiveMut.isPending}
-                      className="gap-1.5"
+                      className="gap-1.5 border-[rgba(132,204,22,0.3)] text-[#84cc16] hover:bg-[rgba(132,204,22,0.1)]"
                     >
                       {setActiveMut.isPending ? (
                         <Spinner className="size-3.5" />

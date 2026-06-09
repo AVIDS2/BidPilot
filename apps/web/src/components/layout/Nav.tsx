@@ -1,15 +1,12 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
 
 export function Nav() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
-  const location = useLocation();
-
-  // 全屏设计页面不显示导航栏（登录、注册）
-  const hideOnRoutes = ["/login", "/signup"];
-  const shouldHide = hideOnRoutes.includes(location.pathname);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -22,8 +19,6 @@ export function Nav() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [lastScrollY]);
-
-  if (shouldHide) return null;
 
   return (
     <nav
@@ -42,7 +37,7 @@ export function Nav() {
           DocPilot
         </Link>
 
-        {/* 导航链接 */}
+        {/* Navigation links */}
         <div className="flex items-center gap-8">
           <Link
             to="/"
@@ -62,18 +57,29 @@ export function Nav() {
           >
             文档
           </Link>
-          <Link
-            to="/login"
-            className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
-          >
-            登录
-          </Link>
-          <Link
-            to="/signup"
-            className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98]"
-          >
-            注册
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              to="/dashboard"
+              className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98]"
+            >
+              进入平台
+            </Link>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
+              >
+                登录
+              </Link>
+              <Link
+                to="/signup"
+                className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98]"
+              >
+                注册
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>
