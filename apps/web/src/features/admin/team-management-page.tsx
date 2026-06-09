@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { UsersIcon, ShieldIcon, PlusIcon, TrashIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 
-const CARDS_PER_PAGE = 9;
+const CARDS_PER_PAGE = 6;
 
 function TeamManagementSkeleton() {
   return (
@@ -117,9 +117,9 @@ export function TeamManagementPage() {
   const paginatedTeams = teams.slice((currentPage - 1) * CARDS_PER_PAGE, currentPage * CARDS_PER_PAGE);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col min-h-[calc(100vh-180px)]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <UsersIcon className="size-5" style={{ color: "#a3a3a3" }} />
           <h1 className="text-xl font-semibold tracking-tight text-white">{t("teamManagement.title")}</h1>
@@ -181,85 +181,85 @@ export function TeamManagementPage() {
         </div>
       ) : (
         <>
-          {/* Card grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Card grid - flex-1 自动填充中间空间 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
             {paginatedTeams.map((team) => (
               <div
                 key={team.id}
-                className="rounded-xl transition-all duration-200 hover:-translate-y-0.5"
+                className="rounded-xl p-8 transition-all duration-300 hover:-translate-y-1"
                 style={{
                   background: "#171717",
                   border: "1px solid rgba(163, 163, 163, 0.1)",
                 }}
               >
                 {/* Team header */}
-                <div className="p-5 pb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    {editingId === team.id ? (
-                      <Input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 mr-2 h-8 text-sm bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white"
-                        onBlur={() => {
+                <div className="flex items-center justify-between mb-4">
+                  {editingId === team.id ? (
+                    <Input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="flex-1 mr-3 h-10 text-base bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white"
+                      onBlur={() => {
+                        updateTeam(team.id, { name: editName }).then(() => {
+                          toast.success(t("teamManagement.teamUpdated"));
+                          qc.invalidateQueries({ queryKey: ["teams"] });
+                        }).catch(() => toast.error(t("teamManagement.operationFailed")));
+                        setEditingId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
                           updateTeam(team.id, { name: editName }).then(() => {
                             toast.success(t("teamManagement.teamUpdated"));
                             qc.invalidateQueries({ queryKey: ["teams"] });
                           }).catch(() => toast.error(t("teamManagement.operationFailed")));
                           setEditingId(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            updateTeam(team.id, { name: editName }).then(() => {
-                              toast.success(t("teamManagement.teamUpdated"));
-                              qc.invalidateQueries({ queryKey: ["teams"] });
-                            }).catch(() => toast.error(t("teamManagement.operationFailed")));
-                            setEditingId(null);
-                          }
-                        }}
-                        autoFocus
-                      />
-                    ) : (
-                      <h3
-                        className="text-base font-medium text-white cursor-pointer hover:text-[#84cc16] transition-colors"
-                        onClick={() => { setEditingId(team.id); setEditName(team.name); }}
-                      >
-                        {team.name}
-                      </h3>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => { if (window.confirm("Delete this team?")) deleteMut.mutate(team.id); }}
-                      className="text-[#737373] hover:text-red-400"
+                        }
+                      }}
+                      autoFocus
+                    />
+                  ) : (
+                    <h3
+                      className="text-lg font-medium text-white cursor-pointer hover:text-[#84cc16] transition-colors"
+                      onClick={() => { setEditingId(team.id); setEditName(team.name); }}
                     >
-                      <TrashIcon className="size-4" />
-                    </Button>
-                  </div>
-                  <p className="text-xs" style={{ color: "#737373" }}>{team.slug}</p>
-                  <div className="flex items-center gap-2 mt-3">
-                    <span className="text-xs" style={{ color: "#a3a3a3" }}>
-                      {team.members?.length ?? 0} {t("teamManagement.membersCount", { count: team.members?.length ?? 0 }).replace(/\d+\s*/, "")}
-                    </span>
-                    <button
-                      className="text-xs hover:text-[#84cc16] transition-colors"
-                      style={{ color: "#84cc16" }}
-                      onClick={() => setExpandedTeamId(expandedTeamId === team.id ? null : team.id)}
-                    >
-                      {expandedTeamId === team.id ? t("teamManagement.collapse", { defaultValue: "收起" }) : t("teamManagement.manage", { defaultValue: "管理成员" })}
-                    </button>
-                  </div>
+                      {team.name}
+                    </h3>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => { if (window.confirm("Delete this team?")) deleteMut.mutate(team.id); }}
+                    className="text-[#737373] hover:text-red-400"
+                  >
+                    <TrashIcon className="size-4" />
+                  </Button>
+                </div>
+
+                <p className="text-sm mb-4" style={{ color: "#737373" }}>{team.slug}</p>
+
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-sm" style={{ color: "#a3a3a3" }}>
+                    {team.members?.length ?? 0} {t("teamManagement.membersCount", { count: team.members?.length ?? 0 }).replace(/\d+\s*/, "")}
+                  </span>
+                  <button
+                    className="text-sm hover:text-[#84cc16] transition-colors font-medium"
+                    style={{ color: "#84cc16" }}
+                    onClick={() => setExpandedTeamId(expandedTeamId === team.id ? null : team.id)}
+                  >
+                    {expandedTeamId === team.id ? t("teamManagement.collapse", { defaultValue: "收起" }) : t("teamManagement.manage", { defaultValue: "管理成员" })}
+                  </button>
                 </div>
 
                 {/* Expanded member management */}
                 {expandedTeamId === team.id && (
-                  <div className="px-5 pb-5 pt-2" style={{ borderTop: "1px solid rgba(163, 163, 163, 0.08)" }}>
+                  <div className="pt-4" style={{ borderTop: "1px solid rgba(163, 163, 163, 0.08)" }}>
                     <div className="mb-3">
                       <Select
                         onValueChange={(value: string | null) => {
                           if (value) addMemberMut.mutate({ teamId: team.id, userId: value });
                         }}
                       >
-                        <SelectTrigger className="w-full h-8 text-xs bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white">
+                        <SelectTrigger className="w-full h-9 text-sm bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white">
                           <SelectValue placeholder={t("teamManagement.addMember")} />
                         </SelectTrigger>
                         <SelectContent>
@@ -274,19 +274,19 @@ export function TeamManagementPage() {
                       </Select>
                     </div>
                     {team.members && team.members.length > 0 ? (
-                      <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+                      <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
                         {team.members.map((m) => (
                           <div
                             key={m.id}
-                            className="flex items-center justify-between rounded-md px-3 py-1.5 text-xs"
+                            className="flex items-center justify-between rounded-lg px-4 py-2.5 text-sm"
                             style={{ background: "rgba(163, 163, 163, 0.04)" }}
                           >
-                            <div className="flex items-center gap-2 min-w-0">
+                            <div className="flex items-center gap-3 min-w-0">
                               <span className="font-medium text-white truncate">{m.user_display_name}</span>
-                              <span className="truncate" style={{ color: "#737373" }}>{m.user_email}</span>
+                              <span className="truncate text-xs" style={{ color: "#737373" }}>{m.user_email}</span>
                             </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs px-2 py-0.5 rounded" style={{
                                 background: m.role === "admin" ? "rgba(132, 204, 22, 0.15)" : "rgba(163, 163, 163, 0.1)",
                                 color: m.role === "admin" ? "#84cc16" : "#a3a3a3",
                               }}>
@@ -296,14 +296,14 @@ export function TeamManagementPage() {
                                 className="text-[#737373] hover:text-red-400 transition-colors"
                                 onClick={() => removeMemberMut.mutate({ teamId: team.id, userId: m.user_id })}
                               >
-                                <TrashIcon className="size-3" />
+                                <TrashIcon className="size-3.5" />
                               </button>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-center py-4" style={{ color: "#737373" }}>
+                      <p className="text-sm text-center py-6" style={{ color: "#737373" }}>
                         {t("teamManagement.noTeamsHint")}
                       </p>
                     )}
@@ -313,9 +313,9 @@ export function TeamManagementPage() {
             ))}
           </div>
 
-          {/* Pagination - 页面底部 */}
+          {/* Pagination - 页面最底部 */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-auto pt-8 pb-4">
+            <div className="flex items-center justify-center gap-2 pt-12 pb-2">
               <button
                 className="px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-30"
                 style={{
@@ -332,7 +332,7 @@ export function TeamManagementPage() {
                 <button
                   key={i}
                   onClick={() => setCurrentPage(i + 1)}
-                  className="px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200"
+                  className="px-4 py-2 text-sm font-medium rounded-md transition-all duration-200"
                   style={{
                     background: currentPage === i + 1 ? "#84cc16" : "#171717",
                     color: currentPage === i + 1 ? "#0a0a0a" : "#a3a3a3",
