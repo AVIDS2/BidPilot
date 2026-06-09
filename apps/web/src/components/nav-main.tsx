@@ -1,4 +1,4 @@
-import { useLocation } from "react-router-dom"
+import { useLocation, Link } from "react-router-dom"
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -25,7 +25,7 @@ export function NavMain({
           <SidebarMenuItem key={item.title}>
             <SidebarMenuButton
               isActive={isActive}
-              render={<a href={item.url} />}
+              render={<Link to={item.url} />}
               className="transition-all duration-200"
               style={{
                 color: isActive ? "#84cc16" : "#a3a3a3",
