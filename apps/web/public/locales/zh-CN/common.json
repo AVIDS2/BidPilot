@@ -12,6 +12,12 @@
     "teams": "团队",
     "invitations": "邀请",
     "account": "账户",
+    "settings": "设置",
+    "docs": "文档",
+    "home": "首页",
+    "login": "登录",
+    "signup": "注册",
+    "enterPlatform": "进入平台",
     "navigation": "导航"
   },
   "actions": {

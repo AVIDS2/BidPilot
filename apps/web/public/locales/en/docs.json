@@ -1,0 +1,122 @@
+{
+  "nav": {
+    "overview": "Overview",
+    "quickstart": "Quick Start",
+    "features": "Core Features",
+    "architecture": "Architecture",
+    "techstack": "Tech Stack",
+    "deployment": "Deployment"
+  },
+  "header": {
+    "back": "Back",
+    "docsLabel": "Docs"
+  },
+  "sidebar": {
+    "needHelp": "Need help?",
+    "helpDesc": "Open an issue on GitHub or reach out to the team."
+  },
+  "overview": {
+    "label": "/ Enterprise AI Document System",
+    "titleLine1": "DocPilot",
+    "titleLine2": "Documentation",
+    "description": "DocPilot is an enterprise-grade AI document execution system designed for complex document workflows. From RFP ingestion to final delivery, DocPilot orchestrates multi-agent workflows to automate the entire bid response process.",
+    "aiNativeTitle": "AI-Native",
+    "aiNativeDesc": "Built on LangGraph multi-agent architecture with specialized agents for each workflow stage.",
+    "statefulTitle": "Stateful Workflows",
+    "statefulDesc": "Checkpoint-backed execution with human-in-the-loop approval gates and full audit trails.",
+    "enterpriseTitle": "Enterprise Ready",
+    "enterpriseDesc": "RBAC, encrypted storage, provider-agnostic LLM integration, and production-grade infrastructure.",
+    "pipelineTitle": "Workflow Pipeline",
+    "pipelineSteps": ["Project Setup", "RFP Ingestion", "Requirement Extraction", "Knowledge Retrieval", "Section Drafting", "Quality Review", "Human Approval", "Export & Delivery"]
+  },
+  "quickstart": {
+    "label": "Quick Start",
+    "title": "Get Running in Minutes",
+    "description": "DocPilot is fully containerized. A single command brings up the entire stack: API, Worker, PostgreSQL, Redis, and MinIO.",
+    "prerequisites": "Prerequisites",
+    "prereq1": "Docker Engine 24+ and Docker Compose v2",
+    "prereq2": "Node.js 20+ (for frontend development)",
+    "prereq3": "Python 3.11+ (for backend development)",
+    "prereq4": "An OpenAI or Anthropic API key",
+    "installation": "Installation",
+    "installDesc": "Clone the repository and start all services with Docker Compose:",
+    "envConfig": "Environment Configuration",
+    "envDesc1": "The",
+    "envDesc2": "file controls all service connections and API keys. Key variables:",
+    "firstProject": "Create Your First Project",
+    "step1Title": "Sign up / Log in",
+    "step1Desc": "Navigate to the web UI and create an account.",
+    "step2Title": "New Project",
+    "step2Desc": "Click 'New Project' on the dashboard and name your bid.",
+    "step3Title": "Upload RFP",
+    "step3Desc": "Drag and drop your RFP document (PDF, DOCX, or Markdown).",
+    "step4Title": "Review & Export",
+    "step4Desc": "AI agents process the document. Review drafts, approve, and export."
+  },
+  "features": {
+    "label": "Core Features",
+    "title": "End-to-End Document Automation",
+    "description": "DocPilot covers every stage of the document lifecycle, from initial ingestion to final export.",
+    "projectMgmtTitle": "Project Management",
+    "projectMgmtDesc": "Create and manage bid projects. Each project is a self-contained workspace with its own RFP documents, knowledge base, deliverables, and review history. Search, filter, and organize across your portfolio.",
+    "docIngestTitle": "Document Ingestion",
+    "docIngestDesc": "Upload RFP documents in PDF, DOCX, or Markdown format. DocPilot automatically parses structure, extracts tables, and chunks content into searchable segments stored in MinIO.",
+    "reqExtractTitle": "Requirement Extraction",
+    "reqExtractDesc": "AI agents analyze the RFP and extract structured requirements: mandatory criteria, evaluation factors, compliance requirements, and submission guidelines. All requirements are linked back to source pages.",
+    "knowledgeTitle": "Knowledge Retrieval",
+    "knowledgeDesc": "The Knowledge Retriever agent uses pgvector semantic search to find the most relevant content chunks from your uploaded documents. Cosine similarity scoring ensures high-quality evidence for every section.",
+    "draftingTitle": "Section Drafting",
+    "draftingDesc": "The Section Drafter agent generates compliant, compelling content by combining RFP requirements with retrieved evidence. Each draft includes citations and follows your organization's tone and style guidelines.",
+    "qualityTitle": "Quality Review",
+    "qualityDesc": "The Quality Reviewer agent evaluates drafts for completeness, compliance, evidence usage, and clarity. Sections below the quality threshold are automatically flagged and revised before human review.",
+    "approvalTitle": "Human Approval",
+    "approvalDesc": "Critical sections pause at a human-in-the-loop gate. Reviewers can approve, request changes, or add inline comments. The workflow resumes only after explicit approval, ensuring quality control.",
+    "exportTitle": "Export & Delivery",
+    "exportDesc": "Export individual sections as Markdown or DOCX. Compile full deliverables with headers, formatting, and a table of contents. Version history is preserved for audit and compliance."
+  },
+  "architecture": {
+    "label": "Architecture",
+    "title": "Layered System Design",
+    "description": "DocPilot follows a clean separation of concerns: Web, API, Worker, and Data layers.",
+    "systemLayers": "System Layers",
+    "webApp": "Web Application",
+    "webAppTech": "React 19 + TypeScript + Vite + Tailwind CSS",
+    "webAppDesc": "SPA frontend with shadcn/ui components, react-router-dom routing, and TanStack Query for server state.",
+    "apiApp": "API Application",
+    "apiAppTech": "FastAPI + SQLAlchemy + Alembic",
+    "apiAppDesc": "REST API layer handling auth, project CRUD, document management, and WebSocket streaming for agent progress.",
+    "workerApp": "Worker Application",
+    "workerAppTech": "Celery + LangGraph",
+    "workerAppDesc": "Async task execution with LangGraph-powered multi-agent workflows. Handles all AI processing in isolated workers.",
+    "dataServices": "Data Services",
+    "dataServicesTech": "PostgreSQL + pgvector + Redis + MinIO",
+    "dataServicesDesc": "Persistent storage, vector search, task queuing, caching, and object storage for documents.",
+    "langgraphTitle": "LangGraph Multi-Agent Workflow",
+    "langgraphDesc": "The Worker layer uses LangGraph to orchestrate stateful, multi-agent workflows. Each agent is a specialized node in a directed graph with checkpoint-backed execution."
+  },
+  "techstack": {
+    "label": "Tech Stack",
+    "title": "Built with Modern Tools",
+    "description": "Every technology choice is deliberate: async-first, type-safe, and battle-tested in production.",
+    "frontend": "Frontend",
+    "backend": "Backend",
+    "dataStorage": "Data & Storage"
+  },
+  "deployment": {
+    "label": "Deployment",
+    "title": "Production Deployment",
+    "description": "DocPilot is designed for containerized deployment. The Docker Compose stack includes all services with health checks.",
+    "dockerTitle": "Docker Compose Stack",
+    "dockerDesc": "The production stack includes 6 services, all orchestrated via Docker Compose:",
+    "healthTitle": "Health & Monitoring",
+    "structureTitle": "Project Structure",
+    "liveness": "Basic liveness check",
+    "dbConnectivity": "Database connectivity",
+    "redisConnectivity": "Redis connectivity",
+    "storageConnectivity": "MinIO connectivity"
+  },
+  "footer": {
+    "title": "DocPilot Documentation",
+    "subtitle": "Built for teams that ship winning proposals."
+  }
+}

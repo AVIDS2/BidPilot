@@ -12,6 +12,12 @@
     "teams": "Teams",
     "invitations": "Invitations",
     "account": "Account",
+    "settings": "Settings",
+    "docs": "Docs",
+    "home": "Home",
+    "login": "Login",
+    "signup": "Sign Up",
+    "enterPlatform": "Enter Platform",
     "navigation": "Navigation"
   },
   "actions": {

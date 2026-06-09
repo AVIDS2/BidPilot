@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 
 export function Nav() {
@@ -7,6 +8,7 @@ export function Nav() {
   const [isHidden, setIsHidden] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation("common");
 
   useEffect(() => {
     const handleScroll = () => {
@@ -43,26 +45,26 @@ export function Nav() {
             to="/"
             className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
           >
-            首页
+            {t("nav.home")}
           </Link>
           <Link
             to="/pricing"
             className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
           >
-            定价
+            {t("nav.pricing")}
           </Link>
           <Link
             to="/docs"
             className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
           >
-            文档
+            {t("nav.docs")}
           </Link>
           {isAuthenticated ? (
             <Link
               to="/dashboard"
               className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98]"
             >
-              进入平台
+              {t("nav.enterPlatform")}
             </Link>
           ) : (
             <>
@@ -70,13 +72,13 @@ export function Nav() {
                 to="/login"
                 className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
               >
-                登录
+                {t("nav.login")}
               </Link>
               <Link
                 to="/signup"
                 className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98]"
               >
-                注册
+                {t("nav.signup")}
               </Link>
             </>
           )}

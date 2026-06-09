@@ -59,7 +59,11 @@
     "teamCreated": "团队已创建",
     "teamDeleted": "团队已删除",
     "teamUpdated": "团队已更新",
-    "operationFailed": "操作失败"
+    "operationFailed": "操作失败",
+    "collapse": "收起",
+    "manage": "管理",
+    "confirmDelete": "确定要删除此团队吗？",
+    "noMembers": "暂无成员"
   },
   "invitationManagement": {
     "title": "邀请管理",

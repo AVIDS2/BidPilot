@@ -241,6 +241,19 @@
     "input": "Input:",
     "output": "Output:"
   },
+  "statusValues": {
+    "active": "Active",
+    "completed": "Completed",
+    "draft": "Draft",
+    "archived": "Archived",
+    "ingested": "Ingested",
+    "failed": "Failed",
+    "succeeded": "Succeeded",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "pending": "Pending",
+    "running": "Running"
+  },
   "summary": {
     "bundles": "Bundles",
     "ingested": "{{count}} ingested",

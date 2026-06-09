@@ -241,6 +241,19 @@
     "input": "输入：",
     "output": "输出："
   },
+  "statusValues": {
+    "active": "进行中",
+    "completed": "已完成",
+    "draft": "草稿",
+    "archived": "已归档",
+    "ingested": "已解析",
+    "failed": "失败",
+    "succeeded": "成功",
+    "approved": "已批准",
+    "rejected": "已驳回",
+    "pending": "待处理",
+    "running": "运行中"
+  },
   "summary": {
     "bundles": "素材包",
     "ingested": "{{count}} 已解析",

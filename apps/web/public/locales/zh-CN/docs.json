@@ -1,0 +1,122 @@
+{
+  "nav": {
+    "overview": "概述",
+    "quickstart": "快速开始",
+    "features": "核心功能",
+    "architecture": "系统架构",
+    "techstack": "技术栈",
+    "deployment": "部署方案"
+  },
+  "header": {
+    "back": "返回",
+    "docsLabel": "文档"
+  },
+  "sidebar": {
+    "needHelp": "需要帮助？",
+    "helpDesc": "在 GitHub 上提交 Issue 或联系团队。"
+  },
+  "overview": {
+    "label": "/ 企业级 AI 文档系统",
+    "titleLine1": "DocPilot",
+    "titleLine2": "文档中心",
+    "description": "DocPilot 是一个企业级 AI 文档执行系统，专为复杂文档工作流设计。从 RFP 导入到最终交付，DocPilot 编排多智能体工作流，自动化整个投标响应过程。",
+    "aiNativeTitle": "AI 原生",
+    "aiNativeDesc": "基于 LangGraph 多智能体架构构建，每个工作流阶段都有专用智能体。",
+    "statefulTitle": "有状态工作流",
+    "statefulDesc": "基于检查点的执行，支持人机协作审批门控和完整审计追踪。",
+    "enterpriseTitle": "企业就绪",
+    "enterpriseDesc": "RBAC 权限控制、加密存储、提供商无关的 LLM 集成和生产级基础设施。",
+    "pipelineTitle": "工作流管线",
+    "pipelineSteps": ["项目创建", "RFP 导入", "需求提取", "知识检索", "章节起草", "质量审核", "人工审批", "导出交付"]
+  },
+  "quickstart": {
+    "label": "快速开始",
+    "title": "几分钟内即可运行",
+    "description": "DocPilot 完全容器化。一条命令即可启动整个技术栈：API、Worker、PostgreSQL、Redis 和 MinIO。",
+    "prerequisites": "前置要求",
+    "prereq1": "Docker Engine 24+ 和 Docker Compose v2",
+    "prereq2": "Node.js 20+（前端开发）",
+    "prereq3": "Python 3.11+（后端开发）",
+    "prereq4": "OpenAI 或 Anthropic API 密钥",
+    "installation": "安装",
+    "installDesc": "克隆仓库并使用 Docker Compose 启动所有服务：",
+    "envConfig": "环境配置",
+    "envDesc1": "",
+    "envDesc2": "文件控制所有服务连接和 API 密钥。关键变量：",
+    "firstProject": "创建第一个项目",
+    "step1Title": "注册 / 登录",
+    "step1Desc": "导航到 Web UI 并创建账户。",
+    "step2Title": "新建项目",
+    "step2Desc": "在仪表盘上点击"新建项目"并命名您的投标。",
+    "step3Title": "上传 RFP",
+    "step3Desc": "拖放您的 RFP 文档（PDF、DOCX 或 Markdown）。",
+    "step4Title": "审核与导出",
+    "step4Desc": "AI 智能体处理文档。审核草稿、批准并导出。"
+  },
+  "features": {
+    "label": "核心功能",
+    "title": "端到端文档自动化",
+    "description": "DocPilot 覆盖文档生命周期的每个阶段，从初始导入到最终导出。",
+    "projectMgmtTitle": "项目管理",
+    "projectMgmtDesc": "创建和管理投标项目。每个项目都是一个独立的工作空间，包含自己的 RFP 文档、知识库、交付物和审核历史。支持搜索、过滤和跨项目组合管理。",
+    "docIngestTitle": "文档导入",
+    "docIngestDesc": "上传 PDF、DOCX 或 Markdown 格式的 RFP 文档。DocPilot 自动解析结构、提取表格，并将内容分块存储在 MinIO 中的可搜索片段中。",
+    "reqExtractTitle": "需求提取",
+    "reqExtractDesc": "AI 智能体分析 RFP 并提取结构化需求：强制性标准、评估因素、合规要求和提交指南。所有需求都链接回源页面。",
+    "knowledgeTitle": "知识检索",
+    "knowledgeDesc": "知识检索智能体使用 pgvector 语义搜索，从您上传的文档中找到最相关的内容片段。余弦相似度评分确保每个章节获得高质量的证据。",
+    "draftingTitle": "章节起草",
+    "draftingDesc": "章节起草智能体通过结合 RFP 需求和检索到的证据来生成合规且有说服力的内容。每份草稿包含引用，并遵循您组织的语气和风格指南。",
+    "qualityTitle": "质量审核",
+    "qualityDesc": "质量审核智能体评估草稿的完整性、合规性、证据使用和清晰度。低于质量阈值的章节会被自动标记并在人工审核前修订。",
+    "approvalTitle": "人工审批",
+    "approvalDesc": "关键章节在人机协作门控处暂停。审核员可以批准、请求更改或添加内联评论。工作流仅在明确批准后恢复，确保质量控制。",
+    "exportTitle": "导出与交付",
+    "exportDesc": "将单独章节导出为 Markdown 或 DOCX。编译包含标题、格式和目录的完整交付物。版本历史保留用于审计和合规。"
+  },
+  "architecture": {
+    "label": "系统架构",
+    "title": "分层系统设计",
+    "description": "DocPilot 遵循关注点清晰分离：Web、API、Worker 和数据层。",
+    "systemLayers": "系统层级",
+    "webApp": "Web 应用",
+    "webAppTech": "React 19 + TypeScript + Vite + Tailwind CSS",
+    "webAppDesc": "SPA 前端，使用 shadcn/ui 组件、react-router-dom 路由和 TanStack Query 进行服务器状态管理。",
+    "apiApp": "API 应用",
+    "apiAppTech": "FastAPI + SQLAlchemy + Alembic",
+    "apiAppDesc": "REST API 层处理认证、项目 CRUD、文档管理和 WebSocket 流式传输智能体进度。",
+    "workerApp": "Worker 应用",
+    "workerAppTech": "Celery + LangGraph",
+    "workerAppDesc": "异步任务执行，使用 LangGraph 驱动的多智能体工作流。在隔离的 worker 中处理所有 AI 处理。",
+    "dataServices": "数据服务",
+    "dataServicesTech": "PostgreSQL + pgvector + Redis + MinIO",
+    "dataServicesDesc": "持久化存储、向量搜索、任务队列、缓存和文档对象存储。",
+    "langgraphTitle": "LangGraph 多智能体工作流",
+    "langgraphDesc": "Worker 层使用 LangGraph 编排有状态的多智能体工作流。每个智能体是定向图中的专用节点，支持基于检查点的执行。"
+  },
+  "techstack": {
+    "label": "技术栈",
+    "title": "基于现代工具构建",
+    "description": "每个技术选择都是经过深思熟虑的：异步优先、类型安全、经生产环境检验。",
+    "frontend": "前端",
+    "backend": "后端",
+    "dataStorage": "数据与存储"
+  },
+  "deployment": {
+    "label": "部署方案",
+    "title": "生产环境部署",
+    "description": "DocPilot 专为容器化部署设计。Docker Compose 技术栈包含所有服务和健康检查。",
+    "dockerTitle": "Docker Compose 技术栈",
+    "dockerDesc": "生产技术栈包含 6 个服务，全部通过 Docker Compose 编排：",
+    "healthTitle": "健康检查与监控",
+    "structureTitle": "项目结构",
+    "liveness": "基本存活检查",
+    "dbConnectivity": "数据库连接",
+    "redisConnectivity": "Redis 连接",
+    "storageConnectivity": "MinIO 连接"
+  },
+  "footer": {
+    "title": "DocPilot 文档中心",
+    "subtitle": "为交付中标方案的团队而生。"
+  }
+}
