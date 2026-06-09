@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listProviderConfigs,
@@ -86,6 +87,7 @@ function ProviderSettingsSkeleton() {
 }
 
 export function ProviderSettingsPage() {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<ProviderConfig | null>(null);
@@ -109,7 +111,7 @@ export function ProviderSettingsPage() {
   const createMut = useMutation({
     mutationFn: (payload: ProviderConfigCreate) => createProviderConfig(payload),
     onSuccess: () => {
-      toast.success("Provider created successfully");
+      toast.success(t("toast.created"));
       qc.invalidateQueries({ queryKey: ["provider-configs"] });
       setIsDialogOpen(false);
       resetForm();
@@ -123,7 +125,7 @@ export function ProviderSettingsPage() {
     mutationFn: ({ id, payload }: { id: string; payload: Partial<ProviderConfigCreate> }) =>
       updateProviderConfig(id, payload),
     onSuccess: () => {
-      toast.success("Provider updated successfully");
+      toast.success(t("toast.updated"));
       qc.invalidateQueries({ queryKey: ["provider-configs"] });
       setIsDialogOpen(false);
       resetForm();
@@ -136,7 +138,7 @@ export function ProviderSettingsPage() {
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteProviderConfig(id),
     onSuccess: () => {
-      toast.success("Provider deleted");
+      toast.success(t("toast.deleted"));
       qc.invalidateQueries({ queryKey: ["provider-configs"] });
     },
     onError: (err: Error) => {
@@ -149,20 +151,20 @@ export function ProviderSettingsPage() {
       testProviderConnection(payload),
     onSuccess: (result) => {
       if (result.data.success) {
-        toast.success(`Connection successful: ${result.data.message}`);
+        toast.success(t("toast.connectionSuccess", { message: result.data.message }));
       } else {
-        toast.error(`Connection failed: ${result.data.message}`);
+        toast.error(t("toast.connectionFailed", { message: result.data.message }));
       }
     },
     onError: (err: Error) => {
-      toast.error(`Test failed: ${err.message}`);
+      toast.error(t("toast.testFailed", { message: err.message }));
     },
   });
 
   const setActiveMut = useMutation({
     mutationFn: (id: string) => updateProviderConfig(id, { is_active: true }),
     onSuccess: () => {
-      toast.success("Active provider updated");
+      toast.success(t("toast.activeUpdated"));
       qc.invalidateQueries({ queryKey: ["provider-configs"] });
     },
     onError: (err: Error) => {
@@ -200,7 +202,7 @@ export function ProviderSettingsPage() {
   }
 
   function handleDeleteProvider(provider: ProviderConfig) {
-    if (window.confirm(`Are you sure you want to delete "${provider.label}"?`)) {
+    if (window.confirm(t("confirmDelete", { label: provider.label }))) {
       deleteMut.mutate(provider.id);
     }
   }
@@ -222,15 +224,15 @@ export function ProviderSettingsPage() {
 
   function handleSave() {
     if (!formLabel.trim()) {
-      toast.error("Label is required");
+      toast.error(t("toast.labelRequired"));
       return;
     }
     if (!formApiKey.trim() && !editingProvider) {
-      toast.error("API key is required");
+      toast.error(t("toast.apiKeyRequired"));
       return;
     }
     if (!formModel.trim()) {
-      toast.error("Model is required");
+      toast.error(t("toast.modelRequired"));
       return;
     }
 
@@ -259,9 +261,9 @@ export function ProviderSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">AI Provider Settings</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-white">{t("title")}</h1>
         <p style={{ color: "#a3a3a3" }}>
-          Configure your AI provider connections for document drafting and analysis.
+          {t("description")}
         </p>
       </div>
 
@@ -269,28 +271,28 @@ export function ProviderSettingsPage() {
         <div className="flex items-center gap-2">
           <Settings2 className="size-5" style={{ color: "#a3a3a3" }} />
           <span className="text-sm" style={{ color: "#a3a3a3" }}>
-            {providers.length} provider{providers.length !== 1 ? "s" : ""} configured
+            {t("providersCount", { count: providers.length })}
           </span>
         </div>
         <Button onClick={handleAddProvider} className="bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d]">
           <Plus className="size-4" />
-          Add Provider
+          {t("addProvider")}
         </Button>
       </div>
 
       {providers.length === 0 ? (
         <div className="rounded-xl py-12 text-center" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
           <Settings2 className="mx-auto size-10 mb-3 opacity-40" style={{ color: "#737373" }} />
-          <p className="text-sm" style={{ color: "#a3a3a3" }}>No providers configured yet.</p>
+          <p className="text-sm" style={{ color: "#a3a3a3" }}>{t("noProvidersTitle")}</p>
           <p className="text-xs mt-1" style={{ color: "#737373" }}>
-            Add an AI provider to get started with document drafting.
+            {t("noProvidersDesc")}
           </p>
           <Button
             onClick={handleAddProvider}
             className="mt-4 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d]"
           >
             <Plus className="size-4" />
-            Add Your First Provider
+            {t("addFirstProvider")}
           </Button>
         </div>
       ) : (
@@ -310,7 +312,7 @@ export function ProviderSettingsPage() {
                     {provider.is_active && (
                       <span className="text-xs px-2 py-0.5 rounded flex items-center gap-1" style={{ background: "rgba(132, 204, 22, 0.15)", color: "#84cc16" }}>
                         <CheckCircle2 className="size-3" />
-                        Active
+                        {t("activeBadge")}
                       </span>
                     )}
                   </div>
@@ -352,7 +354,7 @@ export function ProviderSettingsPage() {
                   <div>
                     <p className="font-medium">{provider.label}</p>
                     <p className="text-sm text-muted-foreground">
-                      Model:{" "}
+                      {t("modelLabel")}{" "}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">
                         {provider.model}
                       </code>
@@ -384,7 +386,7 @@ export function ProviderSettingsPage() {
                       ) : (
                         <Circle className="size-3.5" />
                       )}
-                      Set Active
+                      {t("setActive")}
                     </Button>
                   </div>
                 )}
@@ -407,19 +409,19 @@ export function ProviderSettingsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingProvider ? "Edit Provider" : "Add Provider"}
+              {editingProvider ? t("dialog.editTitle") : t("dialog.addTitle")}
             </DialogTitle>
             <DialogDescription>
               {editingProvider
-                ? "Update your AI provider configuration."
-                : "Configure a new AI provider connection."}
+                ? t("dialog.editDesc")
+                : t("dialog.addDesc")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             {/* Provider Type */}
             <div className="space-y-2">
-              <Label>Provider Type</Label>
+              <Label>{t("dialog.providerType")}</Label>
               <Select
                 value={formProviderType}
                 onValueChange={(v: string | null) => {
@@ -442,7 +444,7 @@ export function ProviderSettingsPage() {
 
             {/* Label */}
             <div className="space-y-2">
-              <Label htmlFor="label">Label</Label>
+              <Label htmlFor="label">{t("dialog.label")}</Label>
               <Input
                 id="label"
                 value={formLabel}
@@ -454,10 +456,10 @@ export function ProviderSettingsPage() {
             {/* API Key */}
             <div className="space-y-2">
               <Label htmlFor="api-key">
-                API Key{" "}
+                {t("dialog.apiKey")}{" "}
                 {editingProvider && (
                   <span className="text-muted-foreground font-normal">
-                    (leave blank to keep existing)
+                    {t("dialog.apiKeyHint")}
                   </span>
                 )}
               </Label>
@@ -468,15 +470,15 @@ export function ProviderSettingsPage() {
                 onChange={(e) => setFormApiKey(e.target.value)}
                 placeholder={
                   editingProvider
-                    ? "Enter new key or leave blank"
-                    : "sk-..."
+                    ? t("dialog.apiKeyPlaceholderEdit")
+                    : t("dialog.apiKeyPlaceholderNew")
                 }
               />
             </div>
 
             {/* API URL */}
             <div className="space-y-2">
-              <Label htmlFor="api-url">API URL (optional)</Label>
+              <Label htmlFor="api-url">{t("dialog.apiUrl")}</Label>
               <Input
                 id="api-url"
                 value={formApiUrl}
@@ -491,7 +493,7 @@ export function ProviderSettingsPage() {
 
             {/* Model */}
             <div className="space-y-2">
-              <Label htmlFor="model">Model</Label>
+              <Label htmlFor="model">{t("dialog.model")}</Label>
               <Input
                 id="model"
                 value={formModel}
@@ -509,9 +511,9 @@ export function ProviderSettingsPage() {
             {/* Active Switch */}
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div className="space-y-0.5">
-                <Label htmlFor="is-active">Set as active provider</Label>
+                <Label htmlFor="is-active">{t("dialog.setActive")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  This provider will be used by default for drafting.
+                  {t("dialog.setActiveDesc")}
                 </p>
               </div>
               <Switch
@@ -530,11 +532,11 @@ export function ProviderSettingsPage() {
                 resetForm();
               }}
             >
-              Cancel
+              {t("dialog.cancel")}
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving && <Spinner />}
-              {editingProvider ? "Update" : "Save"}
+              {editingProvider ? t("dialog.update") : t("dialog.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
