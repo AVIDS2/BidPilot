@@ -1,177 +1,1118 @@
-import { useState } from "react";
-import { useTranslation } from "react-i18next";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { SearchIcon, BookOpenIcon, FileTextIcon, SettingsIcon, HelpCircleIcon, UsersIcon, MessageSquareIcon, CheckCircleIcon } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
+import {
+  BookOpenIcon,
+  RocketIcon,
+  CpuIcon,
+  LayersIcon,
+  CodeIcon,
+  ServerIcon,
+  ChevronRightIcon,
+  ArrowLeftIcon,
+  FileTextIcon,
+  SearchIcon,
+  PenToolIcon,
+  ShieldCheckIcon,
+  DownloadIcon,
+  FolderIcon,
+  BrainCircuitIcon,
+  GitBranchIcon,
+  CheckCircleIcon,
+  CopyIcon,
+  CheckIcon,
+  MenuIcon,
+  XIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface DocArticle {
-  id: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  content: string;
-}
+// ---------- ScrollReveal (老师风格) ----------
+function ScrollReveal({
+  children,
+  className = "",
+  delay = 0,
+  direction = "up",
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+  direction?: "up" | "down" | "left" | "right";
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
 
-interface DocCategory {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  articles: DocArticle[];
-}
+  useEffect(() => {
+    if (!ref.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setTimeout(() => setIsVisible(true), delay);
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.08 }
+    );
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [delay]);
 
-const DOC_CATEGORIES: DocCategory[] = [
-  {
-    id: "getting-started",
-    label: "Getting Started",
-    icon: <BookOpenIcon className="size-4" />,
-    articles: [
-      { id: "what-is-bidpilot", title: "What is BidPilot?", description: "Overview of the platform and its capabilities", icon: <BookOpenIcon className="size-4" />, content: "BidPilot is an AI-powered bid response platform that helps teams create professional, compliant, and compelling proposals. Upload an RFP, and our AI agents analyze requirements, retrieve relevant knowledge, draft sections, and manage reviews." },
-      { id: "quick-start", title: "Quick Start Guide", description: "Create your first project in 5 minutes", icon: <FileTextIcon className="size-4" />, content: "1. Create a Project - Click 'New Project' and name it. 2. Upload RFP - Drag and drop your RFP document. 3. Review Content - Our AI parses the document and extracts requirements. 4. Start Drafting - AI generates sections automatically." },
-      { id: "key-concepts", title: "Key Concepts", description: "Projects, bundles, sections, and versions", icon: <BookOpenIcon className="size-4" />, content: "Projects organize your bid work. Each project contains bundles (your uploaded documents), deliverables (the content you produce), sections (individual parts of a deliverable), and versions (revisions tracked over time)." },
-    ],
-  },
-  {
-    id: "projects",
-    label: "Projects",
-    icon: <FileTextIcon className="size-4" />,
-    articles: [
-      { id: "creating-projects", title: "Creating and Managing Projects", description: "Organize your bid work", icon: <FileTextIcon className="size-4" />, content: "Projects are the top-level container for all your work. Each project represents a bid opportunity. You can search, filter, and sort projects from the dashboard." },
-      { id: "uploading-rfp", title: "Uploading RFP Documents", description: "Ingest and parse bid documents", icon: <FileTextIcon className="size-4" />, content: "Upload RFP documents in PDF, DOCX, or Markdown format. BidPilot automatically parses the document, extracts key requirements, and makes them searchable." },
-      { id: "managing-content", title: "Managing Content", description: "Bundle, organize, and version content", icon: <FileTextIcon className="size-4" />, content: "Content is organized into bundles (source documents) and deliverables (your output). Each section has version history so you can track changes over time." },
-    ],
-  },
-  {
-    id: "drafting",
-    label: "Drafting",
-    icon: <MessageSquareIcon className="size-4" />,
-    articles: [
-      { id: "ai-drafting", title: "AI-Powered Drafting", description: "How AI generates bid sections", icon: <MessageSquareIcon className="size-4" />, content: "Our AI agent workflow uses multiple specialized agents: the RFP Parser extracts requirements, the Knowledge Retriever finds relevant evidence, and the Section Drafter generates content based on both." },
-      { id: "evidence-retrieval", title: "Evidence Retrieval", description: "How context is gathered", icon: <SearchIcon className="size-4" />, content: "The Knowledge Retriever uses semantic search (pgvector) to find the most relevant content chunks from your uploaded documents. It considers cosine similarity between your section and available content." },
-      { id: "quality-review", title: "Quality Review", description: "Automatic review of generated content", icon: <CheckCircleIcon className="size-4" />, content: "After drafting, the Quality Reviewer agent evaluates the content for completeness, compliance with RFP requirements, and proper evidence usage. Sections below quality threshold are automatically revised." },
-    ],
-  },
-  {
-    id: "review",
-    label: "Review & Approval",
-    icon: <MessageSquareIcon className="size-4" />,
-    articles: [
-      { id: "review-workflow", title: "Review Workflow", description: "Collaborative review process", icon: <MessageSquareIcon className="size-4" />, content: "Team members can review drafts, add threaded comments, and request changes. The review workflow supports approve/reject decisions with feedback." },
-      { id: "approval-gate", title: "Human Approval", description: "Validation before finalization", icon: <CheckCircleIcon className="size-4" />, content: "For critical sections, the AI pauses and waits for human approval before finalizing. This ensures quality control while letting AI handle the heavy lifting." },
-    ],
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: <SettingsIcon className="size-4" />,
-    articles: [
-      { id: "account-settings", title: "Account Settings", description: "Manage your profile and preferences", icon: <SettingsIcon className="size-4" />, content: "Update your profile, change password, and manage notification preferences from the Account settings page." },
-      { id: "ai-providers", title: "AI Provider Configuration", description: "Connect your own LLM provider", icon: <SettingsIcon className="size-4" />, content: "Bring your own API keys for OpenAI or Anthropic models. Configure custom endpoints, models, and manage multiple provider profiles." },
-    ],
-  },
-  {
-    id: "faq",
-    label: "FAQ",
-    icon: <HelpCircleIcon className="size-4" />,
-    articles: [
-      { id: "faq-security", title: "Is my data secure?", description: "Security and compliance", icon: <HelpCircleIcon className="size-4" />, content: "Yes. Data is encrypted at rest and in transit. We use industry-standard encryption and follow security best practices. Your documents are stored securely and never shared." },
-      { id: "faq-models", title: "What AI models are used?", description: "Supported AI providers", icon: <HelpCircleIcon className="size-4" />, content: "BidPilot supports OpenAI (GPT-4o-mini) and Anthropic (Claude) models. You can also configure custom providers via the Settings page." },
-      { id: "faq-export", title: "How do I export my work?", description: "Export formats and process", icon: <FileTextIcon className="size-4" />, content: "Sections can be exported as Markdown or DOCX. Full deliverables can be compiled into a single document with all sections, headers, and formatting preserved." },
-    ],
-  },
-];
-
-export function DocsPage() {
-  const { t } = useTranslation();
-  const [activeCategory, setActiveCategory] = useState(DOC_CATEGORIES[0].id);
-  const [activeArticle, setActiveArticle] = useState(DOC_CATEGORIES[0].articles[0].id);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const currentCategory = DOC_CATEGORIES.find((c) => c.id === activeCategory) ?? DOC_CATEGORIES[0];
-  const currentArticle = currentCategory.articles.find((a) => a.id === activeArticle) ?? currentCategory.articles[0];
-
-  const filteredCategories = DOC_CATEGORIES.map((cat) => ({
-    ...cat,
-    articles: cat.articles.filter(
-      (a) =>
-        a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        a.description.toLowerCase().includes(searchQuery.toLowerCase())
-    ),
-  })).filter((cat) => cat.articles.length > 0);
+  const getTransform = () => {
+    switch (direction) {
+      case "up":
+        return "translateY(40px)";
+      case "down":
+        return "translateY(-40px)";
+      case "left":
+        return "translateX(40px)";
+      case "right":
+        return "translateX(-40px)";
+      default:
+        return "translateY(40px)";
+    }
+  };
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <aside className="w-64 shrink-0 border-r bg-muted/20">
-        <div className="p-4 border-b">
-          <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Search docs..."
-              className="pl-9 h-9 text-sm"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        opacity: isVisible ? 1 : 0,
+        transform: isVisible ? "none" : getTransform(),
+        filter: isVisible ? "blur(0px)" : "blur(4px)",
+        transition: `all 0.8s cubic-bezier(0.32, 0.72, 0, 1) ${delay}ms`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ---------- Code Block 组件 ----------
+function CodeBlock({
+  children,
+  language = "bash",
+  filename,
+}: {
+  children: string;
+  language?: string;
+  filename?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(children.trim());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [children]);
+
+  return (
+    <div
+      className="relative group my-6 overflow-hidden"
+      style={{
+        background: "#171717",
+        border: "1px solid rgba(163, 163, 163, 0.1)",
+      }}
+    >
+      {/* 标题栏 */}
+      <div
+        className="flex items-center justify-between px-4 py-2.5"
+        style={{
+          borderBottom: "1px solid rgba(163, 163, 163, 0.08)",
+          background: "#111111",
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#404040" }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#404040" }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#404040" }} />
           </div>
+          {filename && (
+            <span className="text-xs font-mono" style={{ color: "#737373" }}>
+              {filename}
+            </span>
+          )}
         </div>
-        <ScrollArea className="h-[calc(100%-4rem)]">
-          <nav className="p-3 space-y-1">
-            {filteredCategories.map((cat) => (
-              <div key={cat.id}>
-                <button
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={cn(
-                    "flex items-center gap-2 w-full rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    activeCategory === cat.id
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                  )}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono tracking-wider uppercase" style={{ color: "#525252" }}>
+            {language}
+          </span>
+          <button
+            onClick={handleCopy}
+            className="p-1.5 transition-all duration-200 hover:scale-110"
+            style={{
+              color: copied ? "#84cc16" : "#525252",
+            }}
+            title="Copy code"
+          >
+            {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+          </button>
+        </div>
+      </div>
+
+      {/* 代码内容 */}
+      <pre className="p-5 overflow-x-auto text-sm leading-relaxed font-mono" style={{ color: "#a3a3a3" }}>
+        <code>{children.trim()}</code>
+      </pre>
+    </div>
+  );
+}
+
+// ---------- Feature Card 组件 ----------
+function FeatureCard({
+  icon: Icon,
+  title,
+  description,
+  index,
+}: {
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  title: string;
+  description: string;
+  index: number;
+}) {
+  return (
+    <ScrollReveal delay={index * 100}>
+      <div
+        className="group p-7 transition-all duration-300 hover:-translate-y-1"
+        style={{
+          background: "#171717",
+          border: "1px solid rgba(163, 163, 163, 0.1)",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = "rgba(132, 204, 22, 0.3)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = "rgba(163, 163, 163, 0.1)";
+        }}
+      >
+        <div
+          className="w-10 h-10 flex items-center justify-center mb-5"
+          style={{
+            background: "rgba(132, 204, 22, 0.1)",
+            border: "1px solid rgba(132, 204, 22, 0.2)",
+          }}
+        >
+          <Icon className="w-5 h-5" style={{ color: "#84cc16" }} />
+        </div>
+        <h3 className="text-lg font-medium mb-2" style={{ color: "#ffffff" }}>
+          {title}
+        </h3>
+        <p className="text-sm leading-relaxed" style={{ color: "#a3a3a3" }}>
+          {description}
+        </p>
+      </div>
+    </ScrollReveal>
+  );
+}
+
+// ---------- Section Heading 组件 ----------
+function SectionHeading({
+  label,
+  title,
+  description,
+}: {
+  label: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <ScrollReveal>
+      <span
+        className="text-xs font-medium tracking-widest uppercase mb-4 block"
+        style={{ color: "#84cc16" }}
+      >
+        {label}
+      </span>
+      <h2
+        className="text-3xl md:text-4xl font-medium leading-tight tracking-tight mb-4"
+        style={{ color: "#ffffff" }}
+      >
+        {title}
+      </h2>
+      <p className="text-lg max-w-2xl mb-14" style={{ color: "#a3a3a3" }}>
+        {description}
+      </p>
+    </ScrollReveal>
+  );
+}
+
+// ---------- 导航数据 ----------
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: "overview", label: "Overview", icon: BookOpenIcon },
+  { id: "quickstart", label: "Quick Start", icon: RocketIcon },
+  { id: "features", label: "Core Features", icon: LayersIcon },
+  { id: "architecture", label: "Architecture", icon: CpuIcon },
+  { id: "techstack", label: "Tech Stack", icon: CodeIcon },
+  { id: "deployment", label: "Deployment", icon: ServerIcon },
+];
+
+// ---------- Section 1: Overview ----------
+function OverviewSection() {
+  return (
+    <section id="overview" className="pt-8 pb-20">
+      <ScrollReveal>
+        <div className="mb-12">
+          <span
+            className="text-xs font-medium tracking-widest uppercase mb-4 block"
+            style={{ color: "#84cc16" }}
+          >
+            / Enterprise AI Document System
+          </span>
+          <h1
+            className="text-5xl md:text-6xl font-medium leading-[0.9] tracking-tight mb-6"
+            style={{ color: "#ffffff" }}
+          >
+            DocPilot
+            <br />
+            <span style={{ color: "#84cc16" }}>Documentation</span>
+          </h1>
+          <p className="text-xl leading-relaxed max-w-2xl" style={{ color: "#a3a3a3" }}>
+            DocPilot is an enterprise-grade AI document execution system designed for complex
+            document workflows. From RFP ingestion to final delivery, DocPilot orchestrates
+            multi-agent workflows to automate the entire bid response process.
+          </p>
+        </div>
+      </ScrollReveal>
+
+      {/* 概述卡片 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-16">
+        {[
+          {
+            icon: BrainCircuitIcon,
+            title: "AI-Native",
+            desc: "Built on LangGraph multi-agent architecture with specialized agents for each workflow stage.",
+          },
+          {
+            icon: GitBranchIcon,
+            title: "Stateful Workflows",
+            desc: "Checkpoint-backed execution with human-in-the-loop approval gates and full audit trails.",
+          },
+          {
+            icon: ShieldCheckIcon,
+            title: "Enterprise Ready",
+            desc: "RBAC, encrypted storage, provider-agnostic LLM integration, and production-grade infrastructure.",
+          },
+        ].map((item, i) => (
+          <FeatureCard key={item.title} icon={item.icon} title={item.title} description={item.desc} index={i} />
+        ))}
+      </div>
+
+      {/* 流程概览 */}
+      <ScrollReveal>
+        <div
+          className="p-8"
+          style={{
+            background: "#171717",
+            border: "1px solid rgba(163, 163, 163, 0.1)",
+          }}
+        >
+          <h3 className="text-lg font-medium mb-6" style={{ color: "#ffffff" }}>
+            Workflow Pipeline
+          </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            {[
+              "Project Setup",
+              "RFP Ingestion",
+              "Requirement Extraction",
+              "Knowledge Retrieval",
+              "Section Drafting",
+              "Quality Review",
+              "Human Approval",
+              "Export & Delivery",
+            ].map((step, i, arr) => (
+              <div key={step} className="flex items-center gap-3">
+                <div
+                  className="px-4 py-2 text-xs font-medium tracking-wide"
+                  style={{
+                    background: "rgba(132, 204, 22, 0.08)",
+                    border: "1px solid rgba(132, 204, 22, 0.2)",
+                    color: "#84cc16",
+                  }}
                 >
-                  {cat.icon}
-                  {cat.label}
-                </button>
-                {activeCategory === cat.id && (
-                  <div className="ml-2 mt-1 space-y-0.5 pl-4 border-l">
-                    {cat.articles.map((article) => (
-                      <button
-                        key={article.id}
-                        onClick={() => { setActiveArticle(article.id); setActiveCategory(cat.id); }}
-                        className={cn(
-                          "flex items-center gap-2 w-full rounded-md px-3 py-1.5 text-xs transition-colors",
-                          activeArticle === article.id
-                            ? "text-foreground font-medium"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {article.title}
-                      </button>
-                    ))}
-                  </div>
+                  {step}
+                </div>
+                {i < arr.length - 1 && (
+                  <ChevronRightIcon className="size-4 shrink-0" style={{ color: "#404040" }} />
                 )}
               </div>
             ))}
-          </nav>
-        </ScrollArea>
-      </aside>
-      <main className="flex-1 overflow-y-auto p-8">
-        <div className="max-w-3xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold tracking-tight mb-2">{currentArticle.title}</h1>
-            <p className="text-muted-foreground">{currentArticle.description}</p>
           </div>
-          <div className="prose prose-neutral dark:prose-invert max-w-none">
-            <Card>
-              <CardContent className="p-6 leading-relaxed text-sm text-muted-foreground">
-                {currentArticle.content}
-              </CardContent>
-            </Card>
+        </div>
+      </ScrollReveal>
+    </section>
+  );
+}
+
+// ---------- Section 2: Quick Start ----------
+function QuickStartSection() {
+  return (
+    <section id="quickstart" className="py-20">
+      <SectionHeading
+        label="Quick Start"
+        title="Get Running in Minutes"
+        description="DocPilot is fully containerized. A single command brings up the entire stack: API, Worker, PostgreSQL, Redis, and MinIO."
+      />
+
+      <div className="space-y-12">
+        {/* Prerequisites */}
+        <ScrollReveal>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+            Prerequisites
+          </h3>
+          <ul className="space-y-3">
+            {[
+              "Docker Engine 24+ and Docker Compose v2",
+              "Node.js 20+ (for frontend development)",
+              "Python 3.11+ (for backend development)",
+              "An OpenAI or Anthropic API key",
+            ].map((item) => (
+              <li key={item} className="flex items-start gap-3">
+                <CheckCircleIcon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#84cc16" }} />
+                <span className="text-sm" style={{ color: "#a3a3a3" }}>
+                  {item}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </ScrollReveal>
+
+        {/* Installation */}
+        <ScrollReveal>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+            Installation
+          </h3>
+          <p className="text-sm mb-4" style={{ color: "#a3a3a3" }}>
+            Clone the repository and start all services with Docker Compose:
+          </p>
+          <CodeBlock language="bash" filename="terminal">
+{`git clone https://github.com/your-org/docpilot.git
+cd docpilot
+
+# Copy environment template
+cp .env.example .env
+
+# Start all services
+docker compose up -d
+
+# Verify health
+curl http://localhost:8000/health`}
+          </CodeBlock>
+        </ScrollReveal>
+
+        {/* Environment Configuration */}
+        <ScrollReveal>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+            Environment Configuration
+          </h3>
+          <p className="text-sm mb-4" style={{ color: "#a3a3a3" }}>
+            The <code className="px-1.5 py-0.5 text-xs font-mono" style={{ background: "#262626", color: "#84cc16" }}>.env</code> file
+            controls all service connections and API keys. Key variables:
+          </p>
+          <CodeBlock language="env" filename=".env">
+{`# Database
+DATABASE_URL=postgresql+asyncpg://docpilot:secret@postgres:5432/docpilot
+
+# Redis (task queue + cache)
+REDIS_URL=redis://redis:6379/0
+
+# MinIO (document storage)
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+
+# LLM Provider
+OPENAI_API_KEY=sk-...
+# or
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Vector Store (pgvector)
+EMBEDDING_MODEL=text-embedding-3-small`}
+          </CodeBlock>
+        </ScrollReveal>
+
+        {/* First Project */}
+        <ScrollReveal>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+            Create Your First Project
+          </h3>
+          <div className="space-y-4">
+            {[
+              { num: "01", title: "Sign up / Log in", desc: "Navigate to the web UI and create an account." },
+              { num: "02", title: "New Project", desc: "Click 'New Project' on the dashboard and name your bid." },
+              { num: "03", title: "Upload RFP", desc: "Drag and drop your RFP document (PDF, DOCX, or Markdown)." },
+              { num: "04", title: "Review & Export", desc: "AI agents process the document. Review drafts, approve, and export." },
+            ].map((step, i) => (
+              <ScrollReveal key={step.num} delay={i * 100} direction="left">
+                <div className="flex gap-5 items-start">
+                  <div
+                    className="shrink-0 w-10 h-10 flex items-center justify-center text-sm font-mono font-medium"
+                    style={{
+                      background: "#171717",
+                      border: "1px solid rgba(132, 204, 22, 0.3)",
+                      color: "#84cc16",
+                    }}
+                  >
+                    {step.num}
+                  </div>
+                  <div className="pt-1">
+                    <h4 className="text-sm font-medium mb-1" style={{ color: "#ffffff" }}>
+                      {step.title}
+                    </h4>
+                    <p className="text-sm" style={{ color: "#a3a3a3" }}>
+                      {step.desc}
+                    </p>
+                  </div>
+                </div>
+              </ScrollReveal>
+            ))}
           </div>
-          <div className="mt-8 flex items-center gap-4 p-4 rounded-lg border bg-muted/30">
-            <HelpCircleIcon className="size-5 text-muted-foreground shrink-0" />
-            <p className="text-sm text-muted-foreground">
-              Need more help? Contact support or check our integration guides.
-            </p>
+        </ScrollReveal>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Section 3: Core Features ----------
+function CoreFeaturesSection() {
+  const features = [
+    {
+      icon: FolderIcon,
+      title: "Project Management",
+      desc: "Create and manage bid projects. Each project is a self-contained workspace with its own RFP documents, knowledge base, deliverables, and review history. Search, filter, and organize across your portfolio.",
+    },
+    {
+      icon: FileTextIcon,
+      title: "Document Ingestion",
+      desc: "Upload RFP documents in PDF, DOCX, or Markdown format. DocPilot automatically parses structure, extracts tables, and chunks content into searchable segments stored in MinIO.",
+    },
+    {
+      icon: SearchIcon,
+      title: "Requirement Extraction",
+      desc: "AI agents analyze the RFP and extract structured requirements: mandatory criteria, evaluation factors, compliance requirements, and submission guidelines. All requirements are linked back to source pages.",
+    },
+    {
+      icon: BrainCircuitIcon,
+      title: "Knowledge Retrieval",
+      desc: "The Knowledge Retriever agent uses pgvector semantic search to find the most relevant content chunks from your uploaded documents. Cosine similarity scoring ensures high-quality evidence for every section.",
+    },
+    {
+      icon: PenToolIcon,
+      title: "Section Drafting",
+      desc: "The Section Drafter agent generates compliant, compelling content by combining RFP requirements with retrieved evidence. Each draft includes citations and follows your organization's tone and style guidelines.",
+    },
+    {
+      icon: ShieldCheckIcon,
+      title: "Quality Review",
+      desc: "The Quality Reviewer agent evaluates drafts for completeness, compliance, evidence usage, and clarity. Sections below the quality threshold are automatically flagged and revised before human review.",
+    },
+    {
+      icon: CheckCircleIcon,
+      title: "Human Approval",
+      desc: "Critical sections pause at a human-in-the-loop gate. Reviewers can approve, request changes, or add inline comments. The workflow resumes only after explicit approval, ensuring quality control.",
+    },
+    {
+      icon: DownloadIcon,
+      title: "Export & Delivery",
+      desc: "Export individual sections as Markdown or DOCX. Compile full deliverables with headers, formatting, and a table of contents. Version history is preserved for audit and compliance.",
+    },
+  ];
+
+  return (
+    <section id="features" className="py-20">
+      <SectionHeading
+        label="Core Features"
+        title="End-to-End Document Automation"
+        description="DocPilot covers every stage of the document lifecycle, from initial ingestion to final export."
+      />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {features.map((f, i) => (
+          <FeatureCard key={f.title} icon={f.icon} title={f.title} description={f.desc} index={i} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------- Section 4: Architecture ----------
+function ArchitectureSection() {
+  return (
+    <section id="architecture" className="py-20">
+      <SectionHeading
+        label="Architecture"
+        title="Layered System Design"
+        description="DocPilot follows a clean separation of concerns: Web, API, Worker, and Data layers."
+      />
+
+      {/* Architecture Diagram */}
+      <ScrollReveal>
+        <div
+          className="p-8 mb-10"
+          style={{
+            background: "#171717",
+            border: "1px solid rgba(163, 163, 163, 0.1)",
+          }}
+        >
+          <h3 className="text-lg font-medium mb-6" style={{ color: "#ffffff" }}>
+            System Layers
+          </h3>
+          <div className="space-y-4">
+            {[
+              {
+                layer: "Web Application",
+                tech: "React 19 + TypeScript + Vite + Tailwind CSS",
+                color: "#84cc16",
+                desc: "SPA frontend with shadcn/ui components, react-router-dom routing, and TanStack Query for server state.",
+              },
+              {
+                layer: "API Application",
+                tech: "FastAPI + SQLAlchemy + Alembic",
+                color: "#a3e635",
+                desc: "REST API layer handling auth, project CRUD, document management, and WebSocket streaming for agent progress.",
+              },
+              {
+                layer: "Worker Application",
+                tech: "Celery + LangGraph",
+                color: "#65a30d",
+                desc: "Async task execution with LangGraph-powered multi-agent workflows. Handles all AI processing in isolated workers.",
+              },
+              {
+                layer: "Data Services",
+                tech: "PostgreSQL + pgvector + Redis + MinIO",
+                color: "#4d7c0f",
+                desc: "Persistent storage, vector search, task queuing, caching, and object storage for documents.",
+              },
+            ].map((item, i) => (
+              <ScrollReveal key={item.layer} delay={i * 120} direction="left">
+                <div
+                  className="flex flex-col md:flex-row md:items-center gap-4 p-5 transition-all duration-300"
+                  style={{
+                    background: "#0a0a0a",
+                    borderLeft: `3px solid ${item.color}`,
+                  }}
+                >
+                  <div className="shrink-0 w-40">
+                    <p className="text-sm font-medium" style={{ color: "#ffffff" }}>
+                      {item.layer}
+                    </p>
+                    <p className="text-xs font-mono mt-1" style={{ color: "#737373" }}>
+                      {item.tech}
+                    </p>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm" style={{ color: "#a3a3a3" }}>
+                      {item.desc}
+                    </p>
+                  </div>
+                </div>
+              </ScrollReveal>
+            ))}
+          </div>
+        </div>
+      </ScrollReveal>
+
+      {/* LangGraph Agent Workflow */}
+      <ScrollReveal>
+        <div
+          className="p-8"
+          style={{
+            background: "#171717",
+            border: "1px solid rgba(163, 163, 163, 0.1)",
+          }}
+        >
+          <h3 className="text-lg font-medium mb-2" style={{ color: "#ffffff" }}>
+            LangGraph Multi-Agent Workflow
+          </h3>
+          <p className="text-sm mb-6" style={{ color: "#a3a3a3" }}>
+            The Worker layer uses LangGraph to orchestrate stateful, multi-agent workflows. Each agent is a
+            specialized node in a directed graph with checkpoint-backed execution.
+          </p>
+
+          <CodeBlock language="python" filename="services/worker/app/graph/builder.py">
+{`from langgraph.graph import StateGraph, START, END
+
+# Define the agent workflow graph
+workflow = StateGraph(BidPilotState)
+
+# Add agent nodes
+workflow.add_node("supervisor", supervisor_node)
+workflow.add_node("rfp_parser", rfp_parser_node)
+workflow.add_node("knowledge_retriever", knowledge_retriever_node)
+workflow.add_node("section_drafter", section_drafter_node)
+workflow.add_node("quality_reviewer", quality_reviewer_node)
+workflow.add_node("human_approval", human_approval_node)
+workflow.add_node("persist_result", persist_result_node)
+
+# Define edges (workflow routing)
+workflow.add_edge(START, "supervisor")
+workflow.add_conditional_edges("supervisor", route_next_agent)
+workflow.add_edge("rfp_parser", "knowledge_retriever")
+workflow.add_edge("knowledge_retriever", "section_drafter")
+workflow.add_edge("section_drafter", "quality_reviewer")
+workflow.add_conditional_edges("quality_reviewer", quality_gate)
+workflow.add_edge("human_approval", "persist_result")
+workflow.add_edge("persist_result", END)
+
+# Compile with checkpointing
+graph = workflow.compile(checkpointer=PostgresSaver())`}
+          </CodeBlock>
+
+          {/* Agent Pipeline Visualization */}
+          <div className="mt-8 flex flex-wrap items-center gap-2">
+            {["supervisor", "rfp_parser", "knowledge_retriever", "section_drafter", "quality_reviewer", "human_approval", "persist_result"].map(
+              (agent, i, arr) => (
+                <div key={agent} className="flex items-center gap-2">
+                  <div
+                    className="px-3 py-1.5 text-xs font-mono"
+                    style={{
+                      background: agent === "human_approval" ? "rgba(132, 204, 22, 0.15)" : "rgba(163, 163, 163, 0.08)",
+                      border: `1px solid ${agent === "human_approval" ? "rgba(132, 204, 22, 0.3)" : "rgba(163, 163, 163, 0.12)"}`,
+                      color: agent === "human_approval" ? "#84cc16" : "#a3a3a3",
+                    }}
+                  >
+                    {agent}
+                  </div>
+                  {i < arr.length - 1 && (
+                    <ChevronRightIcon className="size-3.5 shrink-0" style={{ color: "#404040" }} />
+                  )}
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      </ScrollReveal>
+    </section>
+  );
+}
+
+// ---------- Section 5: Tech Stack ----------
+function TechStackSection() {
+  const stacks = [
+    {
+      category: "Frontend",
+      items: [
+        { name: "React 19", desc: "UI library with concurrent features" },
+        { name: "TypeScript", desc: "End-to-end type safety" },
+        { name: "Vite", desc: "Fast dev server and build tool" },
+        { name: "Tailwind CSS", desc: "Utility-first styling" },
+        { name: "shadcn/ui", desc: "Accessible component primitives" },
+        { name: "TanStack Query", desc: "Server state management" },
+        { name: "react-router-dom", desc: "Client-side routing" },
+      ],
+    },
+    {
+      category: "Backend",
+      items: [
+        { name: "FastAPI", desc: "Async Python web framework" },
+        { name: "Celery", desc: "Distributed task queue" },
+        { name: "SQLAlchemy 2.0", desc: "Async ORM with type hints" },
+        { name: "Alembic", desc: "Database migration management" },
+        { name: "LangGraph", desc: "Multi-agent workflow orchestration" },
+        { name: "LangChain", desc: "LLM abstraction layer" },
+      ],
+    },
+    {
+      category: "Data & Storage",
+      items: [
+        { name: "PostgreSQL 16", desc: "Primary relational database" },
+        { name: "pgvector", desc: "Vector similarity search" },
+        { name: "Redis 7", desc: "Task queue broker + caching" },
+        { name: "MinIO", desc: "S3-compatible object storage" },
+      ],
+    },
+  ];
+
+  return (
+    <section id="techstack" className="py-20">
+      <SectionHeading
+        label="Tech Stack"
+        title="Built with Modern Tools"
+        description="Every technology choice is deliberate: async-first, type-safe, and battle-tested in production."
+      />
+
+      <div className="space-y-10">
+        {stacks.map((stack, si) => (
+          <ScrollReveal key={stack.category} delay={si * 150}>
+            <div
+              className="p-7"
+              style={{
+                background: "#171717",
+                border: "1px solid rgba(163, 163, 163, 0.1)",
+              }}
+            >
+              <h3
+                className="text-sm font-medium tracking-widest uppercase mb-5"
+                style={{ color: "#84cc16" }}
+              >
+                {stack.category}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {stack.items.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-start gap-3 p-3 transition-colors duration-200"
+                    style={{ background: "#0a0a0a" }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "#111111";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "#0a0a0a";
+                    }}
+                  >
+                    <div
+                      className="w-1.5 h-1.5 mt-1.5 shrink-0"
+                      style={{ background: "#84cc16" }}
+                    />
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: "#ffffff" }}>
+                        {item.name}
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: "#737373" }}>
+                        {item.desc}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </ScrollReveal>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ---------- Section 6: Deployment ----------
+function DeploymentSection() {
+  return (
+    <section id="deployment" className="py-20">
+      <SectionHeading
+        label="Deployment"
+        title="Production Deployment"
+        description="DocPilot is designed for containerized deployment. The Docker Compose stack includes all services with health checks."
+      />
+
+      <div className="space-y-10">
+        {/* Docker Compose */}
+        <ScrollReveal>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+            Docker Compose Stack
+          </h3>
+          <p className="text-sm mb-4" style={{ color: "#a3a3a3" }}>
+            The production stack includes 6 services, all orchestrated via Docker Compose:
+          </p>
+          <CodeBlock language="yaml" filename="docker-compose.yml">
+{`services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docpilot"]
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+
+  api:
+    build: ./services/api
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  worker:
+    build: ./services/worker
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  web:
+    build: ./apps/web
+    ports: ["3000:3000"]`}
+          </CodeBlock>
+        </ScrollReveal>
+
+        {/* Health Checks */}
+        <ScrollReveal>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+            Health & Monitoring
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { endpoint: "/health", desc: "Basic liveness check" },
+              { endpoint: "/health/db", desc: "Database connectivity" },
+              { endpoint: "/health/redis", desc: "Redis connectivity" },
+              { endpoint: "/health/storage", desc: "MinIO connectivity" },
+            ].map((item) => (
+              <div
+                key={item.endpoint}
+                className="flex items-center gap-4 p-4"
+                style={{
+                  background: "#171717",
+                  border: "1px solid rgba(163, 163, 163, 0.1)",
+                }}
+              >
+                <code
+                  className="text-xs font-mono px-2 py-1 shrink-0"
+                  style={{ background: "#262626", color: "#84cc16" }}
+                >
+                  {item.endpoint}
+                </code>
+                <span className="text-sm" style={{ color: "#a3a3a3" }}>
+                  {item.desc}
+                </span>
+              </div>
+            ))}
+          </div>
+        </ScrollReveal>
+
+        {/* Project Structure */}
+        <ScrollReveal>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+            Project Structure
+          </h3>
+          <CodeBlock language="text" filename="directory tree">
+{`docpilot/
+  apps/
+    web/                  # React frontend
+      src/
+        features/         # Feature modules
+        components/       # Shared UI components
+        lib/              # Utilities and API client
+  services/
+    api/                  # FastAPI backend
+      app/
+        models.py         # SQLAlchemy models
+        routers/          # API route handlers
+    worker/               # Celery + LangGraph
+      app/
+        graph/
+          builder.py      # LangGraph graph definition
+          state.py        # Agent state schema
+          nodes/          # Agent node implementations
+  infra/
+    docker-compose.yml    # Production stack
+    alembic/              # Database migrations
+  docs/                   # Project documentation`}
+          </CodeBlock>
+        </ScrollReveal>
+      </div>
+    </section>
+  );
+}
+
+// ---------- Main Component ----------
+export function DocsPage() {
+  const [activeSection, setActiveSection] = useState("overview");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Track active section on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      const sections = NAV_ITEMS.map((item) => {
+        const el = document.getElementById(item.id);
+        if (!el) return { id: item.id, top: Infinity };
+        return { id: item.id, top: el.getBoundingClientRect().top };
+      });
+
+      const current = sections.reduce((closest, section) => {
+        if (section.top <= 120 && section.top > closest.top) return section;
+        return closest;
+      }, { id: "overview", top: -Infinity });
+
+      setActiveSection(current.id);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    setMobileNavOpen(false);
+  };
+
+  return (
+    <div className="min-h-screen" style={{ background: "#0a0a0a" }}>
+      {/* Top Navigation Bar */}
+      <header
+        className="sticky top-0 z-50 backdrop-blur-xl"
+        style={{
+          background: "rgba(10, 10, 10, 0.85)",
+          borderBottom: "1px solid rgba(163, 163, 163, 0.08)",
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link
+              to="/"
+              className="flex items-center gap-2 transition-colors duration-200 hover:opacity-80"
+            >
+              <ArrowLeftIcon className="size-4" style={{ color: "#737373" }} />
+              <span className="text-sm" style={{ color: "#737373" }}>
+                Back
+              </span>
+            </Link>
+            <div className="w-px h-4" style={{ background: "rgba(163, 163, 163, 0.1)" }} />
+            <div className="flex items-center gap-2">
+              <div
+                className="w-6 h-6 flex items-center justify-center"
+                style={{ background: "#84cc16" }}
+              >
+                <FileTextIcon className="size-3.5" style={{ color: "#0a0a0a" }} />
+              </div>
+              <span className="text-sm font-medium" style={{ color: "#ffffff" }}>
+                DocPilot
+              </span>
+              <span
+                className="text-xs px-2 py-0.5 font-mono"
+                style={{
+                  background: "rgba(132, 204, 22, 0.1)",
+                  border: "1px solid rgba(132, 204, 22, 0.2)",
+                  color: "#84cc16",
+                }}
+              >
+                Docs
+              </span>
+            </div>
+          </div>
+
+          {/* Desktop nav indicator */}
+          <div className="hidden md:flex items-center gap-1">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => scrollToSection(item.id)}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-all duration-200",
+                )}
+                style={{
+                  color: activeSection === item.id ? "#84cc16" : "#525252",
+                  background: activeSection === item.id ? "rgba(132, 204, 22, 0.08)" : "transparent",
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Mobile menu toggle */}
+          <button
+            className="md:hidden p-2"
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}
+            style={{ color: "#a3a3a3" }}
+          >
+            {mobileNavOpen ? <XIcon className="size-5" /> : <MenuIcon className="size-5" />}
+          </button>
+        </div>
+
+        {/* Mobile dropdown nav */}
+        {mobileNavOpen && (
+          <div
+            className="md:hidden px-6 py-4 space-y-1"
+            style={{
+              background: "#0a0a0a",
+              borderTop: "1px solid rgba(163, 163, 163, 0.08)",
+            }}
+          >
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => scrollToSection(item.id)}
+                className="flex items-center gap-3 w-full px-3 py-2.5 text-sm transition-colors duration-200"
+                style={{
+                  color: activeSection === item.id ? "#84cc16" : "#a3a3a3",
+                  background: activeSection === item.id ? "rgba(132, 204, 22, 0.08)" : "transparent",
+                }}
+              >
+                <item.icon className="size-4" />
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-6 md:px-8">
+        <div className="flex gap-12">
+          {/* Sidebar (Desktop) */}
+          <aside className="hidden lg:block w-56 shrink-0 sticky top-20 self-start">
+            <nav className="space-y-1 pt-8">
+              {NAV_ITEMS.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => scrollToSection(item.id)}
+                  className="flex items-center gap-3 w-full px-3 py-2 text-sm transition-all duration-200"
+                  style={{
+                    color: activeSection === item.id ? "#84cc16" : "#525252",
+                    background: activeSection === item.id ? "rgba(132, 204, 22, 0.06)" : "transparent",
+                    borderLeft: activeSection === item.id ? "2px solid #84cc16" : "2px solid transparent",
+                  }}
+                >
+                  <item.icon className="size-4 shrink-0" />
+                  <span className="font-medium">{item.label}</span>
+                </button>
+              ))}
+            </nav>
+
+            {/* Sidebar footer */}
+            <div
+              className="mt-10 p-4"
+              style={{
+                background: "#171717",
+                border: "1px solid rgba(163, 163, 163, 0.1)",
+              }}
+            >
+              <p className="text-xs font-medium mb-1" style={{ color: "#ffffff" }}>
+                Need help?
+              </p>
+              <p className="text-xs leading-relaxed" style={{ color: "#737373" }}>
+                Open an issue on GitHub or reach out to the team.
+              </p>
+            </div>
+          </aside>
+
+          {/* Content Area */}
+          <div className="flex-1 min-w-0 py-8">
+            <OverviewSection />
+            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <QuickStartSection />
+            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <CoreFeaturesSection />
+            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <ArchitectureSection />
+            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <TechStackSection />
+            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <DeploymentSection />
+
+            {/* Footer */}
+            <div
+              className="py-16 mt-10 text-center"
+              style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }}
+            >
+              <ScrollReveal>
+                <p className="text-sm mb-2" style={{ color: "#525252" }}>
+                  DocPilot Documentation
+                </p>
+                <p className="text-xs" style={{ color: "#404040" }}>
+                  Built for teams that ship winning proposals.
+                </p>
+              </ScrollReveal>
+            </div>
           </div>
         </div>
       </main>

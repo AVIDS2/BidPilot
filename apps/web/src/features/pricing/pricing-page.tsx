@@ -1,8 +1,5 @@
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { CheckIcon, ArrowLeftIcon, FileTextIcon } from "lucide-react";
+import { ArrowLeftIcon, FileTextIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Link, useNavigate } from "react-router-dom";
 import { createCheckout } from "@/lib/api";
@@ -21,51 +18,125 @@ interface PricingTier {
   cta: string;
 }
 
-function TierCard({ tier, current, onUpgrade, t }: { tier: PricingTier; current: boolean; onUpgrade: (plan: string) => void; t: (key: string) => string }) {
+function TierCard({
+  tier,
+  current,
+  onUpgrade,
+  t,
+}: {
+  tier: PricingTier;
+  current: boolean;
+  onUpgrade: (plan: string) => void;
+  t: (key: string) => string;
+}) {
+  const highlighted = tier.recommended && !current;
+
   return (
-    <Card
-      className={`relative flex flex-col${tier.recommended ? " border-primary/70 shadow-md" : ""}${current ? " ring-2 ring-primary/60" : ""}`}
+    <div
+      className="relative flex flex-col p-8 transition-all duration-300 hover:-translate-y-1"
+      style={{
+        background: "#171717",
+        border: highlighted
+          ? "1px solid rgba(132, 204, 22, 0.4)"
+          : current
+            ? "1px solid rgba(132, 204, 22, 0.6)"
+            : "1px solid rgba(163, 163, 163, 0.1)",
+      }}
     >
-      {tier.recommended && !current && (
+      {/* 推荐标签 */}
+      {highlighted && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <Badge className="px-3 py-0.5 text-[0.7rem] font-medium uppercase tracking-wider">{t("badges.recommended")}</Badge>
+          <Badge
+            className="px-3 py-0.5 text-[0.7rem] font-medium uppercase tracking-wider border-0"
+            style={{ background: "#84cc16", color: "#0a0a0a" }}
+          >
+            {t("badges.recommended")}
+          </Badge>
         </div>
       )}
-      <CardHeader className={tier.recommended ? "pt-8" : ""}>
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-lg font-semibold">{tier.name}</CardTitle>
-          {current && <Badge variant="secondary" className="text-[0.7rem]">{t("badges.currentPlan")}</Badge>}
+
+      {/* 当前方案标签 */}
+      {current && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <Badge
+            className="px-3 py-0.5 text-[0.7rem] font-medium uppercase tracking-wider border-0"
+            style={{ background: "#262626", color: "#a3a3a3" }}
+          >
+            {t("badges.currentPlan")}
+          </Badge>
         </div>
-        <CardDescription className="text-sm">{tier.description}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 space-y-6">
-        <div>
-          <span className="text-4xl font-bold tracking-tight">{tier.price}</span>
-          {tier.period && (
-            <span className="text-sm text-muted-foreground ml-1.5">{tier.period}</span>
-          )}
-        </div>
-        <Separator />
-        <ul className="space-y-3">
-          {tier.features.map((feature) => (
-            <li key={feature} className="flex items-start gap-3 text-sm leading-snug">
-              <CheckIcon className="size-4 text-primary shrink-0 mt-0.5" />
-              <span className="text-muted-foreground">{feature}</span>
-            </li>
-          ))}
-        </ul>
-      </CardContent>
-      <CardFooter>
-        <Button
-          className="w-full"
-          variant={current ? "secondary" : tier.recommended ? "default" : "outline"}
-          disabled={current}
-          onClick={() => onUpgrade(tier.name.toLowerCase())}
-        >
-          {current ? t("button.currentPlan") : tier.cta}
-        </Button>
-      </CardFooter>
-    </Card>
+      )}
+
+      {/* 标题和描述 */}
+      <div className={highlighted || current ? "pt-4" : ""}>
+        <h3 className="text-lg font-semibold text-white">{tier.name}</h3>
+        <p className="mt-1 text-sm" style={{ color: "#737373" }}>
+          {tier.description}
+        </p>
+      </div>
+
+      {/* 价格 */}
+      <div className="mt-6">
+        <span className="text-4xl font-bold tracking-tight text-white">
+          {tier.price}
+        </span>
+        {tier.period && (
+          <span className="text-sm ml-1.5" style={{ color: "#737373" }}>
+            {tier.period}
+          </span>
+        )}
+      </div>
+
+      {/* 分割线 */}
+      <div
+        className="my-6"
+        style={{ borderTop: "1px solid rgba(163, 163, 163, 0.1)" }}
+      />
+
+      {/* 功能列表 */}
+      <ul className="space-y-4 flex-1">
+        {tier.features.map((feat) => (
+          <li key={feat} className="flex items-start gap-3">
+            <span
+              className="mt-1 w-4 h-4 flex items-center justify-center text-xs shrink-0"
+              style={{ color: "#84cc16" }}
+            >
+              ✓
+            </span>
+            <span className="text-sm" style={{ color: "#a3a3a3" }}>
+              {feat}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {/* 按钮 */}
+      <Link
+        to={current ? "#" : tier.name.toLowerCase() === "starter" ? "/login" : "/signup"}
+        className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98] mt-8"
+        style={{
+          background: highlighted ? "#84cc16" : "transparent",
+          color: highlighted ? "#0a0a0a" : current ? "#737373" : "#ffffff",
+          border: highlighted
+            ? "none"
+            : current
+              ? "1px solid rgba(163, 163, 163, 0.1)"
+              : "1px solid rgba(163, 163, 163, 0.1)",
+          cursor: current ? "default" : "pointer",
+          opacity: current ? 0.6 : 1,
+        }}
+        onClick={(e) => {
+          if (current) {
+            e.preventDefault();
+            return;
+          }
+          e.preventDefault();
+          onUpgrade(tier.name.toLowerCase());
+        }}
+      >
+        {current ? t("button.currentPlan") : tier.cta}
+      </Link>
+    </div>
   );
 }
 
@@ -75,33 +146,42 @@ export function PricingPage() {
   const currentPlan = user?.plan?.toLowerCase() ?? "";
   const { t } = useTranslation("pricing");
 
-  const TIERS: PricingTier[] = useMemo(() => [
-    {
-      name: t("tiers.starter.name"),
-      price: t("tiers.starter.price"),
-      period: t("tiers.starter.period"),
-      description: t("tiers.starter.description"),
-      features: t("tiers.starter.features", { returnObjects: true }) as unknown as string[],
-      cta: t("tiers.starter.cta"),
-    },
-    {
-      name: t("tiers.professional.name"),
-      price: t("tiers.professional.price"),
-      period: t("tiers.professional.period"),
-      description: t("tiers.professional.description"),
-      recommended: true,
-      features: t("tiers.professional.features", { returnObjects: true }) as unknown as string[],
-      cta: t("tiers.professional.cta"),
-    },
-    {
-      name: t("tiers.enterprise.name"),
-      price: t("tiers.enterprise.price"),
-      period: t("tiers.enterprise.period"),
-      description: t("tiers.enterprise.description"),
-      features: t("tiers.enterprise.features", { returnObjects: true }) as unknown as string[],
-      cta: t("tiers.enterprise.cta"),
-    },
-  ], [t]);
+  const TIERS: PricingTier[] = useMemo(
+    () => [
+      {
+        name: t("tiers.starter.name"),
+        price: t("tiers.starter.price"),
+        period: t("tiers.starter.period"),
+        description: t("tiers.starter.description"),
+        features: t("tiers.starter.features", {
+          returnObjects: true,
+        }) as unknown as string[],
+        cta: t("tiers.starter.cta"),
+      },
+      {
+        name: t("tiers.professional.name"),
+        price: t("tiers.professional.price"),
+        period: t("tiers.professional.period"),
+        description: t("tiers.professional.description"),
+        recommended: true,
+        features: t("tiers.professional.features", {
+          returnObjects: true,
+        }) as unknown as string[],
+        cta: t("tiers.professional.cta"),
+      },
+      {
+        name: t("tiers.enterprise.name"),
+        price: t("tiers.enterprise.price"),
+        period: t("tiers.enterprise.period"),
+        description: t("tiers.enterprise.description"),
+        features: t("tiers.enterprise.features", {
+          returnObjects: true,
+        }) as unknown as string[],
+        cta: t("tiers.enterprise.cta"),
+      },
+    ],
+    [t],
+  );
 
   const checkoutMut = useMutation({
     mutationFn: createCheckout,
@@ -132,33 +212,67 @@ export function PricingPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl py-12">
-      <div className="flex items-center justify-between mb-12">
-        <Link
-          to={isAuthenticated ? "/projects" : "/"}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeftIcon className="size-4" />
-          {isAuthenticated ? t("back.projects") : t("back.home")}
-        </Link>
-        <Link to="/" className="flex items-center gap-2 font-semibold text-sm">
-          <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <FileTextIcon className="size-4" />
-          </div>
-          DocPilot
-        </Link>
-        <div className="w-20" />
-      </div>
-      <div className="text-center mb-12 max-w-xl mx-auto">
-        <h1 className="text-4xl font-bold tracking-tight">{t("title")}</h1>
-        <p className="mt-3 text-muted-foreground leading-relaxed max-w-[65ch] mx-auto">
-          {t("description")}
-        </p>
-      </div>
-      <div className="grid gap-8 md:grid-cols-3 items-start">
-        {TIERS.map((tier) => (
-          <TierCard key={tier.name} tier={tier} current={tier.name.toLowerCase() === currentPlan} onUpgrade={handleUpgrade} t={t} />
-        ))}
+    <div
+      className="min-h-screen"
+      style={{ background: "#0a0a0a", color: "#ffffff" }}
+    >
+      <div className="mx-auto max-w-5xl py-12 px-6">
+        {/* 顶部导航 */}
+        <div className="flex items-center justify-between mb-16">
+          <Link
+            to={isAuthenticated ? "/projects" : "/"}
+            className="inline-flex items-center gap-1.5 text-sm transition-colors hover:text-white"
+            style={{ color: "#737373" }}
+          >
+            <ArrowLeftIcon className="size-4" />
+            {isAuthenticated ? t("back.projects") : t("back.home")}
+          </Link>
+          <Link
+            to="/"
+            className="flex items-center gap-2 font-semibold text-sm text-white"
+          >
+            <div
+              className="flex size-6 items-center justify-center rounded-md"
+              style={{ background: "#84cc16", color: "#0a0a0a" }}
+            >
+              <FileTextIcon className="size-4" />
+            </div>
+            DocPilot
+          </Link>
+          <div className="w-20" />
+        </div>
+
+        {/* 标题区域 */}
+        <div className="text-center mb-16 max-w-xl mx-auto">
+          <span
+            className="text-sm font-medium tracking-widest uppercase"
+            style={{ color: "#84cc16" }}
+          >
+            / Pricing
+          </span>
+          <h1 className="mt-4 text-4xl font-bold tracking-tight text-white">
+            {t("title")}
+          </h1>
+          <p
+            className="mt-3 leading-relaxed max-w-[65ch] mx-auto"
+            style={{ color: "#737373" }}
+          >
+            {t("description")}
+          </p>
+        </div>
+
+        {/* 定价卡片 */}
+        <div className="grid gap-8 md:grid-cols-3 items-stretch">
+          {TIERS.map((tier) => (
+            <TierCard
+              key={tier.name}
+              tier={tier}
+              current={tier.name.toLowerCase() === currentPlan}
+              onUpgrade={handleUpgrade}
+              t={t}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
