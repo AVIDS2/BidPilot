@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
@@ -23,6 +24,11 @@ _SYSTEM_PROMPT = (
     "你是DocPilot AI助手，帮助用户管理和创建投标文档。"
     "请用中文回答，简洁明了。"
 )
+
+# DeepSeek API configuration (platform-provided, free for users)
+_DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+_DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+_DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
 
 def _resolve_provider_config(
@@ -159,7 +165,7 @@ async def stream_chat_response(
     """Async generator yielding SSE event strings for a chat response.
 
     This is the core streaming logic. It:
-    1. Resolves the LLM provider config
+    1. Resolves the LLM provider config (DeepSeek platform-provided first, then user config)
     2. Creates or reuses a conversation
     3. Saves the user message
     4. Calls the LLM API with streaming
@@ -169,12 +175,6 @@ async def stream_chat_response(
     from datetime import UTC, datetime
 
     timestamp = datetime.now(UTC).isoformat()
-
-    # Resolve provider
-    config = _resolve_provider_config(db, user_id, provider_config_id)
-    if config is None:
-        yield _sse("error", {"error_message": "No LLM provider configured. Please add a provider in settings.", "timestamp": timestamp})
-        return
 
     # Create or reuse conversation
     if conversation_id:
@@ -204,12 +204,26 @@ async def stream_chat_response(
     # Emit start event
     yield _sse("start", {"conversation_id": conversation_id, "timestamp": timestamp})
 
-    # Call LLM with streaming
+    # Call LLM with streaming - Priority: DeepSeek (platform free) > User provider config
     full_response = ""
     try:
-        async for chunk in _call_llm_streaming(config, llm_messages):
-            full_response += chunk
-            yield _sse("content", {"content": chunk})
+        # Try DeepSeek first (platform-provided, free for users)
+        if _DEEPSEEK_API_KEY:
+            logger.info("Using DeepSeek API for chat (platform-provided)")
+            async for chunk in _call_deepseek_streaming(llm_messages):
+                full_response += chunk
+                yield _sse("content", {"content": chunk})
+        else:
+            # Fall back to user's provider config
+            config = _resolve_provider_config(db, user_id, provider_config_id)
+            if config is None:
+                yield _sse("error", {"error_message": "No LLM provider configured. Please add a provider in settings.", "timestamp": timestamp})
+                return
+
+            logger.info("Using user provider config for chat: %s", config.provider_type)
+            async for chunk in _call_llm_streaming(config, llm_messages):
+                full_response += chunk
+                yield _sse("content", {"content": chunk})
     except Exception as exc:
         logger.error("LLM streaming error: %s", exc, exc_info=True)
         yield _sse("error", {"error_message": str(exc), "timestamp": datetime.now(UTC).isoformat()})
@@ -225,6 +239,44 @@ async def stream_chat_response(
         "full_response": full_response,
         "timestamp": datetime.now(UTC).isoformat(),
     })
+
+
+async def _call_deepseek_streaming(
+    messages: list[dict[str, str]],
+) -> AsyncGenerator[str, None]:
+    """Stream from DeepSeek API (platform-provided, free for users)."""
+    url = f"{_DEEPSEEK_BASE_URL}/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {_DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": _DEEPSEEK_MODEL,
+        "messages": messages,
+        "stream": True,
+        "max_tokens": 4096,
+    }
+
+    async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
+        async with client.stream("POST", url, headers=headers, json=payload) as resp:
+            if resp.status_code != 200:
+                body = await resp.aread()
+                raise RuntimeError(f"DeepSeek API error {resp.status_code}: {body.decode()[:500]}")
+
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data_str = line[6:]
+                if data_str.strip() == "[DONE]":
+                    return
+                try:
+                    data = json.loads(data_str)
+                    delta = data.get("choices", [{}])[0].get("delta", {})
+                    content = delta.get("content")
+                    if content:
+                        yield content
+                except (json.JSONDecodeError, IndexError, KeyError):
+                    continue
 
 
 async def _call_llm_streaming(
