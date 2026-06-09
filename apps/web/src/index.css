@@ -51,57 +51,59 @@
 
 :root {
     /* --- Color System (oklch) --- */
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0.005 250);
-    --card: oklch(0.995 0.002 250);
-    --card-foreground: oklch(0.145 0.005 250);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0.005 250);
-    --primary: oklch(0.50 0.17 264);
-    --primary-foreground: oklch(0.985 0.002 250);
-    --secondary: oklch(0.965 0.008 250);
+    /* 晴空蓝 + 雪雾白 配色 */
+    --background: oklch(0.98 0.005 250);  /* 雪雾白 */
+    --foreground: oklch(0.15 0.01 250);   /* 深蓝灰 */
+    --card: oklch(0.99 0.003 250);        /* 纯净白 */
+    --card-foreground: oklch(0.15 0.01 250);
+    --popover: oklch(0.99 0.003 250);
+    --popover-foreground: oklch(0.15 0.01 250);
+    --primary: oklch(0.55 0.18 250);      /* 晴空蓝 */
+    --primary-foreground: oklch(0.99 0.003 250);
+    --secondary: oklch(0.95 0.01 250);    /* 淡蓝灰 */
     --secondary-foreground: oklch(0.25 0.01 250);
-    --muted: oklch(0.965 0.008 250);
-    --muted-foreground: oklch(0.52 0.01 250);
-    --accent: oklch(0.55 0.15 270);
-    --accent-foreground: oklch(0.985 0.002 250);
+    --muted: oklch(0.95 0.01 250);
+    --muted-foreground: oklch(0.50 0.01 250);
+    --accent: oklch(0.60 0.15 230);       /* 天蓝 */
+    --accent-foreground: oklch(0.99 0.003 250);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.91 0.01 250);
-    --input: oklch(0.91 0.01 250);
-    --ring: oklch(0.45 0.18 255);
-    --chart-1: oklch(0.45 0.18 255);
-    --chart-2: oklch(0.55 0.15 270);
+    --border: oklch(0.90 0.015 250);      /* 淡蓝边框 */
+    --input: oklch(0.90 0.015 250);
+    --ring: oklch(0.55 0.18 250);         /* 晴空蓝 */
+    --chart-1: oklch(0.55 0.18 250);
+    --chart-2: oklch(0.60 0.15 230);
     --chart-3: oklch(0.62 0.12 180);
     --chart-4: oklch(0.70 0.10 150);
     --chart-5: oklch(0.50 0.14 300);
     --radius: 0.625rem;
-    --sidebar: oklch(0.98 0.005 250);
-    --sidebar-foreground: oklch(0.145 0.005 250);
-    --sidebar-primary: oklch(0.45 0.18 255);
-    --sidebar-primary-foreground: oklch(0.985 0.002 250);
-    --sidebar-accent: oklch(0.96 0.01 250);
+    --sidebar: oklch(0.97 0.008 250);     /* 侧边栏淡蓝 */
+    --sidebar-foreground: oklch(0.15 0.01 250);
+    --sidebar-primary: oklch(0.55 0.18 250);
+    --sidebar-primary-foreground: oklch(0.99 0.003 250);
+    --sidebar-accent: oklch(0.94 0.012 250);
     --sidebar-accent-foreground: oklch(0.25 0.01 250);
-    --sidebar-border: oklch(0.91 0.01 250);
-    --sidebar-ring: oklch(0.45 0.18 255);
+    --sidebar-border: oklch(0.90 0.015 250);
+    --sidebar-ring: oklch(0.55 0.18 250);
 
     /* --- Shadow System --- */
-    --shadow-xs: 0 1px 2px oklch(0 0 0 / 0.04);
-    --shadow-sm: 0 1px 3px oklch(0 0 0 / 0.06), 0 1px 2px oklch(0 0 0 / 0.04);
-    --shadow-md: 0 4px 6px -1px oklch(0 0 0 / 0.06), 0 2px 4px -2px oklch(0 0 0 / 0.04);
-    --shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 0.06), 0 4px 6px -4px oklch(0 0 0 / 0.04);
-    --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.08), 0 8px 10px -6px oklch(0 0 0 / 0.04);
-    --shadow-card: 0 1px 3px oklch(0 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.03);
-    --shadow-card-hover: 0 10px 25px -5px oklch(0 0 0 / 0.08), 0 4px 10px -4px oklch(0 0 0 / 0.04);
+    --shadow-xs: 0 1px 2px oklch(0.55 0.18 250 / 0.06);
+    --shadow-sm: 0 1px 3px oklch(0.55 0.18 250 / 0.08), 0 1px 2px oklch(0.55 0.18 250 / 0.06);
+    --shadow-md: 0 4px 6px -1px oklch(0.55 0.18 250 / 0.08), 0 2px 4px -2px oklch(0.55 0.18 250 / 0.06);
+    --shadow-lg: 0 10px 15px -3px oklch(0.55 0.18 250 / 0.08), 0 4px 6px -4px oklch(0.55 0.18 250 / 0.06);
+    --shadow-xl: 0 20px 25px -5px oklch(0.55 0.18 250 / 0.10), 0 8px 10px -6px oklch(0.55 0.18 250 / 0.08);
+    --shadow-card: 0 1px 3px oklch(0.55 0.18 250 / 0.06), 0 1px 2px oklch(0.55 0.18 250 / 0.04);
+    --shadow-card-hover: 0 10px 25px -5px oklch(0.55 0.18 250 / 0.10), 0 4px 10px -4px oklch(0.55 0.18 250 / 0.08);
 }
 
     /* --- Custom Theme Variables --- */
-    --surface-1: oklch(0.965 0.008 250);
-    --surface-2: oklch(0.91 0.01 250);
-    --text-primary: oklch(0.145 0.005 250);
-    --text-secondary: oklch(0.52 0.01 250);
-    --text-tertiary: oklch(0.52 0.01 250);
-    --text-quaternary: oklch(0.40 0.01 250);
-    --shadow-system: oklch(0.205 0 0 / 0.15);
+    /* 晴空蓝 + 雪雾白 */
+    --surface-1: oklch(0.96 0.01 250);    /* 淡蓝灰表面 */
+    --surface-2: oklch(0.92 0.015 250);   /* 更深蓝灰 */
+    --text-primary: oklch(0.15 0.01 250); /* 深蓝灰文字 */
+    --text-secondary: oklch(0.45 0.01 250);
+    --text-tertiary: oklch(0.55 0.01 250);
+    --text-quaternary: oklch(0.65 0.01 250);
+    --shadow-system: oklch(0.55 0.18 250 / 0.10);
 }
 
 .dark {
