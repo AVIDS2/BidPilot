@@ -1,12 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useEffect, useState } from "react"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { verifyEmail } from "@/lib/api"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Spinner } from "@/components/ui/spinner"
 import { CheckCircleIcon, XCircleIcon, ArrowLeftIcon } from "lucide-react"
 
 export function VerifyEmailPage() {
@@ -18,76 +15,106 @@ export function VerifyEmailPage() {
   const [errorMsg, setErrorMsg] = useState("")
   const { t } = useTranslation("auth")
 
-  const handleVerify = async () => {
-    if (!token) return
-    setVerifying(true)
-    try {
-      await verifyEmail(token)
-      setResult("success")
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setResult("error")
-      setErrorMsg(msg || t("verifyEmail.failedDefault"))
-    } finally {
-      setVerifying(false)
-    }
-  }
+  // Auto-verify if token is present - using useEffect instead of calling in render
+  useEffect(() => {
+    if (!token || result !== null || verifying) return
 
-  // Auto-verify if token is present
-  if (token && result === null && !verifying) {
+    const handleVerify = async () => {
+      setVerifying(true)
+      try {
+        await verifyEmail(token)
+        setResult("success")
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        setResult("error")
+        setErrorMsg(msg || t("verifyEmail.failedDefault"))
+      } finally {
+        setVerifying(false)
+      }
+    }
+
     handleVerify()
-  }
+  }, [token, result, verifying, t])
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10">
-      <div className="flex w-full max-w-sm flex-col gap-6">
-        <Card>
-          <CardHeader className="text-center">
-            <div className="flex justify-center mb-2">
-              <div className={`rounded-full p-3 ${result === "success" ? "bg-green-100" : result === "error" ? "bg-red-100" : "bg-primary/10"}`}>
+    <div className="h-screen flex items-center justify-center bg-[#0a0a0a] px-6">
+      <div className="absolute inset-0 pointer-events-none z-10">
+        <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">DocPilot v1.0</span>
+        <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">[16:9]</span>
+        <span className="absolute bottom-6 left-6 text-[10px] text-white/30 font-mono">OVERSCAN: 1920 x 1080</span>
+        <span className="absolute bottom-6 right-6 text-[10px] text-white/30 font-mono">100%</span>
+      </div>
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="rgba(132,204,22,0.03)"/><circle cx="75" cy="75" r="1" fill="rgba(132,204,22,0.03)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>')`,
+        }}
+      />
+      <div className="relative z-20 w-full max-w-md">
+        <div className="text-center mb-10">
+          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-[#84cc16] transition-colors duration-300">
+            DocPilot
+          </Link>
+        </div>
+        <div className="p-8" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
+          <div className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className={`rounded-full p-3 ${result === "success" ? "bg-green-900/30" : result === "error" ? "bg-red-900/30" : ""}`} style={result === null ? { background: "rgba(132, 204, 22, 0.1)" } : undefined}>
                 {result === "success" ? (
-                  <CheckCircleIcon className="size-8 text-green-600" />
+                  <CheckCircleIcon className="size-8" style={{ color: "#84cc16" }} />
                 ) : result === "error" ? (
-                  <XCircleIcon className="size-8 text-red-600" />
+                  <XCircleIcon className="size-8" style={{ color: "#ef4444" }} />
                 ) : (
-                  <Spinner className="size-8" />
+                  <svg className="animate-spin size-8" viewBox="0 0 24 24" fill="none" style={{ color: "#84cc16" }}>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
                 )}
               </div>
             </div>
-            <CardTitle className="text-xl">
+            <h2 className="text-xl font-bold text-white mb-2">
               {result === "success"
                 ? t("verifyEmail.verifiedTitle")
                 : result === "error"
                 ? t("verifyEmail.failedTitle")
                 : t("verifyEmail.verifying")}
-            </CardTitle>
-            <CardDescription>
+            </h2>
+            <p className="text-sm mb-6" style={{ color: "#a3a3a3" }}>
               {result === "success"
                 ? t("verifyEmail.verifiedDesc")
                 : result === "error"
                 ? errorMsg
                 : t("verifyEmail.verifyingDesc")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
+            </p>
             {result === "success" && (
-              <Button onClick={() => navigate("/login")} className="w-full">
+              <button
+                onClick={() => navigate("/login")}
+                className="w-full py-3.5 text-sm font-medium bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98]"
+              >
                 {t("verifyEmail.continueToLogin")}
-              </Button>
+              </button>
             )}
             {result === "error" && (
-              <>
-                <Button variant="outline" onClick={() => navigate("/verify-email-prompt")} className="w-full">
+              <div className="space-y-3">
+                <button
+                  onClick={() => navigate("/verify-email-prompt")}
+                  className="w-full py-3 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
+                  style={{ border: "1px solid rgba(163, 163, 163, 0.1)", color: "#a3a3a3" }}
+                >
                   {t("verifyEmail.failedResend")}
-                </Button>
-                <Button variant="ghost" onClick={() => navigate("/login")} className="w-full">
-                  <ArrowLeftIcon className="size-4 mr-2" />
+                </button>
+                <button
+                  onClick={() => navigate("/login")}
+                  className="w-full py-3 text-sm font-medium inline-flex items-center justify-center gap-2 transition-colors duration-300"
+                  style={{ color: "#737373" }}
+                >
+                  <ArrowLeftIcon className="size-4" />
                   {t("verifyEmail.failedBack")}
-                </Button>
-              </>
+                </button>
+              </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   )

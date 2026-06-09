@@ -419,7 +419,7 @@ export function ProjectListPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant={p.status === "active" ? "default" : "secondary"}>
-                      {p.status}
+                      {t(`statusValues.${p.status}`, { defaultValue: p.status })}
                     </Badge>
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground text-xs">

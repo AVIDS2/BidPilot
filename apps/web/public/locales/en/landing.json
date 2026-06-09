@@ -1,12 +1,15 @@
 {
   "hero": {
     "title": "AI-Powered Bid Response",
+    "label": "/ AI-Powered Document Execution",
     "description": "Generate evidence-backed proposals in minutes, not days.",
     "getStarted": "Start Free Trial",
-    "viewPricing": "See How It Works"
+    "viewPricing": "See How It Works",
+    "scrollHint": "Scroll to content"
   },
   "socialProof": {
-    "label": "Trusted by procurement teams worldwide"
+    "label": "Trusted by procurement teams worldwide",
+    "logos": ["Contour Design", "Harbor Group", "Northway Systems", "Atria Capital", "Vantage Partners"]
   },
   "howItWorks": {
     "heading": "How It Works",
@@ -14,7 +17,7 @@
     "steps": {
       "upload": {
         "title": "Upload your RFP",
-        "description": "Drop in the tender document. BidPilot extracts requirements, evaluation criteria, and compliance rules automatically."
+        "description": "Drop in the tender document. DocPilot extracts requirements, evaluation criteria, and compliance rules automatically."
       },
       "generate": {
         "title": "Generate draft responses",
@@ -52,7 +55,7 @@
       "starter": {
         "label": "Starter",
         "price": "Free",
-        "sub": "For individual contributors evaluating BidPilot.",
+        "sub": "For individual contributors evaluating DocPilot.",
         "features": [
           "3 proposals per month",
           "Basic RFP parsing",

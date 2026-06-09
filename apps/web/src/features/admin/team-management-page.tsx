@@ -228,7 +228,7 @@ export function TeamManagementPage() {
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    onClick={() => { if (window.confirm("Delete this team?")) deleteMut.mutate(team.id); }}
+                    onClick={() => { if (window.confirm(t("teamManagement.confirmDelete"))) deleteMut.mutate(team.id); }}
                     className="text-[#737373] hover:text-red-400"
                   >
                     <TrashIcon className="size-4" />
@@ -290,7 +290,7 @@ export function TeamManagementPage() {
                                 background: m.role === "admin" ? "rgba(132, 204, 22, 0.15)" : "rgba(163, 163, 163, 0.1)",
                                 color: m.role === "admin" ? "#84cc16" : "#a3a3a3",
                               }}>
-                                {m.role}
+                                {t(`role.${m.role}`, { defaultValue: m.role })}
                               </span>
                               <button
                                 className="text-[#737373] hover:text-red-400 transition-colors"
@@ -304,7 +304,7 @@ export function TeamManagementPage() {
                       </div>
                     ) : (
                       <p className="text-sm text-center py-6" style={{ color: "#737373" }}>
-                        {t("teamManagement.noTeamsHint")}
+                        {t("teamManagement.noMembers")}
                       </p>
                     )}
                   </div>

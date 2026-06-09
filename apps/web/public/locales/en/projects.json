@@ -53,7 +53,7 @@
     "dismiss": "Dismiss",
     "welcome": "Welcome to DocPilot! Follow these steps to turn source materials into a reviewable, exported deliverable:",
     "step1Title": "1. Create Project",
-    "step1Desc": "Click \"+ New Project\" and pick a scenario package (e.g. BidPilot).",
+    "step1Desc": "Click \"+ New Project\" and pick a scenario package (e.g. DocPilot).",
     "step2Title": "2. Upload Bundle",
     "step2Desc": "Open project -> Bundles tab -> register bundle -> upload PDF/DOCX.",
     "step3Title": "3. Draft Sections",

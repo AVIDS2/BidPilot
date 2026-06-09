@@ -97,7 +97,7 @@ function HeroSection() {
         className="text-sm font-medium tracking-widest uppercase"
         style={{ color: "#84cc16" }}
       >
-        / AI-Powered Document Execution
+        {t("hero.label")}
       </span>
 
       {/* 标题 - 使用逐字动画 */}
@@ -138,7 +138,7 @@ function HeroSection() {
       {/* 滚动提示 */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
         <div className="flex flex-col items-center gap-2 text-white/30">
-          <span className="text-xs tracking-widest uppercase">Scroll to content</span>
+          <span className="text-xs tracking-widest uppercase">{t("hero.scrollHint")}</span>
           <div className="w-px h-8 animate-pulse" style={{ background: "#84cc16" }} />
         </div>
       </div>
@@ -149,7 +149,7 @@ function HeroSection() {
 // 社会证明区域
 function SocialProofSection() {
   const { t } = useTranslation("landing");
-  const logos = ["Contour Design", "Harbor Group", "Northway Systems", "Atria Capital", "Vantage Partners"];
+  const logos = t("socialProof.logos", { returnObjects: true }) as string[];
 
   return (
     <section

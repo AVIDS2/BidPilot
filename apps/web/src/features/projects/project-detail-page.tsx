@@ -378,7 +378,7 @@ export function ProjectDetailPage() {
         <div>
           <h1 className="text-2xl font-bold">{project.name}</h1>
           <p className="text-muted-foreground">
-            {project.scenario_package} &middot; <Badge>{project.status}</Badge>
+            {project.scenario_package} &middot; <Badge>{t(`statusValues.${project.status}`, { defaultValue: project.status })}</Badge>
           </p>
         </div>
         <DropdownMenu>
@@ -557,7 +557,7 @@ export function ProjectDetailPage() {
                       <div className="flex items-center gap-2 text-sm">
                         <span className="font-medium">{b.label}</span>
                         <Badge variant={b.ingest_status === "ingested" ? "default" : "secondary"}>
-                          {b.ingest_status}
+                          {t(`statusValues.${b.ingest_status}`, { defaultValue: b.ingest_status })}
                         </Badge>
                         {b.ingest_status !== "ingested" && (
                           <Button size="sm" variant="outline" onClick={(e) => {
@@ -606,7 +606,7 @@ export function ProjectDetailPage() {
                             >
                               {d.original_filename}
                             </a>
-                            <Badge variant="outline">{d.parse_status}</Badge>
+                            <Badge variant="outline">{t(`statusValues.${d.parse_status}`, { defaultValue: d.parse_status })}</Badge>
                           </div>
                         ))}
                         {documents?.items.length === 0 && (
@@ -690,7 +690,7 @@ export function ProjectDetailPage() {
                           }}
                         >
                           <span>{s.title}</span>
-                          <Badge variant={s.status === "draft" ? "secondary" : "default"}>{s.status}</Badge>
+                          <Badge variant={s.status === "draft" ? "secondary" : "default"}>{t(`statusValues.${s.status}`, { defaultValue: s.status })}</Badge>
                         </div>
                       ))}
                     </AccordionContent>
@@ -765,9 +765,9 @@ export function ProjectDetailPage() {
                         <div className="flex gap-2 text-xs text-muted-foreground">
                           <Badge variant="outline">{r.section_key}</Badge>
                           <Badge variant={r.priority === "high" ? "destructive" : r.priority === "normal" ? "secondary" : "default"}>
-                            {r.priority}
+                            {t(`statusValues.${r.priority}`, { defaultValue: r.priority })}
                           </Badge>
-                          <Badge variant={r.status === "confirmed" ? "default" : "secondary"}>{r.status}</Badge>
+                          <Badge variant={r.status === "confirmed" ? "default" : "secondary"}>{t(`statusValues.${r.status}`, { defaultValue: r.status })}</Badge>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -982,12 +982,12 @@ export function ProjectDetailPage() {
                       <SelectGroup>
                         {runs?.filter((r) => r.status === "running" || r.status === "pending").map((r) => (
                           <SelectItem key={r.id} value={r.id}>
-                            {r.run_type} &middot; {r.status} &middot; {r.id.slice(0, 8)}
+                            {r.run_type} &middot; {t(`statusValues.${r.status}`, { defaultValue: r.status })} &middot; {r.id.slice(0, 8)}
                           </SelectItem>
                         ))}
                         {runs?.filter((r) => r.status !== "running" && r.status !== "pending").map((r) => (
                           <SelectItem key={r.id} value={r.id}>
-                            {r.run_type} &middot; {r.status} &middot; {r.id.slice(0, 8)}
+                            {r.run_type} &middot; {t(`statusValues.${r.status}`, { defaultValue: r.status })} &middot; {r.id.slice(0, 8)}
                           </SelectItem>
                         ))}
                       </SelectGroup>
@@ -1121,7 +1121,7 @@ export function ProjectDetailPage() {
                             r.status === "succeeded" ? "default" : r.status === "failed" ? "destructive" : "secondary"
                           }
                         >
-                          {r.status}
+                          {t(`statusValues.${r.status}`, { defaultValue: r.status })}
                         </Badge>
                         {r.status === "failed" && (
                           <Button size="sm" variant="outline" className="ml-2" onClick={() => {
@@ -1199,7 +1199,7 @@ export function ProjectDetailPage() {
                     onClick={() => setSelectedThreadId(thread.id)}
                   >
                     <span className="font-medium">{t("review.thread", { id: thread.id.slice(0, 8) })}</span>
-                    <Badge variant={thread.status === "resolved" ? "default" : "secondary"}>{thread.status}</Badge>
+                    <Badge variant={thread.status === "resolved" ? "default" : "secondary"}>{t(`statusValues.${thread.status}`, { defaultValue: thread.status })}</Badge>
                   </button>
                 ))}
 
@@ -1383,8 +1383,8 @@ export function ProjectDetailPage() {
                     <div>
                       <p className="font-medium">{d.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        {d.type} &middot; {d.status}
-                        {d.export_status && d.export_status !== "none" && ` · ${t("export.statusLabel", { status: d.export_status })}`}
+                        {d.type} &middot; {t(`statusValues.${d.status}`, { defaultValue: d.status })}
+                        {d.export_status && d.export_status !== "none" && ` · ${t("export.statusLabel", { status: t(`statusValues.${d.export_status}`, { defaultValue: d.export_status }) })}`}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -1453,7 +1453,7 @@ export function ProjectDetailPage() {
                           <div className="flex items-center justify-between mb-1">
                             <Badge variant="outline">{r.run_type}</Badge>
                             <Badge variant={r.status === "succeeded" ? "default" : r.status === "failed" ? "destructive" : "secondary"}>
-                              {r.status}
+                              {t(`statusValues.${r.status}`, { defaultValue: r.status })}
                             </Badge>
                           </div>
                           {r.input_json && (
@@ -1491,7 +1491,7 @@ export function ProjectDetailPage() {
                 setConfirmDialogOpen(false);
               }}
             >
-              {t("confirm.confirm")}
+              {t("common:actions.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
