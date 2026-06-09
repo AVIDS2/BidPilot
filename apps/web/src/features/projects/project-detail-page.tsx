@@ -92,7 +92,8 @@ import {
   type SearchResult,
   type KnowledgeChunkRead,
 } from "@/lib/api";
-import { ActivityIcon, AlertTriangleIcon, ChevronLeft, ChevronRight, ClipboardCheckIcon, DownloadIcon, FileIcon, LayersIcon, MessageCircleIcon, MoreHorizontalIcon, PackageIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
+import { AgentProgress } from "@/components/agent-progress";
+import { ActivityIcon, AlertTriangleIcon, BotIcon, ChevronLeft, ChevronRight, ClipboardCheckIcon, DownloadIcon, FileIcon, LayersIcon, MessageCircleIcon, MoreHorizontalIcon, PackageIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -124,6 +125,7 @@ export function ProjectDetailPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [docPage, setDocPage] = useState(1);
   const [docTotalPages, setDocTotalPages] = useState(0);
+  const [agentRunId, setAgentRunId] = useState<string | null>(null);
   const DOC_PAGE_SIZE = 20;
 
   const { data: project } = useQuery({
@@ -498,6 +500,12 @@ export function ProjectDetailPage() {
             <TabsTrigger value="deliverables">{t("tabs.deliverables")}</TabsTrigger>
             <TabsTrigger value="requirements">{t("tabs.requirements")}</TabsTrigger>
             <TabsTrigger value="drafting">{t("tabs.drafting")}</TabsTrigger>
+            <TabsTrigger value="agent">
+              <span className="flex items-center gap-1.5">
+                <BotIcon className="size-3.5" />
+                {t("tabs.agent")}
+              </span>
+            </TabsTrigger>
             <TabsTrigger value="evidence">{t("tabs.evidence")}</TabsTrigger>
             <TabsTrigger value="search">{t("tabs.search")}</TabsTrigger>
             <TabsTrigger value="runs">{t("tabs.runs")}</TabsTrigger>
@@ -948,6 +956,47 @@ export function ProjectDetailPage() {
                   </Message>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Agent Progress */}
+        <TabsContent value="agent">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">{t("agent.tabTitle")}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              {/* Run selector */}
+              <FieldGroup>
+                <Field>
+                  <FieldLabel>{t("agent.selectRun")}</FieldLabel>
+                  <Select
+                    value={agentRunId ?? ""}
+                    onValueChange={(v) => setAgentRunId(v || null)}
+                  >
+                    <SelectTrigger className="max-w-xs">
+                      <SelectValue placeholder={t("agent.selectRunPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {runs?.filter((r) => r.status === "running" || r.status === "pending").map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.run_type} &middot; {r.status} &middot; {r.id.slice(0, 8)}
+                          </SelectItem>
+                        ))}
+                        {runs?.filter((r) => r.status !== "running" && r.status !== "pending").map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.run_type} &middot; {r.status} &middot; {r.id.slice(0, 8)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </FieldGroup>
+
+              <AgentProgress runId={agentRunId} />
             </CardContent>
           </Card>
         </TabsContent>

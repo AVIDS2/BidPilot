@@ -20,14 +20,14 @@ import { UsersIcon, ShieldIcon, PlusIcon, TrashIcon } from "lucide-react";
 
 function TeamManagementSkeleton() {
   return (
-    <div className="mx-auto max-w-5xl py-8">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="mx-auto max-w-5xl py-8 px-4">
+      <div className="flex items-center gap-3 mb-8">
         <Skeleton className="size-6" />
-        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-7 w-48" />
       </div>
       <Card>
         <CardHeader>
-          <Skeleton className="h-6 w-24" />
+          <Skeleton className="h-5 w-24" />
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-3">
@@ -110,11 +110,11 @@ export function TeamManagementPage() {
 
   if (currentUser?.role !== "admin") {
     return (
-      <div className="mx-auto max-w-5xl py-8">
+      <div className="mx-auto max-w-5xl py-8 px-4">
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+          <CardContent className="py-16 text-center text-muted-foreground">
             <ShieldIcon className="mx-auto size-10 mb-3 opacity-40" />
-            <p>{t("userManagement.adminRequired")}</p>
+            <p className="text-sm">{t("userManagement.adminRequired")}</p>
           </CardContent>
         </Card>
       </div>
@@ -125,24 +125,24 @@ export function TeamManagementPage() {
   const users = usersData?.items ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl py-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-5xl py-8 px-4">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <UsersIcon className="size-6" />
-          <h1 className="text-2xl font-bold tracking-tight">{t("teamManagement.title")}</h1>
-          <Badge variant="secondary">{t("teamManagement.membersCount", { count: teams.length })}</Badge>
+          <UsersIcon className="size-5 text-muted-foreground" />
+          <h1 className="text-xl font-semibold tracking-tight">{t("teamManagement.title")}</h1>
+          <Badge variant="secondary" className="text-xs">{t("teamManagement.membersCount", { count: teams.length })}</Badge>
         </div>
         <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
-          <PlusIcon className="size-4 mr-1" />
+          <PlusIcon className="size-4 mr-1.5" />
           {t("teamManagement.createTeam")}
         </Button>
       </div>
 
       {showCreate && (
-        <Card className="mb-4">
+        <Card className="mb-6">
           <CardContent className="py-4">
             <div className="flex items-end gap-3">
-              <div className="flex-1">
+              <div className="flex-1 space-y-1.5">
                 <label className="text-sm font-medium">{t("teamManagement.teamNameLabel")}</label>
                 <Input
                   placeholder={t("teamManagement.teamNamePlaceholder")}
@@ -150,7 +150,7 @@ export function TeamManagementPage() {
                   onChange={(e) => setNewTeamName(e.target.value)}
                 />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 space-y-1.5">
                 <label className="text-sm font-medium">{t("teamManagement.teamSlugLabel")}</label>
                 <Input
                   placeholder={t("teamManagement.teamSlugPlaceholder")}
@@ -171,7 +171,7 @@ export function TeamManagementPage() {
 
       {!teams.length ? (
         <Card>
-          <CardContent className="py-12">
+          <CardContent className="py-16">
             <Empty className="min-h-32">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -184,117 +184,119 @@ export function TeamManagementPage() {
           </CardContent>
         </Card>
       ) : (
-        teams.map((team) => (
-          <Card key={team.id} className="mb-4">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">
-                  {editingId === team.id ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="w-48"
-                        onBlur={() => {
-                          updateTeam(team.id, { name: editName }).then(() => {
-                            toast.success(t("teamManagement.teamUpdated"));
-                            qc.invalidateQueries({ queryKey: ["teams"] });
-                          }).catch(() => toast.error(t("teamManagement.operationFailed")));
-                          setEditingId(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
+        <div className="flex flex-col gap-4">
+          {teams.map((team) => (
+            <Card key={team.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">
+                    {editingId === team.id ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="w-48"
+                          onBlur={() => {
                             updateTeam(team.id, { name: editName }).then(() => {
                               toast.success(t("teamManagement.teamUpdated"));
                               qc.invalidateQueries({ queryKey: ["teams"] });
                             }).catch(() => toast.error(t("teamManagement.operationFailed")));
                             setEditingId(null);
-                          }
-                        }}
-                        autoFocus
-                      />
-                    </div>
-                  ) : (
-                    <span
-                      className="cursor-pointer hover:text-primary"
-                      onClick={() => { setEditingId(team.id); setEditName(team.name); }}
-                    >
-                      {team.name} <span className="text-xs text-muted-foreground">({team.slug})</span>
-                    </span>
-                  )}
-                </CardTitle>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => { if (window.confirm("Delete this team?")) deleteMut.mutate(team.id); }}
-                >
-                  <TrashIcon className="size-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-3 mb-3">
-                <div className="flex-1">
-                  <label className="text-sm font-medium">{t("teamManagement.addMember")}</label>
-                  <Select
-                    onValueChange={(value: string | null) => {
-                      if (value) addMemberMut.mutate({ teamId: team.id, userId: value });
-                    }}
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              updateTeam(team.id, { name: editName }).then(() => {
+                                toast.success(t("teamManagement.teamUpdated"));
+                                qc.invalidateQueries({ queryKey: ["teams"] });
+                              }).catch(() => toast.error(t("teamManagement.operationFailed")));
+                              setEditingId(null);
+                            }
+                          }}
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <span
+                        className="cursor-pointer hover:text-foreground/80 transition-colors"
+                        onClick={() => { setEditingId(team.id); setEditName(team.name); }}
+                      >
+                        {team.name} <span className="text-xs text-muted-foreground font-normal">({team.slug})</span>
+                      </span>
+                    )}
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => { if (window.confirm("Delete this team?")) deleteMut.mutate(team.id); }}
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={t("teamManagement.addMember")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {users.map((u) => (
-                          <SelectItem key={u.id} value={u.id}>
-                            {u.display_name} ({u.email})
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                    <TrashIcon className="size-4 text-muted-foreground" />
+                  </Button>
                 </div>
-              </div>
-              {team.members && team.members.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("table.user")}</TableHead>
-                      <TableHead>{t("table.email")}</TableHead>
-                      <TableHead>{t("table.role")}</TableHead>
-                      <TableHead className="w-16">{t("table.actions")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {team.members.map((m) => (
-                      <TableRow key={m.id}>
-                        <TableCell className="font-medium">{m.user_display_name}</TableCell>
-                        <TableCell className="text-muted-foreground">{m.user_email}</TableCell>
-                        <TableCell>
-                          <Badge variant={m.role === "admin" ? "default" : "outline"}>{m.role}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeMemberMut.mutate({ teamId: team.id, userId: m.user_id })}
-                          >
-                            {t("teamManagement.removeMember")}
-                          </Button>
-                        </TableCell>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-4">
+                  <div className="max-w-xs space-y-1.5">
+                    <label className="text-sm font-medium">{t("teamManagement.addMember")}</label>
+                    <Select
+                      onValueChange={(value: string | null) => {
+                        if (value) addMemberMut.mutate({ teamId: team.id, userId: value });
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={t("teamManagement.addMember")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {users.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              {u.display_name} ({u.email})
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {team.members && team.members.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("table.user")}</TableHead>
+                        <TableHead>{t("table.email")}</TableHead>
+                        <TableHead>{t("table.role")}</TableHead>
+                        <TableHead className="w-20 text-right">{t("table.actions")}</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  {t("teamManagement.noTeamsHint")}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        ))
+                    </TableHeader>
+                    <TableBody>
+                      {team.members.map((m) => (
+                        <TableRow key={m.id}>
+                          <TableCell className="font-medium">{m.user_display_name}</TableCell>
+                          <TableCell className="text-muted-foreground">{m.user_email}</TableCell>
+                          <TableCell>
+                            <Badge variant={m.role === "admin" ? "default" : "outline"}>{m.role}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeMemberMut.mutate({ teamId: team.id, userId: m.user_id })}
+                            >
+                              <TrashIcon className="size-3.5 text-muted-foreground" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-6 text-center">
+                    {t("teamManagement.noTeamsHint")}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -11,8 +11,8 @@ describe("App", () => {
 
   it("renders the landing page for unauthenticated users at /", () => {
     render(<App />);
-    expect(screen.getByText(/AI-Powered Document Execution/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Get Started/i })).toBeInTheDocument();
+    expect(screen.getByText(/AI-Powered Bid Response/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Start Free Trial/i }).length).toBeGreaterThan(0);
   });
 
   it("renders the signup page without unavailable social auth actions", () => {

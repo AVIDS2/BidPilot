@@ -24,29 +24,33 @@ interface PricingTier {
 function TierCard({ tier, current, onUpgrade, t }: { tier: PricingTier; current: boolean; onUpgrade: (plan: string) => void; t: (key: string) => string }) {
   return (
     <Card
-      className={`flex flex-col${tier.recommended ? " border-primary shadow-lg" : ""}${current ? " ring-2 ring-primary" : ""}`}
+      className={`relative flex flex-col${tier.recommended ? " border-primary/70 shadow-md" : ""}${current ? " ring-2 ring-primary/60" : ""}`}
     >
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-xl">{tier.name}</CardTitle>
-          {tier.recommended && !current && <Badge>{t("badges.recommended")}</Badge>}
-          {current && <Badge variant="secondary">{t("badges.currentPlan")}</Badge>}
+      {tier.recommended && !current && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+          <Badge className="px-3 py-0.5 text-[0.7rem] font-medium uppercase tracking-wider">{t("badges.recommended")}</Badge>
         </div>
-        <CardDescription>{tier.description}</CardDescription>
+      )}
+      <CardHeader className={tier.recommended ? "pt-8" : ""}>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-lg font-semibold">{tier.name}</CardTitle>
+          {current && <Badge variant="secondary" className="text-[0.7rem]">{t("badges.currentPlan")}</Badge>}
+        </div>
+        <CardDescription className="text-sm">{tier.description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex-1">
-        <div className="mb-4">
-          <span className="text-3xl font-bold">{tier.price}</span>
+      <CardContent className="flex-1 space-y-6">
+        <div>
+          <span className="text-4xl font-bold tracking-tight">{tier.price}</span>
           {tier.period && (
-            <span className="text-muted-foreground">{tier.period}</span>
+            <span className="text-sm text-muted-foreground ml-1.5">{tier.period}</span>
           )}
         </div>
-        <Separator className="mb-4" />
-        <ul className="space-y-2 text-sm">
+        <Separator />
+        <ul className="space-y-3">
           {tier.features.map((feature) => (
-            <li key={feature} className="flex items-center gap-2">
-              <CheckIcon className="size-4 text-primary shrink-0" />
-              {feature}
+            <li key={feature} className="flex items-start gap-3 text-sm leading-snug">
+              <CheckIcon className="size-4 text-primary shrink-0 mt-0.5" />
+              <span className="text-muted-foreground">{feature}</span>
             </li>
           ))}
         </ul>
@@ -128,16 +132,16 @@ export function PricingPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl py-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="mx-auto max-w-5xl py-12">
+      <div className="flex items-center justify-between mb-12">
         <Link
           to={isAuthenticated ? "/projects" : "/"}
-          className="inline-flex items-center gap-1 rounded-lg px-2.5 h-7 text-[0.8rem] font-medium hover:bg-muted hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeftIcon className="size-3.5" />
+          <ArrowLeftIcon className="size-4" />
           {isAuthenticated ? t("back.projects") : t("back.home")}
         </Link>
-        <Link to="/" className="flex items-center gap-2 font-medium">
+        <Link to="/" className="flex items-center gap-2 font-semibold text-sm">
           <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <FileTextIcon className="size-4" />
           </div>
@@ -145,13 +149,13 @@ export function PricingPage() {
         </Link>
         <div className="w-20" />
       </div>
-      <div className="text-center mb-10">
-        <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
-        <p className="mt-2 text-muted-foreground">
+      <div className="text-center mb-12 max-w-xl mx-auto">
+        <h1 className="text-4xl font-bold tracking-tight">{t("title")}</h1>
+        <p className="mt-3 text-muted-foreground leading-relaxed max-w-[65ch] mx-auto">
           {t("description")}
         </p>
       </div>
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-8 md:grid-cols-3 items-start">
         {TIERS.map((tier) => (
           <TierCard key={tier.name} tier={tier} current={tier.name.toLowerCase() === currentPlan} onUpgrade={handleUpgrade} t={t} />
         ))}

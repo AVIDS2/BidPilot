@@ -84,6 +84,7 @@
     "deliverables": "Deliverables",
     "requirements": "Requirements",
     "drafting": "Drafting",
+    "agent": "Agent",
     "evidence": "Evidence",
     "search": "Search",
     "runs": "Runs",
@@ -257,5 +258,27 @@
   "confirm": {
     "cancel": "Cancel",
     "confirm": "Confirm"
+  },
+  "agent": {
+    "tabTitle": "Agent Progress",
+    "selectRun": "Select Run",
+    "selectRunPlaceholder": "Choose an execution run...",
+    "title": "Agent Execution",
+    "runId": "Run {{id}}",
+    "running": "Running",
+    "failed": "Failed",
+    "idle": "Idle",
+    "progress": "Progress",
+    "nodesComplete": "{{done}} of {{total}} nodes complete",
+    "executing": "Executing: {{node}}",
+    "noRun": "No active run",
+    "noRunDesc": "Start a draft to see agent progress here.",
+    "reviewTitle": "Review Score",
+    "pass": "Pass",
+    "fail": "Fail",
+    "score": "Score",
+    "approvalRequired": "Approval Required",
+    "approve": "Approve",
+    "reject": "Reject"
   }
 }

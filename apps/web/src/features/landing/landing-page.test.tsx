@@ -11,23 +11,41 @@ describe("LandingPage", () => {
   it("renders the hero headline and sub-headline", () => {
     renderWithRouter(<LandingPage />);
 
-    expect(screen.getByText(/AI-Powered Document Execution/i)).not.toBeNull();
-    expect(screen.getByText(/Turn source materials into reviewable/i)).not.toBeNull();
+    expect(screen.getByText(/AI-Powered Bid Response/i)).not.toBeNull();
+    expect(
+      screen.getByText(/Generate evidence-backed proposals in minutes/i)
+    ).not.toBeNull();
   });
 
-  it("renders three feature highlight cards", () => {
+  it("renders all three feature tiles", () => {
     renderWithRouter(<LandingPage />);
 
-    expect(screen.getByText("Smart Extraction")).not.toBeNull();
-    expect(screen.getByText("Evidence-Backed Drafts")).not.toBeNull();
-    expect(screen.getByText("Audit Trail")).not.toBeNull();
+    expect(screen.getByText("RFP Parsing")).not.toBeNull();
+    expect(screen.getByText("AI Drafting")).not.toBeNull();
+    expect(screen.getByText("Quality Review")).not.toBeNull();
+  });
+
+  it("renders the how-it-works timeline steps", () => {
+    renderWithRouter(<LandingPage />);
+
+    expect(screen.getByText("Upload your RFP")).not.toBeNull();
+    expect(screen.getByText("Generate draft responses")).not.toBeNull();
+    expect(screen.getByText("Review and export")).not.toBeNull();
+  });
+
+  it("renders pricing tiers", () => {
+    renderWithRouter(<LandingPage />);
+
+    expect(screen.getByText("Starter")).not.toBeNull();
+    expect(screen.getByText("Team")).not.toBeNull();
+    expect(screen.getByText("Enterprise")).not.toBeNull();
   });
 
   it("renders a CTA button linking to signup", () => {
     renderWithRouter(<LandingPage />);
 
-    const cta = screen.getByRole("link", { name: /Get Started/i });
-    expect(cta).not.toBeNull();
-    expect(cta.getAttribute("href")).toContain("/signup");
+    const cta = screen.getAllByRole("link", { name: /Start Free Trial/i });
+    expect(cta.length).toBeGreaterThan(0);
+    expect(cta[0].getAttribute("href")).toContain("/signup");
   });
 });

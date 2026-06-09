@@ -4,6 +4,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
+import { NotificationBell } from "@/components/notification-bell";
 
 export function SiteHeader() {
   const { t, i18n } = useTranslation();
@@ -24,6 +25,7 @@ export function SiteHeader() {
         />
         <h1 className="text-base font-medium">{t("app.documents")}</h1>
         <div className="ml-auto flex items-center gap-2">
+          <NotificationBell />
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="relative rounded-md p-1 text-muted-foreground hover:text-foreground"

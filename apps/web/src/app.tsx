@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { DashboardPage } from "./features/dashboard/dashboard-page";
 import { ProjectListPage } from "./features/projects/project-list-page";
 import { ProjectDetailPage } from "./features/projects/project-detail-page";
 import { AccountPage } from "./features/account/account-page";
@@ -10,6 +11,7 @@ import { UserManagementPage } from "./features/admin/user-management-page";
 import { TeamManagementPage } from "./features/admin/team-management-page";
 import { InvitationManagementPage } from "./features/admin/invitation-management-page";
 import { ProviderSettingsPage } from "./features/settings/provider-settings-page";
+import { DocsPage } from "./features/docs/docs-page";
 import { ForgotPasswordPage } from "./features/auth/forgot-password-page";
 import { ResetPasswordPage } from "./features/auth/reset-password-page";
 import { VerifyEmailPromptPage } from "./features/auth/verify-email-prompt-page";
@@ -24,7 +26,9 @@ import { SignupForm } from "@/components/signup-form";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "next-themes";
-import { FileTextIcon, CreditCardIcon, UsersIcon, UserPlusIcon, MailIcon } from "lucide-react";
+import { FileTextIcon, CreditCardIcon, UsersIcon, UserPlusIcon, MailIcon, LayoutDashboardIcon, BookOpenIcon } from "lucide-react";
+import { CommandPalette } from "@/components/command-palette";
+import { useCommandPalette } from "@/hooks/use-command-palette";
 
 const queryClient = new QueryClient();
 
@@ -60,9 +64,18 @@ function SignupPage() {
   );
 }
 
+function RootRedirect() {
+  const { isAuthenticated } = useAuth();
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <LandingPage />;
+}
+
 function AppLayout() {
   const { user, isAuthenticated } = useAuth();
   const { t } = useTranslation();
+  const { open, setOpen } = useCommandPalette();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -71,7 +84,9 @@ function AppLayout() {
   const isAdmin = user?.role === "admin";
 
   const navItems = [
+    { title: t("nav.dashboard"), url: "/dashboard", icon: <LayoutDashboardIcon /> },
     { title: t("nav.projects"), url: "/projects", icon: <FileTextIcon /> },
+    { title: t("nav.docs"), url: "/docs", icon: <BookOpenIcon /> },
     { title: t("nav.pricing"), url: "/pricing", icon: <CreditCardIcon /> },
     { title: t("nav.teams"), url: "/admin/teams", icon: <UserPlusIcon /> },
     { title: t("nav.invitations"), url: "/admin/invitations", icon: <MailIcon /> },
@@ -100,6 +115,7 @@ function AppLayout() {
         "--header-height": "calc(var(--spacing) * 12)",
       } as React.CSSProperties}
     >
+      <CommandPalette open={open} onOpenChange={setOpen} />
       <AppSidebar
         navItems={visibleNavItems}
         teams={teams}
@@ -130,9 +146,10 @@ export function App() {
           <BrowserRouter>
             <ErrorBoundary>
               <Routes>
-                <Route path="/" element={<LandingPage />} />
+                <Route path="/" element={<RootRedirect />} />
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route element={<AppLayout />}>
+                  <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/projects" element={<ProjectListPage />} />
                   <Route path="/projects/:id" element={<ProjectDetailPage />} />
                   <Route path="/account" element={<AccountPage />} />
@@ -140,6 +157,7 @@ export function App() {
                   <Route path="/admin/teams" element={<TeamManagementPage />} />
                   <Route path="/admin/invitations" element={<InvitationManagementPage />} />
                   <Route path="/settings/providers" element={<ProviderSettingsPage />} />
+                  <Route path="/docs" element={<DocsPage />} />
                 </Route>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />

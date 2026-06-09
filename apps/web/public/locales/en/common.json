@@ -5,6 +5,7 @@
     "tagline": "AI Document Execution"
   },
   "nav": {
+    "dashboard": "Dashboard",
     "projects": "Projects",
     "pricing": "Pricing",
     "users": "Users",
@@ -48,5 +49,26 @@
     "fallbackName": "User",
     "account": "Account",
     "logOut": "Log out"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "empty": "No notifications"
+  },
+  "commandPalette": {
+    "placeholder": "Search commands...",
+    "noResults": "No results found.",
+    "groups": {
+      "navigation": "Navigation",
+      "actions": "Actions"
+    },
+    "actions": {
+      "newProject": "New Project",
+      "toggleTheme": "Toggle Theme"
+    },
+    "hint": {
+      "navigate": "Navigate with arrow keys",
+      "select": "Select with Enter"
+    }
   }
 }

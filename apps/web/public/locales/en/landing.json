@@ -1,23 +1,96 @@
 {
-  "badge": "Now in Pilot",
   "hero": {
-    "title": "AI-Powered Document Execution",
-    "description": "Turn source materials into reviewable draft packages with source attribution and workflow state -- without leaving the product.",
-    "getStarted": "Get Started",
-    "viewPricing": "View Pricing"
+    "title": "AI-Powered Bid Response",
+    "description": "Generate evidence-backed proposals in minutes, not days.",
+    "getStarted": "Start Free Trial",
+    "viewPricing": "See How It Works"
+  },
+  "socialProof": {
+    "label": "Trusted by procurement teams worldwide"
+  },
+  "howItWorks": {
+    "heading": "How It Works",
+    "subheading": "Three steps from RFP to submission-ready draft.",
+    "steps": {
+      "upload": {
+        "title": "Upload your RFP",
+        "description": "Drop in the tender document. BidPilot extracts requirements, evaluation criteria, and compliance rules automatically."
+      },
+      "generate": {
+        "title": "Generate draft responses",
+        "description": "Our model drafts each section with source citations and missing-evidence flags so nothing gets fabricated."
+      },
+      "review": {
+        "title": "Review and export",
+        "description": "Run quality checks, accept or edit suggestions, and export a submission-ready package in your format."
+      }
+    }
   },
   "features": {
+    "heading": "Core Capabilities",
+    "subheading": "Everything you need to win more bids with less effort.",
     "extraction": {
-      "title": "Smart Extraction",
-      "description": "Automatically extract structured requirements from RFPs, SOWs, and presales bundles."
+      "title": "RFP Parsing",
+      "description": "Extract structured requirements, compliance matrices, and evaluation criteria from any tender format. Supports PDF, Word, and scanned documents.",
+      "learnMore": "Learn more"
     },
     "drafts": {
-      "title": "Evidence-Backed Drafts",
-      "description": "Generate section drafts with source attribution and missing-evidence markers."
+      "title": "AI Drafting",
+      "description": "Generate section-by-section proposals grounded in your past work, product docs, and compliance libraries.",
+      "learnMore": "Learn more"
     },
     "audit": {
-      "title": "Audit Trail",
-      "description": "Full traceability from source documents through generation runs to final export."
+      "title": "Quality Review",
+      "description": "Every claim is traced to its source. Flag gaps, verify compliance, and catch inconsistencies before submission.",
+      "learnMore": "Learn more"
     }
+  },
+  "pricing": {
+    "heading": "Pricing",
+    "subheading": "Start free. Scale when your pipeline does.",
+    "tiers": {
+      "starter": {
+        "label": "Starter",
+        "price": "Free",
+        "sub": "For individual contributors evaluating BidPilot.",
+        "features": [
+          "3 proposals per month",
+          "Basic RFP parsing",
+          "Community support"
+        ],
+        "cta": "Get Started"
+      },
+      "team": {
+        "label": "Team",
+        "price": "$49 / mo",
+        "sub": "Per seat. Built for procurement teams that ship weekly.",
+        "features": [
+          "Unlimited proposals",
+          "Advanced parsing and drafting",
+          "Quality review with source tracing",
+          "Shared compliance library",
+          "Priority support"
+        ],
+        "cta": "Start Free Trial"
+      },
+      "enterprise": {
+        "label": "Enterprise",
+        "price": "Custom",
+        "sub": "For organizations with dedicated procurement operations.",
+        "features": [
+          "Everything in Team",
+          "SSO and SCIM provisioning",
+          "Custom model fine-tuning",
+          "Dedicated success manager",
+          "On-premise deployment option"
+        ],
+        "cta": "Contact Sales"
+      }
+    }
+  },
+  "finalCta": {
+    "heading": "Win your next bid",
+    "subheading": "Start generating evidence-backed proposals in minutes.",
+    "cta": "Start Free Trial"
   }
 }

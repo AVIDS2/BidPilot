@@ -5,7 +5,7 @@ from app.celery_client import celery
 from app.models import ExecutionRun
 
 from .repository import create_run
-from .schemas import DraftSectionRequest, DraftSectionResponse, RedraftSectionRequest
+from .schemas import DraftSectionRequest, DraftSectionResponse, RedraftSectionRequest, ResumeRunRequest
 
 
 def draft_section_command(db: Session, payload: DraftSectionRequest) -> DraftSectionResponse:
@@ -52,3 +52,62 @@ def redraft_section_command(db: Session, payload: RedraftSectionRequest) -> Draf
     record_audit_event(db, project_id=payload.project_id, event_type="draft.redraft", payload={"run_id": run.id, "section_key": payload.section_key, "has_feedback": payload.review_feedback is not None})
     db.commit()
     return DraftSectionResponse(run_id=run.id, status=run.status)
+
+
+def resume_run_command(db: Session, run_id: str, payload: ResumeRunRequest) -> DraftSectionResponse:
+    """Resume an interrupted LangGraph drafting run.
+
+    Validates that the run exists and is in a resumable state, then dispatches
+    a Celery task that calls ``resume_graph`` on the worker side.
+
+    Args:
+        db: Database session.
+        run_id: UUID of the ExecutionRun to resume.
+        payload: Human decision and optional feedback.
+
+    Returns:
+        DraftSectionResponse with the run_id and updated status.
+
+    Raises:
+        ValueError: If the run does not exist.
+        RuntimeError: If the run is not in a resumable state.
+    """
+    run = db.get(ExecutionRun, run_id)
+    if run is None:
+        raise ValueError(f"ExecutionRun {run_id} not found")
+
+    if run.status not in ("pending", "running", "awaiting_human"):
+        raise RuntimeError(
+            f"ExecutionRun {run_id} is in state '{run.status}' and cannot be resumed"
+        )
+
+    # Map the API decision to the internal HITL decision value.
+    # API uses "approved"/"rejected"; graph uses "approved"/"rejected_with_feedback".
+    decision = payload.decision
+    if decision == "rejected":
+        decision = "rejected_with_feedback"
+
+    # Update run status to indicate it's being resumed
+    run.status = "running"
+    db.flush()
+
+    # Dispatch async task to resume the graph on the worker
+    celery.send_task(
+        "worker.resume_draft",
+        args=[run_id, decision, payload.feedback],
+    )
+
+    # Record audit event
+    record_audit_event(
+        db,
+        project_id=run.project_id,
+        event_type="draft.resumed",
+        payload={
+            "run_id": run_id,
+            "decision": payload.decision,
+            "has_feedback": payload.feedback is not None,
+        },
+    )
+    db.commit()
+
+    return DraftSectionResponse(run_id=run_id, status=run.status)

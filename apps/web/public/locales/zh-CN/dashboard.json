@@ -1,0 +1,39 @@
+{
+  "greeting": "欢迎回来，{{name}}",
+  "greetingDefault": "欢迎回来",
+  "subtitle": "以下是您的项目和活动概览。",
+  "stats": {
+    "totalProjects": "项目总数",
+    "activeDrafts": "活跃草稿",
+    "pendingReviews": "待审核",
+    "completed": "已完成",
+    "allTime": "累计",
+    "inProgress": "进行中",
+    "awaitingReview": "等待审核",
+    "done": "已完成"
+  },
+  "recentActivity": {
+    "title": "最近活动",
+    "description": "所有项目的最新动态。",
+    "empty": "暂无活动记录。创建一个项目开始吧。",
+    "recentRuns": "最近运行"
+  },
+  "quickActions": {
+    "title": "快捷操作",
+    "newProject": "新建项目",
+    "viewPendingReviews": "查看待审核",
+    "exportLatest": "导出最新"
+  },
+  "aiUsage": {
+    "title": "AI 用量",
+    "activeProviders": "活跃提供商",
+    "totalDrafts": "草稿总数",
+    "totalRuns": "运行总数",
+    "configureProviders": "配置 AI 提供商"
+  },
+  "activity": {
+    "activeProject": "进行中",
+    "completedProject": "已完成",
+    "updatedProject": "已更新"
+  }
+}

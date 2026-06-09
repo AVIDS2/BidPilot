@@ -1,23 +1,96 @@
 {
-  "badge": "Pilot 公测中",
   "hero": {
-    "title": "AI 驱动的文档执行",
-    "description": "将源材料转化为带来源归属与工作流状态的可审核草稿包——无需离开产品。",
-    "getStarted": "开始使用",
-    "viewPricing": "查看定价"
+    "title": "AI 驱动的投标响应",
+    "description": "几分钟内生成有据可查的投标方案，而非数天。",
+    "getStarted": "免费试用",
+    "viewPricing": "查看工作原理"
+  },
+  "socialProof": {
+    "label": "全球采购团队的信赖之选"
+  },
+  "howItWorks": {
+    "heading": "工作原理",
+    "subheading": "三步完成从招标文件到提交就绪的草稿。",
+    "steps": {
+      "upload": {
+        "title": "上传招标文件",
+        "description": "拖入招标文件。BidPilot 自动提取需求、评审标准和合规规则。"
+      },
+      "generate": {
+        "title": "生成草稿回复",
+        "description": "模型逐章节起草方案，附带来源引用和缺失证据标记，杜绝编造。"
+      },
+      "review": {
+        "title": "审核并导出",
+        "description": "执行质量检查，接受或编辑建议，导出提交就绪的方案包。"
+      }
+    }
   },
   "features": {
+    "heading": "核心能力",
+    "subheading": "用更少精力赢得更多投标所需的一切。",
     "extraction": {
-      "title": "智能提取",
-      "description": "自动从招标书、工作说明书和售前素材包中提取结构化需求。"
+      "title": "招标解析",
+      "description": "从任何招标格式中提取结构化需求、合规矩阵和评审标准。支持 PDF、Word 和扫描文档。",
+      "learnMore": "了解更多"
     },
     "drafts": {
-      "title": "有据可查的草稿",
-      "description": "生成带来源归属和缺失证据标记的章节草稿。"
+      "title": "AI 起草",
+      "description": "基于过往项目、产品文档和合规库，逐章节生成有据可查的投标方案。",
+      "learnMore": "了解更多"
     },
     "audit": {
-      "title": "审计追踪",
-      "description": "从源文档到生成运行再到最终导出的完整可追溯性。"
+      "title": "质量审查",
+      "description": "每项声明都可追溯至来源。在提交前标记缺口、验证合规性和发现不一致。",
+      "learnMore": "了解更多"
     }
+  },
+  "pricing": {
+    "heading": "定价",
+    "subheading": "免费起步，随业务扩展。",
+    "tiers": {
+      "starter": {
+        "label": "入门版",
+        "price": "免费",
+        "sub": "适合评估 BidPilot 的个人用户。",
+        "features": [
+          "每月 3 份方案",
+          "基础招标解析",
+          "社区支持"
+        ],
+        "cta": "开始使用"
+      },
+      "team": {
+        "label": "团队版",
+        "price": "¥349 / 月",
+        "sub": "按席位计费。为每周交付方案的采购团队打造。",
+        "features": [
+          "无限方案数量",
+          "高级解析与起草",
+          "带来源追溯的质量审查",
+          "共享合规库",
+          "优先支持"
+        ],
+        "cta": "免费试用"
+      },
+      "enterprise": {
+        "label": "企业版",
+        "price": "定制",
+        "sub": "适合拥有专业采购运营的组织。",
+        "features": [
+          "包含团队版全部功能",
+          "SSO 和 SCIM 配置",
+          "定制模型微调",
+          "专属客户成功经理",
+          "本地部署选项"
+        ],
+        "cta": "联系销售"
+      }
+    }
+  },
+  "finalCta": {
+    "heading": "赢得下一次投标",
+    "subheading": "几分钟内开始生成有据可查的投标方案。",
+    "cta": "免费试用"
   }
 }

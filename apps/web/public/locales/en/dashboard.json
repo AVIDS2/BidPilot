@@ -1,0 +1,39 @@
+{
+  "greeting": "Welcome back, {{name}}",
+  "greetingDefault": "Welcome back",
+  "subtitle": "Here's an overview of your projects and activity.",
+  "stats": {
+    "totalProjects": "Total Projects",
+    "activeDrafts": "Active Drafts",
+    "pendingReviews": "Pending Reviews",
+    "completed": "Completed",
+    "allTime": "All time",
+    "inProgress": "In progress",
+    "awaitingReview": "Awaiting review",
+    "done": "Done"
+  },
+  "recentActivity": {
+    "title": "Recent Activity",
+    "description": "Latest updates across all your projects.",
+    "empty": "No recent activity. Create a project to get started.",
+    "recentRuns": "Recent Runs"
+  },
+  "quickActions": {
+    "title": "Quick Actions",
+    "newProject": "New Project",
+    "viewPendingReviews": "View Pending Reviews",
+    "exportLatest": "Export Latest"
+  },
+  "aiUsage": {
+    "title": "AI Usage",
+    "activeProviders": "Active Providers",
+    "totalDrafts": "Total Drafts",
+    "totalRuns": "Total Runs",
+    "configureProviders": "Configure AI Providers"
+  },
+  "activity": {
+    "activeProject": "Active",
+    "completedProject": "Completed",
+    "updatedProject": "Updated"
+  }
+}

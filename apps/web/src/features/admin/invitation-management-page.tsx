@@ -17,14 +17,14 @@ import { MailIcon, ShieldIcon, PlusIcon, XIcon } from "lucide-react";
 
 function InvitationSkeleton() {
   return (
-    <div className="mx-auto max-w-5xl py-8">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="mx-auto max-w-5xl py-8 px-4">
+      <div className="flex items-center gap-3 mb-8">
         <Skeleton className="size-6" />
-        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-7 w-48" />
       </div>
       <Card>
         <CardHeader>
-          <Skeleton className="h-6 w-24" />
+          <Skeleton className="h-5 w-24" />
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-3">
@@ -78,11 +78,11 @@ export function InvitationManagementPage() {
 
   if (currentUser?.role !== "admin") {
     return (
-      <div className="mx-auto max-w-5xl py-8">
+      <div className="mx-auto max-w-5xl py-8 px-4">
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+          <CardContent className="py-16 text-center text-muted-foreground">
             <ShieldIcon className="mx-auto size-10 mb-3 opacity-40" />
-            <p>{t("userManagement.adminRequired")}</p>
+            <p className="text-sm">{t("userManagement.adminRequired")}</p>
           </CardContent>
         </Card>
       </div>
@@ -92,24 +92,24 @@ export function InvitationManagementPage() {
   const items = invitations ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl py-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-5xl py-8 px-4">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <MailIcon className="size-6" />
-          <h1 className="text-2xl font-bold tracking-tight">{t("invitationManagement.title")}</h1>
-          <Badge variant="secondary">{items.length}</Badge>
+          <MailIcon className="size-5 text-muted-foreground" />
+          <h1 className="text-xl font-semibold tracking-tight">{t("invitationManagement.title")}</h1>
+          <Badge variant="secondary" className="text-xs">{items.length}</Badge>
         </div>
         <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
-          <PlusIcon className="size-4 mr-1" />
+          <PlusIcon className="size-4 mr-1.5" />
           {t("invitationManagement.inviteUser")}
         </Button>
       </div>
 
       {showCreate && (
-        <Card className="mb-4">
+        <Card className="mb-6">
           <CardContent className="py-4">
             <div className="flex items-end gap-3">
-              <div className="flex-1">
+              <div className="flex-1 space-y-1.5">
                 <label className="text-sm font-medium">{t("invitationManagement.emailLabel")}</label>
                 <Input
                   type="email"
@@ -151,7 +151,7 @@ export function InvitationManagementPage() {
                   <TableRow>
                     <TableHead>{t("table.email")}</TableHead>
                     <TableHead>{t("invitationManagement.status")}</TableHead>
-                    <TableHead className="w-16">{t("table.actions")}</TableHead>
+                    <TableHead className="w-20 text-right">{t("table.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -163,14 +163,14 @@ export function InvitationManagementPage() {
                           {t(`invitationManagement.${inv.status}`)}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         {inv.status === "pending" && (
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon-sm"
                             onClick={() => revokeMut.mutate(inv.id)}
                           >
-                            <XIcon className="size-4" />
+                            <XIcon className="size-4 text-muted-foreground" />
                           </Button>
                         )}
                       </TableCell>

@@ -5,6 +5,7 @@
     "tagline": "AI 文档执行"
   },
   "nav": {
+    "dashboard": "仪表盘",
     "projects": "项目",
     "pricing": "定价",
     "users": "用户管理",
@@ -48,5 +49,26 @@
     "fallbackName": "用户",
     "account": "账户",
     "logOut": "退出登录"
+  },
+  "notifications": {
+    "title": "通知",
+    "markAllRead": "全部标为已读",
+    "empty": "暂无通知"
+  },
+  "commandPalette": {
+    "placeholder": "搜索命令...",
+    "noResults": "未找到结果。",
+    "groups": {
+      "navigation": "导航",
+      "actions": "操作"
+    },
+    "actions": {
+      "newProject": "新建项目",
+      "toggleTheme": "切换主题"
+    },
+    "hint": {
+      "navigate": "使用方向键导航",
+      "select": "按 Enter 选择"
+    }
   }
 }

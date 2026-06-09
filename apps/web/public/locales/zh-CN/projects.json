@@ -84,6 +84,7 @@
     "deliverables": "交付物",
     "requirements": "需求",
     "drafting": "草稿",
+    "agent": "智能体",
     "evidence": "证据",
     "search": "搜索",
     "runs": "运行",
@@ -257,5 +258,27 @@
   "confirm": {
     "cancel": "取消",
     "confirm": "确认"
+  },
+  "agent": {
+    "tabTitle": "智能体进度",
+    "selectRun": "选择运行",
+    "selectRunPlaceholder": "选择一个执行运行...",
+    "title": "智能体执行",
+    "runId": "运行 {{id}}",
+    "running": "运行中",
+    "failed": "失败",
+    "idle": "空闲",
+    "progress": "进度",
+    "nodesComplete": "已完成 {{done}}/{{total}} 个节点",
+    "executing": "执行中：{{node}}",
+    "noRun": "无活跃运行",
+    "noRunDesc": "开始生成草稿以查看智能体进度。",
+    "reviewTitle": "审核评分",
+    "pass": "通过",
+    "fail": "未通过",
+    "score": "评分",
+    "approvalRequired": "需要审批",
+    "approve": "批准",
+    "reject": "驳回"
   }
 }
