@@ -13,27 +13,16 @@ function AnimatedTitle({ text, className }: { text: string; className?: string }
 
     const el = titleRef.current;
     const content = el.textContent || '';
+
+    // 拆分文字为单独的span
     el.innerHTML = content.split('').map((char, i) =>
       `<span class="anim-char" style="--i:${i}">${char === ' ' ? '&nbsp;' : char}</span>`
     ).join('');
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('animate-in');
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.1 }
-    );
-
-    el.querySelectorAll('.anim-char').forEach(el => {
-      observer.observe(el);
-    });
-
-    return () => observer.disconnect();
+    // 立即触发动画（Hero区域在视口中，不需要IntersectionObserver）
+    setTimeout(() => {
+      el.classList.add('animate-in');
+    }, 100);
   }, []);
 
   return <h1 ref={titleRef} className={className}>{text}</h1>;
