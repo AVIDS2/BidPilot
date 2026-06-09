@@ -7,8 +7,8 @@ export function Nav() {
   const [lastScrollY, setLastScrollY] = useState(0);
   const location = useLocation();
 
-  // 全屏设计页面不显示导航栏（落地页、登录、注册）
-  const hideOnRoutes = ["/", "/login", "/signup"];
+  // 全屏设计页面不显示导航栏（登录、注册）
+  const hideOnRoutes = ["/login", "/signup"];
   const shouldHide = hideOnRoutes.includes(location.pathname);
 
   useEffect(() => {
