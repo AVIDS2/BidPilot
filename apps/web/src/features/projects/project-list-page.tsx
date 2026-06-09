@@ -225,7 +225,7 @@ export function ProjectListPage() {
         <Card className="border-[rgba(132,204,22,0.2)] bg-gradient-to-br from-[rgba(132,204,22,0.04)] to-transparent">
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
-              <BookOpenIcon className="size-5 text-[#84cc16]" />
+              <BookOpenIcon className="size-5 text-primary" />
               <CardTitle className="text-lg">{t("guide.title")}</CardTitle>
             </div>
             <Button variant="ghost" size="icon" onClick={dismissGuide} className="-mt-1 -mr-2 size-7" aria-label={t("guide.dismiss")}>
@@ -239,7 +239,7 @@ export function ProjectListPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <PlusIcon className="size-4 text-[#84cc16]" />
+                  <PlusIcon className="size-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">{t("guide.step1Title")}</p>
@@ -248,7 +248,7 @@ export function ProjectListPage() {
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <FileUpIcon className="size-4 text-[#84cc16]" />
+                  <FileUpIcon className="size-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">{t("guide.step2Title")}</p>
@@ -257,7 +257,7 @@ export function ProjectListPage() {
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <FileTextIcon className="size-4 text-[#84cc16]" />
+                  <FileTextIcon className="size-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">{t("guide.step3Title")}</p>
@@ -266,7 +266,7 @@ export function ProjectListPage() {
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <CheckIcon className="size-4 text-[#84cc16]" />
+                  <CheckIcon className="size-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">{t("guide.step4Title")}</p>
@@ -275,7 +275,7 @@ export function ProjectListPage() {
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <DownloadIcon className="size-4 text-[#84cc16]" />
+                  <DownloadIcon className="size-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">{t("guide.step5Title")}</p>
@@ -284,7 +284,7 @@ export function ProjectListPage() {
               </div>
               <div className="flex items-start gap-3 rounded-md border bg-background p-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <BookOpenIcon className="size-4 text-[#84cc16]" />
+                  <BookOpenIcon className="size-4 text-primary" />
                 </div>
                 <div>
                   <p className="text-sm font-medium">{t("guide.step6Title")}</p>

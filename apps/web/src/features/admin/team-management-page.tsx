@@ -25,7 +25,7 @@ function TeamManagementSkeleton() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="rounded-xl p-6" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
+          <div key={i} className="rounded-xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
             <Skeleton className="h-5 w-32 mb-3" />
             <Skeleton className="h-4 w-20" />
           </div>
@@ -103,7 +103,7 @@ export function TeamManagementPage() {
   if (currentUser?.role !== "admin") {
     return (
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col items-center justify-center py-20" style={{ color: "#a3a3a3" }}>
+        <div className="flex flex-col items-center justify-center py-20" style={{ color: "var(--muted-foreground)" }}>
           <ShieldIcon className="size-10 mb-3 opacity-40" />
           <p className="text-sm">{t("userManagement.adminRequired")}</p>
         </div>
@@ -121,13 +121,13 @@ export function TeamManagementPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <UsersIcon className="size-5" style={{ color: "#a3a3a3" }} />
-          <h1 className="text-xl font-semibold tracking-tight text-white">{t("teamManagement.title")}</h1>
-          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(132, 204, 22, 0.15)", color: "#84cc16" }}>
+          <UsersIcon className="size-5" style={{ color: "var(--muted-foreground)" }} />
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">{t("teamManagement.title")}</h1>
+          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(132, 204, 22, 0.15)", color: "var(--primary)" }}>
             {teams.length}
           </span>
         </div>
-        <Button size="sm" onClick={() => setShowCreate(!showCreate)} className="bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d]">
+        <Button size="sm" onClick={() => setShowCreate(!showCreate)} className="bg-primary text-primary-foreground hover:bg-primary/90">
           <PlusIcon className="size-4 mr-1.5" />
           {t("teamManagement.createTeam")}
         </Button>
@@ -135,30 +135,30 @@ export function TeamManagementPage() {
 
       {/* Create form */}
       {showCreate && (
-        <div className="rounded-xl p-5" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
+        <div className="rounded-xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
           <div className="flex items-end gap-3">
             <div className="flex-1 space-y-1.5">
-              <label className="text-sm font-medium text-white">{t("teamManagement.teamNameLabel")}</label>
+              <label className="text-sm font-medium text-foreground">{t("teamManagement.teamNameLabel")}</label>
               <Input
                 placeholder={t("teamManagement.teamNamePlaceholder")}
                 value={newTeamName}
                 onChange={(e) => setNewTeamName(e.target.value)}
-                className="bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white placeholder:text-[#737373]"
+                className="bg-background border-border text-foreground placeholder:text-muted-foreground"
               />
             </div>
             <div className="flex-1 space-y-1.5">
-              <label className="text-sm font-medium text-white">{t("teamManagement.teamSlugLabel")}</label>
+              <label className="text-sm font-medium text-foreground">{t("teamManagement.teamSlugLabel")}</label>
               <Input
                 placeholder={t("teamManagement.teamSlugPlaceholder")}
                 value={newTeamSlug}
                 onChange={(e) => setNewTeamSlug(e.target.value.replace(/[^a-z0-9-]/g, "").toLowerCase())}
-                className="bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white placeholder:text-[#737373]"
+                className="bg-background border-border text-foreground placeholder:text-muted-foreground"
               />
             </div>
             <Button
               disabled={!newTeamName || !newTeamSlug}
               onClick={() => createMut.mutate({ name: newTeamName, slug: newTeamSlug })}
-              className="bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d]"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {t("common:actions.save")}
             </Button>
@@ -168,7 +168,7 @@ export function TeamManagementPage() {
 
       {/* Empty state */}
       {!teams.length ? (
-        <div className="rounded-xl py-20" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
+        <div className="rounded-xl py-20" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
           <Empty className="min-h-32">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -188,8 +188,8 @@ export function TeamManagementPage() {
                 key={team.id}
                 className="rounded-xl p-8 transition-all duration-300 hover:-translate-y-1"
                 style={{
-                  background: "#171717",
-                  border: "1px solid rgba(163, 163, 163, 0.1)",
+                  background: "var(--card)",
+                  border: "1px solid var(--border)",
                 }}
               >
                 {/* Team header */}
@@ -198,7 +198,7 @@ export function TeamManagementPage() {
                     <Input
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      className="flex-1 mr-3 h-10 text-base bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white"
+                      className="flex-1 mr-3 h-10 text-base bg-background border-border text-foreground"
                       onBlur={() => {
                         updateTeam(team.id, { name: editName }).then(() => {
                           toast.success(t("teamManagement.teamUpdated"));
@@ -219,7 +219,7 @@ export function TeamManagementPage() {
                     />
                   ) : (
                     <h3
-                      className="text-lg font-medium text-white cursor-pointer hover:text-[#84cc16] transition-colors"
+                      className="text-lg font-medium text-foreground cursor-pointer hover:text-primary transition-colors"
                       onClick={() => { setEditingId(team.id); setEditName(team.name); }}
                     >
                       {team.name}
@@ -229,21 +229,21 @@ export function TeamManagementPage() {
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => { if (window.confirm(t("teamManagement.confirmDelete"))) deleteMut.mutate(team.id); }}
-                    className="text-[#737373] hover:text-red-400"
+                    className="text-muted-foreground hover:text-red-400"
                   >
                     <TrashIcon className="size-4" />
                   </Button>
                 </div>
 
-                <p className="text-sm mb-4" style={{ color: "#737373" }}>{team.slug}</p>
+                <p className="text-sm mb-4" style={{ color: "var(--text-tertiary)" }}>{team.slug}</p>
 
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="text-sm" style={{ color: "#a3a3a3" }}>
+                  <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                     {team.members?.length ?? 0} {t("teamManagement.membersCount", { count: team.members?.length ?? 0 }).replace(/\d+\s*/, "")}
                   </span>
                   <button
-                    className="text-sm hover:text-[#84cc16] transition-colors font-medium"
-                    style={{ color: "#84cc16" }}
+                    className="text-sm hover:text-primary transition-colors font-medium"
+                    style={{ color: "var(--primary)" }}
                     onClick={() => setExpandedTeamId(expandedTeamId === team.id ? null : team.id)}
                   >
                     {expandedTeamId === team.id ? t("teamManagement.collapse", { defaultValue: "收起" }) : t("teamManagement.manage", { defaultValue: "管理成员" })}
@@ -252,14 +252,14 @@ export function TeamManagementPage() {
 
                 {/* Expanded member management */}
                 {expandedTeamId === team.id && (
-                  <div className="pt-4" style={{ borderTop: "1px solid rgba(163, 163, 163, 0.08)" }}>
+                  <div className="pt-4" style={{ borderTop: "1px solid var(--border)" }}>
                     <div className="mb-3">
                       <Select
                         onValueChange={(value: string | null) => {
                           if (value) addMemberMut.mutate({ teamId: team.id, userId: value });
                         }}
                       >
-                        <SelectTrigger className="w-full h-9 text-sm bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white">
+                        <SelectTrigger className="w-full h-9 text-sm bg-background border-border text-foreground">
                           <SelectValue placeholder={t("teamManagement.addMember")} />
                         </SelectTrigger>
                         <SelectContent>
@@ -279,21 +279,21 @@ export function TeamManagementPage() {
                           <div
                             key={m.id}
                             className="flex items-center justify-between rounded-lg px-4 py-2.5 text-sm"
-                            style={{ background: "rgba(163, 163, 163, 0.04)" }}
+                            style={{ background: "var(--muted)" }}
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <span className="font-medium text-white truncate">{m.user_display_name}</span>
-                              <span className="truncate text-xs" style={{ color: "#737373" }}>{m.user_email}</span>
+                              <span className="font-medium text-foreground truncate">{m.user_display_name}</span>
+                              <span className="truncate text-xs" style={{ color: "var(--text-tertiary)" }}>{m.user_email}</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="text-xs px-2 py-0.5 rounded" style={{
-                                background: m.role === "admin" ? "rgba(132, 204, 22, 0.15)" : "rgba(163, 163, 163, 0.1)",
-                                color: m.role === "admin" ? "#84cc16" : "#a3a3a3",
+                                background: m.role === "admin" ? "rgba(132, 204, 22, 0.15)" : "var(--border)",
+                                color: m.role === "admin" ? "var(--primary)" : "var(--muted-foreground)",
                               }}>
                                 {t(`role.${m.role}`, { defaultValue: m.role })}
                               </span>
                               <button
-                                className="text-[#737373] hover:text-red-400 transition-colors"
+                                className="text-muted-foreground hover:text-red-400 transition-colors"
                                 onClick={() => removeMemberMut.mutate({ teamId: team.id, userId: m.user_id })}
                               >
                                 <TrashIcon className="size-3.5" />
@@ -303,7 +303,7 @@ export function TeamManagementPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-center py-6" style={{ color: "#737373" }}>
+                      <p className="text-sm text-center py-6" style={{ color: "var(--text-tertiary)" }}>
                         {t("teamManagement.noMembers")}
                       </p>
                     )}
@@ -319,9 +319,9 @@ export function TeamManagementPage() {
               <button
                 className="px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-30"
                 style={{
-                  background: "#171717",
-                  color: "#a3a3a3",
-                  border: "1px solid rgba(163, 163, 163, 0.1)",
+                  background: "var(--card)",
+                  color: "var(--muted-foreground)",
+                  border: "1px solid var(--border)",
                 }}
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => p - 1)}
@@ -334,9 +334,9 @@ export function TeamManagementPage() {
                   onClick={() => setCurrentPage(i + 1)}
                   className="px-4 py-2 text-sm font-medium rounded-md transition-all duration-200"
                   style={{
-                    background: currentPage === i + 1 ? "#84cc16" : "#171717",
-                    color: currentPage === i + 1 ? "#0a0a0a" : "#a3a3a3",
-                    border: `1px solid ${currentPage === i + 1 ? "#84cc16" : "rgba(163, 163, 163, 0.1)"}`,
+                    background: currentPage === i + 1 ? "var(--primary)" : "var(--card)",
+                    color: currentPage === i + 1 ? "var(--background)" : "var(--muted-foreground)",
+                    border: `1px solid ${currentPage === i + 1 ? "var(--primary)" : "var(--border)"}`,
                   }}
                 >
                   {i + 1}
@@ -345,9 +345,9 @@ export function TeamManagementPage() {
               <button
                 className="px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-30"
                 style={{
-                  background: "#171717",
-                  color: "#a3a3a3",
-                  border: "1px solid rgba(163, 163, 163, 0.1)",
+                  background: "var(--card)",
+                  color: "var(--muted-foreground)",
+                  border: "1px solid var(--border)",
                 }}
                 disabled={currentPage >= totalPages}
                 onClick={() => setCurrentPage((p) => p + 1)}

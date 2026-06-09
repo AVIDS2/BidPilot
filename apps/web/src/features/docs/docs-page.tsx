@@ -108,39 +108,39 @@ function CodeBlock({
     <div
       className="relative group my-6 overflow-hidden"
       style={{
-        background: "#171717",
-        border: "1px solid rgba(163, 163, 163, 0.1)",
+        background: "var(--landing-surface-1)",
+        border: "1px solid var(--landing-hairline)",
       }}
     >
       {/* 标题栏 */}
       <div
         className="flex items-center justify-between px-4 py-2.5"
         style={{
-          borderBottom: "1px solid rgba(163, 163, 163, 0.08)",
-          background: "#111111",
+          borderBottom: "1px solid var(--landing-hairline)",
+          background: "var(--landing-canvas)",
         }}
       >
         <div className="flex items-center gap-3">
           <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#404040" }} />
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#404040" }} />
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#404040" }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--landing-surface-3)" }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--landing-surface-3)" }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--landing-surface-3)" }} />
           </div>
           {filename && (
-            <span className="text-xs font-mono" style={{ color: "#737373" }}>
+            <span className="text-xs font-mono" style={{ color: "var(--landing-text-tertiary)" }}>
               {filename}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono tracking-wider uppercase" style={{ color: "#525252" }}>
+          <span className="text-[10px] font-mono tracking-wider uppercase" style={{ color: "var(--landing-text-tertiary)" }}>
             {language}
           </span>
           <button
             onClick={handleCopy}
             className="p-1.5 transition-all duration-200 hover:scale-110"
             style={{
-              color: copied ? "#84cc16" : "#525252",
+              color: copied ? "var(--landing-accent)" : "var(--landing-text-tertiary)",
             }}
             title="Copy code"
           >
@@ -150,7 +150,7 @@ function CodeBlock({
       </div>
 
       {/* 代码内容 */}
-      <pre className="p-5 overflow-x-auto text-sm leading-relaxed font-mono" style={{ color: "#a3a3a3" }}>
+      <pre className="p-5 overflow-x-auto text-sm leading-relaxed font-mono" style={{ color: "var(--landing-text-secondary)" }}>
         <code>{children.trim()}</code>
       </pre>
     </div>
@@ -174,29 +174,29 @@ function FeatureCard({
       <div
         className="group p-7 transition-all duration-300 hover:-translate-y-1"
         style={{
-          background: "#171717",
-          border: "1px solid rgba(163, 163, 163, 0.1)",
+          background: "var(--landing-surface-1)",
+          border: "1px solid var(--landing-hairline)",
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = "rgba(132, 204, 22, 0.3)";
+          e.currentTarget.style.borderColor = "var(--landing-border-inner)";
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = "rgba(163, 163, 163, 0.1)";
+          e.currentTarget.style.borderColor = "var(--landing-hairline)";
         }}
       >
         <div
           className="w-10 h-10 flex items-center justify-center mb-5"
           style={{
             background: "rgba(132, 204, 22, 0.1)",
-            border: "1px solid rgba(132, 204, 22, 0.2)",
+            border: "1px solid var(--landing-border-inner)",
           }}
         >
-          <Icon className="w-5 h-5" style={{ color: "#84cc16" }} />
+          <Icon className="w-5 h-5" style={{ color: "var(--landing-accent)" }} />
         </div>
-        <h3 className="text-lg font-medium mb-2" style={{ color: "#ffffff" }}>
+        <h3 className="text-lg font-medium mb-2" style={{ color: "var(--landing-text-primary)" }}>
           {title}
         </h3>
-        <p className="text-sm leading-relaxed" style={{ color: "#a3a3a3" }}>
+        <p className="text-sm leading-relaxed" style={{ color: "var(--landing-text-secondary)" }}>
           {description}
         </p>
       </div>
@@ -218,17 +218,17 @@ function SectionHeading({
     <ScrollReveal>
       <span
         className="text-xs font-medium tracking-widest uppercase mb-4 block"
-        style={{ color: "#84cc16" }}
+        style={{ color: "var(--landing-accent)" }}
       >
         {label}
       </span>
       <h2
         className="text-3xl md:text-4xl font-medium leading-tight tracking-tight mb-4"
-        style={{ color: "#ffffff" }}
+        style={{ color: "var(--landing-text-primary)" }}
       >
         {title}
       </h2>
-      <p className="text-lg max-w-2xl mb-14" style={{ color: "#a3a3a3" }}>
+      <p className="text-lg max-w-2xl mb-14" style={{ color: "var(--landing-text-secondary)" }}>
         {description}
       </p>
     </ScrollReveal>
@@ -259,19 +259,19 @@ function OverviewSection() {
         <div className="mb-12">
           <span
             className="text-xs font-medium tracking-widest uppercase mb-4 block"
-            style={{ color: "#84cc16" }}
+            style={{ color: "var(--landing-accent)" }}
           >
             / Enterprise AI Document System
           </span>
           <h1
             className="text-5xl md:text-6xl font-medium leading-[0.9] tracking-tight mb-6"
-            style={{ color: "#ffffff" }}
+            style={{ color: "var(--landing-text-primary)" }}
           >
             DocPilot
             <br />
-            <span style={{ color: "#84cc16" }}>Documentation</span>
+            <span style={{ color: "var(--landing-accent)" }}>Documentation</span>
           </h1>
-          <p className="text-xl leading-relaxed max-w-2xl" style={{ color: "#a3a3a3" }}>
+          <p className="text-xl leading-relaxed max-w-2xl" style={{ color: "var(--landing-text-secondary)" }}>
             DocPilot is an enterprise-grade AI document execution system designed for complex
             document workflows. From RFP ingestion to final delivery, DocPilot orchestrates
             multi-agent workflows to automate the entire bid response process.
@@ -307,11 +307,11 @@ function OverviewSection() {
         <div
           className="p-8"
           style={{
-            background: "#171717",
-            border: "1px solid rgba(163, 163, 163, 0.1)",
+            background: "var(--landing-surface-1)",
+            border: "1px solid var(--landing-hairline)",
           }}
         >
-          <h3 className="text-lg font-medium mb-6" style={{ color: "#ffffff" }}>
+          <h3 className="text-lg font-medium mb-6" style={{ color: "var(--landing-text-primary)" }}>
             Workflow Pipeline
           </h3>
           <div className="flex flex-wrap items-center gap-3">
@@ -330,14 +330,14 @@ function OverviewSection() {
                   className="px-4 py-2 text-xs font-medium tracking-wide"
                   style={{
                     background: "rgba(132, 204, 22, 0.08)",
-                    border: "1px solid rgba(132, 204, 22, 0.2)",
-                    color: "#84cc16",
+                    border: "1px solid var(--landing-border-inner)",
+                    color: "var(--landing-accent)",
                   }}
                 >
                   {step}
                 </div>
                 {i < arr.length - 1 && (
-                  <ChevronRightIcon className="size-4 shrink-0" style={{ color: "#404040" }} />
+                  <ChevronRightIcon className="size-4 shrink-0" style={{ color: "var(--landing-surface-3)" }} />
                 )}
               </div>
             ))}
@@ -361,7 +361,7 @@ function QuickStartSection() {
       <div className="space-y-12">
         {/* Prerequisites */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
             Prerequisites
           </h3>
           <ul className="space-y-3">
@@ -372,8 +372,8 @@ function QuickStartSection() {
               "An OpenAI or Anthropic API key",
             ].map((item) => (
               <li key={item} className="flex items-start gap-3">
-                <CheckCircleIcon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#84cc16" }} />
-                <span className="text-sm" style={{ color: "#a3a3a3" }}>
+                <CheckCircleIcon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--landing-accent)" }} />
+                <span className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
                   {item}
                 </span>
               </li>
@@ -383,10 +383,10 @@ function QuickStartSection() {
 
         {/* Installation */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
             Installation
           </h3>
-          <p className="text-sm mb-4" style={{ color: "#a3a3a3" }}>
+          <p className="text-sm mb-4" style={{ color: "var(--landing-text-secondary)" }}>
             Clone the repository and start all services with Docker Compose:
           </p>
           <CodeBlock language="bash" filename="terminal">
@@ -406,11 +406,11 @@ curl http://localhost:8000/health`}
 
         {/* Environment Configuration */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
             Environment Configuration
           </h3>
-          <p className="text-sm mb-4" style={{ color: "#a3a3a3" }}>
-            The <code className="px-1.5 py-0.5 text-xs font-mono" style={{ background: "#262626", color: "#84cc16" }}>.env</code> file
+          <p className="text-sm mb-4" style={{ color: "var(--landing-text-secondary)" }}>
+            The <code className="px-1.5 py-0.5 text-xs font-mono" style={{ background: "var(--landing-surface-2)", color: "var(--landing-accent)" }}>.env</code> file
             controls all service connections and API keys. Key variables:
           </p>
           <CodeBlock language="env" filename=".env">
@@ -437,7 +437,7 @@ EMBEDDING_MODEL=text-embedding-3-small`}
 
         {/* First Project */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
             Create Your First Project
           </h3>
           <div className="space-y-4">
@@ -452,18 +452,18 @@ EMBEDDING_MODEL=text-embedding-3-small`}
                   <div
                     className="shrink-0 w-10 h-10 flex items-center justify-center text-sm font-mono font-medium"
                     style={{
-                      background: "#171717",
-                      border: "1px solid rgba(132, 204, 22, 0.3)",
-                      color: "#84cc16",
+                      background: "var(--landing-surface-1)",
+                      border: "1px solid var(--landing-border-inner)",
+                      color: "var(--landing-accent)",
                     }}
                   >
                     {step.num}
                   </div>
                   <div className="pt-1">
-                    <h4 className="text-sm font-medium mb-1" style={{ color: "#ffffff" }}>
+                    <h4 className="text-sm font-medium mb-1" style={{ color: "var(--landing-text-primary)" }}>
                       {step.title}
                     </h4>
-                    <p className="text-sm" style={{ color: "#a3a3a3" }}>
+                    <p className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
                       {step.desc}
                     </p>
                   </div>
@@ -553,11 +553,11 @@ function ArchitectureSection() {
         <div
           className="p-8 mb-10"
           style={{
-            background: "#171717",
-            border: "1px solid rgba(163, 163, 163, 0.1)",
+            background: "var(--landing-surface-1)",
+            border: "1px solid var(--landing-hairline)",
           }}
         >
-          <h3 className="text-lg font-medium mb-6" style={{ color: "#ffffff" }}>
+          <h3 className="text-lg font-medium mb-6" style={{ color: "var(--landing-text-primary)" }}>
             System Layers
           </h3>
           <div className="space-y-4">
@@ -565,25 +565,25 @@ function ArchitectureSection() {
               {
                 layer: "Web Application",
                 tech: "React 19 + TypeScript + Vite + Tailwind CSS",
-                color: "#84cc16",
+                color: "var(--landing-accent)",
                 desc: "SPA frontend with shadcn/ui components, react-router-dom routing, and TanStack Query for server state.",
               },
               {
                 layer: "API Application",
                 tech: "FastAPI + SQLAlchemy + Alembic",
-                color: "#a3e635",
+                color: "var(--landing-accent-light)",
                 desc: "REST API layer handling auth, project CRUD, document management, and WebSocket streaming for agent progress.",
               },
               {
                 layer: "Worker Application",
                 tech: "Celery + LangGraph",
-                color: "#65a30d",
+                color: "var(--landing-accent-hover)",
                 desc: "Async task execution with LangGraph-powered multi-agent workflows. Handles all AI processing in isolated workers.",
               },
               {
                 layer: "Data Services",
                 tech: "PostgreSQL + pgvector + Redis + MinIO",
-                color: "#4d7c0f",
+                color: "var(--landing-accent-hover)",
                 desc: "Persistent storage, vector search, task queuing, caching, and object storage for documents.",
               },
             ].map((item, i) => (
@@ -591,20 +591,20 @@ function ArchitectureSection() {
                 <div
                   className="flex flex-col md:flex-row md:items-center gap-4 p-5 transition-all duration-300"
                   style={{
-                    background: "#0a0a0a",
+                    background: "var(--landing-canvas)",
                     borderLeft: `3px solid ${item.color}`,
                   }}
                 >
                   <div className="shrink-0 w-40">
-                    <p className="text-sm font-medium" style={{ color: "#ffffff" }}>
+                    <p className="text-sm font-medium" style={{ color: "var(--landing-text-primary)" }}>
                       {item.layer}
                     </p>
-                    <p className="text-xs font-mono mt-1" style={{ color: "#737373" }}>
+                    <p className="text-xs font-mono mt-1" style={{ color: "var(--landing-text-tertiary)" }}>
                       {item.tech}
                     </p>
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm" style={{ color: "#a3a3a3" }}>
+                    <p className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
                       {item.desc}
                     </p>
                   </div>
@@ -620,14 +620,14 @@ function ArchitectureSection() {
         <div
           className="p-8"
           style={{
-            background: "#171717",
-            border: "1px solid rgba(163, 163, 163, 0.1)",
+            background: "var(--landing-surface-1)",
+            border: "1px solid var(--landing-hairline)",
           }}
         >
-          <h3 className="text-lg font-medium mb-2" style={{ color: "#ffffff" }}>
+          <h3 className="text-lg font-medium mb-2" style={{ color: "var(--landing-text-primary)" }}>
             LangGraph Multi-Agent Workflow
           </h3>
-          <p className="text-sm mb-6" style={{ color: "#a3a3a3" }}>
+          <p className="text-sm mb-6" style={{ color: "var(--landing-text-secondary)" }}>
             The Worker layer uses LangGraph to orchestrate stateful, multi-agent workflows. Each agent is a
             specialized node in a directed graph with checkpoint-backed execution.
           </p>
@@ -669,15 +669,15 @@ graph = workflow.compile(checkpointer=PostgresSaver())`}
                   <div
                     className="px-3 py-1.5 text-xs font-mono"
                     style={{
-                      background: agent === "human_approval" ? "rgba(132, 204, 22, 0.15)" : "rgba(163, 163, 163, 0.08)",
-                      border: `1px solid ${agent === "human_approval" ? "rgba(132, 204, 22, 0.3)" : "rgba(163, 163, 163, 0.12)"}`,
-                      color: agent === "human_approval" ? "#84cc16" : "#a3a3a3",
+                      background: agent === "human_approval" ? "rgba(132, 204, 22, 0.15)" : "var(--landing-hairline)",
+                      border: `1px solid ${agent === "human_approval" ? "var(--landing-border-inner)" : "var(--landing-hairline)"}`,
+                      color: agent === "human_approval" ? "var(--landing-accent)" : "var(--landing-text-secondary)",
                     }}
                   >
                     {agent}
                   </div>
                   {i < arr.length - 1 && (
-                    <ChevronRightIcon className="size-3.5 shrink-0" style={{ color: "#404040" }} />
+                    <ChevronRightIcon className="size-3.5 shrink-0" style={{ color: "var(--landing-surface-3)" }} />
                   )}
                 </div>
               )
@@ -740,13 +740,13 @@ function TechStackSection() {
             <div
               className="p-7"
               style={{
-                background: "#171717",
-                border: "1px solid rgba(163, 163, 163, 0.1)",
+                background: "var(--landing-surface-1)",
+                border: "1px solid var(--landing-hairline)",
               }}
             >
               <h3
                 className="text-sm font-medium tracking-widest uppercase mb-5"
-                style={{ color: "#84cc16" }}
+                style={{ color: "var(--landing-accent)" }}
               >
                 {stack.category}
               </h3>
@@ -755,23 +755,23 @@ function TechStackSection() {
                   <div
                     key={item.name}
                     className="flex items-start gap-3 p-3 transition-colors duration-200"
-                    style={{ background: "#0a0a0a" }}
+                    style={{ background: "var(--landing-canvas)" }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#111111";
+                      e.currentTarget.style.background = "var(--landing-canvas)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "#0a0a0a";
+                      e.currentTarget.style.background = "var(--landing-canvas)";
                     }}
                   >
                     <div
                       className="w-1.5 h-1.5 mt-1.5 shrink-0"
-                      style={{ background: "#84cc16" }}
+                      style={{ background: "var(--landing-accent)" }}
                     />
                     <div>
-                      <p className="text-sm font-medium" style={{ color: "#ffffff" }}>
+                      <p className="text-sm font-medium" style={{ color: "var(--landing-text-primary)" }}>
                         {item.name}
                       </p>
-                      <p className="text-xs mt-0.5" style={{ color: "#737373" }}>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--landing-text-tertiary)" }}>
                         {item.desc}
                       </p>
                     </div>
@@ -799,10 +799,10 @@ function DeploymentSection() {
       <div className="space-y-10">
         {/* Docker Compose */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
             Docker Compose Stack
           </h3>
-          <p className="text-sm mb-4" style={{ color: "#a3a3a3" }}>
+          <p className="text-sm mb-4" style={{ color: "var(--landing-text-secondary)" }}>
             The production stack includes 6 services, all orchestrated via Docker Compose:
           </p>
           <CodeBlock language="yaml" filename="docker-compose.yml">
@@ -843,7 +843,7 @@ function DeploymentSection() {
 
         {/* Health Checks */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
             Health & Monitoring
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -857,17 +857,17 @@ function DeploymentSection() {
                 key={item.endpoint}
                 className="flex items-center gap-4 p-4"
                 style={{
-                  background: "#171717",
-                  border: "1px solid rgba(163, 163, 163, 0.1)",
+                  background: "var(--landing-surface-1)",
+                  border: "1px solid var(--landing-hairline)",
                 }}
               >
                 <code
                   className="text-xs font-mono px-2 py-1 shrink-0"
-                  style={{ background: "#262626", color: "#84cc16" }}
+                  style={{ background: "var(--landing-surface-2)", color: "var(--landing-accent)" }}
                 >
                   {item.endpoint}
                 </code>
-                <span className="text-sm" style={{ color: "#a3a3a3" }}>
+                <span className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
                   {item.desc}
                 </span>
               </div>
@@ -877,7 +877,7 @@ function DeploymentSection() {
 
         {/* Project Structure */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "#ffffff" }}>
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
             Project Structure
           </h3>
           <CodeBlock language="text" filename="directory tree">
@@ -945,13 +945,13 @@ export function DocsPage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: "#0a0a0a" }}>
+    <div className="min-h-screen" style={{ background: "var(--landing-canvas)" }}>
       {/* Top Navigation Bar */}
       <header
         className="sticky top-0 z-50 backdrop-blur-xl"
         style={{
           background: "rgba(10, 10, 10, 0.85)",
-          borderBottom: "1px solid rgba(163, 163, 163, 0.08)",
+          borderBottom: "1px solid var(--landing-hairline)",
         }}
       >
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
@@ -960,28 +960,28 @@ export function DocsPage() {
               to="/"
               className="flex items-center gap-2 transition-colors duration-200 hover:opacity-80"
             >
-              <ArrowLeftIcon className="size-4" style={{ color: "#737373" }} />
-              <span className="text-sm" style={{ color: "#737373" }}>
+              <ArrowLeftIcon className="size-4" style={{ color: "var(--landing-text-tertiary)" }} />
+              <span className="text-sm" style={{ color: "var(--landing-text-tertiary)" }}>
                 Back
               </span>
             </Link>
-            <div className="w-px h-4" style={{ background: "rgba(163, 163, 163, 0.1)" }} />
+            <div className="w-px h-4" style={{ background: "var(--landing-hairline)" }} />
             <div className="flex items-center gap-2">
               <div
                 className="w-6 h-6 flex items-center justify-center"
-                style={{ background: "#84cc16" }}
+                style={{ background: "var(--landing-accent)" }}
               >
-                <FileTextIcon className="size-3.5" style={{ color: "#0a0a0a" }} />
+                <FileTextIcon className="size-3.5" style={{ color: "var(--landing-canvas)" }} />
               </div>
-              <span className="text-sm font-medium" style={{ color: "#ffffff" }}>
+              <span className="text-sm font-medium" style={{ color: "var(--landing-text-primary)" }}>
                 DocPilot
               </span>
               <span
                 className="text-xs px-2 py-0.5 font-mono"
                 style={{
                   background: "rgba(132, 204, 22, 0.1)",
-                  border: "1px solid rgba(132, 204, 22, 0.2)",
-                  color: "#84cc16",
+                  border: "1px solid var(--landing-border-inner)",
+                  color: "var(--landing-accent)",
                 }}
               >
                 Docs
@@ -999,7 +999,7 @@ export function DocsPage() {
                   "px-3 py-1.5 text-xs font-medium transition-all duration-200",
                 )}
                 style={{
-                  color: activeSection === item.id ? "#84cc16" : "#525252",
+                  color: activeSection === item.id ? "var(--landing-accent)" : "var(--landing-text-tertiary)",
                   background: activeSection === item.id ? "rgba(132, 204, 22, 0.08)" : "transparent",
                 }}
               >
@@ -1012,7 +1012,7 @@ export function DocsPage() {
           <button
             className="md:hidden p-2"
             onClick={() => setMobileNavOpen(!mobileNavOpen)}
-            style={{ color: "#a3a3a3" }}
+            style={{ color: "var(--landing-text-secondary)" }}
           >
             {mobileNavOpen ? <XIcon className="size-5" /> : <MenuIcon className="size-5" />}
           </button>
@@ -1023,8 +1023,8 @@ export function DocsPage() {
           <div
             className="md:hidden px-6 py-4 space-y-1"
             style={{
-              background: "#0a0a0a",
-              borderTop: "1px solid rgba(163, 163, 163, 0.08)",
+              background: "var(--landing-canvas)",
+              borderTop: "1px solid var(--landing-hairline)",
             }}
           >
             {NAV_ITEMS.map((item) => (
@@ -1033,7 +1033,7 @@ export function DocsPage() {
                 onClick={() => scrollToSection(item.id)}
                 className="flex items-center gap-3 w-full px-3 py-2.5 text-sm transition-colors duration-200"
                 style={{
-                  color: activeSection === item.id ? "#84cc16" : "#a3a3a3",
+                  color: activeSection === item.id ? "var(--landing-accent)" : "var(--landing-text-secondary)",
                   background: activeSection === item.id ? "rgba(132, 204, 22, 0.08)" : "transparent",
                 }}
               >
@@ -1057,7 +1057,7 @@ export function DocsPage() {
                   onClick={() => scrollToSection(item.id)}
                   className="flex items-center gap-3 w-full px-3 py-2 text-sm transition-all duration-200"
                   style={{
-                    color: activeSection === item.id ? "#84cc16" : "#525252",
+                    color: activeSection === item.id ? "var(--landing-accent)" : "var(--landing-text-tertiary)",
                     background: activeSection === item.id ? "rgba(132, 204, 22, 0.06)" : "transparent",
                     borderLeft: activeSection === item.id ? "2px solid #84cc16" : "2px solid transparent",
                   }}
@@ -1072,14 +1072,14 @@ export function DocsPage() {
             <div
               className="mt-10 p-4"
               style={{
-                background: "#171717",
-                border: "1px solid rgba(163, 163, 163, 0.1)",
+                background: "var(--landing-surface-1)",
+                border: "1px solid var(--landing-hairline)",
               }}
             >
-              <p className="text-xs font-medium mb-1" style={{ color: "#ffffff" }}>
+              <p className="text-xs font-medium mb-1" style={{ color: "var(--landing-text-primary)" }}>
                 Need help?
               </p>
-              <p className="text-xs leading-relaxed" style={{ color: "#737373" }}>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--landing-text-tertiary)" }}>
                 Open an issue on GitHub or reach out to the team.
               </p>
             </div>
@@ -1088,27 +1088,27 @@ export function DocsPage() {
           {/* Content Area */}
           <div className="flex-1 min-w-0 py-8">
             <OverviewSection />
-            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
             <QuickStartSection />
-            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
             <CoreFeaturesSection />
-            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
             <ArchitectureSection />
-            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
             <TechStackSection />
-            <div style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }} />
+            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
             <DeploymentSection />
 
             {/* Footer */}
             <div
               className="py-16 mt-10 text-center"
-              style={{ borderTop: "1px solid rgba(163, 163, 163, 0.06)" }}
+              style={{ borderTop: "1px solid var(--landing-hairline)" }}
             >
               <ScrollReveal>
-                <p className="text-sm mb-2" style={{ color: "#525252" }}>
+                <p className="text-sm mb-2" style={{ color: "var(--landing-text-tertiary)" }}>
                   DocPilot Documentation
                 </p>
-                <p className="text-xs" style={{ color: "#404040" }}>
+                <p className="text-xs" style={{ color: "var(--landing-surface-3)" }}>
                   Built for teams that ship winning proposals.
                 </p>
               </ScrollReveal>

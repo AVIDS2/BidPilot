@@ -95,7 +95,7 @@ function HeroSection() {
       {/* 区域标签 */}
       <span
         className="text-sm font-medium tracking-widest uppercase"
-        style={{ color: "#84cc16" }}
+        style={{ color: "var(--landing-accent)" }}
       >
         {t("hero.label")}
       </span>
@@ -117,8 +117,8 @@ function HeroSection() {
           to="/signup"
           className="inline-flex items-center gap-3 text-lg font-medium px-8 py-4 transition-all duration-300 hover:scale-[0.98]"
           style={{
-            background: "#84cc16",
-            color: "#0a0a0a",
+            background: "var(--landing-accent)",
+            color: "var(--landing-canvas)",
           }}
         >
           {t("hero.getStarted")}
@@ -128,7 +128,7 @@ function HeroSection() {
           to="/pricing"
           className="inline-flex items-center gap-3 text-lg font-medium text-white px-8 py-4 transition-all duration-300"
           style={{
-            border: "1px solid rgba(163, 163, 163, 0.1)",
+            border: "1px solid var(--landing-hairline)",
           }}
         >
           {t("hero.viewPricing")}
@@ -139,7 +139,7 @@ function HeroSection() {
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
         <div className="flex flex-col items-center gap-2 text-white/30">
           <span className="text-xs tracking-widest uppercase">{t("hero.scrollHint")}</span>
-          <div className="w-px h-8 animate-pulse" style={{ background: "#84cc16" }} />
+          <div className="w-px h-8 animate-pulse" style={{ background: "var(--landing-accent)" }} />
         </div>
       </div>
     </CinematicHero>
@@ -155,14 +155,14 @@ function SocialProofSection() {
     <section
       className="py-16"
       style={{
-        background: "#0a0a0a",
-        borderTop: "1px solid rgba(163, 163, 163, 0.1)",
-        borderBottom: "1px solid rgba(163, 163, 163, 0.1)",
+        background: "var(--landing-canvas)",
+        borderTop: "1px solid var(--landing-hairline)",
+        borderBottom: "1px solid var(--landing-hairline)",
       }}
     >
       <div className="max-w-7xl mx-auto px-8">
         <ScrollReveal>
-          <p className="text-sm font-medium tracking-widest uppercase text-center mb-8" style={{ color: "#737373" }}>
+          <p className="text-sm font-medium tracking-widest uppercase text-center mb-8" style={{ color: "var(--landing-text-tertiary)" }}>
             {t("socialProof.label")}
           </p>
         </ScrollReveal>
@@ -171,7 +171,7 @@ function SocialProofSection() {
             <ScrollReveal key={name} delay={index * 100}>
               <span
                 className="text-sm font-medium tracking-wider uppercase transition-colors duration-300 hover:text-white"
-                style={{ color: "#525252" }}
+                style={{ color: "var(--landing-text-tertiary)" }}
               >
                 {name}
               </span>
@@ -193,16 +193,16 @@ function HowItWorksSection() {
   ];
 
   return (
-    <section className="py-32" style={{ background: "#0a0a0a" }}>
+    <section className="py-32" style={{ background: "var(--landing-canvas)" }}>
       <div className="max-w-7xl mx-auto px-8">
         <ScrollReveal>
           <h2
             className="text-4xl md:text-5xl font-medium leading-tight tracking-tight mb-4"
-            style={{ color: "#ffffff" }}
+            style={{ color: "var(--landing-text-primary)" }}
           >
             {t("howItWorks.heading")}
           </h2>
-          <p className="text-xl max-w-2xl mb-16" style={{ color: "#a3a3a3" }}>
+          <p className="text-xl max-w-2xl mb-16" style={{ color: "var(--landing-text-secondary)" }}>
             {t("howItWorks.subheading")}
           </p>
         </ScrollReveal>
@@ -211,7 +211,7 @@ function HowItWorksSection() {
           {/* 时间线连接线 */}
           <div
             className="absolute left-[19px] top-0 bottom-0 w-px"
-            style={{ background: "rgba(132, 204, 22, 0.2)" }}
+            style={{ background: "var(--landing-border-inner)" }}
           />
 
           {steps.map((step, index) => (
@@ -221,9 +221,9 @@ function HowItWorksSection() {
                 <div
                   className="relative z-10 flex items-center justify-center w-10 h-10 text-sm font-medium"
                   style={{
-                    background: "#171717",
-                    border: "1px solid rgba(132, 204, 22, 0.3)",
-                    color: "#84cc16",
+                    background: "var(--landing-surface-1)",
+                    border: "1px solid var(--landing-border-inner)",
+                    color: "var(--landing-accent)",
                   }}
                 >
                   {step.num}
@@ -232,12 +232,12 @@ function HowItWorksSection() {
                 {/* 内容 */}
                 <div className="flex-1 pt-2">
                   <div className="flex items-center gap-3 mb-3">
-                    <step.icon className="w-5 h-5" style={{ color: "#84cc16" }} />
-                    <h3 className="text-xl font-medium" style={{ color: "#ffffff" }}>
+                    <step.icon className="w-5 h-5" style={{ color: "var(--landing-accent)" }} />
+                    <h3 className="text-xl font-medium" style={{ color: "var(--landing-text-primary)" }}>
                       {t(`howItWorks.steps.${step.key}.title`)}
                     </h3>
                   </div>
-                  <p className="text-base leading-relaxed max-w-lg" style={{ color: "#a3a3a3" }}>
+                  <p className="text-base leading-relaxed max-w-lg" style={{ color: "var(--landing-text-secondary)" }}>
                     {t(`howItWorks.steps.${step.key}.description`)}
                   </p>
                 </div>
@@ -260,16 +260,16 @@ function FeaturesSection() {
   ];
 
   return (
-    <section className="py-32" style={{ background: "#0a0a0a" }}>
+    <section className="py-32" style={{ background: "var(--landing-canvas)" }}>
       <div className="max-w-7xl mx-auto px-8">
         <ScrollReveal>
           <h2
             className="text-4xl md:text-5xl font-medium leading-tight tracking-tight mb-4"
-            style={{ color: "#ffffff" }}
+            style={{ color: "var(--landing-text-primary)" }}
           >
             {t("features.heading")}
           </h2>
-          <p className="text-xl max-w-2xl mb-16" style={{ color: "#a3a3a3" }}>
+          <p className="text-xl max-w-2xl mb-16" style={{ color: "var(--landing-text-secondary)" }}>
             {t("features.subheading")}
           </p>
         </ScrollReveal>
@@ -280,14 +280,14 @@ function FeaturesSection() {
               <div
                 className="group p-8 transition-all duration-300 hover:-translate-y-1"
                 style={{
-                  background: "#171717",
-                  border: "1px solid rgba(163, 163, 163, 0.1)",
+                  background: "var(--landing-surface-1)",
+                  border: "1px solid var(--landing-hairline)",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(132, 204, 22, 0.3)";
+                  e.currentTarget.style.borderColor = "var(--landing-border-inner)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(163, 163, 163, 0.1)";
+                  e.currentTarget.style.borderColor = "var(--landing-hairline)";
                 }}
               >
                 {/* 图标 */}
@@ -295,26 +295,26 @@ function FeaturesSection() {
                   className="w-12 h-12 flex items-center justify-center mb-6"
                   style={{
                     background: "rgba(132, 204, 22, 0.1)",
-                    border: "1px solid rgba(132, 204, 22, 0.2)",
+                    border: "1px solid var(--landing-border-inner)",
                   }}
                 >
-                  <feature.icon className="w-6 h-6" style={{ color: "#84cc16" }} />
+                  <feature.icon className="w-6 h-6" style={{ color: "var(--landing-accent)" }} />
                 </div>
 
                 {/* 标题 */}
-                <h3 className="text-xl font-medium mb-3" style={{ color: "#ffffff" }}>
+                <h3 className="text-xl font-medium mb-3" style={{ color: "var(--landing-text-primary)" }}>
                   {t(`features.${feature.key}.title`)}
                 </h3>
 
                 {/* 描述 */}
-                <p className="text-base leading-relaxed mb-6" style={{ color: "#a3a3a3" }}>
+                <p className="text-base leading-relaxed mb-6" style={{ color: "var(--landing-text-secondary)" }}>
                   {t(`features.${feature.key}.description`)}
                 </p>
 
                 {/* Learn more */}
                 <span
                   className="inline-flex items-center gap-2 text-sm font-medium transition-colors duration-300 group-hover:text-white"
-                  style={{ color: "#84cc16" }}
+                  style={{ color: "var(--landing-accent)" }}
                 >
                   {t(`features.${feature.key}.learnMore`)}
                   <ArrowRight className="w-4 h-4" />
@@ -334,16 +334,16 @@ function PricingSection() {
   const tiers = ["starter", "team", "enterprise"] as const;
 
   return (
-    <section className="py-32" style={{ background: "#0a0a0a" }}>
+    <section className="py-32" style={{ background: "var(--landing-canvas)" }}>
       <div className="max-w-7xl mx-auto px-8">
         <ScrollReveal>
           <h2
             className="text-4xl md:text-5xl font-medium leading-tight tracking-tight mb-4"
-            style={{ color: "#ffffff" }}
+            style={{ color: "var(--landing-text-primary)" }}
           >
             {t("pricing.heading")}
           </h2>
-          <p className="text-xl max-w-2xl mb-16" style={{ color: "#a3a3a3" }}>
+          <p className="text-xl max-w-2xl mb-16" style={{ color: "var(--landing-text-secondary)" }}>
             {t("pricing.subheading")}
           </p>
         </ScrollReveal>
@@ -356,33 +356,33 @@ function PricingSection() {
                 <div
                   className="p-8 transition-all duration-300 hover:-translate-y-1"
                   style={{
-                    background: "#171717",
+                    background: "var(--landing-surface-1)",
                     border: highlighted
-                      ? "1px solid rgba(132, 204, 22, 0.4)"
-                      : "1px solid rgba(163, 163, 163, 0.1)",
+                      ? "1px solid var(--landing-border-inner)"
+                      : "1px solid var(--landing-hairline)",
                   }}
                 >
                   {/* 标签 */}
                   <span
                     className="inline-block px-3 py-1 text-xs font-medium tracking-widest uppercase mb-6"
                     style={{
-                      background: highlighted ? "rgba(132, 204, 22, 0.1)" : "rgba(163, 163, 163, 0.1)",
-                      color: highlighted ? "#84cc16" : "#a3a3a3",
+                      background: highlighted ? "rgba(132, 204, 22, 0.1)" : "var(--landing-hairline)",
+                      color: highlighted ? "var(--landing-accent)" : "var(--landing-text-secondary)",
                       border: highlighted
-                        ? "1px solid rgba(132, 204, 22, 0.2)"
-                        : "1px solid rgba(163, 163, 163, 0.1)",
+                        ? "1px solid var(--landing-border-inner)"
+                        : "1px solid var(--landing-hairline)",
                     }}
                   >
                     {t(`pricing.tiers.${tier}.label`)}
                   </span>
 
                   {/* 价格 */}
-                  <p className="text-5xl font-medium tracking-tight mb-2" style={{ color: "#ffffff" }}>
+                  <p className="text-5xl font-medium tracking-tight mb-2" style={{ color: "var(--landing-text-primary)" }}>
                     {t(`pricing.tiers.${tier}.price`)}
                   </p>
 
                   {/* 描述 */}
-                  <p className="text-sm mb-8" style={{ color: "#737373" }}>
+                  <p className="text-sm mb-8" style={{ color: "var(--landing-text-tertiary)" }}>
                     {t(`pricing.tiers.${tier}.sub`)}
                   </p>
 
@@ -394,11 +394,11 @@ function PricingSection() {
                       <li key={feat} className="flex items-start gap-3">
                         <span
                           className="mt-1 w-4 h-4 flex items-center justify-center text-xs"
-                          style={{ color: "#84cc16" }}
+                          style={{ color: "var(--landing-accent)" }}
                         >
                           ✓
                         </span>
-                        <span className="text-sm" style={{ color: "#a3a3a3" }}>
+                        <span className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
                           {feat}
                         </span>
                       </li>
@@ -410,9 +410,9 @@ function PricingSection() {
                     to="/signup"
                     className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
                     style={{
-                      background: highlighted ? "#84cc16" : "transparent",
-                      color: highlighted ? "#0a0a0a" : "#ffffff",
-                      border: highlighted ? "none" : "1px solid rgba(163, 163, 163, 0.1)",
+                      background: highlighted ? "var(--landing-accent)" : "transparent",
+                      color: highlighted ? "var(--landing-canvas)" : "var(--landing-text-primary)",
+                      border: highlighted ? "none" : "1px solid var(--landing-hairline)",
                     }}
                   >
                     {t(`pricing.tiers.${tier}.cta`)}
@@ -432,24 +432,24 @@ function FinalCtaSection() {
   const { t } = useTranslation("landing");
 
   return (
-    <section className="py-32" style={{ background: "#0a0a0a" }}>
+    <section className="py-32" style={{ background: "var(--landing-canvas)" }}>
       <div className="max-w-7xl mx-auto px-8 text-center">
         <ScrollReveal>
           <h2
             className="text-4xl md:text-6xl font-medium leading-tight tracking-tight mb-6"
-            style={{ color: "#ffffff" }}
+            style={{ color: "var(--landing-text-primary)" }}
           >
             {t("finalCta.heading")}
           </h2>
-          <p className="text-xl max-w-2xl mx-auto mb-12" style={{ color: "#a3a3a3" }}>
+          <p className="text-xl max-w-2xl mx-auto mb-12" style={{ color: "var(--landing-text-secondary)" }}>
             {t("finalCta.subheading")}
           </p>
           <Link
             to="/signup"
             className="inline-flex items-center gap-3 text-lg font-medium px-10 py-5 transition-all duration-300 hover:scale-[0.98]"
             style={{
-              background: "#84cc16",
-              color: "#0a0a0a",
+              background: "var(--landing-accent)",
+              color: "var(--landing-canvas)",
             }}
           >
             {t("finalCta.cta")}
@@ -464,7 +464,7 @@ function FinalCtaSection() {
 // 导出落地页
 export function LandingPage() {
   return (
-    <div className="min-h-screen" style={{ background: "#0a0a0a" }}>
+    <div className="min-h-screen" style={{ background: "var(--landing-canvas)" }}>
       <HeroSection />
       <SocialProofSection />
       <HowItWorksSection />

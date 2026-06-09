@@ -26,7 +26,7 @@ export function Nav() {
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
         isScrolled
-          ? "bg-[#0a0a0a]/80 backdrop-blur-md"
+          ? "bg-background/80 backdrop-blur-md"
           : "bg-transparent"
       } ${isHidden ? "-translate-y-full" : "translate-y-0"}`}
     >
@@ -34,7 +34,7 @@ export function Nav() {
         {/* Logo */}
         <Link
           to="/"
-          className="text-2xl font-medium tracking-[-0.04em] text-white hover:text-[#84cc16] transition-colors duration-300"
+          className="text-2xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300"
         >
           DocPilot
         </Link>
@@ -43,26 +43,26 @@ export function Nav() {
         <div className="flex items-center gap-8">
           <Link
             to="/"
-            className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
+            className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300"
           >
             {t("nav.home")}
           </Link>
           <Link
             to="/pricing"
-            className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
+            className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300"
           >
             {t("nav.pricing")}
           </Link>
           <Link
             to="/docs"
-            className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
+            className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300"
           >
             {t("nav.docs")}
           </Link>
           {isAuthenticated ? (
             <Link
               to="/dashboard"
-              className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98]"
+              className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98]"
             >
               {t("nav.enterPlatform")}
             </Link>
@@ -70,13 +70,13 @@ export function Nav() {
             <>
               <Link
                 to="/login"
-                className="text-sm text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300"
               >
                 {t("nav.login")}
               </Link>
               <Link
                 to="/signup"
-                className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98]"
+                className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98]"
               >
                 {t("nav.signup")}
               </Link>

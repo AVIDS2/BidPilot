@@ -34,15 +34,15 @@ export function AppSidebar({
       collapsible="icon"
       className="border-r"
       style={{
-        borderColor: "rgba(163, 163, 163, 0.06)",
-        background: "#0a0a0a",
+        borderColor: "var(--border)",
+        background: "var(--background)",
       }}
       {...props}
     >
       <SidebarHeader
         className="p-4"
         style={{
-          borderBottom: "1px solid rgba(163, 163, 163, 0.06)",
+          borderBottom: "1px solid var(--border)",
         }}
       >
         <TeamSwitcher teams={teams} />
@@ -51,7 +51,7 @@ export function AppSidebar({
         <SidebarGroup>
           <SidebarGroupLabel
             className="text-xs font-medium tracking-widest uppercase mb-2 px-2"
-            style={{ color: "#525252" }}
+            style={{ color: "var(--text-quaternary)" }}
           >
             {t("nav.navigation")}
           </SidebarGroupLabel>
@@ -63,7 +63,7 @@ export function AppSidebar({
       <SidebarFooter
         className="p-3"
         style={{
-          borderTop: "1px solid rgba(163, 163, 163, 0.06)",
+          borderTop: "1px solid var(--border)",
         }}
       >
         <NavUser user={user} />

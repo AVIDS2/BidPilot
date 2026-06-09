@@ -30,7 +30,7 @@ export function VerifyEmailPromptPage() {
   }
 
   return (
-    <div className="h-screen flex items-center justify-center bg-[#0a0a0a] px-6">
+    <div className="h-screen flex items-center justify-center bg-background px-6">
       <div className="absolute inset-0 pointer-events-none z-10">
         <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">DocPilot v1.0</span>
         <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">[16:9]</span>
@@ -45,29 +45,29 @@ export function VerifyEmailPromptPage() {
       />
       <div className="relative z-20 w-full max-w-md">
         <div className="text-center mb-10">
-          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-[#84cc16] transition-colors duration-300">
+          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300">
             DocPilot
           </Link>
-          <p className="mt-3 text-sm" style={{ color: "#737373" }}>{t("verifyEmail.promptTitle")}</p>
+          <p className="mt-3 text-sm" style={{ color: "var(--landing-text-tertiary)" }}>{t("verifyEmail.promptTitle")}</p>
         </div>
-        <div className="p-8" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
+        <div className="p-8" style={{ background: "var(--landing-surface-1)", border: "1px solid var(--landing-hairline)" }}>
           <div className="text-center">
             <div className="flex justify-center mb-4">
               <div className="rounded-full p-3" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                <MailCheckIcon className="size-8" style={{ color: "#84cc16" }} />
+                <MailCheckIcon className="size-8" style={{ color: "var(--landing-accent)" }} />
               </div>
             </div>
             <h2 className="text-xl font-bold text-white mb-2">{t("verifyEmail.promptTitle")}</h2>
-            <p className="text-sm mb-4" style={{ color: "#a3a3a3" }}>
+            <p className="text-sm mb-4" style={{ color: "var(--landing-text-secondary)" }}>
               {t("verifyEmail.promptDesc", { email: email || t("verifyEmail.promptDescFallback") })}
             </p>
-            <p className="text-sm mb-6" style={{ color: "#737373" }}>{t("verifyEmail.promptBody")}</p>
+            <p className="text-sm mb-6" style={{ color: "var(--landing-text-tertiary)" }}>{t("verifyEmail.promptBody")}</p>
             {email && !resent && (
               <button
                 onClick={handleResend}
                 disabled={resending}
                 className="w-full py-3 text-sm font-medium transition-all duration-300 hover:scale-[0.98] mb-3"
-                style={{ border: "1px solid rgba(163, 163, 163, 0.1)", color: "#a3a3a3" }}
+                style={{ border: "1px solid var(--landing-hairline)", color: "var(--landing-text-secondary)" }}
               >
                 {resending ? (
                   <span className="inline-flex items-center gap-2">
@@ -83,18 +83,18 @@ export function VerifyEmailPromptPage() {
               </button>
             )}
             {resent && (
-              <p className="text-sm mb-3 font-medium" style={{ color: "#84cc16" }}>{t("verifyEmail.resent")}</p>
+              <p className="text-sm mb-3 font-medium" style={{ color: "var(--landing-accent)" }}>{t("verifyEmail.resent")}</p>
             )}
             <button
               onClick={() => navigate("/login")}
               className="w-full py-3 text-sm font-medium transition-all duration-300 hover:scale-[0.98] inline-flex items-center justify-center gap-2"
-              style={{ color: "#737373" }}
+              style={{ color: "var(--landing-text-tertiary)" }}
             >
               <ArrowLeftIcon className="size-4" />
               {t("verifyEmail.backToLogin")}
             </button>
           </div>
-          <p className="text-center text-xs mt-6" style={{ color: "#525252" }}>
+          <p className="text-center text-xs mt-6" style={{ color: "var(--landing-text-tertiary)" }}>
             {t("verifyEmail.helpText")}
           </p>
         </div>

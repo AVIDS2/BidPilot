@@ -160,11 +160,11 @@ export function AccountPage() {
                   onClick={(e) => { e.preventDefault(); setActiveSection(item.href); }}
                   style={{
                     background: active ? "rgba(132, 204, 22, 0.1)" : "transparent",
-                    color: active ? "#84cc16" : "#a3a3a3",
+                    color: active ? "var(--primary)" : "var(--muted-foreground)",
                   }}
                   className={cn(
                     "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    !active && "hover:text-white"
+                    !active && "hover:text-foreground"
                   )}
                 >
                   <Icon className="size-4" />
@@ -220,7 +220,7 @@ export function AccountPage() {
                 )}
 
                 {user?.role === "admin" && (
-                  <div className="rounded-md p-4 space-y-3" style={{ background: "rgba(163, 163, 163, 0.04)", border: "1px solid rgba(163, 163, 163, 0.08)" }}>
+                  <div className="rounded-md p-4 space-y-3" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
                     <div>
                       <p className="text-sm font-medium">{t("admin.changePlan")}</p>
                       <p className="text-xs text-muted-foreground">

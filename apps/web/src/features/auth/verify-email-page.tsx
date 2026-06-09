@@ -37,7 +37,7 @@ export function VerifyEmailPage() {
   }, [token, result, verifying, t])
 
   return (
-    <div className="h-screen flex items-center justify-center bg-[#0a0a0a] px-6">
+    <div className="h-screen flex items-center justify-center bg-background px-6">
       <div className="absolute inset-0 pointer-events-none z-10">
         <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">DocPilot v1.0</span>
         <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">[16:9]</span>
@@ -52,20 +52,20 @@ export function VerifyEmailPage() {
       />
       <div className="relative z-20 w-full max-w-md">
         <div className="text-center mb-10">
-          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-[#84cc16] transition-colors duration-300">
+          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300">
             DocPilot
           </Link>
         </div>
-        <div className="p-8" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
+        <div className="p-8" style={{ background: "var(--landing-surface-1)", border: "1px solid var(--landing-hairline)" }}>
           <div className="text-center">
             <div className="flex justify-center mb-4">
               <div className={`rounded-full p-3 ${result === "success" ? "bg-green-900/30" : result === "error" ? "bg-red-900/30" : ""}`} style={result === null ? { background: "rgba(132, 204, 22, 0.1)" } : undefined}>
                 {result === "success" ? (
-                  <CheckCircleIcon className="size-8" style={{ color: "#84cc16" }} />
+                  <CheckCircleIcon className="size-8" style={{ color: "var(--landing-accent)" }} />
                 ) : result === "error" ? (
-                  <XCircleIcon className="size-8" style={{ color: "#ef4444" }} />
+                  <XCircleIcon className="size-8" style={{ color: "var(--destructive)" }} />
                 ) : (
-                  <svg className="animate-spin size-8" viewBox="0 0 24 24" fill="none" style={{ color: "#84cc16" }}>
+                  <svg className="animate-spin size-8" viewBox="0 0 24 24" fill="none" style={{ color: "var(--landing-accent)" }}>
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
@@ -79,7 +79,7 @@ export function VerifyEmailPage() {
                 ? t("verifyEmail.failedTitle")
                 : t("verifyEmail.verifying")}
             </h2>
-            <p className="text-sm mb-6" style={{ color: "#a3a3a3" }}>
+            <p className="text-sm mb-6" style={{ color: "var(--landing-text-secondary)" }}>
               {result === "success"
                 ? t("verifyEmail.verifiedDesc")
                 : result === "error"
@@ -89,7 +89,7 @@ export function VerifyEmailPage() {
             {result === "success" && (
               <button
                 onClick={() => navigate("/login")}
-                className="w-full py-3.5 text-sm font-medium bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98]"
+                className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98]"
               >
                 {t("verifyEmail.continueToLogin")}
               </button>
@@ -99,14 +99,14 @@ export function VerifyEmailPage() {
                 <button
                   onClick={() => navigate("/verify-email-prompt")}
                   className="w-full py-3 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
-                  style={{ border: "1px solid rgba(163, 163, 163, 0.1)", color: "#a3a3a3" }}
+                  style={{ border: "1px solid var(--landing-hairline)", color: "var(--landing-text-secondary)" }}
                 >
                   {t("verifyEmail.failedResend")}
                 </button>
                 <button
                   onClick={() => navigate("/login")}
                   className="w-full py-3 text-sm font-medium inline-flex items-center justify-center gap-2 transition-colors duration-300"
-                  style={{ color: "#737373" }}
+                  style={{ color: "var(--landing-text-tertiary)" }}
                 >
                   <ArrowLeftIcon className="size-4" />
                   {t("verifyEmail.failedBack")}

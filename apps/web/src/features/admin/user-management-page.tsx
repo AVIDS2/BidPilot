@@ -26,7 +26,7 @@ function UserManagementSkeleton() {
         <Skeleton className="size-6" />
         <Skeleton className="h-7 w-48" />
       </div>
-      <div className="rounded-xl p-6" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
+      <div className="rounded-xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <div className="flex flex-col gap-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center gap-4">
@@ -86,7 +86,7 @@ export function UserManagementPage() {
   if (currentUser?.role !== "admin") {
     return (
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col items-center justify-center py-20" style={{ color: "#a3a3a3" }}>
+        <div className="flex flex-col items-center justify-center py-20" style={{ color: "var(--muted-foreground)" }}>
           <ShieldIcon className="size-10 mb-3 opacity-40" />
           <p className="text-sm">{t("userManagement.adminRequired")}</p>
         </div>
@@ -103,18 +103,18 @@ export function UserManagementPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <UsersIcon className="size-5" style={{ color: "#a3a3a3" }} />
-          <h1 className="text-xl font-semibold tracking-tight text-white">{t("userManagement.title")}</h1>
-          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(132, 204, 22, 0.15)", color: "#84cc16" }}>
+          <UsersIcon className="size-5" style={{ color: "var(--muted-foreground)" }} />
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">{t("userManagement.title")}</h1>
+          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(132, 204, 22, 0.15)", color: "var(--primary)" }}>
             {total}
           </span>
         </div>
       </div>
 
       {/* Users table */}
-      <div className="rounded-xl overflow-hidden" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
-        <div className="px-5 py-4" style={{ borderBottom: "1px solid rgba(163, 163, 163, 0.08)" }}>
-          <h2 className="text-sm font-medium text-white">{t("userManagement.allUsers")}</h2>
+      <div className="rounded-xl overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
+          <h2 className="text-sm font-medium text-foreground">{t("userManagement.allUsers")}</h2>
         </div>
         <div className="p-5">
           {!users.length ? (
@@ -131,25 +131,25 @@ export function UserManagementPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr style={{ borderBottom: "1px solid rgba(163, 163, 163, 0.08)" }}>
-                    <th className="text-left py-3 px-3 font-medium" style={{ color: "#a3a3a3" }}>{t("table.user")}</th>
-                    <th className="text-left py-3 px-3 font-medium" style={{ color: "#a3a3a3" }}>{t("table.email")}</th>
-                    <th className="text-left py-3 px-3 font-medium" style={{ color: "#a3a3a3" }}>{t("table.role")}</th>
-                    <th className="text-left py-3 px-3 font-medium" style={{ color: "#a3a3a3" }}>{t("table.plan")}</th>
-                    <th className="text-left py-3 px-3 font-medium" style={{ color: "#a3a3a3" }}>{t("table.status")}</th>
-                    <th className="text-right py-3 px-3 font-medium" style={{ color: "#a3a3a3" }}>{t("table.actions")}</th>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th className="text-left py-3 px-3 font-medium" style={{ color: "var(--muted-foreground)" }}>{t("table.user")}</th>
+                    <th className="text-left py-3 px-3 font-medium" style={{ color: "var(--muted-foreground)" }}>{t("table.email")}</th>
+                    <th className="text-left py-3 px-3 font-medium" style={{ color: "var(--muted-foreground)" }}>{t("table.role")}</th>
+                    <th className="text-left py-3 px-3 font-medium" style={{ color: "var(--muted-foreground)" }}>{t("table.plan")}</th>
+                    <th className="text-left py-3 px-3 font-medium" style={{ color: "var(--muted-foreground)" }}>{t("table.status")}</th>
+                    <th className="text-right py-3 px-3 font-medium" style={{ color: "var(--muted-foreground)" }}>{t("table.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((u) => (
-                    <tr key={u.id} className="transition-colors" style={{ borderBottom: "1px solid rgba(163, 163, 163, 0.05)" }}>
+                    <tr key={u.id} className="transition-colors" style={{ borderBottom: "1px solid var(--border)" }}>
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2">
-                          <UserIcon className="size-4" style={{ color: "#737373" }} />
-                          <span className="font-medium text-white">{u.display_name}</span>
+                          <UserIcon className="size-4" style={{ color: "var(--text-tertiary)" }} />
+                          <span className="font-medium text-foreground">{u.display_name}</span>
                         </div>
                       </td>
-                      <td className="py-3 px-3" style={{ color: "#a3a3a3" }}>{u.email}</td>
+                      <td className="py-3 px-3" style={{ color: "var(--muted-foreground)" }}>{u.email}</td>
                       <td className="py-3 px-3">
                         <Select
                           value={u.role}
@@ -157,7 +157,7 @@ export function UserManagementPage() {
                           onValueChange={(newRole) => { if (newRole) roleMut.mutate({ userId: u.id, role: newRole }); }}
                           disabled={u.id === currentUser?.id}
                         >
-                          <SelectTrigger className="w-28 h-8 text-xs bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white">
+                          <SelectTrigger className="w-28 h-8 text-xs bg-background border-border text-foreground">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -171,22 +171,22 @@ export function UserManagementPage() {
                       </td>
                       <td className="py-3 px-3">
                         <span className="text-xs px-2 py-0.5 rounded capitalize" style={{
-                          background: "rgba(163, 163, 163, 0.08)",
-                          color: "#a3a3a3",
-                          border: "1px solid rgba(163, 163, 163, 0.1)",
+                          background: "var(--muted)",
+                          color: "var(--muted-foreground)",
+                          border: "1px solid var(--border)",
                         }}>
                           {t(`plan.${u.plan ?? "starter"}`, { ns: "admin" })}
                         </span>
                       </td>
                       <td className="py-3 px-3">
                         {u.id === currentUser?.id ? (
-                          <span className="text-xs px-2 py-0.5 rounded" style={{ background: "rgba(163, 163, 163, 0.08)", color: "#a3a3a3" }}>
+                          <span className="text-xs px-2 py-0.5 rounded" style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}>
                             {t("status.you")}
                           </span>
                         ) : (
                           <span className="text-xs px-2 py-0.5 rounded" style={{
                             background: u.disabled ? "rgba(239, 68, 68, 0.15)" : "rgba(132, 204, 22, 0.15)",
-                            color: u.disabled ? "#ef4444" : "#84cc16",
+                            color: u.disabled ? "var(--destructive)" : "var(--primary)",
                           }}>
                             {u.disabled ? t("status.disabled") : t("status.active")}
                           </span>
@@ -198,7 +198,7 @@ export function UserManagementPage() {
                             variant={u.disabled ? "outline" : "destructive"}
                             size="sm"
                             onClick={() => statusMut.mutate({ userId: u.id, disabled: !u.disabled })}
-                            className={u.disabled ? "border-[rgba(163,163,163,0.1)] text-[#a3a3a3] hover:text-white" : ""}
+                            className={u.disabled ? "border-border text-muted-foreground hover:text-foreground" : ""}
                           >
                             {u.disabled ? t("status.reenable") : t("status.disable")}
                           </Button>
@@ -210,8 +210,8 @@ export function UserManagementPage() {
               </table>
 
               {/* Pagination */}
-              <div className="flex items-center justify-between pt-5 mt-4" style={{ borderTop: "1px solid rgba(163, 163, 163, 0.08)" }}>
-                <p className="text-sm" style={{ color: "#a3a3a3" }}>
+              <div className="flex items-center justify-between pt-5 mt-4" style={{ borderTop: "1px solid var(--border)" }}>
+                <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                   {t("common:pagination.pageInfo", { page, totalPages, total })}
                 </p>
                 <div className="flex items-center gap-2">
@@ -220,12 +220,12 @@ export function UserManagementPage() {
                     size="sm"
                     disabled={page <= 1}
                     onClick={() => { setPage((p) => p - 1); setJumpInput(""); }}
-                    className="border-[rgba(163,163,163,0.1)] text-[#a3a3a3] hover:text-white hover:border-[#84cc16]"
+                    className="border-border text-muted-foreground hover:text-foreground hover:border-primary"
                   >
                     <ChevronLeftIcon className="size-4" />
                     {t("common:actions.previous")}
                   </Button>
-                  <span className="text-sm whitespace-nowrap" style={{ color: "#737373" }}>{t("common:actions.goTo")}</span>
+                  <span className="text-sm whitespace-nowrap" style={{ color: "var(--text-tertiary)" }}>{t("common:actions.goTo")}</span>
                   <Input
                     type="number"
                     min={1}
@@ -239,14 +239,14 @@ export function UserManagementPage() {
                       }
                     }}
                     placeholder={`1-${totalPages}`}
-                    className="w-20 h-8 text-sm text-center bg-[#0a0a0a] border-[rgba(163,163,163,0.1)] text-white"
+                    className="w-20 h-8 text-sm text-center bg-background border-border text-foreground"
                   />
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={page >= totalPages}
                     onClick={() => { setPage((p) => p + 1); setJumpInput(""); }}
-                    className="border-[rgba(163,163,163,0.1)] text-[#a3a3a3] hover:text-white hover:border-[#84cc16]"
+                    className="border-border text-muted-foreground hover:text-foreground hover:border-primary"
                   >
                     {t("common:actions.next")}
                     <ChevronRightIcon className="size-4" />

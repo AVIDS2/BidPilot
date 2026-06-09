@@ -35,12 +35,12 @@ function TierCard({
     <div
       className="relative flex flex-col p-8 transition-all duration-300 hover:-translate-y-1"
       style={{
-        background: "#171717",
+        background: "var(--landing-surface-1)",
         border: highlighted
-          ? "1px solid rgba(132, 204, 22, 0.4)"
+          ? "1px solid var(--landing-border-inner)"
           : current
             ? "1px solid rgba(132, 204, 22, 0.6)"
-            : "1px solid rgba(163, 163, 163, 0.1)",
+            : "1px solid var(--landing-hairline)",
       }}
     >
       {/* 推荐标签 */}
@@ -48,7 +48,7 @@ function TierCard({
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <Badge
             className="px-3 py-0.5 text-[0.7rem] font-medium uppercase tracking-wider border-0"
-            style={{ background: "#84cc16", color: "#0a0a0a" }}
+            style={{ background: "var(--landing-accent)", color: "var(--landing-canvas)" }}
           >
             {t("badges.recommended")}
           </Badge>
@@ -60,7 +60,7 @@ function TierCard({
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <Badge
             className="px-3 py-0.5 text-[0.7rem] font-medium uppercase tracking-wider border-0"
-            style={{ background: "#262626", color: "#a3a3a3" }}
+            style={{ background: "var(--landing-surface-2)", color: "var(--landing-text-secondary)" }}
           >
             {t("badges.currentPlan")}
           </Badge>
@@ -70,7 +70,7 @@ function TierCard({
       {/* 标题和描述 */}
       <div className={highlighted || current ? "pt-4" : ""}>
         <h3 className="text-lg font-semibold text-white">{tier.name}</h3>
-        <p className="mt-1 text-sm" style={{ color: "#737373" }}>
+        <p className="mt-1 text-sm" style={{ color: "var(--landing-text-tertiary)" }}>
           {tier.description}
         </p>
       </div>
@@ -81,7 +81,7 @@ function TierCard({
           {tier.price}
         </span>
         {tier.period && (
-          <span className="text-sm ml-1.5" style={{ color: "#737373" }}>
+          <span className="text-sm ml-1.5" style={{ color: "var(--landing-text-tertiary)" }}>
             {tier.period}
           </span>
         )}
@@ -90,7 +90,7 @@ function TierCard({
       {/* 分割线 */}
       <div
         className="my-6"
-        style={{ borderTop: "1px solid rgba(163, 163, 163, 0.1)" }}
+        style={{ borderTop: "1px solid var(--landing-hairline)" }}
       />
 
       {/* 功能列表 */}
@@ -99,11 +99,11 @@ function TierCard({
           <li key={feat} className="flex items-start gap-3">
             <span
               className="mt-1 w-4 h-4 flex items-center justify-center text-xs shrink-0"
-              style={{ color: "#84cc16" }}
+              style={{ color: "var(--landing-accent)" }}
             >
               ✓
             </span>
-            <span className="text-sm" style={{ color: "#a3a3a3" }}>
+            <span className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
               {feat}
             </span>
           </li>
@@ -115,13 +115,13 @@ function TierCard({
         to={current ? "#" : tier.name.toLowerCase() === "starter" ? "/login" : "/signup"}
         className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98] mt-8"
         style={{
-          background: highlighted ? "#84cc16" : "transparent",
-          color: highlighted ? "#0a0a0a" : current ? "#737373" : "#ffffff",
+          background: highlighted ? "var(--landing-accent)" : "transparent",
+          color: highlighted ? "var(--landing-canvas)" : current ? "var(--landing-text-tertiary)" : "var(--landing-text-primary)",
           border: highlighted
             ? "none"
             : current
-              ? "1px solid rgba(163, 163, 163, 0.1)"
-              : "1px solid rgba(163, 163, 163, 0.1)",
+              ? "1px solid var(--landing-hairline)"
+              : "1px solid var(--landing-hairline)",
           cursor: current ? "default" : "pointer",
           opacity: current ? 0.6 : 1,
         }}
@@ -214,7 +214,7 @@ export function PricingPage() {
   return (
     <div
       className="min-h-screen"
-      style={{ background: "#0a0a0a", color: "#ffffff" }}
+      style={{ background: "var(--landing-canvas)", color: "var(--landing-text-primary)" }}
     >
       <div className="mx-auto max-w-5xl py-12 px-6">
         {/* 顶部导航 */}
@@ -222,7 +222,7 @@ export function PricingPage() {
           <Link
             to={isAuthenticated ? "/projects" : "/"}
             className="inline-flex items-center gap-1.5 text-sm transition-colors hover:text-white"
-            style={{ color: "#737373" }}
+            style={{ color: "var(--landing-text-tertiary)" }}
           >
             <ArrowLeftIcon className="size-4" />
             {isAuthenticated ? t("back.projects") : t("back.home")}
@@ -233,7 +233,7 @@ export function PricingPage() {
           >
             <div
               className="flex size-6 items-center justify-center rounded-md"
-              style={{ background: "#84cc16", color: "#0a0a0a" }}
+              style={{ background: "var(--landing-accent)", color: "var(--landing-canvas)" }}
             >
               <FileTextIcon className="size-4" />
             </div>
@@ -246,7 +246,7 @@ export function PricingPage() {
         <div className="text-center mb-16 max-w-xl mx-auto">
           <span
             className="text-sm font-medium tracking-widest uppercase"
-            style={{ color: "#84cc16" }}
+            style={{ color: "var(--landing-accent)" }}
           >
             / Pricing
           </span>
@@ -255,7 +255,7 @@ export function PricingPage() {
           </h1>
           <p
             className="mt-3 leading-relaxed max-w-[65ch] mx-auto"
-            style={{ color: "#737373" }}
+            style={{ color: "var(--landing-text-tertiary)" }}
           >
             {t("description")}
           </p>

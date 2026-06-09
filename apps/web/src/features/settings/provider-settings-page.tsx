@@ -261,35 +261,35 @@ export function ProviderSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">{t("title")}</h1>
-        <p style={{ color: "#a3a3a3" }}>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("title")}</h1>
+        <p style={{ color: "var(--muted-foreground)" }}>
           {t("description")}
         </p>
       </div>
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Settings2 className="size-5" style={{ color: "#a3a3a3" }} />
-          <span className="text-sm" style={{ color: "#a3a3a3" }}>
+          <Settings2 className="size-5" style={{ color: "var(--muted-foreground)" }} />
+          <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
             {t("providersCount", { count: providers.length })}
           </span>
         </div>
-        <Button onClick={handleAddProvider} className="bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d]">
+        <Button onClick={handleAddProvider} className="bg-primary text-primary-foreground hover:bg-primary/90">
           <Plus className="size-4" />
           {t("addProvider")}
         </Button>
       </div>
 
       {providers.length === 0 ? (
-        <div className="rounded-xl py-12 text-center" style={{ background: "#171717", border: "1px solid rgba(163, 163, 163, 0.1)" }}>
-          <Settings2 className="mx-auto size-10 mb-3 opacity-40" style={{ color: "#737373" }} />
-          <p className="text-sm" style={{ color: "#a3a3a3" }}>{t("noProvidersTitle")}</p>
-          <p className="text-xs mt-1" style={{ color: "#737373" }}>
+        <div className="rounded-xl py-12 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+          <Settings2 className="mx-auto size-10 mb-3 opacity-40" style={{ color: "var(--text-tertiary)" }} />
+          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>{t("noProvidersTitle")}</p>
+          <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
             {t("noProvidersDesc")}
           </p>
           <Button
             onClick={handleAddProvider}
-            className="mt-4 bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d]"
+            className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="size-4" />
             {t("addFirstProvider")}
@@ -310,7 +310,7 @@ export function ProviderSettingsPage() {
                       {provider.provider_type}
                     </Badge>
                     {provider.is_active && (
-                      <span className="text-xs px-2 py-0.5 rounded flex items-center gap-1" style={{ background: "rgba(132, 204, 22, 0.15)", color: "#84cc16" }}>
+                      <span className="text-xs px-2 py-0.5 rounded flex items-center gap-1" style={{ background: "rgba(132, 204, 22, 0.15)", color: "var(--primary)" }}>
                         <CheckCircle2 className="size-3" />
                         {t("activeBadge")}
                       </span>
@@ -373,13 +373,13 @@ export function ProviderSettingsPage() {
                   )}
                 </div>
                 {!provider.is_active && (
-                  <div className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(163, 163, 163, 0.08)" }}>
+                  <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setActiveMut.mutate(provider.id)}
                       disabled={setActiveMut.isPending}
-                      className="gap-1.5 border-[rgba(132,204,22,0.3)] text-[#84cc16] hover:bg-[rgba(132,204,22,0.1)]"
+                      className="gap-1.5 border-[rgba(132,204,22,0.3)] text-primary hover:bg-[rgba(132,204,22,0.1)]"
                     >
                       {setActiveMut.isPending ? (
                         <Spinner className="size-3.5" />

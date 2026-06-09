@@ -42,7 +42,7 @@ export function TeamSwitcher({
               <SidebarMenuButton
                 className="w-fit px-2 transition-all duration-200"
                 style={{
-                  color: "#ffffff",
+                  color: "var(--foreground)",
                 }}
               />
             }
@@ -50,14 +50,14 @@ export function TeamSwitcher({
             <div
               className="flex aspect-square size-6 items-center justify-center rounded-md"
               style={{
-                background: "#84cc16",
-                color: "#0a0a0a",
+                background: "var(--primary)",
+                color: "var(--primary-foreground)",
               }}
             >
               {activeTeam.logo}
             </div>
             <span className="truncate font-medium text-sm">{activeTeam.name}</span>
-            <ChevronDownIcon className="opacity-50 size-3.5" style={{ color: "#737373" }} />
+            <ChevronDownIcon className="opacity-50 size-3.5" style={{ color: "var(--text-tertiary)" }} />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="w-64 rounded-lg"
@@ -65,14 +65,14 @@ export function TeamSwitcher({
             side="bottom"
             sideOffset={4}
             style={{
-              background: "#171717",
-              borderColor: "rgba(163, 163, 163, 0.1)",
+              background: "var(--card)",
+              borderColor: "var(--border)",
             }}
           >
             <DropdownMenuGroup>
               <DropdownMenuLabel
                 className="text-xs font-medium tracking-widest uppercase"
-                style={{ color: "#525252" }}
+                style={{ color: "var(--text-quaternary)" }}
               >
                 {t("nav.teams")}
               </DropdownMenuLabel>
@@ -80,7 +80,7 @@ export function TeamSwitcher({
                 <DropdownMenuItem
                   key={team.name}
                   onClick={() => setActiveTeam(team)}
-                  className="gap-2 p-2 text-[#a3a3a3] focus:text-white focus:bg-[rgba(163,163,163,0.08)]"
+                  className="gap-2 p-2 text-muted-foreground focus:text-white focus:bg-[rgba(163,163,163,0.08)]"
                 >
                   <div
                     className="flex size-6 items-center justify-center rounded-xs"
@@ -92,7 +92,7 @@ export function TeamSwitcher({
                     {team.logo}
                   </div>
                   {team.name}
-                  <DropdownMenuShortcut style={{ color: "#525252" }}>⌘{index + 1}</DropdownMenuShortcut>
+                  <DropdownMenuShortcut style={{ color: "var(--text-quaternary)" }}>⌘{index + 1}</DropdownMenuShortcut>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>

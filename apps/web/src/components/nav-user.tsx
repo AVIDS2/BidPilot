@@ -53,8 +53,8 @@ export function NavUser({
                 size="lg"
                 className="transition-all duration-200"
                 style={{
-                  background: "rgba(163, 163, 163, 0.04)",
-                  borderColor: "rgba(163, 163, 163, 0.06)",
+                  background: "var(--muted)",
+                  borderColor: "var(--border)",
                 }}
               />
             }
@@ -65,7 +65,7 @@ export function NavUser({
                 className="text-xs"
                 style={{
                   background: "rgba(132, 204, 22, 0.15)",
-                  color: "#84cc16",
+                  color: "var(--primary)",
                 }}
               >
                 {user.name?.charAt(0)?.toUpperCase() || "U"}
@@ -73,9 +73,9 @@ export function NavUser({
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-medium text-white text-xs">{user.name}</span>
-              <span className="truncate text-xs" style={{ color: "#737373" }}>{user.email}</span>
+              <span className="truncate text-xs" style={{ color: "var(--text-tertiary)" }}>{user.email}</span>
             </div>
-            <ChevronsUpDownIcon className="ml-auto size-3.5" style={{ color: "#525252" }} />
+            <ChevronsUpDownIcon className="ml-auto size-3.5" style={{ color: "var(--text-quaternary)" }} />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="min-w-56 rounded-lg"
@@ -83,8 +83,8 @@ export function NavUser({
             align="start"
             sideOffset={4}
             style={{
-              background: "#171717",
-              borderColor: "rgba(163, 163, 163, 0.1)",
+              background: "var(--card)",
+              borderColor: "var(--border)",
             }}
           >
             <DropdownMenuGroup>
@@ -96,7 +96,7 @@ export function NavUser({
                       className="text-xs"
                       style={{
                         background: "rgba(132, 204, 22, 0.15)",
-                        color: "#84cc16",
+                        color: "var(--primary)",
                       }}
                     >
                       {user.name?.charAt(0)?.toUpperCase() || "U"}
@@ -104,26 +104,26 @@ export function NavUser({
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium text-white">{user.name}</span>
-                    <span className="truncate text-xs" style={{ color: "#737373" }}>{user.email}</span>
+                    <span className="truncate text-xs" style={{ color: "var(--text-tertiary)" }}>{user.email}</span>
                   </div>
                 </div>
               </DropdownMenuLabel>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator style={{ background: "rgba(163, 163, 163, 0.1)" }} />
+            <DropdownMenuSeparator style={{ background: "var(--border)" }} />
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={() => navigate("/account")}
-                className="text-[#a3a3a3] focus:text-white focus:bg-[rgba(163,163,163,0.08)]"
+                className="text-muted-foreground focus:text-white focus:bg-[rgba(163,163,163,0.08)]"
               >
                 <BadgeCheckIcon className="size-4" />
                 {t("user.account")}
               </DropdownMenuItem>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator style={{ background: "rgba(163, 163, 163, 0.1)" }} />
+            <DropdownMenuSeparator style={{ background: "var(--border)" }} />
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={handleLogout}
-                className="text-[#a3a3a3] focus:text-red-400 focus:bg-[rgba(239,68,68,0.08)]"
+                className="text-muted-foreground focus:text-red-400 focus:bg-[rgba(239,68,68,0.08)]"
               >
                 <LogOutIcon className="size-4" />
                 {t("user.logOut")}

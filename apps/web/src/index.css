@@ -94,6 +94,16 @@
     --shadow-card-hover: 0 10px 25px -5px oklch(0 0 0 / 0.08), 0 4px 10px -4px oklch(0 0 0 / 0.04);
 }
 
+    /* --- Custom Theme Variables --- */
+    --surface-1: oklch(0.965 0.008 250);
+    --surface-2: oklch(0.91 0.01 250);
+    --text-primary: oklch(0.145 0.005 250);
+    --text-secondary: oklch(0.52 0.01 250);
+    --text-tertiary: oklch(0.52 0.01 250);
+    --text-quaternary: oklch(0.40 0.01 250);
+    --shadow-system: oklch(0.205 0 0 / 0.15);
+}
+
 .dark {
     --background: oklch(0.10 0.005 250);
     --foreground: oklch(0.96 0.003 250);
@@ -135,6 +145,15 @@
     --shadow-xl: 0 20px 25px -5px oklch(0 0 0 / 0.3), 0 8px 10px -6px oklch(0 0 0 / 0.2);
     --shadow-card: 0 1px 3px oklch(0 0 0 / 0.2), 0 1px 2px oklch(0 0 0 / 0.15);
     --shadow-card-hover: 0 10px 25px -5px oklch(0 0 0 / 0.3), 0 4px 10px -4px oklch(0 0 0 / 0.2);
+
+    /* --- Custom Theme Variables (dark) --- */
+    --surface-1: oklch(0.14 0.005 250);
+    --surface-2: oklch(0.20 0.005 250);
+    --text-primary: oklch(0.96 0.003 250);
+    --text-secondary: oklch(0.65 0.008 250);
+    --text-tertiary: oklch(0.52 0.008 250);
+    --text-quaternary: oklch(0.40 0.008 250);
+    --shadow-system: oklch(0.922 0 0 / 0.15);
 }
 
 @layer base {
@@ -292,7 +311,7 @@
 }
 
 .dark .gradient-hero {
-  background: linear-gradient(180deg, #010102 0%, #010102 100%);
+  background: linear-gradient(180deg, var(--landing-canvas) 0%, var(--landing-canvas) 100%);
 }
 
 /* --- Animation Utilities --- */
@@ -534,8 +553,8 @@
 
 /* --- Landing Page: Card Surface (老师风格 - 双层边框) --- */
 .landing-card {
-  background: #171717;
-  border: 1px solid rgba(163, 163, 163, 0.1);
+  background: var(--landing-surface-1);
+  border: 1px solid var(--landing-hairline);
   position: relative;
   transition: all 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
@@ -544,7 +563,7 @@
   content: '';
   position: absolute;
   inset: -1px;
-  border: 1px solid rgba(132, 204, 22, 0.2);
+  border: 1px solid var(--landing-border-inner);
   opacity: 0;
   transition: opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   pointer-events: none;
@@ -556,13 +575,13 @@
 }
 
 .landing-card:hover {
-  border-color: rgba(132, 204, 22, 0.3);
+  border-color: var(--landing-border-inner);
   transform: translateY(-2px);
 }
 
 .landing-card-highlight {
-  border-color: rgba(132, 204, 22, 0.3);
-  background: linear-gradient(145deg, rgba(132, 204, 22, 0.06), #171717);
+  border-color: var(--landing-border-inner);
+  background: linear-gradient(145deg, rgba(132, 204, 22, 0.06), var(--landing-surface-1));
 }
 
 .landing-card-highlight::before {
@@ -583,7 +602,7 @@
   content: '';
   position: absolute;
   inset: -1px;
-  border: 1px solid rgba(132, 204, 22, 0.2);
+  border: 1px solid var(--landing-border-inner);
   opacity: 0;
   transition: opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   pointer-events: none;
@@ -605,13 +624,13 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #0a0a0a;
+  background: var(--landing-canvas);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #262626;
+  background: var(--landing-surface-2);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #84cc16;
+  background: var(--landing-accent);
 }

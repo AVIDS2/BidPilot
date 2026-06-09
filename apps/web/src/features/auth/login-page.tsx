@@ -58,7 +58,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="h-screen flex items-center justify-center bg-[#0a0a0a] px-6">
+    <div className="h-screen flex items-center justify-center bg-background px-6">
       {/* 影视画框标注 */}
       <div className="absolute inset-0 pointer-events-none z-10">
         <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">
@@ -88,11 +88,11 @@ export function LoginPage() {
         <div className="text-center mb-10">
           <Link
             to="/"
-            className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-[#84cc16] transition-colors duration-300"
+            className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300"
           >
             DocPilot
           </Link>
-          <p className="mt-3 text-sm text-[#737373]">
+          <p className="mt-3 text-sm text-muted-foreground">
             AI-Powered Document Execution
           </p>
         </div>
@@ -101,15 +101,15 @@ export function LoginPage() {
         <div
           className="p-8"
           style={{
-            background: "#171717",
-            border: "1px solid rgba(163, 163, 163, 0.1)",
+            background: "var(--landing-surface-1)",
+            border: "1px solid var(--landing-hairline)",
           }}
         >
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-[#a3a3a3] mb-2"
+                className="block text-sm font-medium text-muted-foreground mb-2"
               >
                 {t("login.emailLabel")}
               </label>
@@ -120,7 +120,7 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 text-sm text-white bg-[#262626] border border-[rgba(163,163,163,0.1)] outline-none focus:border-[#84cc16] transition-colors duration-300"
+                className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
               />
             </div>
 
@@ -128,13 +128,13 @@ export function LoginPage() {
               <div className="flex items-center justify-between mb-2">
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-[#a3a3a3]"
+                  className="block text-sm font-medium text-muted-foreground"
                 >
                   {t("login.passwordLabel")}
                 </label>
                 <Link
                   to="/forgot-password"
-                  className="text-xs text-[#737373] hover:text-[#84cc16] transition-colors duration-300"
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors duration-300"
                 >
                   {t("login.forgotPassword")}
                 </Link>
@@ -145,14 +145,14 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-3 text-sm text-white bg-[#262626] border border-[rgba(163,163,163,0.1)] outline-none focus:border-[#84cc16] transition-colors duration-300"
+                className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading || !email || !password}
-              className="w-full py-3.5 text-sm font-medium bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {loading ? (
                 <span className="inline-flex items-center gap-2">
@@ -207,11 +207,11 @@ export function LoginPage() {
 
         {/* 底部链接 */}
         <div className="mt-6 text-center">
-          <p className="text-sm text-[#737373]">
+          <p className="text-sm text-muted-foreground">
             {t("login.noAccount")}{" "}
             <Link
               to="/signup"
-              className="text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
+              className="text-muted-foreground hover:text-primary transition-colors duration-300"
             >
               {t("login.signUp")}
             </Link>
@@ -219,18 +219,18 @@ export function LoginPage() {
         </div>
 
         {/* 条款 */}
-        <p className="mt-6 text-center text-xs text-[#525252]">
+        <p className="mt-6 text-center text-xs text-muted-foreground">
           {t("login.termsText")}{" "}
           <a
             href="#"
-            className="text-[#737373] hover:text-[#84cc16] transition-colors duration-300"
+            className="text-muted-foreground hover:text-primary transition-colors duration-300"
           >
             {t("login.termsOfService")}
           </a>{" "}
           {t("login.and")}{" "}
           <a
             href="#"
-            className="text-[#737373] hover:text-[#84cc16] transition-colors duration-300"
+            className="text-muted-foreground hover:text-primary transition-colors duration-300"
           >
             {t("login.privacyPolicy")}
           </a>

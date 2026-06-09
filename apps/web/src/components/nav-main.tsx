@@ -28,9 +28,9 @@ export function NavMain({
               render={<Link to={item.url} />}
               className="transition-all duration-200"
               style={{
-                color: isActive ? "#84cc16" : "#a3a3a3",
+                color: isActive ? "var(--primary)" : "var(--muted-foreground)",
                 background: isActive ? "rgba(132, 204, 22, 0.08)" : "transparent",
-                borderLeft: isActive ? "2px solid #84cc16" : "2px solid transparent",
+                borderLeft: isActive ? "2px solid var(--primary)" : "2px solid transparent",
               }}
             >
               {item.icon}

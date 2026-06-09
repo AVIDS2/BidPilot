@@ -69,7 +69,7 @@ export function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] px-6 py-12">
+    <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12">
       {/* 影视画框标注 */}
       <div className="absolute inset-0 pointer-events-none z-10">
         <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">
@@ -99,11 +99,11 @@ export function SignupPage() {
         <div className="text-center mb-10">
           <Link
             to="/"
-            className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-[#84cc16] transition-colors duration-300"
+            className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300"
           >
             DocPilot
           </Link>
-          <p className="mt-3 text-sm text-[#737373]">
+          <p className="mt-3 text-sm text-muted-foreground">
             AI-Powered Document Execution
           </p>
         </div>
@@ -112,8 +112,8 @@ export function SignupPage() {
         <div
           className="p-8"
           style={{
-            background: "#171717",
-            border: "1px solid rgba(163, 163, 163, 0.1)",
+            background: "var(--landing-surface-1)",
+            border: "1px solid var(--landing-hairline)",
           }}
         >
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -121,7 +121,7 @@ export function SignupPage() {
             <div>
               <label
                 htmlFor="display-name"
-                className="block text-sm font-medium text-[#a3a3a3] mb-2"
+                className="block text-sm font-medium text-muted-foreground mb-2"
               >
                 {t("signup.displayNameLabel")}
               </label>
@@ -132,7 +132,7 @@ export function SignupPage() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 required
-                className="w-full px-4 py-3 text-sm text-white bg-[#262626] border border-[rgba(163,163,163,0.1)] outline-none focus:border-[#84cc16] transition-colors duration-300"
+                className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
               />
             </div>
 
@@ -140,7 +140,7 @@ export function SignupPage() {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-[#a3a3a3] mb-2"
+                className="block text-sm font-medium text-muted-foreground mb-2"
               >
                 {t("signup.emailLabel")}
               </label>
@@ -151,19 +151,19 @@ export function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 text-sm text-white bg-[#262626] border border-[rgba(163,163,163,0.1)] outline-none focus:border-[#84cc16] transition-colors duration-300"
+                className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
               />
-              <p className="mt-1.5 text-xs text-[#525252]">
+              <p className="mt-1.5 text-xs text-muted-foreground">
                 {t("signup.emailDescription")}
               </p>
             </div>
 
             {/* 组织区域 */}
             <div>
-              <label className="block text-sm font-medium text-[#a3a3a3] mb-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-2">
                 {t("signup.orgLabel")}
               </label>
-              <p className="mb-3 text-xs text-[#525252]">
+              <p className="mb-3 text-xs text-muted-foreground">
                 {t("signup.orgDescription")}
               </p>
 
@@ -172,7 +172,7 @@ export function SignupPage() {
                   <div>
                     <label
                       htmlFor="org-name"
-                      className="block text-xs font-medium text-[#737373] mb-1.5"
+                      className="block text-xs font-medium text-muted-foreground mb-1.5"
                     >
                       {t("signup.orgNameLabel")}
                     </label>
@@ -183,13 +183,13 @@ export function SignupPage() {
                       value={orgName}
                       onChange={(e) => setOrgName(e.target.value)}
                       required={createOrg}
-                      className="w-full px-4 py-3 text-sm text-white bg-[#262626] border border-[rgba(163,163,163,0.1)] outline-none focus:border-[#84cc16] transition-colors duration-300"
+                      className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
                     />
                   </div>
                   <div>
                     <label
                       htmlFor="org-slug"
-                      className="block text-xs font-medium text-[#737373] mb-1.5"
+                      className="block text-xs font-medium text-muted-foreground mb-1.5"
                     >
                       {t("signup.orgSlugLabel")}
                     </label>
@@ -206,9 +206,9 @@ export function SignupPage() {
                         )
                       }
                       required={createOrg}
-                      className="w-full px-4 py-3 text-sm text-white bg-[#262626] border border-[rgba(163,163,163,0.1)] outline-none focus:border-[#84cc16] transition-colors duration-300"
+                      className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
                     />
-                    <p className="mt-1.5 text-xs text-[#525252]">
+                    <p className="mt-1.5 text-xs text-muted-foreground">
                       {t("signup.orgSlugDescription")}
                     </p>
                   </div>
@@ -216,10 +216,10 @@ export function SignupPage() {
               )}
 
               {hasInvitation && (
-                <div className="p-3 bg-[#262626] border border-[rgba(163,163,163,0.1)]">
+                <div className="p-3 bg-muted border border-border">
                   <label
                     htmlFor="invitation-token"
-                    className="block text-xs font-medium text-[#737373] mb-1.5"
+                    className="block text-xs font-medium text-muted-foreground mb-1.5"
                   >
                     {t("signup.invitationTokenLabel")}
                   </label>
@@ -229,9 +229,9 @@ export function SignupPage() {
                     placeholder={t("signup.invitationTokenPlaceholder")}
                     value={invitationToken}
                     onChange={(e) => setInvitationToken(e.target.value)}
-                    className="w-full px-4 py-3 text-sm text-white bg-[#0a0a0a] border border-[rgba(163,163,163,0.1)] outline-none focus:border-[#84cc16] transition-colors duration-300"
+                    className="w-full px-4 py-3 text-sm text-white bg-background border border-border outline-none focus:border-primary transition-colors duration-300"
                   />
-                  <p className="mt-1.5 text-xs text-[#525252]">
+                  <p className="mt-1.5 text-xs text-muted-foreground">
                     {t("signup.invitationTokenDescription")}
                   </p>
                 </div>
@@ -243,7 +243,7 @@ export function SignupPage() {
               <div>
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-[#a3a3a3] mb-2"
+                  className="block text-sm font-medium text-muted-foreground mb-2"
                 >
                   {t("signup.passwordLabel")}
                 </label>
@@ -253,13 +253,13 @@ export function SignupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 text-sm text-white bg-[#262626] border border-[rgba(163,163,163,0.1)] outline-none focus:border-[#84cc16] transition-colors duration-300"
+                  className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
                 />
               </div>
               <div>
                 <label
                   htmlFor="confirm-password"
-                  className="block text-sm font-medium text-[#a3a3a3] mb-2"
+                  className="block text-sm font-medium text-muted-foreground mb-2"
                 >
                   {t("signup.confirmPasswordLabel")}
                 </label>
@@ -269,11 +269,11 @@ export function SignupPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-3 text-sm text-white bg-[#262626] border border-[rgba(163,163,163,0.1)] outline-none focus:border-[#84cc16] transition-colors duration-300"
+                  className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
                 />
               </div>
             </div>
-            <p className="text-xs text-[#525252] -mt-2">
+            <p className="text-xs text-muted-foreground -mt-2">
               {t("signup.passwordHint")}
             </p>
 
@@ -281,7 +281,7 @@ export function SignupPage() {
             <button
               type="submit"
               disabled={loading || !email || !displayName || !password}
-              className="w-full py-3.5 text-sm font-medium bg-[#84cc16] text-[#0a0a0a] hover:bg-[#65a30d] transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {loading ? (
                 <span className="inline-flex items-center gap-2">
@@ -315,11 +315,11 @@ export function SignupPage() {
 
         {/* 底部链接 */}
         <div className="mt-6 text-center">
-          <p className="text-sm text-[#737373]">
+          <p className="text-sm text-muted-foreground">
             {t("signup.hasAccount")}{" "}
             <Link
               to="/login"
-              className="text-[#a3a3a3] hover:text-[#84cc16] transition-colors duration-300"
+              className="text-muted-foreground hover:text-primary transition-colors duration-300"
             >
               {t("signup.signIn")}
             </Link>
@@ -327,18 +327,18 @@ export function SignupPage() {
         </div>
 
         {/* 条款 */}
-        <p className="mt-6 text-center text-xs text-[#525252]">
+        <p className="mt-6 text-center text-xs text-muted-foreground">
           {t("login.termsText")}{" "}
           <a
             href="#"
-            className="text-[#737373] hover:text-[#84cc16] transition-colors duration-300"
+            className="text-muted-foreground hover:text-primary transition-colors duration-300"
           >
             {t("login.termsOfService")}
           </a>{" "}
           {t("login.and")}{" "}
           <a
             href="#"
-            className="text-[#737373] hover:text-[#84cc16] transition-colors duration-300"
+            className="text-muted-foreground hover:text-primary transition-colors duration-300"
           >
             {t("login.privacyPolicy")}
           </a>
