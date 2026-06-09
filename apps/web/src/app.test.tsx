@@ -11,7 +11,11 @@ describe("App", () => {
 
   it("renders the landing page for unauthenticated users at /", () => {
     render(<App />);
-    expect(screen.getByText(/AI-Powered Bid Response/i)).toBeInTheDocument();
+    // 逐字动画把文字拆分成了单独的字符span，使用getAllByText获取所有字符
+    const heroChars = screen.getAllByText((content, element) => {
+      return element?.textContent?.includes("AI-Powered") || false;
+    });
+    expect(heroChars.length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Start Free Trial/i }).length).toBeGreaterThan(0);
   });
 

@@ -317,49 +317,49 @@
   animation: ripple-expand 0.6s ease-out forwards;
 }
 
-/* Scroll-triggered directional animations */
+/* Scroll-triggered directional animations (老师缓动曲线) */
 .scroll-fade-in-up {
   opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  transform: translateY(24px) blur(4px);
+  transition: opacity 0.8s cubic-bezier(0.32, 0.72, 0, 1), transform 0.8s cubic-bezier(0.32, 0.72, 0, 1), filter 0.8s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .scroll-fade-in-up.is-visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) blur(0);
 }
 
 .scroll-fade-in-down {
   opacity: 0;
-  transform: translateY(-24px);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  transform: translateY(-24px) blur(4px);
+  transition: opacity 0.8s cubic-bezier(0.32, 0.72, 0, 1), transform 0.8s cubic-bezier(0.32, 0.72, 0, 1), filter 0.8s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .scroll-fade-in-down.is-visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) blur(0);
 }
 
 .scroll-fade-in-left {
   opacity: 0;
-  transform: translateX(-24px);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  transform: translateX(-24px) blur(4px);
+  transition: opacity 0.8s cubic-bezier(0.32, 0.72, 0, 1), transform 0.8s cubic-bezier(0.32, 0.72, 0, 1), filter 0.8s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .scroll-fade-in-left.is-visible {
   opacity: 1;
-  transform: translateX(0);
+  transform: translateX(0) blur(0);
 }
 
 .scroll-fade-in-right {
   opacity: 0;
-  transform: translateX(24px);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  transform: translateX(24px) blur(4px);
+  transition: opacity 0.8s cubic-bezier(0.32, 0.72, 0, 1), transform 0.8s cubic-bezier(0.32, 0.72, 0, 1), filter 0.8s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .scroll-fade-in-right.is-visible {
   opacity: 1;
-  transform: translateX(0);
+  transform: translateX(0) blur(0);
 }
 
 /* Hero floating animations */
@@ -411,7 +411,8 @@
   .hero-float-2,
   .hero-float-3,
   .hero-glow-pulse,
-  .hero-counter-in {
+  .hero-counter-in,
+  .anim-char {
     animation: none;
   }
 
@@ -422,13 +423,16 @@
     opacity: 1;
     transform: none;
     transition: none;
+    filter: none;
   }
 
   .stagger-children > * {
     animation: none;
   }
 
-  .card-elevated:hover {
+  .card-elevated:hover,
+  .landing-card:hover,
+  .landing-card-highlight:hover {
     transform: none;
   }
 
@@ -444,59 +448,169 @@
   .landing-hero-glow-pulse-slow {
     animation: none;
   }
+
+  .animate-in .anim-char {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
 }
 
-/* --- Landing Page: Design System Tokens --- */
+/* --- Landing Page: Design System Tokens (老师风格) --- */
 :root {
-  --landing-canvas: #010102;
-  --landing-surface-1: #0f1011;
-  --landing-surface-2: #141516;
-  --landing-hairline: #23252a;
-  --landing-accent: #5e6ad2;
-  --landing-accent-hover: #828fff;
-  --landing-warm: #cc785c;
-  --landing-warm-hover: #a9583e;
-  --landing-text-primary: #f7f8f8;
-  --landing-text-secondary: #d0d6e0;
+  /* 主背景色系 - 近黑灰层次 */
+  --landing-canvas: #0a0a0a;
+  --landing-surface-1: #171717;
+  --landing-surface-2: #262626;
+  --landing-surface-3: #404040;
+
+  /* 文字色系 */
+  --landing-text-primary: #ffffff;
+  --landing-text-secondary: #a3a3a3;
+  --landing-text-tertiary: #737373;
+
+  /* 青柠绿强调色系 */
+  --landing-accent: #84cc16;
+  --landing-accent-hover: #65a30d;
+  --landing-accent-light: #a3e635;
+
+  /* 边框色系 */
+  --landing-hairline: rgba(163, 163, 163, 0.1);
+  --landing-border-inner: rgba(132, 204, 22, 0.2);
+
+  /* 兼容旧变量 */
+  --landing-warm: #84cc16;
+  --landing-warm-hover: #65a30d;
 }
 
-/* --- Landing Page: Hero Orb Animations --- */
+/* --- Landing Page: Hero Orb Animations (青柠绿光晕) --- */
 @keyframes landing-hero-orb {
-  0%, 100% { opacity: 0.35; transform: scale(1); }
-  50% { opacity: 0.55; transform: scale(1.06); }
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(1.06); }
 }
 
 @keyframes landing-hero-glow {
-  0%, 100% { opacity: 0.35; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(1.05); }
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.05); }
 }
 
 @keyframes landing-hero-glow-slow {
-  0%, 100% { opacity: 0.25; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(1.04); }
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.04); }
 }
 
-.landing-hero-orb-1 { animation: landing-hero-orb 8s ease-in-out infinite; }
-.landing-hero-orb-2 { animation: landing-hero-orb 10s ease-in-out infinite 4s; }
-.landing-cta-orb-1 { animation: landing-hero-orb 8s ease-in-out infinite; }
-.landing-cta-orb-2 { animation: landing-hero-orb 10s ease-in-out infinite 4s; }
-.landing-hero-glow-pulse { animation: landing-hero-glow 6s ease-in-out infinite; }
-.landing-hero-glow-pulse-slow { animation: landing-hero-glow-slow 6s ease-in-out infinite 3s; }
+@keyframes char-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(20px) blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) blur(0);
+  }
+}
 
-/* --- Landing Page: Card Surface (Linear-style) --- */
+.landing-hero-orb-1 { animation: landing-hero-orb 8s cubic-bezier(0.32, 0.72, 0, 1) infinite; }
+.landing-hero-orb-2 { animation: landing-hero-orb 10s cubic-bezier(0.32, 0.72, 0, 1) infinite 4s; }
+.landing-cta-orb-1 { animation: landing-hero-orb 8s cubic-bezier(0.32, 0.72, 0, 1) infinite; }
+.landing-cta-orb-2 { animation: landing-hero-orb 10s cubic-bezier(0.32, 0.72, 0, 1) infinite 4s; }
+.landing-hero-glow-pulse { animation: landing-hero-glow 6s cubic-bezier(0.32, 0.72, 0, 1) infinite; }
+.landing-hero-glow-pulse-slow { animation: landing-hero-glow-slow 6s cubic-bezier(0.32, 0.72, 0, 1) infinite 3s; }
+
+/* 文字逐字动画 */
+.anim-char {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(20px) blur(4px);
+  transition: all 0.6s cubic-bezier(0.32, 0.72, 0, 1);
+  transition-delay: calc(var(--i) * 0.05s);
+}
+
+.animate-in .anim-char {
+  opacity: 1;
+  transform: translateY(0) blur(0);
+}
+
+/* --- Landing Page: Card Surface (老师风格 - 双层边框) --- */
 .landing-card {
-  background: linear-gradient(145deg, #141516 0%, #0f1011 100%);
-  border: 1px solid oklch(1 0 0 / 8%);
+  background: #171717;
+  border: 1px solid rgba(163, 163, 163, 0.1);
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.landing-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid rgba(132, 204, 22, 0.2);
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.landing-card:hover::before {
+  opacity: 1;
 }
 
 .landing-card:hover {
-  border-color: oklch(1 0 0 / 14%);
+  border-color: rgba(132, 204, 22, 0.3);
+  transform: translateY(-2px);
 }
 
 .landing-card-highlight {
-  border-color: oklch(0.68 0.17 264 / 35%);
+  border-color: rgba(132, 204, 22, 0.3);
+  background: linear-gradient(145deg, rgba(132, 204, 22, 0.06), #171717);
+}
+
+.landing-card-highlight::before {
+  opacity: 1;
+  border-color: rgba(132, 204, 22, 0.4);
 }
 
 .landing-card-highlight:hover {
-  border-color: oklch(0.68 0.17 264 / 50%);
+  border-color: rgba(132, 204, 22, 0.5);
+}
+
+/* 双层边框效果 */
+.double-border {
+  position: relative;
+}
+
+.double-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid rgba(132, 204, 22, 0.2);
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.double-border:hover::before {
+  opacity: 1;
+}
+
+/* 全局过渡使用老师的缓动曲线 */
+* {
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #262626;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #84cc16;
 }
