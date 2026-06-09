@@ -313,9 +313,9 @@ export function TeamManagementPage() {
             ))}
           </div>
 
-          {/* Pagination */}
+          {/* Pagination - 页面底部 */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-2">
+            <div className="flex items-center justify-center gap-2 mt-auto pt-8 pb-4">
               <button
                 className="px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-30"
                 style={{
