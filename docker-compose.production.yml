@@ -74,7 +74,7 @@ services:
       context: ./repo
       dockerfile: apps/web/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-https://api.bidpilot.rglens.com}
+        VITE_API_URL: ${VITE_API_URL:-https://bidpilot-api.rglens.com}
     container_name: bidpilot-web
     restart: unless-stopped
     depends_on:
