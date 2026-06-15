@@ -6,7 +6,16 @@ from sqlalchemy.orm import Session
 
 from app.models import Project
 
-from .repository import create_project, get_project, list_projects, update_project_status, delete_project
+from .repository import (
+    create_project,
+    delete_project,
+    delete_project_for_org,
+    get_project,
+    get_project_for_org,
+    list_projects,
+    update_project_status,
+    update_project_status_for_org,
+)
 from .schemas import ProjectCreate, ProjectRead
 
 
@@ -83,6 +92,13 @@ def get_project_query(db: Session, project_id: str) -> ProjectRead | None:
     return _project_to_read(project)
 
 
+def get_project_query_for_org(db: Session, project_id: str, org_id: str) -> ProjectRead | None:
+    project = get_project_for_org(db, project_id, org_id)
+    if project is None:
+        return None
+    return _project_to_read(project)
+
+
 def list_projects_query(db: Session, org_id: str | None = None) -> list[ProjectRead]:
     projects = list_projects(db, org_id)
     return [_project_to_read(p) for p in projects]
@@ -95,5 +111,16 @@ def update_project_status_command(db: Session, project_id: str, status: str) -> 
     return _project_to_read(project)
 
 
+def update_project_status_command_for_org(db: Session, project_id: str, org_id: str, status: str) -> ProjectRead | None:
+    project = update_project_status_for_org(db, project_id, org_id, status)
+    if project is None:
+        return None
+    return _project_to_read(project)
+
+
 def delete_project_command(db: Session, project_id: str) -> bool:
     return delete_project(db, project_id)
+
+
+def delete_project_command_for_org(db: Session, project_id: str, org_id: str) -> bool:
+    return delete_project_for_org(db, project_id, org_id)

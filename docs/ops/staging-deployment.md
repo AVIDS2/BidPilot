@@ -69,6 +69,8 @@ VITE_API_URL=http://localhost:8000 pnpm dev
 | `EMBEDDING_API_URL` | `https://api.openai.com/v1/embeddings` | Embedding endpoint |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
 
+For the controlled VPS pilot deployment shape, see `docs/ops/vps-pilot-deployment.md` instead of this local/staging guide.
+
 ## Production Checklist
 
 - [ ] Set `DOCPILOT_JWT_SECRET` to a cryptographically random 32+ byte string

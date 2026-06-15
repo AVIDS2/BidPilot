@@ -5,10 +5,11 @@ Falls back to a structured stub when no API key is configured.
 """
 
 import logging
-import os
 from dataclasses import dataclass
 
 import httpx
+
+from app.adapters.provider_env import chat_api_key, chat_api_url, chat_model
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +25,15 @@ class DraftResult:
 
 
 def _api_key() -> str | None:
-    return os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    return chat_api_key()
 
 
 def _api_url() -> str:
-    return os.environ.get("LLM_API_URL", _DEFAULT_URL)
+    return chat_api_url(_DEFAULT_URL)
 
 
 def _api_model() -> str:
-    return os.environ.get("LLM_MODEL", _DEFAULT_MODEL)
+    return chat_model(_DEFAULT_MODEL)
 
 
 def _build_prompt(section_key: str, evidence_texts: list[str], review_feedback: str | None = None) -> str:

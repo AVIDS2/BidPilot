@@ -183,6 +183,7 @@ def section_drafter_node(state: BidPilotState) -> dict:
             "draft_markdown": result.content_markdown,
             "draft_model_used": result.model_used,
             "draft_created": True,
+            "iteration": iteration + 1,
             "agent_history": history,
         }
     except Exception as exc:
@@ -206,6 +207,7 @@ def section_drafter_node(state: BidPilotState) -> dict:
             "draft_markdown": "",
             "draft_model_used": "",
             "draft_created": False,
+            "iteration": iteration + 1,
             "error": f"section_drafter: {exc}",
             "agent_history": history,
         }

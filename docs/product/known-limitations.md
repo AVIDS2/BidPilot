@@ -11,9 +11,10 @@ This document lists known limitations that must be acknowledged before onboardin
 
 ## AI & Generation
 
-- AI generation requires a configured provider API key. Aliyun DashScope is configured as the domestic provider (`qwen3.5-flash` for LLM, `text-embedding-v4` for embeddings). Without a valid key, draft generation endpoints return errors.
+- AI generation requires a configured server-side provider API key for real output. Aliyun DashScope is configured as the domestic provider (`qwen3.5-flash` for LLM, `text-embedding-v4` for embeddings). Without a valid or IP-allowed key, worker adapters fall back to stub output for local safety.
 - Generation quality depends on the provider model and prompt configuration; no automated quality gate exists yet.
 - No automatic red-team or compliance scoring.
+- Starter/free workflow usage is not yet backed by a durable usage ledger. The intended initial policy is 3 official-provider workflow draft runs per logged-in starter user, with assistant chat free but rate-limited.
 
 ## Review & Collaboration
 

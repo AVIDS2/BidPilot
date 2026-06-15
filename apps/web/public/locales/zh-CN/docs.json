@@ -27,7 +27,16 @@
     "enterpriseTitle": "企业就绪",
     "enterpriseDesc": "RBAC 权限控制、加密存储、提供商无关的 LLM 集成和生产级基础设施。",
     "pipelineTitle": "工作流管线",
-    "pipelineSteps": ["项目创建", "RFP 导入", "需求提取", "知识检索", "章节起草", "质量审核", "人工审批", "导出交付"]
+    "pipelineSteps": [
+      "项目创建",
+      "RFP 导入",
+      "需求提取",
+      "知识检索",
+      "章节起草",
+      "质量审核",
+      "人工审批",
+      "导出交付"
+    ]
   },
   "quickstart": {
     "label": "快速开始",
@@ -45,9 +54,9 @@
     "envDesc2": "文件控制所有服务连接和 API 密钥。关键变量：",
     "firstProject": "创建第一个项目",
     "step1Title": "注册 / 登录",
-    "step1Desc": "导航到 Web UI 并创建账户。",
+    "step1Desc": "进入 Web 界面并创建一个账户。",
     "step2Title": "新建项目",
-    "step2Desc": "在仪表盘上点击"新建项目"并命名您的投标。",
+    "step2Desc": "在仪表盘上点击“新建项目”并命名您的投标。",
     "step3Title": "上传 RFP",
     "step3Desc": "拖放您的 RFP 文档（PDF、DOCX 或 Markdown）。",
     "step4Title": "审核与导出",
@@ -100,7 +109,24 @@
     "description": "每个技术选择都是经过深思熟虑的：异步优先、类型安全、经生产环境检验。",
     "frontend": "前端",
     "backend": "后端",
-    "dataStorage": "数据与存储"
+    "dataStorage": "数据与存储",
+    "reactDesc": "具备并发特性的界面库",
+    "typescriptDesc": "端到端类型安全",
+    "viteDesc": "快速开发服务器与构建工具",
+    "tailwindDesc": "实用优先的样式方案",
+    "shadcnDesc": "可访问的组件原语",
+    "queryDesc": "服务端状态管理",
+    "routerDesc": "客户端路由",
+    "fastapiDesc": "异步 Python Web 框架",
+    "celeryDesc": "分布式任务队列",
+    "sqlalchemyDesc": "带类型提示的异步 ORM",
+    "alembicDesc": "数据库迁移管理",
+    "langgraphDesc": "多智能体工作流编排",
+    "langchainDesc": "LLM 抽象层",
+    "postgresDesc": "主关系型数据库",
+    "pgvectorDesc": "向量相似度搜索",
+    "redisDesc": "任务队列代理与缓存",
+    "minioDesc": "兼容 S3 的对象存储"
   },
   "deployment": {
     "label": "部署方案",

@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
@@ -8,7 +9,21 @@ import { NotificationBell } from "@/components/notification-bell";
 
 export function SiteHeader() {
   const { t, i18n } = useTranslation();
+  const location = useLocation();
   const { theme, setTheme } = useTheme();
+
+  const title = (() => {
+    if (location.pathname === "/dashboard") return t("nav.dashboard");
+    if (location.pathname === "/projects") return t("nav.projects");
+    if (location.pathname.startsWith("/projects/")) return t("nav.projects");
+    if (location.pathname === "/pricing") return t("nav.pricing", { defaultValue: "定价" });
+    if (location.pathname === "/docs") return t("nav.docs", { defaultValue: "文档" });
+    if (location.pathname.startsWith("/settings")) return t("nav.settings");
+    if (location.pathname === "/admin/users") return t("nav.users");
+    if (location.pathname === "/admin/teams") return t("nav.teams");
+    if (location.pathname === "/admin/invitations") return t("nav.invitations");
+    return t("app.documents");
+  })();
 
   const toggleLang = () => {
     const next = i18n.language === "zh-CN" ? "en" : "zh-CN";
@@ -29,7 +44,7 @@ export function SiteHeader() {
           orientation="vertical"
           className="mx-2 h-4 data-vertical:self-auto"
         />
-        <h1 className="text-sm font-medium text-foreground">{t("app.documents")}</h1>
+        <h1 className="text-sm font-medium text-foreground">{title}</h1>
         <div className="ml-auto flex items-center gap-2">
           <NotificationBell />
           <button

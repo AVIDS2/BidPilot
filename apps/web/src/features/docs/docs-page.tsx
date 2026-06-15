@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
+import { useTranslation } from "react-i18next";
 import {
   BookOpenIcon,
   RocketIcon,
@@ -108,39 +110,39 @@ function CodeBlock({
     <div
       className="relative group my-6 overflow-hidden"
       style={{
-        background: "var(--landing-surface-1)",
-        border: "1px solid var(--landing-hairline)",
+        background: "var(--card)",
+        border: "1px solid var(--border)",
       }}
     >
       {/* 标题栏 */}
       <div
         className="flex items-center justify-between px-4 py-2.5"
         style={{
-          borderBottom: "1px solid var(--landing-hairline)",
-          background: "var(--landing-canvas)",
+          borderBottom: "1px solid var(--border)",
+          background: "var(--background)",
         }}
       >
         <div className="flex items-center gap-3">
           <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--landing-surface-3)" }} />
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--landing-surface-3)" }} />
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--landing-surface-3)" }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
           </div>
           {filename && (
-            <span className="text-xs font-mono" style={{ color: "var(--landing-text-tertiary)" }}>
+            <span className="text-xs font-mono" style={{ color: "var(--muted-foreground)" }}>
               {filename}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono tracking-wider uppercase" style={{ color: "var(--landing-text-tertiary)" }}>
+          <span className="text-[10px] font-mono tracking-wider uppercase" style={{ color: "var(--muted-foreground)" }}>
             {language}
           </span>
           <button
             onClick={handleCopy}
             className="p-1.5 transition-all duration-200 hover:scale-110"
             style={{
-              color: copied ? "var(--landing-accent)" : "var(--landing-text-tertiary)",
+              color: copied ? "var(--primary)" : "var(--muted-foreground)",
             }}
             title="Copy code"
           >
@@ -150,7 +152,7 @@ function CodeBlock({
       </div>
 
       {/* 代码内容 */}
-      <pre className="p-5 overflow-x-auto text-sm leading-relaxed font-mono" style={{ color: "var(--landing-text-secondary)" }}>
+      <pre className="p-5 overflow-x-auto text-sm leading-relaxed font-mono" style={{ color: "var(--muted-foreground)" }}>
         <code>{children.trim()}</code>
       </pre>
     </div>
@@ -174,29 +176,29 @@ function FeatureCard({
       <div
         className="group p-7 transition-all duration-300 hover:-translate-y-1"
         style={{
-          background: "var(--landing-surface-1)",
-          border: "1px solid var(--landing-hairline)",
+          background: "var(--card)",
+          border: "1px solid var(--border)",
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = "var(--landing-border-inner)";
+          e.currentTarget.style.borderColor = "var(--border)";
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = "var(--landing-hairline)";
+          e.currentTarget.style.borderColor = "var(--border)";
         }}
       >
         <div
           className="w-10 h-10 flex items-center justify-center mb-5"
           style={{
             background: "rgba(132, 204, 22, 0.1)",
-            border: "1px solid var(--landing-border-inner)",
+            border: "1px solid var(--border)",
           }}
         >
-          <Icon className="w-5 h-5" style={{ color: "var(--landing-accent)" }} />
+          <Icon className="w-5 h-5" style={{ color: "var(--primary)" }} />
         </div>
-        <h3 className="text-lg font-medium mb-2" style={{ color: "var(--landing-text-primary)" }}>
+        <h3 className="text-lg font-medium mb-2" style={{ color: "var(--foreground)" }}>
           {title}
         </h3>
-        <p className="text-sm leading-relaxed" style={{ color: "var(--landing-text-secondary)" }}>
+        <p className="text-sm leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
           {description}
         </p>
       </div>
@@ -218,17 +220,17 @@ function SectionHeading({
     <ScrollReveal>
       <span
         className="text-xs font-medium tracking-widest uppercase mb-4 block"
-        style={{ color: "var(--landing-accent)" }}
+        style={{ color: "var(--primary)" }}
       >
         {label}
       </span>
       <h2
         className="text-3xl md:text-4xl font-medium leading-tight tracking-tight mb-4"
-        style={{ color: "var(--landing-text-primary)" }}
+        style={{ color: "var(--foreground)" }}
       >
         {title}
       </h2>
-      <p className="text-lg max-w-2xl mb-14" style={{ color: "var(--landing-text-secondary)" }}>
+      <p className="text-lg max-w-2xl mb-14" style={{ color: "var(--muted-foreground)" }}>
         {description}
       </p>
     </ScrollReveal>
@@ -242,39 +244,44 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: "overview", label: "Overview", icon: BookOpenIcon },
-  { id: "quickstart", label: "Quick Start", icon: RocketIcon },
-  { id: "features", label: "Core Features", icon: LayersIcon },
-  { id: "architecture", label: "Architecture", icon: CpuIcon },
-  { id: "techstack", label: "Tech Stack", icon: CodeIcon },
-  { id: "deployment", label: "Deployment", icon: ServerIcon },
-];
+function buildNavItems(t: (key: string) => string): NavItem[] {
+  return [
+    { id: "overview", label: t("nav.overview"), icon: BookOpenIcon },
+    { id: "quickstart", label: t("nav.quickstart"), icon: RocketIcon },
+    { id: "features", label: t("nav.features"), icon: LayersIcon },
+    { id: "architecture", label: t("nav.architecture"), icon: CpuIcon },
+    { id: "techstack", label: t("nav.techstack"), icon: CodeIcon },
+    { id: "deployment", label: t("nav.deployment"), icon: ServerIcon },
+  ];
+}
 
 // ---------- Section 1: Overview ----------
 function OverviewSection() {
+  const { t } = useTranslation("docs");
+  const pipelineSteps = t("overview.pipelineSteps", {
+    returnObjects: true,
+  }) as unknown as string[];
+
   return (
     <section id="overview" className="pt-8 pb-20">
       <ScrollReveal>
         <div className="mb-12">
           <span
             className="text-xs font-medium tracking-widest uppercase mb-4 block"
-            style={{ color: "var(--landing-accent)" }}
+            style={{ color: "var(--primary)" }}
           >
-            / Enterprise AI Document System
+            {t("overview.label")}
           </span>
           <h1
             className="text-5xl md:text-6xl font-medium leading-[0.9] tracking-tight mb-6"
-            style={{ color: "var(--landing-text-primary)" }}
+            style={{ color: "var(--foreground)" }}
           >
-            DocPilot
+            {t("overview.titleLine1")}
             <br />
-            <span style={{ color: "var(--landing-accent)" }}>Documentation</span>
+            <span style={{ color: "var(--primary)" }}>{t("overview.titleLine2")}</span>
           </h1>
-          <p className="text-xl leading-relaxed max-w-2xl" style={{ color: "var(--landing-text-secondary)" }}>
-            DocPilot is an enterprise-grade AI document execution system designed for complex
-            document workflows. From RFP ingestion to final delivery, DocPilot orchestrates
-            multi-agent workflows to automate the entire bid response process.
+          <p className="text-xl leading-relaxed max-w-2xl" style={{ color: "var(--muted-foreground)" }}>
+            {t("overview.description")}
           </p>
         </div>
       </ScrollReveal>
@@ -284,18 +291,18 @@ function OverviewSection() {
         {[
           {
             icon: BrainCircuitIcon,
-            title: "AI-Native",
-            desc: "Built on LangGraph multi-agent architecture with specialized agents for each workflow stage.",
+            title: t("overview.aiNativeTitle"),
+            desc: t("overview.aiNativeDesc"),
           },
           {
             icon: GitBranchIcon,
-            title: "Stateful Workflows",
-            desc: "Checkpoint-backed execution with human-in-the-loop approval gates and full audit trails.",
+            title: t("overview.statefulTitle"),
+            desc: t("overview.statefulDesc"),
           },
           {
             icon: ShieldCheckIcon,
-            title: "Enterprise Ready",
-            desc: "RBAC, encrypted storage, provider-agnostic LLM integration, and production-grade infrastructure.",
+            title: t("overview.enterpriseTitle"),
+            desc: t("overview.enterpriseDesc"),
           },
         ].map((item, i) => (
           <FeatureCard key={item.title} icon={item.icon} title={item.title} description={item.desc} index={i} />
@@ -307,37 +314,28 @@ function OverviewSection() {
         <div
           className="p-8"
           style={{
-            background: "var(--landing-surface-1)",
-            border: "1px solid var(--landing-hairline)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
           }}
         >
-          <h3 className="text-lg font-medium mb-6" style={{ color: "var(--landing-text-primary)" }}>
-            Workflow Pipeline
+          <h3 className="text-lg font-medium mb-6" style={{ color: "var(--foreground)" }}>
+            {t("overview.pipelineTitle")}
           </h3>
           <div className="flex flex-wrap items-center gap-3">
-            {[
-              "Project Setup",
-              "RFP Ingestion",
-              "Requirement Extraction",
-              "Knowledge Retrieval",
-              "Section Drafting",
-              "Quality Review",
-              "Human Approval",
-              "Export & Delivery",
-            ].map((step, i, arr) => (
+            {pipelineSteps.map((step, i, arr) => (
               <div key={step} className="flex items-center gap-3">
                 <div
                   className="px-4 py-2 text-xs font-medium tracking-wide"
                   style={{
                     background: "rgba(132, 204, 22, 0.08)",
-                    border: "1px solid var(--landing-border-inner)",
-                    color: "var(--landing-accent)",
+                    border: "1px solid var(--border)",
+                    color: "var(--primary)",
                   }}
                 >
                   {step}
                 </div>
                 {i < arr.length - 1 && (
-                  <ChevronRightIcon className="size-4 shrink-0" style={{ color: "var(--landing-surface-3)" }} />
+                  <ChevronRightIcon className="size-4 shrink-0" style={{ color: "var(--muted-foreground)" }} />
                 )}
               </div>
             ))}
@@ -350,30 +348,32 @@ function OverviewSection() {
 
 // ---------- Section 2: Quick Start ----------
 function QuickStartSection() {
+  const { t } = useTranslation("docs");
+
   return (
     <section id="quickstart" className="py-20">
       <SectionHeading
-        label="Quick Start"
-        title="Get Running in Minutes"
-        description="DocPilot is fully containerized. A single command brings up the entire stack: API, Worker, PostgreSQL, Redis, and MinIO."
+        label={t("quickstart.label")}
+        title={t("quickstart.title")}
+        description={t("quickstart.description")}
       />
 
       <div className="space-y-12">
         {/* Prerequisites */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
-            Prerequisites
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
+            {t("quickstart.prerequisites")}
           </h3>
           <ul className="space-y-3">
             {[
-              "Docker Engine 24+ and Docker Compose v2",
-              "Node.js 20+ (for frontend development)",
-              "Python 3.11+ (for backend development)",
-              "An OpenAI or Anthropic API key",
+              t("quickstart.prereq1"),
+              t("quickstart.prereq2"),
+              t("quickstart.prereq3"),
+              t("quickstart.prereq4"),
             ].map((item) => (
               <li key={item} className="flex items-start gap-3">
-                <CheckCircleIcon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--landing-accent)" }} />
-                <span className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
+                <CheckCircleIcon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--primary)" }} />
+                <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                   {item}
                 </span>
               </li>
@@ -383,11 +383,11 @@ function QuickStartSection() {
 
         {/* Installation */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
-            Installation
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
+            {t("quickstart.installation")}
           </h3>
-          <p className="text-sm mb-4" style={{ color: "var(--landing-text-secondary)" }}>
-            Clone the repository and start all services with Docker Compose:
+          <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+            {t("quickstart.installDesc")}
           </p>
           <CodeBlock language="bash" filename="terminal">
 {`git clone https://github.com/your-org/docpilot.git
@@ -406,12 +406,11 @@ curl http://localhost:8000/health`}
 
         {/* Environment Configuration */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
-            Environment Configuration
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
+            {t("quickstart.envConfig")}
           </h3>
-          <p className="text-sm mb-4" style={{ color: "var(--landing-text-secondary)" }}>
-            The <code className="px-1.5 py-0.5 text-xs font-mono" style={{ background: "var(--landing-surface-2)", color: "var(--landing-accent)" }}>.env</code> file
-            controls all service connections and API keys. Key variables:
+          <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+            {t("quickstart.envDesc1")} <code className="px-1.5 py-0.5 text-xs font-mono" style={{ background: "var(--muted)", color: "var(--primary)" }}>.env</code> {t("quickstart.envDesc2")}
           </p>
           <CodeBlock language="env" filename=".env">
 {`# Database
@@ -437,33 +436,33 @@ EMBEDDING_MODEL=text-embedding-3-small`}
 
         {/* First Project */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
-            Create Your First Project
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
+            {t("quickstart.firstProject")}
           </h3>
           <div className="space-y-4">
             {[
-              { num: "01", title: "Sign up / Log in", desc: "Navigate to the web UI and create an account." },
-              { num: "02", title: "New Project", desc: "Click 'New Project' on the dashboard and name your bid." },
-              { num: "03", title: "Upload RFP", desc: "Drag and drop your RFP document (PDF, DOCX, or Markdown)." },
-              { num: "04", title: "Review & Export", desc: "AI agents process the document. Review drafts, approve, and export." },
+              { num: "01", title: t("quickstart.step1Title"), desc: t("quickstart.step1Desc") },
+              { num: "02", title: t("quickstart.step2Title"), desc: t("quickstart.step2Desc") },
+              { num: "03", title: t("quickstart.step3Title"), desc: t("quickstart.step3Desc") },
+              { num: "04", title: t("quickstart.step4Title"), desc: t("quickstart.step4Desc") },
             ].map((step, i) => (
               <ScrollReveal key={step.num} delay={i * 100} direction="left">
                 <div className="flex gap-5 items-start">
                   <div
                     className="shrink-0 w-10 h-10 flex items-center justify-center text-sm font-mono font-medium"
                     style={{
-                      background: "var(--landing-surface-1)",
-                      border: "1px solid var(--landing-border-inner)",
-                      color: "var(--landing-accent)",
+                      background: "var(--card)",
+                      border: "1px solid var(--border)",
+                      color: "var(--primary)",
                     }}
                   >
                     {step.num}
                   </div>
                   <div className="pt-1">
-                    <h4 className="text-sm font-medium mb-1" style={{ color: "var(--landing-text-primary)" }}>
+                    <h4 className="text-sm font-medium mb-1" style={{ color: "var(--foreground)" }}>
                       {step.title}
                     </h4>
-                    <p className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
+                    <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                       {step.desc}
                     </p>
                   </div>
@@ -479,55 +478,56 @@ EMBEDDING_MODEL=text-embedding-3-small`}
 
 // ---------- Section 3: Core Features ----------
 function CoreFeaturesSection() {
+  const { t } = useTranslation("docs");
   const features = [
     {
       icon: FolderIcon,
-      title: "Project Management",
-      desc: "Create and manage bid projects. Each project is a self-contained workspace with its own RFP documents, knowledge base, deliverables, and review history. Search, filter, and organize across your portfolio.",
+      title: t("features.projectMgmtTitle"),
+      desc: t("features.projectMgmtDesc"),
     },
     {
       icon: FileTextIcon,
-      title: "Document Ingestion",
-      desc: "Upload RFP documents in PDF, DOCX, or Markdown format. DocPilot automatically parses structure, extracts tables, and chunks content into searchable segments stored in MinIO.",
+      title: t("features.docIngestTitle"),
+      desc: t("features.docIngestDesc"),
     },
     {
       icon: SearchIcon,
-      title: "Requirement Extraction",
-      desc: "AI agents analyze the RFP and extract structured requirements: mandatory criteria, evaluation factors, compliance requirements, and submission guidelines. All requirements are linked back to source pages.",
+      title: t("features.reqExtractTitle"),
+      desc: t("features.reqExtractDesc"),
     },
     {
       icon: BrainCircuitIcon,
-      title: "Knowledge Retrieval",
-      desc: "The Knowledge Retriever agent uses pgvector semantic search to find the most relevant content chunks from your uploaded documents. Cosine similarity scoring ensures high-quality evidence for every section.",
+      title: t("features.knowledgeTitle"),
+      desc: t("features.knowledgeDesc"),
     },
     {
       icon: PenToolIcon,
-      title: "Section Drafting",
-      desc: "The Section Drafter agent generates compliant, compelling content by combining RFP requirements with retrieved evidence. Each draft includes citations and follows your organization's tone and style guidelines.",
+      title: t("features.draftingTitle"),
+      desc: t("features.draftingDesc"),
     },
     {
       icon: ShieldCheckIcon,
-      title: "Quality Review",
-      desc: "The Quality Reviewer agent evaluates drafts for completeness, compliance, evidence usage, and clarity. Sections below the quality threshold are automatically flagged and revised before human review.",
+      title: t("features.qualityTitle"),
+      desc: t("features.qualityDesc"),
     },
     {
       icon: CheckCircleIcon,
-      title: "Human Approval",
-      desc: "Critical sections pause at a human-in-the-loop gate. Reviewers can approve, request changes, or add inline comments. The workflow resumes only after explicit approval, ensuring quality control.",
+      title: t("features.approvalTitle"),
+      desc: t("features.approvalDesc"),
     },
     {
       icon: DownloadIcon,
-      title: "Export & Delivery",
-      desc: "Export individual sections as Markdown or DOCX. Compile full deliverables with headers, formatting, and a table of contents. Version history is preserved for audit and compliance.",
+      title: t("features.exportTitle"),
+      desc: t("features.exportDesc"),
     },
   ];
 
   return (
     <section id="features" className="py-20">
       <SectionHeading
-        label="Core Features"
-        title="End-to-End Document Automation"
-        description="DocPilot covers every stage of the document lifecycle, from initial ingestion to final export."
+        label={t("features.label")}
+        title={t("features.title")}
+        description={t("features.description")}
       />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {features.map((f, i) => (
@@ -540,12 +540,13 @@ function CoreFeaturesSection() {
 
 // ---------- Section 4: Architecture ----------
 function ArchitectureSection() {
+  const { t } = useTranslation("docs");
   return (
     <section id="architecture" className="py-20">
       <SectionHeading
-        label="Architecture"
-        title="Layered System Design"
-        description="DocPilot follows a clean separation of concerns: Web, API, Worker, and Data layers."
+        label={t("architecture.label")}
+        title={t("architecture.title")}
+        description={t("architecture.description")}
       />
 
       {/* Architecture Diagram */}
@@ -553,58 +554,58 @@ function ArchitectureSection() {
         <div
           className="p-8 mb-10"
           style={{
-            background: "var(--landing-surface-1)",
-            border: "1px solid var(--landing-hairline)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
           }}
         >
-          <h3 className="text-lg font-medium mb-6" style={{ color: "var(--landing-text-primary)" }}>
-            System Layers
+          <h3 className="text-lg font-medium mb-6" style={{ color: "var(--foreground)" }}>
+            {t("architecture.systemLayers")}
           </h3>
           <div className="space-y-4">
             {[
               {
-                layer: "Web Application",
-                tech: "React 19 + TypeScript + Vite + Tailwind CSS",
-                color: "var(--landing-accent)",
-                desc: "SPA frontend with shadcn/ui components, react-router-dom routing, and TanStack Query for server state.",
+                layer: t("architecture.webApp"),
+                tech: t("architecture.webAppTech"),
+                color: "var(--primary)",
+                desc: t("architecture.webAppDesc"),
               },
               {
-                layer: "API Application",
-                tech: "FastAPI + SQLAlchemy + Alembic",
-                color: "var(--landing-accent-light)",
-                desc: "REST API layer handling auth, project CRUD, document management, and WebSocket streaming for agent progress.",
+                layer: t("architecture.apiApp"),
+                tech: t("architecture.apiAppTech"),
+                color: "var(--primary)",
+                desc: t("architecture.apiAppDesc"),
               },
               {
-                layer: "Worker Application",
-                tech: "Celery + LangGraph",
-                color: "var(--landing-accent-hover)",
-                desc: "Async task execution with LangGraph-powered multi-agent workflows. Handles all AI processing in isolated workers.",
+                layer: t("architecture.workerApp"),
+                tech: t("architecture.workerAppTech"),
+                color: "var(--primary)",
+                desc: t("architecture.workerAppDesc"),
               },
               {
-                layer: "Data Services",
-                tech: "PostgreSQL + pgvector + Redis + MinIO",
-                color: "var(--landing-accent-hover)",
-                desc: "Persistent storage, vector search, task queuing, caching, and object storage for documents.",
+                layer: t("architecture.dataServices"),
+                tech: t("architecture.dataServicesTech"),
+                color: "var(--primary)",
+                desc: t("architecture.dataServicesDesc"),
               },
             ].map((item, i) => (
               <ScrollReveal key={item.layer} delay={i * 120} direction="left">
                 <div
                   className="flex flex-col md:flex-row md:items-center gap-4 p-5 transition-all duration-300"
                   style={{
-                    background: "var(--landing-canvas)",
+                    background: "var(--background)",
                     borderLeft: `3px solid ${item.color}`,
                   }}
                 >
                   <div className="shrink-0 w-40">
-                    <p className="text-sm font-medium" style={{ color: "var(--landing-text-primary)" }}>
+                    <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
                       {item.layer}
                     </p>
-                    <p className="text-xs font-mono mt-1" style={{ color: "var(--landing-text-tertiary)" }}>
+                    <p className="text-xs font-mono mt-1" style={{ color: "var(--muted-foreground)" }}>
                       {item.tech}
                     </p>
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
+                    <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                       {item.desc}
                     </p>
                   </div>
@@ -620,16 +621,15 @@ function ArchitectureSection() {
         <div
           className="p-8"
           style={{
-            background: "var(--landing-surface-1)",
-            border: "1px solid var(--landing-hairline)",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
           }}
         >
-          <h3 className="text-lg font-medium mb-2" style={{ color: "var(--landing-text-primary)" }}>
-            LangGraph Multi-Agent Workflow
+          <h3 className="text-lg font-medium mb-2" style={{ color: "var(--foreground)" }}>
+            {t("architecture.langgraphTitle")}
           </h3>
-          <p className="text-sm mb-6" style={{ color: "var(--landing-text-secondary)" }}>
-            The Worker layer uses LangGraph to orchestrate stateful, multi-agent workflows. Each agent is a
-            specialized node in a directed graph with checkpoint-backed execution.
+          <p className="text-sm mb-6" style={{ color: "var(--muted-foreground)" }}>
+            {t("architecture.langgraphDesc")}
           </p>
 
           <CodeBlock language="python" filename="services/worker/app/graph/builder.py">
@@ -669,15 +669,15 @@ graph = workflow.compile(checkpointer=PostgresSaver())`}
                   <div
                     className="px-3 py-1.5 text-xs font-mono"
                     style={{
-                      background: agent === "human_approval" ? "rgba(132, 204, 22, 0.15)" : "var(--landing-hairline)",
-                      border: `1px solid ${agent === "human_approval" ? "var(--landing-border-inner)" : "var(--landing-hairline)"}`,
-                      color: agent === "human_approval" ? "var(--landing-accent)" : "var(--landing-text-secondary)",
+                      background: agent === "human_approval" ? "rgba(132, 204, 22, 0.15)" : "var(--border)",
+                      border: `1px solid ${agent === "human_approval" ? "var(--border)" : "var(--border)"}`,
+                      color: agent === "human_approval" ? "var(--primary)" : "var(--muted-foreground)",
                     }}
                   >
                     {agent}
                   </div>
                   {i < arr.length - 1 && (
-                    <ChevronRightIcon className="size-3.5 shrink-0" style={{ color: "var(--landing-surface-3)" }} />
+                    <ChevronRightIcon className="size-3.5 shrink-0" style={{ color: "var(--muted-foreground)" }} />
                   )}
                 </div>
               )
@@ -691,37 +691,38 @@ graph = workflow.compile(checkpointer=PostgresSaver())`}
 
 // ---------- Section 5: Tech Stack ----------
 function TechStackSection() {
+  const { t } = useTranslation("docs");
   const stacks = [
     {
-      category: "Frontend",
+      category: t("techstack.frontend"),
       items: [
-        { name: "React 19", desc: "UI library with concurrent features" },
-        { name: "TypeScript", desc: "End-to-end type safety" },
-        { name: "Vite", desc: "Fast dev server and build tool" },
-        { name: "Tailwind CSS", desc: "Utility-first styling" },
-        { name: "shadcn/ui", desc: "Accessible component primitives" },
-        { name: "TanStack Query", desc: "Server state management" },
-        { name: "react-router-dom", desc: "Client-side routing" },
+        { name: "React 19", desc: t("techstack.reactDesc") },
+        { name: "TypeScript", desc: t("techstack.typescriptDesc") },
+        { name: "Vite", desc: t("techstack.viteDesc") },
+        { name: "Tailwind CSS", desc: t("techstack.tailwindDesc") },
+        { name: "shadcn/ui", desc: t("techstack.shadcnDesc") },
+        { name: "TanStack Query", desc: t("techstack.queryDesc") },
+        { name: "react-router-dom", desc: t("techstack.routerDesc") },
       ],
     },
     {
-      category: "Backend",
+      category: t("techstack.backend"),
       items: [
-        { name: "FastAPI", desc: "Async Python web framework" },
-        { name: "Celery", desc: "Distributed task queue" },
-        { name: "SQLAlchemy 2.0", desc: "Async ORM with type hints" },
-        { name: "Alembic", desc: "Database migration management" },
-        { name: "LangGraph", desc: "Multi-agent workflow orchestration" },
-        { name: "LangChain", desc: "LLM abstraction layer" },
+        { name: "FastAPI", desc: t("techstack.fastapiDesc") },
+        { name: "Celery", desc: t("techstack.celeryDesc") },
+        { name: "SQLAlchemy 2.0", desc: t("techstack.sqlalchemyDesc") },
+        { name: "Alembic", desc: t("techstack.alembicDesc") },
+        { name: "LangGraph", desc: t("techstack.langgraphDesc") },
+        { name: "LangChain", desc: t("techstack.langchainDesc") },
       ],
     },
     {
-      category: "Data & Storage",
+      category: t("techstack.dataStorage"),
       items: [
-        { name: "PostgreSQL 16", desc: "Primary relational database" },
-        { name: "pgvector", desc: "Vector similarity search" },
-        { name: "Redis 7", desc: "Task queue broker + caching" },
-        { name: "MinIO", desc: "S3-compatible object storage" },
+        { name: "PostgreSQL 16", desc: t("techstack.postgresDesc") },
+        { name: "pgvector", desc: t("techstack.pgvectorDesc") },
+        { name: "Redis 7", desc: t("techstack.redisDesc") },
+        { name: "MinIO", desc: t("techstack.minioDesc") },
       ],
     },
   ];
@@ -729,9 +730,9 @@ function TechStackSection() {
   return (
     <section id="techstack" className="py-20">
       <SectionHeading
-        label="Tech Stack"
-        title="Built with Modern Tools"
-        description="Every technology choice is deliberate: async-first, type-safe, and battle-tested in production."
+        label={t("techstack.label")}
+        title={t("techstack.title")}
+        description={t("techstack.description")}
       />
 
       <div className="space-y-10">
@@ -740,13 +741,13 @@ function TechStackSection() {
             <div
               className="p-7"
               style={{
-                background: "var(--landing-surface-1)",
-                border: "1px solid var(--landing-hairline)",
+                background: "var(--card)",
+                border: "1px solid var(--border)",
               }}
             >
               <h3
                 className="text-sm font-medium tracking-widest uppercase mb-5"
-                style={{ color: "var(--landing-accent)" }}
+                style={{ color: "var(--primary)" }}
               >
                 {stack.category}
               </h3>
@@ -755,23 +756,23 @@ function TechStackSection() {
                   <div
                     key={item.name}
                     className="flex items-start gap-3 p-3 transition-colors duration-200"
-                    style={{ background: "var(--landing-canvas)" }}
+                    style={{ background: "var(--background)" }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "var(--landing-canvas)";
+                      e.currentTarget.style.background = "var(--background)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "var(--landing-canvas)";
+                      e.currentTarget.style.background = "var(--background)";
                     }}
                   >
                     <div
                       className="w-1.5 h-1.5 mt-1.5 shrink-0"
-                      style={{ background: "var(--landing-accent)" }}
+                      style={{ background: "var(--primary)" }}
                     />
                     <div>
-                      <p className="text-sm font-medium" style={{ color: "var(--landing-text-primary)" }}>
+                      <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
                         {item.name}
                       </p>
-                      <p className="text-xs mt-0.5" style={{ color: "var(--landing-text-tertiary)" }}>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
                         {item.desc}
                       </p>
                     </div>
@@ -788,22 +789,23 @@ function TechStackSection() {
 
 // ---------- Section 6: Deployment ----------
 function DeploymentSection() {
+  const { t } = useTranslation("docs");
   return (
     <section id="deployment" className="py-20">
       <SectionHeading
-        label="Deployment"
-        title="Production Deployment"
-        description="DocPilot is designed for containerized deployment. The Docker Compose stack includes all services with health checks."
+        label={t("deployment.label")}
+        title={t("deployment.title")}
+        description={t("deployment.description")}
       />
 
       <div className="space-y-10">
         {/* Docker Compose */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
-            Docker Compose Stack
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
+            {t("deployment.dockerTitle")}
           </h3>
-          <p className="text-sm mb-4" style={{ color: "var(--landing-text-secondary)" }}>
-            The production stack includes 6 services, all orchestrated via Docker Compose:
+          <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
+            {t("deployment.dockerDesc")}
           </p>
           <CodeBlock language="yaml" filename="docker-compose.yml">
 {`services:
@@ -843,31 +845,31 @@ function DeploymentSection() {
 
         {/* Health Checks */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
-            Health & Monitoring
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
+            {t("deployment.healthTitle")}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
-              { endpoint: "/health", desc: "Basic liveness check" },
-              { endpoint: "/health/db", desc: "Database connectivity" },
-              { endpoint: "/health/redis", desc: "Redis connectivity" },
-              { endpoint: "/health/storage", desc: "MinIO connectivity" },
+              { endpoint: "/health", desc: t("deployment.liveness") },
+              { endpoint: "/health/db", desc: t("deployment.dbConnectivity") },
+              { endpoint: "/health/redis", desc: t("deployment.redisConnectivity") },
+              { endpoint: "/health/storage", desc: t("deployment.storageConnectivity") },
             ].map((item) => (
               <div
                 key={item.endpoint}
                 className="flex items-center gap-4 p-4"
                 style={{
-                  background: "var(--landing-surface-1)",
-                  border: "1px solid var(--landing-hairline)",
+                  background: "var(--card)",
+                  border: "1px solid var(--border)",
                 }}
               >
                 <code
                   className="text-xs font-mono px-2 py-1 shrink-0"
-                  style={{ background: "var(--landing-surface-2)", color: "var(--landing-accent)" }}
+                  style={{ background: "var(--muted)", color: "var(--primary)" }}
                 >
                   {item.endpoint}
                 </code>
-                <span className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
+                <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
                   {item.desc}
                 </span>
               </div>
@@ -877,8 +879,8 @@ function DeploymentSection() {
 
         {/* Project Structure */}
         <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--landing-text-primary)" }}>
-            Project Structure
+          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
+            {t("deployment.structureTitle")}
           </h3>
           <CodeBlock language="text" filename="directory tree">
 {`docpilot/
@@ -912,13 +914,17 @@ function DeploymentSection() {
 
 // ---------- Main Component ----------
 export function DocsPage() {
+  const { isAuthenticated } = useAuth();
+  const { t } = useTranslation("docs");
+  const inPlatform = isAuthenticated;
   const [activeSection, setActiveSection] = useState("overview");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const navItems = useMemo(() => buildNavItems((key) => t(key)), [t]);
 
   // Track active section on scroll
   useEffect(() => {
     const handleScroll = () => {
-      const sections = NAV_ITEMS.map((item) => {
+      const sections = navItems.map((item) => {
         const el = document.getElementById(item.id);
         if (!el) return { id: item.id, top: Infinity };
         return { id: item.id, top: el.getBoundingClientRect().top };
@@ -934,7 +940,7 @@ export function DocsPage() {
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [navItems]);
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -945,53 +951,57 @@ export function DocsPage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--landing-canvas)" }}>
+    <div className={inPlatform ? "" : "min-h-screen"} style={{ background: inPlatform ? "var(--background)" : "var(--background)" }}>
       {/* Top Navigation Bar */}
       <header
         className="sticky top-0 z-50 backdrop-blur-xl"
         style={{
-          background: "rgba(10, 10, 10, 0.85)",
-          borderBottom: "1px solid var(--landing-hairline)",
+          background: inPlatform ? "color-mix(in oklab, var(--background) 92%, transparent)" : "rgba(10, 10, 10, 0.85)",
+          borderBottom: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}`,
         }}
       >
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              to="/"
-              className="flex items-center gap-2 transition-colors duration-200 hover:opacity-80"
-            >
-              <ArrowLeftIcon className="size-4" style={{ color: "var(--landing-text-tertiary)" }} />
-              <span className="text-sm" style={{ color: "var(--landing-text-tertiary)" }}>
-                Back
-              </span>
-            </Link>
-            <div className="w-px h-4" style={{ background: "var(--landing-hairline)" }} />
+            {!inPlatform && (
+              <>
+                <Link
+                  to="/"
+                  className="flex items-center gap-2 transition-colors duration-200 hover:opacity-80"
+                >
+                  <ArrowLeftIcon className="size-4" style={{ color: "var(--muted-foreground)" }} />
+                  <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                    {t("header.back")}
+                  </span>
+                </Link>
+                <div className="w-px h-4" style={{ background: "var(--border)" }} />
+              </>
+            )}
             <div className="flex items-center gap-2">
               <div
                 className="w-6 h-6 flex items-center justify-center"
-                style={{ background: "var(--landing-accent)" }}
+                style={{ background: inPlatform ? "var(--primary)" : "var(--primary)" }}
               >
-                <FileTextIcon className="size-3.5" style={{ color: "var(--landing-canvas)" }} />
+                <FileTextIcon className="size-3.5" style={{ color: inPlatform ? "var(--primary-foreground)" : "var(--background)" }} />
               </div>
-              <span className="text-sm font-medium" style={{ color: "var(--landing-text-primary)" }}>
+              <span className="text-sm font-medium" style={{ color: inPlatform ? "var(--foreground)" : "var(--foreground)" }}>
                 DocPilot
               </span>
               <span
                 className="text-xs px-2 py-0.5 font-mono"
                 style={{
-                  background: "rgba(132, 204, 22, 0.1)",
-                  border: "1px solid var(--landing-border-inner)",
-                  color: "var(--landing-accent)",
+                  background: inPlatform ? "var(--muted)" : "rgba(132, 204, 22, 0.1)",
+                  border: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}`,
+                  color: inPlatform ? "var(--primary)" : "var(--primary)",
                 }}
               >
-                Docs
+                {t("header.docsLabel")}
               </span>
             </div>
           </div>
 
           {/* Desktop nav indicator */}
           <div className="hidden md:flex items-center gap-1">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => scrollToSection(item.id)}
@@ -999,8 +1009,12 @@ export function DocsPage() {
                   "px-3 py-1.5 text-xs font-medium transition-all duration-200",
                 )}
                 style={{
-                  color: activeSection === item.id ? "var(--landing-accent)" : "var(--landing-text-tertiary)",
-                  background: activeSection === item.id ? "rgba(132, 204, 22, 0.08)" : "transparent",
+                  color: activeSection === item.id
+                    ? (inPlatform ? "var(--primary)" : "var(--primary)")
+                    : (inPlatform ? "var(--muted-foreground)" : "var(--muted-foreground)"),
+                  background: activeSection === item.id
+                    ? (inPlatform ? "var(--muted)" : "rgba(132, 204, 22, 0.08)")
+                    : "transparent",
                 }}
               >
                 {item.label}
@@ -1012,7 +1026,7 @@ export function DocsPage() {
           <button
             className="md:hidden p-2"
             onClick={() => setMobileNavOpen(!mobileNavOpen)}
-            style={{ color: "var(--landing-text-secondary)" }}
+            style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--muted-foreground)" }}
           >
             {mobileNavOpen ? <XIcon className="size-5" /> : <MenuIcon className="size-5" />}
           </button>
@@ -1023,18 +1037,22 @@ export function DocsPage() {
           <div
             className="md:hidden px-6 py-4 space-y-1"
             style={{
-              background: "var(--landing-canvas)",
-              borderTop: "1px solid var(--landing-hairline)",
+              background: inPlatform ? "var(--background)" : "var(--background)",
+              borderTop: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}`,
             }}
           >
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => scrollToSection(item.id)}
                 className="flex items-center gap-3 w-full px-3 py-2.5 text-sm transition-colors duration-200"
                 style={{
-                  color: activeSection === item.id ? "var(--landing-accent)" : "var(--landing-text-secondary)",
-                  background: activeSection === item.id ? "rgba(132, 204, 22, 0.08)" : "transparent",
+                  color: activeSection === item.id
+                    ? (inPlatform ? "var(--primary)" : "var(--primary)")
+                    : (inPlatform ? "var(--muted-foreground)" : "var(--muted-foreground)"),
+                  background: activeSection === item.id
+                    ? (inPlatform ? "var(--muted)" : "rgba(132, 204, 22, 0.08)")
+                    : "transparent",
                 }}
               >
                 <item.icon className="size-4" />
@@ -1051,15 +1069,21 @@ export function DocsPage() {
           {/* Sidebar (Desktop) */}
           <aside className="hidden lg:block w-56 shrink-0 sticky top-20 self-start">
             <nav className="space-y-1 pt-8">
-              {NAV_ITEMS.map((item) => (
+              {navItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => scrollToSection(item.id)}
-                  className="flex items-center gap-3 w-full px-3 py-2 text-sm transition-all duration-200"
-                  style={{
-                    color: activeSection === item.id ? "var(--landing-accent)" : "var(--landing-text-tertiary)",
-                    background: activeSection === item.id ? "rgba(132, 204, 22, 0.06)" : "transparent",
-                    borderLeft: activeSection === item.id ? "2px solid #84cc16" : "2px solid transparent",
+                className="flex items-center gap-3 w-full px-3 py-2 text-sm transition-all duration-200"
+                style={{
+                    color: activeSection === item.id
+                      ? (inPlatform ? "var(--primary)" : "var(--primary)")
+                      : (inPlatform ? "var(--muted-foreground)" : "var(--muted-foreground)"),
+                    background: activeSection === item.id
+                      ? (inPlatform ? "var(--muted)" : "rgba(132, 204, 22, 0.06)")
+                      : "transparent",
+                    borderLeft: activeSection === item.id
+                      ? `2px solid ${inPlatform ? "var(--primary)" : "#84cc16"}`
+                      : "2px solid transparent",
                   }}
                 >
                   <item.icon className="size-4 shrink-0" />
@@ -1072,15 +1096,15 @@ export function DocsPage() {
             <div
               className="mt-10 p-4"
               style={{
-                background: "var(--landing-surface-1)",
-                border: "1px solid var(--landing-hairline)",
+                background: inPlatform ? "var(--card)" : "var(--card)",
+                border: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}`,
               }}
             >
-              <p className="text-xs font-medium mb-1" style={{ color: "var(--landing-text-primary)" }}>
-                Need help?
+              <p className="text-xs font-medium mb-1" style={{ color: inPlatform ? "var(--foreground)" : "var(--foreground)" }}>
+                {t("sidebar.needHelp")}
               </p>
-              <p className="text-xs leading-relaxed" style={{ color: "var(--landing-text-tertiary)" }}>
-                Open an issue on GitHub or reach out to the team.
+              <p className="text-xs leading-relaxed" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--muted-foreground)" }}>
+                {t("sidebar.helpDesc")}
               </p>
             </div>
           </aside>
@@ -1088,28 +1112,28 @@ export function DocsPage() {
           {/* Content Area */}
           <div className="flex-1 min-w-0 py-8">
             <OverviewSection />
-            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
+            <div style={{ borderTop: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}` }} />
             <QuickStartSection />
-            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
+            <div style={{ borderTop: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}` }} />
             <CoreFeaturesSection />
-            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
+            <div style={{ borderTop: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}` }} />
             <ArchitectureSection />
-            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
+            <div style={{ borderTop: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}` }} />
             <TechStackSection />
-            <div style={{ borderTop: "1px solid var(--landing-hairline)" }} />
+            <div style={{ borderTop: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}` }} />
             <DeploymentSection />
 
             {/* Footer */}
             <div
               className="py-16 mt-10 text-center"
-              style={{ borderTop: "1px solid var(--landing-hairline)" }}
+              style={{ borderTop: `1px solid ${inPlatform ? "var(--border)" : "var(--border)"}` }}
             >
               <ScrollReveal>
-                <p className="text-sm mb-2" style={{ color: "var(--landing-text-tertiary)" }}>
-                  DocPilot Documentation
+                <p className="text-sm mb-2" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--muted-foreground)" }}>
+                  {t("footer.title")}
                 </p>
-                <p className="text-xs" style={{ color: "var(--landing-surface-3)" }}>
-                  Built for teams that ship winning proposals.
+                <p className="text-xs" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--muted-foreground)" }}>
+                  {t("footer.subtitle")}
                 </p>
               </ScrollReveal>
             </div>
@@ -1119,3 +1143,4 @@ export function DocsPage() {
     </div>
   );
 }
+

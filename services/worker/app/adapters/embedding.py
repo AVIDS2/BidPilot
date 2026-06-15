@@ -5,10 +5,11 @@ stub when no API key is configured.
 """
 
 import logging
-import os
 from dataclasses import dataclass
 
 import httpx
+
+from app.adapters.provider_env import embedding_api_key, embedding_api_url, embedding_model
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +26,15 @@ class EmbeddingResult:
 
 
 def _api_key() -> str | None:
-    return os.environ.get("EMBEDDING_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    return embedding_api_key()
 
 
 def _api_url() -> str:
-    return os.environ.get("EMBEDDING_API_URL", _DEFAULT_URL)
+    return embedding_api_url(_DEFAULT_URL)
 
 
 def _api_model() -> str:
-    return os.environ.get("EMBEDDING_MODEL", _DEFAULT_MODEL)
+    return embedding_model(_DEFAULT_MODEL)
 
 
 def generate_embedding(text: str) -> EmbeddingResult:

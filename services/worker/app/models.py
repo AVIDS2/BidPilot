@@ -87,6 +87,19 @@ class RequirementItem(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
 
 
+class Deliverable(Base):
+    __tablename__ = "deliverable"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("project.id"), nullable=False)
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    current_version_id: Mapped[str | None] = mapped_column(String(36))
+    export_status: Mapped[str] = mapped_column(String(30), nullable=False, default="not_exported")
+    export_storage_key: Mapped[str | None] = mapped_column(String(500))
+
+
 class DeliverableSection(Base):
     __tablename__ = "deliverable_section"
 

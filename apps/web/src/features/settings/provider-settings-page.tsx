@@ -147,7 +147,7 @@ export function ProviderSettingsPage() {
   });
 
   const testMut = useMutation({
-    mutationFn: (payload: { provider_type: string; api_key: string; api_url?: string; model: string }) =>
+    mutationFn: (payload: Parameters<typeof testProviderConnection>[0]) =>
       testProviderConnection(payload),
     onSuccess: (result) => {
       if (result.data.success) {
@@ -210,12 +210,7 @@ export function ProviderSettingsPage() {
   function handleTestConnection(provider: ProviderConfig) {
     setTestingId(provider.id);
     testMut.mutate(
-      {
-        provider_type: provider.provider_type,
-        api_key: provider.api_key,
-        api_url: provider.api_url ?? undefined,
-        model: provider.model,
-      },
+      { config_id: provider.id },
       {
         onSettled: () => setTestingId(null),
       },

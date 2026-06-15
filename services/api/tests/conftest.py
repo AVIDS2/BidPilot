@@ -10,6 +10,9 @@ os.environ["DOCPILOT_LOGGING"] = "off"
 # High rate limit for test suite (136+ tests, each may make multiple requests)
 os.environ["DOCPILOT_RATE_LIMIT"] = "10000/minute"
 
+# Stable Fernet key for test-only provider secret encryption.
+os.environ["DOCPILOT_SECRETS_KEY"] = "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
+
 # Disable auth requirement in tests (uses dev fallback)
 # Must happen before app modules are imported
 os.environ.pop("DOCPILOT_AUTH_REQUIRED", None)

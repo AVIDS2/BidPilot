@@ -15,10 +15,14 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
+import atexit
+from typing import Any
 
 from langgraph.graph import END, StateGraph
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 from .state import BidPilotState
 from .nodes.supervisor import (
@@ -41,9 +45,10 @@ logger = logging.getLogger(__name__)
 
 # ── Thread-safe lazy initialization ───────────────────────────────────
 
-_checkpointer: PostgresSaver | None = None
+_checkpointer: Any | None = None
+_checkpointer_cm = None
 _graph = None  # CompiledGraph | None
-_init_lock = threading.Lock()
+_init_lock = threading.RLock()
 
 
 def _build_graph() -> StateGraph:
@@ -132,7 +137,7 @@ def _build_graph() -> StateGraph:
     return sg
 
 
-def _create_checkpointer() -> PostgresSaver:
+def _create_checkpointer() -> Any:
     """Create a PostgresSaver checkpointer connected to the application DB.
 
     Uses the same DATABASE_URL as the rest of the worker.  Calls ``setup()``
@@ -141,23 +146,50 @@ def _create_checkpointer() -> PostgresSaver:
     Raises:
         RuntimeError: If the database connection or table setup fails.
     """
+    checkpointer_mode = os.environ.get("DOCPILOT_LANGGRAPH_CHECKPOINTER", "postgres").lower()
+    if checkpointer_mode == "memory":
+        logger.warning(
+            "Using in-memory LangGraph checkpointer. This is for local smoke tests only."
+        )
+        return InMemorySaver()
+
     database_url = os.environ.get(
         "DOCPILOT_DATABASE_URL",
         "postgresql+psycopg://docpilot:docpilot@localhost:5433/docpilot",
     )
+    # PostgresSaver uses psycopg directly, not SQLAlchemy URL dialects.
+    checkpointer_url = database_url.replace("postgresql+psycopg://", "postgresql://", 1)
     try:
-        checkpointer = PostgresSaver.from_conn_string(database_url)
+        global _checkpointer_cm
+        checkpointer_cm = PostgresSaver.from_conn_string(checkpointer_url)
+        checkpointer = checkpointer_cm.__enter__()
         # Ensure checkpoint tables exist
         checkpointer.setup()
+        _checkpointer_cm = checkpointer_cm
         return checkpointer
     except Exception as exc:
+        if "checkpointer_cm" in locals():
+            checkpointer_cm.__exit__(*sys.exc_info())
         raise RuntimeError(
             f"Failed to initialize PostgresSaver checkpointer "
             f"(URL: {database_url.split('@')[-1] if '@' in database_url else database_url}): {exc}"
         ) from exc
 
 
-def get_checkpointer() -> PostgresSaver:
+def close_checkpointer() -> None:
+    """Close the module-level PostgresSaver context if it was opened."""
+    global _checkpointer, _checkpointer_cm, _graph
+    if _checkpointer_cm is not None:
+        _checkpointer_cm.__exit__(None, None, None)
+    _checkpointer = None
+    _checkpointer_cm = None
+    _graph = None
+
+
+atexit.register(close_checkpointer)
+
+
+def get_checkpointer() -> Any:
     """Return the module-level PostgresSaver, creating it on first call.
 
     Thread-safe: uses a lock so that concurrent callers from multiple

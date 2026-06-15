@@ -1,5 +1,6 @@
 """Test provider configuration CRUD API."""
 from app.models import ProviderConfig
+from app.security.secrets import decrypt_secret, is_encrypted_secret
 
 
 def test_create_provider_config(client, default_org_id, default_user_id):
@@ -19,6 +20,27 @@ def test_create_provider_config(client, default_org_id, default_user_id):
     data = resp.json()["data"]
     assert data["provider_type"] == "openai"
     assert "****" in data["api_key"]  # Masked
+
+
+def test_create_provider_config_encrypts_api_key(client, default_org_id, default_user_id, test_db):
+    """Provider keys should be encrypted before they are stored."""
+    resp = client.post(
+        "/auth/me/providers",
+        json={
+            "provider_type": "openai",
+            "api_key": "test-provider-key",
+            "model": "gpt-4o-mini",
+            "label": "Encrypted",
+        },
+    )
+    assert resp.status_code == 201
+    config_id = resp.json()["data"]["id"]
+
+    config = test_db.get(ProviderConfig, config_id)
+    assert config is not None
+    assert is_encrypted_secret(config.api_key)
+    assert "test-provider-key" not in config.api_key
+    assert decrypt_secret(config.api_key) == "test-provider-key"
 
 
 def test_list_provider_configs(client, default_org_id, default_user_id):

@@ -146,14 +146,15 @@ export function InlineSuggestionBar() {
   const { state } = useAIAssistant();
   const suggestions = usePageSuggestions();
 
-  if (state.isOpen || suggestions.length === 0) return null;
+  if (suggestions.length === 0) return null;
 
   return (
     <div
-      className="flex items-center gap-2 px-4 py-2 animate-fade-in"
+      className="flex items-center gap-2 px-4 py-2 animate-fade-in transition-opacity duration-200"
       style={{
         borderBottom: "1px solid var(--border)",
         background: "oklch(from var(--primary) l c h / 0.03)",
+        opacity: state.isOpen ? 0.78 : 1,
       }}
     >
       <SparklesIcon className="w-3.5 h-3.5 shrink-0" style={{ color: "var(--primary)" }} />

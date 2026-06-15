@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
@@ -13,6 +12,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.models import ChatConversation, ChatMessage as ChatMessageModel, Project, ProviderConfig
+from app.security.secrets import decrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,95 @@ def _get_project_context(db: Session, project_id: str) -> str:
     return f"项目名称：{project.name}\n场景包：{project.scenario_package}\n状态：{project.status}"
 
 
+def _fallback_conversation_title(content: str) -> str | None:
+    title = content.strip().replace("\n", " ")[:80]
+    return title or None
+
+
+def _generate_conversation_title(
+    user_message: str,
+    assistant_message: str,
+) -> str | None:
+    """Generate a short conversation title.
+
+    Uses the platform DeepSeek key when available. Falls back to a trimmed
+    version of the first user message if title generation is unavailable.
+    """
+    fallback_title = _fallback_conversation_title(user_message)
+    if not fallback_title:
+        return None
+
+    if not _DEEPSEEK_API_KEY:
+        return fallback_title
+
+    prompt = (
+        "请根据下面这段用户和助手的首轮对话，生成一个简短清晰的中文会话标题。"
+        "要求：10到18个字，不能加引号，不能带句号，像 AI 聊天产品的历史标题那样自然。\n\n"
+        f"用户：{user_message.strip()[:400]}\n"
+        f"助手：{assistant_message.strip()[:600]}"
+    )
+
+    try:
+        response = httpx.post(
+            f"{_DEEPSEEK_BASE_URL}/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {_DEEPSEEK_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": _DEEPSEEK_MODEL,
+                "messages": [
+                    {"role": "system", "content": "你负责为聊天会话生成简洁标题。只返回标题文本本身。"},
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+                "max_tokens": 32,
+                "temperature": 0.2,
+            },
+            timeout=15.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        title = str(content).strip().strip('"').strip("'").replace("\n", " ")[:80]
+        return title or fallback_title
+    except Exception as exc:
+        logger.info("Conversation title generation fell back to first user message: %s", exc)
+        return fallback_title
+
+
+def _maybe_refresh_conversation_title(db: Session, conversation_id: str) -> None:
+    """Upgrade the fallback title after the first assistant reply arrives."""
+    conversation = db.get(ChatConversation, conversation_id)
+    if conversation is None:
+        return
+
+    messages = get_conversation_messages(db, conversation_id)
+    first_user_message = next((message for message in messages if message.role == "user"), None)
+    if first_user_message is None:
+        return
+
+    assistant_messages = [message for message in messages if message.role == "assistant"]
+    if len(assistant_messages) != 1:
+        return
+
+    fallback_title = _fallback_conversation_title(first_user_message.content)
+    current_title = conversation.title.strip() if conversation.title else None
+    if current_title and fallback_title and current_title != fallback_title:
+        return
+
+    generated_title = _generate_conversation_title(
+        first_user_message.content,
+        assistant_messages[0].content,
+    )
+    if not generated_title:
+        return
+
+    conversation.title = generated_title
+    conversation.updated_at = datetime.now(UTC)
+    db.commit()
+
+
 def create_conversation(
     db: Session,
     user_id: str,
@@ -106,6 +195,16 @@ def save_message(
     content: str,
 ) -> ChatMessageModel:
     """Persist a chat message."""
+    conversation = db.get(ChatConversation, conversation_id)
+    if (
+        role == "user"
+        and conversation is not None
+        and (conversation.title is None or not conversation.title.strip())
+    ):
+        conversation.title = _fallback_conversation_title(content)
+    if conversation is not None:
+        conversation.updated_at = datetime.now(UTC)
+
     msg = ChatMessageModel(
         conversation_id=conversation_id,
         role=role,
@@ -113,6 +212,11 @@ def save_message(
     )
     db.add(msg)
     db.commit()
+    db.refresh(msg)
+
+    if role == "assistant":
+        _maybe_refresh_conversation_title(db, conversation_id)
+
     return msg
 
 
@@ -150,7 +254,29 @@ def list_conversations(
     query = db.query(ChatConversation).filter(ChatConversation.user_id == user_id)
     if project_id:
         query = query.filter(ChatConversation.project_id == project_id)
-    return query.order_by(ChatConversation.created_at.desc()).all()
+    return query.order_by(ChatConversation.updated_at.desc(), ChatConversation.created_at.desc()).all()
+
+
+def rename_conversation(
+    db: Session,
+    conversation_id: str,
+    user_id: str,
+    title: str,
+) -> ChatConversation | None:
+    """Rename a conversation owned by the current user."""
+    conversation = get_conversation(db, conversation_id, user_id)
+    if conversation is None:
+        return None
+
+    normalized_title = title.strip().replace("\n", " ")[:80]
+    if not normalized_title:
+        raise ValueError("Conversation title cannot be empty")
+
+    conversation.title = normalized_title
+    conversation.updated_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(conversation)
+    return conversation
 
 
 async def stream_chat_response(
@@ -302,7 +428,7 @@ async def _call_openai_streaming(
     """Stream from an OpenAI-compatible API."""
     url = (config.api_url or "https://api.openai.com/v1/chat/completions").rstrip("/")
     headers = {
-        "Authorization": f"Bearer {config.api_key}",
+        "Authorization": f"Bearer {decrypt_secret(config.api_key)}",
         "Content-Type": "application/json",
     }
     payload = {
@@ -341,7 +467,7 @@ async def _call_anthropic_streaming(
     """Stream from the Anthropic Messages API."""
     url = (config.api_url or "https://api.anthropic.com/v1/messages").rstrip("/")
     headers = {
-        "x-api-key": config.api_key,
+        "x-api-key": decrypt_secret(config.api_key),
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
     }

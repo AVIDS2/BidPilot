@@ -3,6 +3,21 @@
   "subtitle": "您的文档助手",
   "inputPlaceholder": "问我任何问题...",
   "thinking": "思考中",
+  "status": {
+    "thinking": "正在理解请求",
+    "needs_input": "等待补充信息",
+    "needs_confirmation": "等待你的确认",
+    "executing_tool": "正在调用工具",
+    "running_workflow": "工作流运行中",
+    "completed": "已完成",
+    "failed": "执行失败"
+  },
+  "execution": {
+    "confirmAction": "确认操作",
+    "confirm": "确认",
+    "cancel": "取消",
+    "workflowStarted": "工作流已启动"
+  },
   "welcome": {
     "title": "欢迎使用 DocPilot！",
     "description": "我可以帮您创建项目、上传文档、生成章节等。"
@@ -26,7 +41,16 @@
     "openCommand": "命令面板",
     "close": "关闭面板",
     "enterToSend": "回车发送",
-    "escToClose": "Esc 关闭"
+    "escToClose": "Esc 关闭",
+    "history": "历史会话",
+    "historySubtitle": "已连接历史记录",
+    "newConversation": "新对话",
+    "noHistory": "还没有历史会话",
+    "untitledConversation": "未命名对话",
+    "justNow": "刚刚",
+    "closeHistory": "关闭历史会话",
+    "renameConversation": "重命名会话",
+    "renameConversationHint": "双击重命名"
   },
   "floating": {
     "ariaLabel": "DocPilot AI 助手",

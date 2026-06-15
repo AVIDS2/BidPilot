@@ -26,6 +26,22 @@
     "description": "无限项目、全部场景包、优先支持。",
     "viewPlans": "查看方案"
   },
+  "billing": {
+    "title": "账单状态",
+    "description": "订阅与额度概览。",
+    "plan": "方案：{{plan}}",
+    "customer": "已连接 Stripe 客户：{{status}}",
+    "connected": "是",
+    "notConnected": "否",
+    "manage": "管理方案",
+    "status": {
+      "active": "生效中",
+      "trialing": "试用中",
+      "past_due": "欠费",
+      "canceled": "已取消",
+      "unpaid": "未支付"
+    }
+  },
   "admin": {
     "changePlan": "管理员：更改方案",
     "changePlanDesc": "手动更新您的订阅方案。",

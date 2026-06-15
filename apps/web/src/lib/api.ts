@@ -10,16 +10,87 @@ function getAuthHeaders(): Record<string, string> {
   return {};
 }
 
+// Rate limit retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  baseDelay: 1000,
+  maxDelay: 10000,
+};
+
+// Delay utility with exponential backoff
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Check if error is rate limit (429)
+function isRateLimitError(error: unknown): error is { status: number } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    (error as { status: number }).status === 429
+  );
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...getAuthHeaders(), ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${body}`);
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+          ...options?.headers,
+        },
+        ...options,
+      });
+
+      if (res.status === 429) {
+        // Rate limit exceeded - extract retry-after or use exponential backoff
+        const retryAfter = res.headers.get("Retry-After");
+        const retryMs = retryAfter
+          ? parseInt(retryAfter, 10) * 1000
+          : Math.min(
+              RETRY_CONFIG.baseDelay * Math.pow(2, attempt),
+              RETRY_CONFIG.maxDelay,
+            );
+
+        if (attempt < RETRY_CONFIG.maxRetries) {
+          await delay(retryMs);
+          continue; // Retry
+        }
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        const error = new Error(`API ${res.status}: ${body}`) as Error & {
+          status: number;
+        };
+        error.status = res.status;
+        throw error;
+      }
+
+      return res.json();
+    } catch (error) {
+      lastError = error;
+
+      // If it's a rate limit error and we haven't exhausted retries, wait and retry
+      if (isRateLimitError(error) && attempt < RETRY_CONFIG.maxRetries) {
+        const retryMs = Math.min(
+          RETRY_CONFIG.baseDelay * Math.pow(2, attempt),
+          RETRY_CONFIG.maxDelay,
+        );
+        await delay(retryMs);
+        continue;
+      }
+
+      // For non-rate-limit errors or exhausted retries, throw immediately
+      throw error;
+    }
   }
-  return res.json();
+
+  throw lastError;
 }
 
 async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
@@ -446,6 +517,32 @@ export function getSubscription(token: string) {
   return request<SubscriptionRead>("/auth/subscription", { headers: { Authorization: `Bearer ${token}` } });
 }
 
+export interface UsageQuotaRead {
+  plan: string;
+  monthly_workflow_limit: number;
+  monthly_workflow_used: number;
+  monthly_workflow_remaining: number | null;
+  trial_window_start: string;
+}
+
+export function getUsageQuota() {
+  return request<{ data: UsageQuotaRead }>("/usage/quota");
+}
+
+export interface BillingSummaryRead {
+  plan: string;
+  status: string;
+  stripe_customer_id: string | null;
+  monthly_workflow_limit: number;
+  monthly_workflow_used: number;
+  monthly_workflow_remaining: number | null;
+  trial_window_start: string;
+}
+
+export function getBillingSummary() {
+  return request<{ data: BillingSummaryRead }>("/auth/billing-summary");
+}
+
 // Billing
 export interface CheckoutResult {
   url: string;
@@ -672,6 +769,40 @@ export interface TestConnectionResult {
   model: string | null;
 }
 
+// Chat
+export interface ChatMessageRead {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatConversationRead {
+  id: string;
+  project_id: string | null;
+  title: string | null;
+  created_at: string | null;
+}
+
+export interface ChatHistoryRead {
+  items: ChatMessageRead[];
+  total: number;
+}
+
+export function listChatConversations(projectId?: string) {
+  const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+  return request<ChatConversationRead[]>(`/chat/conversations${query}`);
+}
+
+export function getChatConversationMessages(conversationId: string) {
+  return request<ChatHistoryRead>(`/chat/conversations/${conversationId}/messages`);
+}
+
+export function renameChatConversation(conversationId: string, title: string) {
+  return request<ChatConversationRead>(`/chat/conversations/${conversationId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
+}
+
 export function listProviderConfigs() {
   return request<{ data: ProviderConfig[] }>("/auth/me/providers");
 }
@@ -688,7 +819,17 @@ export function deleteProviderConfig(id: string) {
   return request<{ data: { deleted: boolean } }>(`/auth/me/providers/${id}`, { method: "DELETE" });
 }
 
-export function testProviderConnection(payload: { provider_type: string; api_key: string; api_url?: string; model: string }) {
+export type TestProviderConnectionPayload =
+  | { config_id: string }
+  | { provider_type: string; api_key: string; api_url?: string; model: string };
+
+export function testProviderConnection(payload: TestProviderConnectionPayload) {
+  if ("config_id" in payload) {
+    return request<{ data: TestConnectionResult }>(
+      `/auth/me/providers/test?config_id=${encodeURIComponent(payload.config_id)}`,
+      { method: "POST" },
+    );
+  }
   return request<{ data: TestConnectionResult }>("/auth/me/providers/test", { method: "POST", body: JSON.stringify(payload) });
 }
 

@@ -125,18 +125,22 @@ def check_plan_limit(db: Session, user_id: str, resource: str = "projects", delt
 
 
 VALID_PLANS = {"starter", "professional", "enterprise"}
+VALID_SUBSCRIPTION_STATUSES = {"active", "trialing", "past_due", "canceled", "unpaid"}
 
 
-def update_subscription_command(db: Session, user_id: str, new_plan: str) -> Subscription:
+def update_subscription_command(db: Session, user_id: str, new_plan: str, status: str = "active") -> Subscription:
     """Update or create a subscription for the given user. Admin-only in router."""
     if new_plan not in VALID_PLANS:
         raise ValueError(f"Invalid plan: {new_plan}. Must be one of {VALID_PLANS}")
+    if status not in VALID_SUBSCRIPTION_STATUSES:
+        raise ValueError(f"Invalid subscription status: {status}. Must be one of {VALID_SUBSCRIPTION_STATUSES}")
     sub = db.query(Subscription).filter_by(user_id=user_id).first()
     if sub is None:
-        sub = Subscription(user_id=user_id, plan=new_plan, status="active")
+        sub = Subscription(user_id=user_id, plan=new_plan, status=status)
         db.add(sub)
     else:
         sub.plan = new_plan
+        sub.status = status
     db.commit()
     db.refresh(sub)
     return sub

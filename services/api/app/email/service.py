@@ -14,6 +14,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Protocol
 
+from app.core.settings import get_app_url
+
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
@@ -24,8 +26,6 @@ SMTP_USER = os.environ.get("DOCPILOT_SMTP_USER", "")
 SMTP_PASS = os.environ.get("DOCPILOT_SMTP_PASS", "")
 SMTP_FROM = os.environ.get("DOCPILOT_SMTP_FROM", "noreply@docpilot.local")
 SMTP_USE_TLS = os.environ.get("DOCPILOT_SMTP_TLS", "true").lower() == "true"
-
-APP_BASE_URL = os.environ.get("DOCPILOT_APP_URL", "http://localhost:5173")
 
 SMTP_CONFIGURED = bool(SMTP_HOST and SMTP_USER)
 
@@ -112,7 +112,7 @@ def send_email(message: EmailMessage) -> None:
 
 def send_password_reset_email(email: str, token: str) -> None:
     """Send a password reset email with a link containing the token."""
-    reset_url = f"{APP_BASE_URL}/reset-password?token={token}"
+    reset_url = f"{get_app_url()}/reset-password?token={token}"
     send_email(EmailMessage(
         to=email,
         subject="DocPilot — Password Reset",
@@ -136,7 +136,7 @@ def send_password_reset_email(email: str, token: str) -> None:
 
 def send_email_verification_email(email: str, token: str) -> None:
     """Send an email verification link."""
-    verify_url = f"{APP_BASE_URL}/verify-email?token={token}"
+    verify_url = f"{get_app_url()}/verify-email?token={token}"
     send_email(EmailMessage(
         to=email,
         subject="DocPilot — Verify Your Email",
@@ -169,13 +169,13 @@ def send_review_notification_email(email: str, project_name: str, section_title:
         subject=f"DocPilot — Section \"{section_title}\" {action_label}",
         body_text=(
             f"Section \"{section_title}\" in project \"{project_name}\" has been {action_label}.\n\n"
-            f"View the project at {APP_BASE_URL}/projects\n"
+            f"View the project at {get_app_url()}/projects\n"
         ),
         body_html=(
             f"<h2>Review Update</h2>"
             f"<p>Section <strong>\"{section_title}\"</strong> in project "
             f"<strong>\"{project_name}\"</strong> has been <strong>{action_label}</strong>.</p>"
-            f'<p><a href="{APP_BASE_URL}/projects" style="display:inline-block;padding:10px 20px;'
+            f'<p><a href="{get_app_url()}/projects" style="display:inline-block;padding:10px 20px;'
             f'background:#2563eb;color:white;border-radius:6px;text-decoration:none;">'
             f"View Project</a></p>"
         ),
@@ -201,7 +201,7 @@ def send_account_deletion_confirmation_email(email: str) -> None:
 
 def send_invitation_email(email: str, token: str, org_slug: str) -> None:
     """Send an invitation email with a registration link including the token."""
-    link = f"http://localhost:5173/register?invitation={token}"
+    link = f"{get_app_url()}/register?invitation={token}"
     send_email(EmailMessage(
         to=email,
         subject=f"DocPilot — You've been invited to join {org_slug}",

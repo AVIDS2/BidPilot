@@ -70,6 +70,7 @@ def test_webhook_handles_checkout_completed(mock_verify, mock_update):
     call_args = mock_update.call_args
     assert call_args[0][1] == "some-user"
     assert call_args[0][2] == "professional"
+    assert call_args[0][3] == "active"
 
 
 @patch("app.billing.router.update_subscription_command")
@@ -92,6 +93,56 @@ def test_webhook_handles_subscription_deleted(mock_verify, mock_update):
     mock_update.assert_called_once()
     call_args = mock_update.call_args
     assert call_args[0][2] == "starter"
+    assert call_args[0][3] == "canceled"
+
+
+@patch("app.billing.router.update_subscription_command")
+@patch("app.billing.router.verify_webhook_signature")
+def test_webhook_handles_subscription_updated(mock_verify, mock_update):
+    mock_verify.return_value = {
+        "type": "customer.subscription.updated",
+        "data": {
+            "object": {
+                "status": "past_due",
+                "metadata": {"user_id": "some-user", "plan": "professional"},
+            }
+        },
+    }
+    resp = client.post(
+        "/billing/webhook",
+        content=b"{}",
+        headers={"Stripe-Signature": "t=1,v1=abc"},
+    )
+    assert resp.status_code == 200
+    mock_update.assert_called_once()
+    call_args = mock_update.call_args
+    assert call_args[0][1] == "some-user"
+    assert call_args[0][2] == "professional"
+    assert call_args[0][3] == "past_due"
+
+
+@patch("app.billing.router.update_subscription_command")
+@patch("app.billing.router.verify_webhook_signature")
+def test_webhook_handles_invoice_payment_failed(mock_verify, mock_update):
+    mock_verify.return_value = {
+        "type": "invoice.payment_failed",
+        "data": {
+            "object": {
+                "metadata": {"user_id": "some-user", "plan": "professional"},
+            }
+        },
+    }
+    resp = client.post(
+        "/billing/webhook",
+        content=b"{}",
+        headers={"Stripe-Signature": "t=1,v1=abc"},
+    )
+    assert resp.status_code == 200
+    mock_update.assert_called_once()
+    call_args = mock_update.call_args
+    assert call_args[0][1] == "some-user"
+    assert call_args[0][2] == "professional"
+    assert call_args[0][3] == "past_due"
 
 
 @patch("app.billing.router.verify_webhook_signature")

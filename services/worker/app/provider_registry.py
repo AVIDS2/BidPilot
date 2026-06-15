@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import logging
 from app.db import SessionLocal
 from app.models import ProviderConfig
+from app.security.secrets import decrypt_secret
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def get_active_provider(user_id: str, provider_type: str = "openai") -> Provider
 
         return ProviderParams(
             provider_type=config.provider_type,
-            api_key=config.api_key,
+            api_key=decrypt_secret(config.api_key),
             api_url=config.api_url,
             model=config.model,
         )
@@ -84,7 +85,7 @@ def get_provider_by_id(config_id: str) -> ProviderParams | None:
             return None
         return ProviderParams(
             provider_type=config.provider_type,
-            api_key=config.api_key,
+            api_key=decrypt_secret(config.api_key),
             api_url=config.api_url,
             model=config.model,
         )

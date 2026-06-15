@@ -23,11 +23,13 @@ function TierCard({
   current,
   onUpgrade,
   t,
+  inPlatform,
 }: {
   tier: PricingTier;
   current: boolean;
   onUpgrade: (plan: string) => void;
   t: (key: string) => string;
+  inPlatform: boolean;
 }) {
   const highlighted = tier.recommended && !current;
 
@@ -35,12 +37,12 @@ function TierCard({
     <div
       className="relative flex flex-col p-8 transition-all duration-300 hover:-translate-y-1"
       style={{
-        background: "var(--landing-surface-1)",
+        background: inPlatform ? "var(--card)" : "var(--landing-surface-1)",
         border: highlighted
-          ? "1px solid var(--landing-border-inner)"
+          ? `1px solid ${inPlatform ? "var(--primary)" : "var(--landing-border-inner)"}`
           : current
-            ? "1px solid rgba(132, 204, 22, 0.6)"
-            : "1px solid var(--landing-hairline)",
+            ? `1px solid ${inPlatform ? "var(--primary)" : "rgba(132, 204, 22, 0.6)"}`
+            : `1px solid ${inPlatform ? "var(--border)" : "var(--landing-hairline)"}`,
       }}
     >
       {/* 推荐标签 */}
@@ -48,7 +50,10 @@ function TierCard({
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <Badge
             className="px-3 py-0.5 text-[0.7rem] font-medium uppercase tracking-wider border-0"
-            style={{ background: "var(--landing-accent)", color: "var(--landing-canvas)" }}
+            style={{
+              background: inPlatform ? "var(--primary)" : "var(--landing-accent)",
+              color: inPlatform ? "var(--primary-foreground)" : "var(--landing-canvas)",
+            }}
           >
             {t("badges.recommended")}
           </Badge>
@@ -60,7 +65,10 @@ function TierCard({
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <Badge
             className="px-3 py-0.5 text-[0.7rem] font-medium uppercase tracking-wider border-0"
-            style={{ background: "var(--landing-surface-2)", color: "var(--landing-text-secondary)" }}
+            style={{
+              background: inPlatform ? "var(--muted)" : "var(--landing-surface-2)",
+              color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-secondary)",
+            }}
           >
             {t("badges.currentPlan")}
           </Badge>
@@ -69,19 +77,21 @@ function TierCard({
 
       {/* 标题和描述 */}
       <div className={highlighted || current ? "pt-4" : ""}>
-        <h3 className="text-lg font-semibold text-white">{tier.name}</h3>
-        <p className="mt-1 text-sm" style={{ color: "var(--landing-text-tertiary)" }}>
+        <h3 className="text-lg font-semibold" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>
+          {tier.name}
+        </h3>
+        <p className="mt-1 text-sm" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)" }}>
           {tier.description}
         </p>
       </div>
 
       {/* 价格 */}
       <div className="mt-6">
-        <span className="text-4xl font-bold tracking-tight text-white">
+        <span className="text-4xl font-bold tracking-tight" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>
           {tier.price}
         </span>
         {tier.period && (
-          <span className="text-sm ml-1.5" style={{ color: "var(--landing-text-tertiary)" }}>
+          <span className="text-sm ml-1.5" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)" }}>
             {tier.period}
           </span>
         )}
@@ -90,7 +100,7 @@ function TierCard({
       {/* 分割线 */}
       <div
         className="my-6"
-        style={{ borderTop: "1px solid var(--landing-hairline)" }}
+        style={{ borderTop: `1px solid ${inPlatform ? "var(--border)" : "var(--landing-hairline)"}` }}
       />
 
       {/* 功能列表 */}
@@ -99,11 +109,11 @@ function TierCard({
           <li key={feat} className="flex items-start gap-3">
             <span
               className="mt-1 w-4 h-4 flex items-center justify-center text-xs shrink-0"
-              style={{ color: "var(--landing-accent)" }}
+              style={{ color: inPlatform ? "var(--primary)" : "var(--landing-accent)" }}
             >
               ✓
             </span>
-            <span className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
+            <span className="text-sm" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-secondary)" }}>
               {feat}
             </span>
           </li>
@@ -115,13 +125,17 @@ function TierCard({
         to={current ? "#" : tier.name.toLowerCase() === "starter" ? "/login" : "/signup"}
         className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98] mt-8"
         style={{
-          background: highlighted ? "var(--landing-accent)" : "transparent",
-          color: highlighted ? "var(--landing-canvas)" : current ? "var(--landing-text-tertiary)" : "var(--landing-text-primary)",
+          background: highlighted ? (inPlatform ? "var(--primary)" : "var(--landing-accent)") : "transparent",
+          color: highlighted
+            ? (inPlatform ? "var(--primary-foreground)" : "var(--landing-canvas)")
+            : current
+              ? (inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)")
+              : (inPlatform ? "var(--foreground)" : "var(--landing-text-primary)"),
           border: highlighted
             ? "none"
             : current
-              ? "1px solid var(--landing-hairline)"
-              : "1px solid var(--landing-hairline)",
+              ? `1px solid ${inPlatform ? "var(--border)" : "var(--landing-hairline)"}`
+              : `1px solid ${inPlatform ? "var(--border)" : "var(--landing-hairline)"}`,
           cursor: current ? "default" : "pointer",
           opacity: current ? 0.6 : 1,
         }}
@@ -145,6 +159,7 @@ export function PricingPage() {
   const navigate = useNavigate();
   const currentPlan = user?.plan?.toLowerCase() ?? "";
   const { t } = useTranslation("pricing");
+  const inPlatform = isAuthenticated;
 
   const TIERS: PricingTier[] = useMemo(
     () => [
@@ -213,12 +228,15 @@ export function PricingPage() {
 
   return (
     <div
-      className="min-h-screen"
-      style={{ background: "var(--landing-canvas)", color: "var(--landing-text-primary)" }}
+      className={inPlatform ? "" : "min-h-screen"}
+      style={{
+        background: inPlatform ? "var(--background)" : "var(--landing-canvas)",
+        color: inPlatform ? "var(--foreground)" : "var(--landing-text-primary)",
+      }}
     >
-      <div className="mx-auto max-w-5xl py-12 px-6">
+      <div className={`mx-auto ${inPlatform ? "max-w-6xl py-2 px-0" : "max-w-5xl py-12 px-6"}`}>
         {/* 顶部导航 */}
-        <div className="flex items-center justify-between mb-16">
+        {!inPlatform && <div className="flex items-center justify-between mb-16">
           <Link
             to={isAuthenticated ? "/projects" : "/"}
             className="inline-flex items-center gap-1.5 text-sm transition-colors hover:text-white"
@@ -240,25 +258,30 @@ export function PricingPage() {
             DocPilot
           </Link>
           <div className="w-20" />
-        </div>
+        </div>}
 
         {/* 标题区域 */}
-        <div className="text-center mb-16 max-w-xl mx-auto">
+        <div className={`${inPlatform ? "mb-8 max-w-2xl" : "text-center mb-16 max-w-xl mx-auto"}`}>
           <span
             className="text-sm font-medium tracking-widest uppercase"
-            style={{ color: "var(--landing-accent)" }}
+            style={{ color: inPlatform ? "var(--primary)" : "var(--landing-accent)" }}
           >
-            / Pricing
+            {inPlatform ? t("title") : "/ Pricing"}
           </span>
-          <h1 className="mt-4 text-4xl font-bold tracking-tight text-white">
+          <h1 className="mt-4 text-4xl font-bold tracking-tight" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>
             {t("title")}
           </h1>
           <p
             className="mt-3 leading-relaxed max-w-[65ch] mx-auto"
-            style={{ color: "var(--landing-text-tertiary)" }}
+            style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)" }}
           >
             {t("description")}
           </p>
+          {inPlatform && (
+            <p className="mt-4 text-sm text-muted-foreground">
+              {t("inPlatformNote", { defaultValue: "Your current plan and usage are shown in Settings." })}
+            </p>
+          )}
         </div>
 
         {/* 定价卡片 */}
@@ -270,6 +293,7 @@ export function PricingPage() {
               current={tier.name.toLowerCase() === currentPlan}
               onUpgrade={handleUpgrade}
               t={t}
+              inPlatform={inPlatform}
             />
           ))}
         </div>

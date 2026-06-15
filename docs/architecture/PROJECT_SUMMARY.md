@@ -157,7 +157,7 @@ MinIO: minio (端口9000, 9001)
 ```
 VPS: root@38.14.254.50
 管理面板: 1Panel v2.1.12
-域名: devlens.top, dwill.top
+域名: bidpilot.rglens.com, api.bidpilot.rglens.com
 SSL: Let's Encrypt
 ```
 

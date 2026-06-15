@@ -610,10 +610,10 @@ services:
 ### 8.2 生产部署（VPS）
 
 ```
-devlens.top (主站)
-├── api.devlens.top → API网关
-├── docs.devlens.top → 文档站
-└── pay.dwill.top → 支付
+bidpilot.rglens.com (主站)
+├── api.bidpilot.rglens.com → API网关
+├── docs.bidpilot.rglens.com → 文档站
+└── pay.rglens.com → 支付
 
 root@38.14.254.50 (VPS)
 ├── 1Panel v2.1.12 (管理面板)

@@ -90,7 +90,7 @@ https://dashscope.aliyuncs.com/compatible-mode/v1
 Current API key for this local development context:
 
 ```text
-sk-d02b0d8022e744739caccd4997b0ea1e
+<your-api-key>
 ```
 
 Preferred model baseline:
@@ -114,17 +114,35 @@ DOCPILOT_DATABASE_URL=postgresql://docpilot:docpilot@localhost:5433/docpilot
 DOCPILOT_REDIS_URL=redis://localhost:6379/0
 
 DOCPILOT_PROVIDER_DOMESTIC_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-DOCPILOT_PROVIDER_DOMESTIC_API_KEY=sk-d02b0d8022e744739caccd4997b0ea1e
+DOCPILOT_PROVIDER_DOMESTIC_API_KEY=<your-api-key>
 DOCPILOT_LLM_MODEL_PRIMARY=qwen3.5-flash
 DOCPILOT_EMBEDDING_MODEL_TEXT=text-embedding-v4
 DOCPILOT_EMBEDDING_MODEL_MULTIMODAL=qwen3-vl-embedding
+DOCPILOT_SECRETS_KEY=<generated-fernet-key>
 ```
 
 Optional compatibility alias if a library expects DashScope naming:
 
 ```text
-DASHSCOPE_API_KEY=sk-d02b0d8022e744739caccd4997b0ea1e
+ALIYUN_API_KEY=<your-aliyun-bailian-api-key>
+DASHSCOPE_API_KEY=<your-dashscope-api-key>
 ```
+
+Generate `DOCPILOT_SECRETS_KEY` locally with:
+
+```bash
+uv run --directory services/api python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+This key protects user-supplied provider API keys stored in `provider_config`. Keep it out of Git, logs, screenshots, and chat transcripts.
+
+LangGraph checkpoint mode:
+
+```text
+DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres
+```
+
+Use `DOCPILOT_LANGGRAPH_CHECKPOINTER=memory` only for local workflow smoke tests when isolating Postgres checkpoint behavior. Do not use memory checkpoints for staging or production.
 
 ## Local startup order
 

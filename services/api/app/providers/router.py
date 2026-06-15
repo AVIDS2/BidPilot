@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.auth.service import require_auth
+from app.security.secrets import SecretConfigurationError
 from .schemas import (
     ProviderConfigCreate, ProviderConfigUpdate,
     TestConnectionRequest,
@@ -25,7 +26,10 @@ def list_providers(user=Depends(require_auth), db: Session = Depends(get_db)):
 @router.post("", status_code=201)
 def create_provider(payload: ProviderConfigCreate, user=Depends(require_auth), db: Session = Depends(get_db)):
     """Create a new provider configuration."""
-    config = create_provider_config(db, user.id, payload)
+    try:
+        config = create_provider_config(db, user.id, payload)
+    except SecretConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"data": mask_read_config(config)}
 
 
@@ -41,7 +45,10 @@ def get_provider(config_id: str, user=Depends(require_auth), db: Session = Depen
 @router.put("/{config_id}")
 def update_provider(config_id: str, payload: ProviderConfigUpdate, user=Depends(require_auth), db: Session = Depends(get_db)):
     """Update a provider configuration."""
-    config = update_provider_config(db, config_id, user.id, payload)
+    try:
+        config = update_provider_config(db, config_id, user.id, payload)
+    except SecretConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if config is None:
         raise HTTPException(status_code=404, detail="Provider config not found")
     return {"data": mask_read_config(config)}

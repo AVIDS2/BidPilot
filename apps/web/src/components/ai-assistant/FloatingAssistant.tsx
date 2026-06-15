@@ -6,7 +6,7 @@ import {
   PanelRightOpenIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useAIAssistant } from "@/lib/ai-assistant-store";
+import { isAssistantBusy, useAIAssistant } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -63,7 +63,7 @@ export function FloatingAssistant() {
   /* hide when panel is open */
   if (state.isOpen && state.mode === "panel") return null;
 
-  const isProcessing = state.status === "processing";
+  const isProcessing = isAssistantBusy(state.status);
 
   return (
     <div className="fixed bottom-6 right-6 z-50" ref={menuRef}>

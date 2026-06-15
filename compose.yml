@@ -1,3 +1,21 @@
+x-docpilot-env: &docpilot-env
+  DOCPILOT_DATABASE_URL: ${DOCPILOT_DATABASE_URL}
+  DOCPILOT_REDIS_URL: ${DOCPILOT_REDIS_URL}
+  DOCPILOT_MINIO_ENDPOINT: ${DOCPILOT_MINIO_ENDPOINT}
+  DOCPILOT_MINIO_ACCESS_KEY: ${DOCPILOT_MINIO_ACCESS_KEY}
+  DOCPILOT_MINIO_SECRET_KEY: ${DOCPILOT_MINIO_SECRET_KEY}
+  DOCPILOT_JWT_SECRET: ${DOCPILOT_JWT_SECRET}
+  DOCPILOT_SECRETS_KEY: ${DOCPILOT_SECRETS_KEY}
+  DOCPILOT_APP_URL: ${DOCPILOT_APP_URL}
+  DOCPILOT_API_URL: ${DOCPILOT_API_URL}
+  DOCPILOT_CORS_ORIGINS: ${DOCPILOT_CORS_ORIGINS}
+  DOCPILOT_AUTH_REQUIRED: ${DOCPILOT_AUTH_REQUIRED:-true}
+  DOCPILOT_LANGGRAPH_CHECKPOINTER: ${DOCPILOT_LANGGRAPH_CHECKPOINTER:-postgres}
+  DOCPILOT_SMTP_HOST: ${DOCPILOT_SMTP_HOST}
+  DOCPILOT_SMTP_USER: ${DOCPILOT_SMTP_USER}
+  DOCPILOT_SMTP_FROM: ${DOCPILOT_SMTP_FROM}
+  DOCPILOT_PROVIDER_DOMESTIC_API_KEY: ${DOCPILOT_PROVIDER_DOMESTIC_API_KEY}
+
 services:
   postgres:
     image: pgvector/pgvector:pg17
@@ -8,7 +26,7 @@ services:
       POSTGRES_USER: docpilot
       POSTGRES_PASSWORD: docpilot
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - docpilot-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +40,7 @@ services:
     container_name: docpilot-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - docpilot-redis-data:/data
 
@@ -35,10 +53,61 @@ services:
       MINIO_ROOT_USER: docpilot
       MINIO_ROOT_PASSWORD: docpilot123
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - docpilot-minio-data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: docpilot-api
+    restart: unless-stopped
+    environment: *docpilot-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+    container_name: docpilot-worker
+    restart: unless-stopped
+    environment: *docpilot-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://api.bidpilot.rglens.com}
+    container_name: docpilot-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
 
 volumes:
   docpilot-postgres-data:

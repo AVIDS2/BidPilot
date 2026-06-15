@@ -112,17 +112,6 @@ def _deterministic_routing(state: BidPilotState) -> str:
 
     Checks state flags in priority order to decide the next node.
     """
-    iteration: int = state.get("iteration", 0)
-    max_iterations: int = state.get("max_iterations", 3)
-
-    # Check for max iterations exceeded
-    if iteration >= max_iterations:
-        logger.warning(
-            "Max iterations %d reached — routing to persist_result",
-            max_iterations,
-        )
-        return "persist_result"
-
     # State flag checks in priority order
     if not state.get("requirements_parsed"):
         return "rfp_parser"
@@ -153,7 +142,8 @@ def supervisor_node(state: BidPilotState) -> dict:
     Uses ChatOpenAI gpt-4o-mini for routing decisions when available.
     Falls back to deterministic state inspection on LLM failure.
 
-    Increments iteration counter and records routing decision to agent_history.
+    Records routing decision to agent_history. Draft iteration is incremented
+    by the section drafter node, not by routing.
 
     Returns:
         Partial state update with incremented ``iteration`` and
@@ -161,7 +151,6 @@ def supervisor_node(state: BidPilotState) -> dict:
     """
     start = time.monotonic()
     current_iteration = state.get("iteration", 0)
-    new_iteration = current_iteration + 1
 
     # Attempt LLM routing first
     llm_target = _llm_routing_decision(state)
@@ -177,7 +166,7 @@ def supervisor_node(state: BidPilotState) -> dict:
 
     logger.info(
         "Supervisor routing (iteration %d/%d): method=%s target=%s",
-        new_iteration,
+        current_iteration,
         state.get("max_iterations", 3),
         routing_method,
         target,
@@ -194,7 +183,7 @@ def supervisor_node(state: BidPilotState) -> dict:
     )
 
     output_summary = (
-        f"new_iteration={new_iteration}, "
+        f"iteration={current_iteration}, "
         f"routing={routing_method}, "
         f"target={target}"
     )
@@ -209,7 +198,7 @@ def supervisor_node(state: BidPilotState) -> dict:
     )
 
     return {
-        "iteration": new_iteration,
+        "iteration": current_iteration,
         "agent_history": history,
     }
 

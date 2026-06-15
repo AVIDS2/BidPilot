@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.orm import Session
 
+from app.auth.schemas import CurrentUser
+from app.auth.service import require_auth
 from app.db import get_db
+from app.usage.service import UsageLimitExceeded
 
 from .schemas import (
     DraftSectionRequest,
@@ -17,13 +20,27 @@ router = APIRouter(prefix="/drafting", tags=["drafting"])
 
 
 @router.post("/sections", response_model=DraftSectionResponse, status_code=status.HTTP_202_ACCEPTED)
-def draft_section(payload: DraftSectionRequest, db: Session = Depends(get_db)) -> DraftSectionResponse:
-    return draft_section_command(db, payload)
+def draft_section(
+    payload: DraftSectionRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> DraftSectionResponse:
+    try:
+        return draft_section_command(db, payload, current_user)
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
 
 @router.post("/sections/redraft", response_model=DraftSectionResponse, status_code=status.HTTP_202_ACCEPTED)
-def redraft_section(payload: RedraftSectionRequest, db: Session = Depends(get_db)) -> DraftSectionResponse:
-    return redraft_section_command(db, payload)
+def redraft_section(
+    payload: RedraftSectionRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> DraftSectionResponse:
+    try:
+        return redraft_section_command(db, payload, current_user)
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
 
 @router.post("/runs/{run_id}/resume", response_model=DraftSectionResponse)

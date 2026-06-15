@@ -1,11 +1,14 @@
 import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.auth.service import require_admin
 from app.db import get_db
-from app.models import ExecutionRun
+from app.billing.service import get_billing_summary
+from app.models import ExecutionRun, User
+from app.usage.service import list_usage_events_for_user
 
 router = APIRouter(prefix="/ops", tags=["ops"])
 
@@ -81,3 +84,35 @@ def health_detailed(db: Session = Depends(get_db)) -> dict[str, object]:
         "status": "ok" if all_ok else "degraded",
         "checks": checks,
     }
+
+
+@router.get("/billing/users/{user_id}")
+def billing_user_summary(
+    user_id: str,
+    admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    summary = get_billing_summary(db, user_id)
+    return {
+        "data": {
+            "user_id": user_id,
+            "email": user.email,
+            "display_name": user.display_name,
+            **summary.model_dump(),
+        }
+    }
+
+
+@router.get("/billing/usage/{user_id}")
+def billing_user_usage(
+    user_id: str,
+    admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"data": list_usage_events_for_user(db, user_id)}

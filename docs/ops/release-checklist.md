@@ -25,6 +25,9 @@ Provide one repeatable gate before promoting DocPilot between environments.
 ## Production promotion checklist
 
 - `python scripts/production_readiness.py --target production` passes with production secret injection
+- VPS pilot web and API domains resolve over HTTPS
+- email links point at the deployed app domain
+- starter workflow quota blocks the 4th official-provider draft run
 - backup dry-run and staging restore drill confirmed per `docs/ops/backup-restore-drill.md`
 - rollback path and release owner confirmed
 - secrets and environment config reviewed

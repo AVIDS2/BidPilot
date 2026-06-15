@@ -4,6 +4,9 @@ import os
 import tempfile
 
 from app.adapters.parser import _extract_text, _split_into_chunks, ParsedChunk, store_chunks
+from app.adapters import embedding as embedding_adapter
+from app.adapters import llm as llm_adapter
+from app.adapters import requirements as requirements_adapter
 from app.adapters.embedding import generate_embedding, generate_embeddings_batch
 from app.adapters.llm import draft_section
 from app.adapters.requirements import extract_requirements
@@ -73,6 +76,10 @@ class TestEmbeddingAdapter:
         # Ensure no API key is set
         os.environ.pop("EMBEDDING_API_KEY", None)
         os.environ.pop("OPENAI_API_KEY", None)
+        os.environ.pop("DOCPILOT_PROVIDER_OPENAI_API_KEY", None)
+        os.environ.pop("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", None)
+        os.environ.pop("ALIYUN_API_KEY", None)
+        os.environ.pop("DASHSCOPE_API_KEY", None)
         result = generate_embedding("test text")
         assert result.model == "stub"
         assert len(result.embedding) == 1536
@@ -81,19 +88,77 @@ class TestEmbeddingAdapter:
     def test_batch_stub_without_api_key(self) -> None:
         os.environ.pop("EMBEDDING_API_KEY", None)
         os.environ.pop("OPENAI_API_KEY", None)
+        os.environ.pop("DOCPILOT_PROVIDER_OPENAI_API_KEY", None)
+        os.environ.pop("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", None)
+        os.environ.pop("ALIYUN_API_KEY", None)
+        os.environ.pop("DASHSCOPE_API_KEY", None)
         results = generate_embeddings_batch(["text1", "text2"])
         assert len(results) == 2
         assert all(r.model == "stub" for r in results)
+
+    def test_domestic_embedding_env_uses_dashscope_defaults(self, monkeypatch) -> None:
+        monkeypatch.delenv("EMBEDDING_API_KEY", raising=False)
+        monkeypatch.delenv("EMBEDDING_API_URL", raising=False)
+        monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_EMBEDDING_MODEL_TEXT", raising=False)
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.setenv("ALIYUN_API_KEY", "test-aliyun-key")
+
+        assert embedding_adapter._api_key() == "test-aliyun-key"
+        assert embedding_adapter._api_url() == "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"
+        assert embedding_adapter._api_model() == "text-embedding-v4"
 
 
 class TestLLMAdapter:
     def test_stub_draft_without_api_key(self) -> None:
         os.environ.pop("LLM_API_KEY", None)
         os.environ.pop("OPENAI_API_KEY", None)
+        os.environ.pop("DOCPILOT_PROVIDER_OPENAI_API_KEY", None)
+        os.environ.pop("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", None)
+        os.environ.pop("ALIYUN_API_KEY", None)
+        os.environ.pop("DASHSCOPE_API_KEY", None)
         result = draft_section("technical-approach", ["evidence text"], "proj1")
         assert result.model_used == "stub"
         assert "technical-approach" in result.content_markdown.lower() or "Technical Approach" in result.content_markdown
         assert "evidence text" in result.content_markdown
+
+    def test_domestic_llm_env_uses_dashscope_defaults(self, monkeypatch) -> None:
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.delenv("LLM_API_URL", raising=False)
+        monkeypatch.delenv("LLM_MODEL", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_LLM_MODEL_PRIMARY", raising=False)
+        monkeypatch.delenv("ALIYUN_API_KEY", raising=False)
+        monkeypatch.setenv("DASHSCOPE_API_KEY", "test-dashscope-key")
+
+        assert llm_adapter._api_key() == "test-dashscope-key"
+        assert llm_adapter._api_url() == "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+        assert llm_adapter._api_model() == "qwen3.5-flash"
+
+
+class TestProviderEnv:
+    def test_requirements_adapter_uses_domestic_chat_config(self, monkeypatch) -> None:
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.delenv("LLM_API_URL", raising=False)
+        monkeypatch.delenv("LLM_MODEL", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ALIYUN_API_KEY", raising=False)
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.setenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "test-domestic-key")
+        monkeypatch.setenv("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", "https://example.test/v1/")
+        monkeypatch.setenv("DOCPILOT_LLM_MODEL_PRIMARY", "qwen-test")
+
+        assert requirements_adapter._api_key() == "test-domestic-key"
+        assert requirements_adapter._api_url() == "https://example.test/v1/chat/completions"
+        assert requirements_adapter._api_model() == "qwen-test"
 
 
 class TestRequirementsAdapter:

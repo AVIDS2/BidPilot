@@ -52,16 +52,11 @@ function PublicLayout() {
   );
 }
 
-// AppLayout - Sidebar navigation for platform pages
-function AppLayout() {
+function PlatformShell() {
   const { user, isAuthenticated } = useAuth();
   const { t } = useTranslation();
   const { state, toggle } = useAIAssistant();
   useAIAssistantHotkeys();
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
 
   const isAdmin = user?.role === "admin";
 
@@ -123,6 +118,23 @@ function AppLayout() {
   );
 }
 
+// AppLayout - Sidebar navigation for platform pages
+function AppLayout() {
+  const { isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <PlatformShell />;
+}
+
+function MarketingOrPlatformLayout() {
+  const { isAuthenticated } = useAuth();
+
+  return isAuthenticated ? <PlatformShell /> : <PublicLayout />;
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -136,14 +148,17 @@ export function App() {
                 {/* Public pages - Nav navigation */}
                 <Route element={<PublicLayout />}>
                   <Route path="/" element={<RootRedirect />} />
-                  <Route path="/pricing" element={<PricingPage />} />
-                  <Route path="/docs" element={<DocsPage />} />
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/signup" element={<SignupPage />} />
                   <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                   <Route path="/reset-password" element={<ResetPasswordPage />} />
                   <Route path="/verify-email-prompt" element={<VerifyEmailPromptPage />} />
                   <Route path="/verify-email" element={<VerifyEmailPage />} />
+                </Route>
+
+                <Route element={<MarketingOrPlatformLayout />}>
+                  <Route path="/pricing" element={<PricingPage />} />
+                  <Route path="/docs" element={<DocsPage />} />
                 </Route>
 
                 {/* Platform pages - Sidebar navigation */}

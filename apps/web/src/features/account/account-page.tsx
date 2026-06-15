@@ -12,8 +12,8 @@ import { useNavigate, Link } from "react-router-dom"
 import { UserIcon, ShieldIcon, BellIcon, KeyIcon, LogOutIcon, MailIcon, CreditCardIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
-import { useMutation } from "@tanstack/react-query"
-import { updateCurrentUser, updateSubscription } from "@/lib/api"
+import { useMutation, useQuery } from "@tanstack/react-query"
+import { getBillingSummary, updateCurrentUser, updateSubscription } from "@/lib/api"
 import { toast } from "sonner"
 import {
   Select,
@@ -105,6 +105,11 @@ export function AccountPage() {
   const [currentPw, setCurrentPw] = useState("")
   const [newPw, setNewPw] = useState("")
   const { t } = useTranslation("account")
+  const { data: billingSummary } = useQuery({
+    queryKey: ["billing-summary"],
+    queryFn: getBillingSummary,
+    enabled: !!user,
+  })
 
   const updateMut = useMutation({
     mutationFn: updateCurrentUser,
@@ -217,6 +222,75 @@ export function AccountPage() {
                       <Button size="sm">{t("upgrade.viewPlans")}</Button>
                     </Link>
                   </div>
+                )}
+
+                {billingSummary?.data && (
+                  <Card className="border-[rgba(132,204,22,0.2)] bg-gradient-to-br from-[rgba(132,204,22,0.04)] to-transparent">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{t("usage.title", { defaultValue: "Usage this month" })}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t("usage.window", {
+                              defaultValue: "Window starts {{date}}",
+                              date: new Date(billingSummary.data.trial_window_start).toLocaleDateString(),
+                            })}
+                          </p>
+                        </div>
+                        <Badge variant="outline">
+                          {getPlanLabel(billingSummary.data.plan, t)}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-between gap-4 pt-0">
+                      <div>
+                        <p className="text-sm font-medium">
+                          {billingSummary.data.monthly_workflow_used}
+                          {billingSummary.data.monthly_workflow_limit > 0
+                            ? ` / ${billingSummary.data.monthly_workflow_limit}`
+                            : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {billingSummary.data.monthly_workflow_remaining === null
+                            ? t("usage.unlimited", { defaultValue: "Unlimited official workflow runs" })
+                            : t("usage.remaining", {
+                                defaultValue: "{{count}} official workflow runs remaining",
+                                count: billingSummary.data.monthly_workflow_remaining,
+                              })}
+                        </p>
+                      </div>
+                      <Link to="/pricing">
+                        <Button variant="outline" size="sm">
+                          {t("upgrade.viewPlans")}
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {billingSummary?.data && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{t("billing.title")}</p>
+                          <p className="text-xs text-muted-foreground">{t("billing.description")}</p>
+                        </div>
+                        <Badge variant={billingSummary.data.status === "active" ? "default" : "secondary"}>
+                          {t(`billing.status.${billingSummary.data.status}`, { defaultValue: billingSummary.data.status })}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-between gap-4 pt-0">
+                      <div className="text-sm text-muted-foreground">
+                        <p>{t("billing.plan", { plan: getPlanLabel(billingSummary.data.plan, t) })}</p>
+                        <p>{t("billing.customer", { status: billingSummary.data.stripe_customer_id ? t("billing.connected") : t("billing.notConnected") })}</p>
+                      </div>
+                      <Link to="/pricing">
+                        <Button size="sm">{t("billing.manage")}</Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
                 )}
 
                 {user?.role === "admin" && (

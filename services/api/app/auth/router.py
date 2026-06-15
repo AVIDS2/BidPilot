@@ -9,6 +9,7 @@ from app.models import Subscription, User
 import math
 from .schemas import CurrentUser, TokenResponse, UserLogin, UserRegister, UserUpdate, SubscriptionRead, SubscriptionUpdate, PasswordResetRequest, PasswordResetConfirm, UsersPaginatedResponse
 from .service import get_current_user_from_token, get_dev_user, login_command, register_user_command, update_user_command, update_subscription_command, _get_user_plan, _user_to_current, require_admin, create_password_reset_token, confirm_password_reset, create_email_verification_token, verify_email_command, refresh_token_command, login_rate_limiter, resend_rate_limiter, admin_verify_user_command
+from app.billing.service import get_billing_summary
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 _bearer = HTTPBearer(auto_error=False)
@@ -96,6 +97,20 @@ def get_subscription(
     if sub is None:
         return SubscriptionRead(plan="starter", status="active", stripe_customer_id=None)
     return SubscriptionRead(plan=sub.plan, status=sub.status, stripe_customer_id=sub.stripe_customer_id)
+
+
+@router.get("/billing-summary")
+def get_billing_summary_for_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> dict:
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    user = get_current_user_from_token(db, credentials.credentials)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    summary = get_billing_summary(db, user.id)
+    return {"data": summary.model_dump()}
 
 
 @router.patch("/subscription", response_model=SubscriptionRead)

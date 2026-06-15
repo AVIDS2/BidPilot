@@ -29,6 +29,12 @@ class ChatConversationRead(BaseModel):
     created_at: str | None
 
 
+class ChatConversationUpdate(BaseModel):
+    """Payload for renaming a conversation."""
+
+    title: str
+
+
 class ChatHistoryRead(BaseModel):
     """Read schema for chat message history."""
 

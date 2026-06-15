@@ -118,7 +118,8 @@ export function DashboardPage() {
     {
       queryKey: ["projects"],
       queryFn: listProjects,
-      staleTime: 30 * 1000,
+      staleTime: 5 * 60 * 1000, // 5 minutes cache
+      retry: 2,
     },
   );
 
@@ -127,15 +128,26 @@ export function DashboardPage() {
     queryKey: ["dashboard-runs"],
     queryFn: async () => {
       if (!projects || projects.length === 0) return [];
-      const results = await Promise.allSettled(
-        projects.map((p) => listExecutionRuns(p.id)),
-      );
+
+      // Batch requests sequentially with delays to avoid rate limits
+      const results: ExecutionRunRead[][] = [];
+      for (const project of projects) {
+        try {
+          const runs = await listExecutionRuns(project.id);
+          results.push(runs);
+        } catch (error) {
+          // Gracefully handle individual project errors
+          console.warn(
+            `Failed to fetch runs for project ${project.id}:`,
+            error,
+          );
+        }
+        // Small delay between requests to respect rate limits
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
       return results
-        .filter(
-          (r): r is PromiseFulfilledResult<ExecutionRunRead[]> =>
-            r.status === "fulfilled",
-        )
-        .flatMap((r) => r.value)
+        .flatMap((r) => r)
         .sort(
           (a, b) =>
             new Date(b.output_json?.created_at as string ?? 0).getTime() -
@@ -144,13 +156,15 @@ export function DashboardPage() {
         .slice(0, 10);
     },
     enabled: !!projects && projects.length > 0,
-    staleTime: 30 * 1000,
+    staleTime: 2 * 60 * 1000, // 2 minutes stale time
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   const { data: providerData } = useQuery({
     queryKey: ["provider-configs"],
     queryFn: listProviderConfigs,
-    staleTime: 60 * 1000,
+    staleTime: 5 * 60 * 1000, // 5 minutes cache
   });
 
   const statusCounts = projects?.reduce(

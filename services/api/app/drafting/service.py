@@ -1,20 +1,49 @@
 from sqlalchemy.orm import Session
 
+from app.auth.schemas import CurrentUser
 from app.audit.service import record_audit_event
 from app.celery_client import celery
 from app.models import ExecutionRun
 
 from .repository import create_run
 from .schemas import DraftSectionRequest, DraftSectionResponse, RedraftSectionRequest, ResumeRunRequest
+from app.usage.schemas import ProviderSource
+from app.usage.service import (
+    WORKFLOW_DRAFT_STARTED,
+    UsageLimitExceeded,
+    check_workflow_quota,
+    record_usage_event,
+)
 
 
-def draft_section_command(db: Session, payload: DraftSectionRequest) -> DraftSectionResponse:
+def _provider_source(provider_config_id: str | None) -> ProviderSource:
+    return ProviderSource.BYOK if provider_config_id else ProviderSource.OFFICIAL
+
+
+def draft_section_command(
+    db: Session,
+    payload: DraftSectionRequest,
+    current_user: CurrentUser | None = None,
+) -> DraftSectionResponse:
+    provider_source = _provider_source(payload.provider_config_id)
+    if current_user is not None:
+        check_workflow_quota(db, current_user.id, current_user.org_id, provider_source)
     run = ExecutionRun(
         project_id=payload.project_id,
         run_type="draft_section",
         input_json={"section_key": payload.section_key},
     )
     run = create_run(db, run)
+    if current_user is not None:
+        record_usage_event(
+            db,
+            user_id=current_user.id,
+            org_id=current_user.org_id,
+            project_id=payload.project_id,
+            event_type=WORKFLOW_DRAFT_STARTED,
+            provider_source=provider_source,
+            execution_run_id=run.id,
+        )
     # Dispatch async drafting task
     kwargs: dict = {}
     if payload.provider_config_id:
@@ -30,13 +59,30 @@ def draft_section_command(db: Session, payload: DraftSectionRequest) -> DraftSec
     return DraftSectionResponse(run_id=run.id, status=run.status)
 
 
-def redraft_section_command(db: Session, payload: RedraftSectionRequest) -> DraftSectionResponse:
+def redraft_section_command(
+    db: Session,
+    payload: RedraftSectionRequest,
+    current_user: CurrentUser | None = None,
+) -> DraftSectionResponse:
+    provider_source = _provider_source(payload.provider_config_id)
+    if current_user is not None:
+        check_workflow_quota(db, current_user.id, current_user.org_id, provider_source)
     run = ExecutionRun(
         project_id=payload.project_id,
         run_type="redraft_section",
         input_json={"section_key": payload.section_key, "review_feedback": payload.review_feedback},
     )
     run = create_run(db, run)
+    if current_user is not None:
+        record_usage_event(
+            db,
+            user_id=current_user.id,
+            org_id=current_user.org_id,
+            project_id=payload.project_id,
+            event_type=WORKFLOW_DRAFT_STARTED,
+            provider_source=provider_source,
+            execution_run_id=run.id,
+        )
     # Dispatch async drafting task with feedback
     task_kwargs: dict = {}
     if payload.review_feedback:

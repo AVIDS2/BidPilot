@@ -83,8 +83,11 @@ Required secret-backed values:
 - `DOCPILOT_MINIO_SECRET_KEY`
 - `DOCPILOT_JWT_SECRET`
 - one provider API key such as `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `DOCPILOT_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY`, or `LLM_API_KEY`
+- `DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres`
 
 `DOCPILOT_AUTH_REQUIRED` must be `true`.
+
+For Aliyun Bailian/DashScope, configure API key IP allowlists to the staging/production egress IPs before enabling official-provider workflow trials. Remove wildcard allowlist entries such as `0.0.0.0/0` and `::/0`.
 
 ## Migration policy
 
@@ -133,3 +136,5 @@ Required secret-backed values:
 - frontend can roll back independently
 - API and worker roll back together when schema expectations change
 - database rollbacks require restore plans, not blind down migrations
+
+For the VPS pilot deployment path, use `docs/ops/vps-pilot-deployment.md`.

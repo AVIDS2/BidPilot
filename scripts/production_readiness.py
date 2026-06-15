@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import os
 from typing import Mapping, NamedTuple
 
@@ -26,13 +27,25 @@ REQUIRED_PRODUCTION_VARIABLES = [
     "DOCPILOT_MINIO_SECRET_KEY",
     "DOCPILOT_JWT_SECRET",
     "DOCPILOT_AUTH_REQUIRED",
+    "DOCPILOT_SECRETS_KEY",
+    "DOCPILOT_APP_URL",
+    "DOCPILOT_CORS_ORIGINS",
+    "DOCPILOT_LANGGRAPH_CHECKPOINTER",
 ]
 
 PROVIDER_KEY_VARIABLES = [
     "DOCPILOT_PROVIDER_OPENAI_API_KEY",
     "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
+    "ALIYUN_API_KEY",
+    "DASHSCOPE_API_KEY",
     "OPENAI_API_KEY",
     "LLM_API_KEY",
+]
+
+SMTP_PRODUCTION_VARIABLES = [
+    "DOCPILOT_SMTP_HOST",
+    "DOCPILOT_SMTP_USER",
+    "DOCPILOT_SMTP_FROM",
 ]
 
 
@@ -51,6 +64,18 @@ def _uses_localhost(value: str) -> bool:
     return "localhost" in lower or "127.0.0.1" in lower
 
 
+def _is_https_url(value: str) -> bool:
+    return value.lower().startswith("https://")
+
+
+def _is_fernet_key(value: str) -> bool:
+    try:
+        decoded = base64.urlsafe_b64decode(value.encode("utf-8"))
+    except Exception:
+        return False
+    return len(decoded) == 32
+
+
 def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult:
     errors: list[str] = []
     warnings: list[str] = []
@@ -66,6 +91,24 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
     if env.get("DOCPILOT_AUTH_REQUIRED", "").lower() != "true":
         errors.append("DOCPILOT_AUTH_REQUIRED must be true for production")
 
+    app_url = env.get("DOCPILOT_APP_URL")
+    if app_url:
+        if not _is_https_url(app_url):
+            errors.append("DOCPILOT_APP_URL must be https for production")
+        if _uses_localhost(app_url):
+            errors.append("DOCPILOT_APP_URL must not use localhost for production")
+
+    cors_origins = env.get("DOCPILOT_CORS_ORIGINS")
+    if cors_origins and _uses_localhost(cors_origins):
+        errors.append("DOCPILOT_CORS_ORIGINS must not use localhost for production")
+    if app_url and cors_origins:
+        normalized_origins = [item.strip().rstrip("/") for item in cors_origins.split(",") if item.strip()]
+        if app_url.rstrip("/") not in normalized_origins:
+            errors.append("DOCPILOT_CORS_ORIGINS must include DOCPILOT_APP_URL")
+
+    if env.get("DOCPILOT_LANGGRAPH_CHECKPOINTER") != "postgres":
+        errors.append("DOCPILOT_LANGGRAPH_CHECKPOINTER must be postgres for production")
+
     for name, defaults in DEVELOPMENT_DEFAULTS.items():
         value = env.get(name)
         if value in defaults:
@@ -79,6 +122,14 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
     jwt_secret = env.get("DOCPILOT_JWT_SECRET")
     if jwt_secret and len(jwt_secret) < 32:
         errors.append("DOCPILOT_JWT_SECRET must be at least 32 characters")
+
+    secrets_key = env.get("DOCPILOT_SECRETS_KEY")
+    if secrets_key and not _is_fernet_key(secrets_key):
+        errors.append("DOCPILOT_SECRETS_KEY must be a valid Fernet key")
+
+    for name in SMTP_PRODUCTION_VARIABLES:
+        if _is_missing(env.get(name)):
+            errors.append(f"{name} is required for production email")
 
     if not any(not _is_missing(env.get(name)) for name in PROVIDER_KEY_VARIABLES):
         errors.append("one provider API key is required")

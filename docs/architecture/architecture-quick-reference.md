@@ -151,7 +151,7 @@ DOCPILOT_JWT_SECRET=...
 DOCPILOT_AUTH_REQUIRED=true
 
 # LLM
-OPENAI_API_KEY=...
+OPENAI_API_KEY=<your-openai-api-key>
 ANTHROPIC_API_KEY=...
 
 # Stripe
@@ -206,10 +206,10 @@ docker compose down                       # 停止
 ## 部署架构
 
 ```
-devlens.top (主站)
-├── api.devlens.top → FastAPI
-├── docs.devlens.top → 文档
-└── pay.dwill.top → 支付
+bidpilot.rglens.com (主站)
+├── api.bidpilot.rglens.com → FastAPI
+├── docs.bidpilot.rglens.com → 文档
+└── pay.rglens.com → 支付
 
 VPS: root@38.14.254.50
 ├── 1Panel (管理面板)

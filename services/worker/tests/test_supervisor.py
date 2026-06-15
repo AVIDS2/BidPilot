@@ -67,13 +67,17 @@ class TestRouteInitial:
             draft_created=True, review_result={"passed": True},
             review_passed=True,
         )
-        assert route_initial(state) == "persist_result"
+        assert route_initial(state) == "human_approval"
+
+    def test_max_iterations_does_not_skip_initial_work(self):
+        state = _make_state(iteration=3, max_iterations=3, requirements_parsed=False)
+        assert route_initial(state) == "rfp_parser"
 
 
 class TestRouteAfterReview:
-    def test_review_passed_goes_to_persist(self):
+    def test_review_passed_goes_to_human_approval(self):
         state = _make_state(review_passed=True)
-        assert route_after_review(state) == "persist_result"
+        assert route_after_review(state) == "human_approval"
 
     def test_review_failed_iteration_below_max_goes_to_drafter(self):
         state = _make_state(review_passed=False, iteration=1, max_iterations=3)
@@ -85,10 +89,10 @@ class TestRouteAfterReview:
 
 
 class TestSupervisorNode:
-    def test_increments_iteration(self):
-        state = _make_state(iteration=0)
+    def test_preserves_draft_iteration(self):
+        state = _make_state(iteration=2)
         result = supervisor_node(state)
-        assert result["iteration"] == 1
+        assert result["iteration"] == 2
 
     def test_handles_error_state(self):
         state = _make_state(error="something went wrong")

@@ -280,6 +280,22 @@ class Subscription(Base):
     user: Mapped["User"] = relationship(back_populates="subscription")
 
 
+class UsageEvent(Base):
+    __tablename__ = "usage_event"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id"), nullable=False)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organization.id"), nullable=False)
+    project_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("project.id"))
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_source: Mapped[str] = mapped_column(String(30), nullable=False)
+    units: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    execution_run_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("execution_run.id"))
+    period_key: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class ProviderConfig(Base):
     __tablename__ = "provider_config"
 

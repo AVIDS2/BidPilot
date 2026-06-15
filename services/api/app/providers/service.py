@@ -1,15 +1,22 @@
 """Provider configuration service -- CRUD for user API provider configs."""
-import httpx
 from datetime import UTC, datetime
+
+import httpx
 from sqlalchemy.orm import Session
+
 from app.models import ProviderConfig
+from app.security.secrets import (
+    SecretConfigurationError,
+    decrypt_secret,
+    encrypt_secret,
+    mask_secret,
+)
+
 from .schemas import ProviderConfigCreate, ProviderConfigUpdate, TestConnectionRequest, TestConnectionResponse
 
 
 def _mask_api_key(key: str) -> str:
-    if len(key) <= 8:
-        return key[:4] + "****"
-    return key[:4] + "****" + key[-4:]
+    return mask_secret(key)
 
 
 def list_provider_configs(db: Session, user_id: str) -> list[ProviderConfig]:
@@ -21,6 +28,8 @@ def get_provider_config(db: Session, config_id: str, user_id: str) -> ProviderCo
 
 
 def create_provider_config(db: Session, user_id: str, payload: ProviderConfigCreate) -> ProviderConfig:
+    encrypted_api_key = encrypt_secret(payload.api_key)
+
     # If setting this as active, deactivate others of same type
     if payload.is_active:
         db.query(ProviderConfig).filter(
@@ -31,7 +40,7 @@ def create_provider_config(db: Session, user_id: str, payload: ProviderConfigCre
     config = ProviderConfig(
         user_id=user_id,
         provider_type=payload.provider_type,
-        api_key=payload.api_key,
+        api_key=encrypted_api_key,
         api_url=payload.api_url,
         model=payload.model,
         label=payload.label,
@@ -49,6 +58,8 @@ def update_provider_config(db: Session, config_id: str, user_id: str, payload: P
         return None
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "api_key" in update_data and update_data["api_key"]:
+        update_data["api_key"] = encrypt_secret(update_data["api_key"])
 
     if "is_active" in update_data and update_data["is_active"]:
         # Deactivate others of same type
@@ -83,7 +94,7 @@ def test_connection(db: Session, user_id: str, config_id: str | None, payload: T
         if config is None:
             return TestConnectionResponse(success=False, message="Provider config not found")
         provider_type = config.provider_type
-        api_key = config.api_key
+        api_key = decrypt_secret(config.api_key)
         api_url = config.api_url
         model = config.model
     elif payload:
@@ -144,6 +155,8 @@ def test_connection(db: Session, user_id: str, config_id: str | None, payload: T
         return TestConnectionResponse(success=False, message=f"Cannot connect to {url}")
     except httpx.TimeoutException:
         return TestConnectionResponse(success=False, message="Connection timed out")
+    except SecretConfigurationError:
+        return TestConnectionResponse(success=False, message="Secret encryption key is not configured")
     except Exception as exc:
         return TestConnectionResponse(success=False, message=str(exc)[:200])
 

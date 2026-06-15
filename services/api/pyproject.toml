@@ -14,12 +14,16 @@ dependencies = [
   "PyJWT>=2.8.0",
   "python-dotenv>=1.0.0",
   "python-docx>=1.2.0",
+  "reportlab>=4.4.0",
   "python-multipart>=0.0.26",
   "redis>=5.0.0",
   "sqlalchemy>=2.0.39",
   "sse-starlette>=2.1.0",
   "structlog>=24.0.0",
   "uvicorn>=0.34.0",
+  "cryptography>=48.0.1",
+  "slowapi>=0.1.9",
+  "openai-agents>=0.17.5",
 ]
 
 [dependency-groups]

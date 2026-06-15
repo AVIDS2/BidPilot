@@ -20,8 +20,10 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.audit.router import router as audit_router
+from app.assistant.router import router as assistant_router
 from app.auth.router import router as auth_router
 from app.auth.service import require_admin, require_auth
+from app.core.settings import get_cors_origins
 from app.bundles.router import router as bundles_router
 from app.deliverables.router import router as deliverables_router
 from app.documents.router import router as documents_router
@@ -43,6 +45,8 @@ from app.organizations.router import router as organizations_router
 from app.chat.router import router as chat_router
 from app.providers.router import router as providers_router
 from app.invitations.router import router as invitations_router
+from app.usage.router import router as usage_router
+from app.notifications.router import router as notifications_router
 from app.logging import setup_logging
 
 setup_logging()
@@ -62,7 +66,7 @@ app = FastAPI(title="DocPilot API")
 
 app.add_middleware(RequestContextMiddleware)
 
-rate_limit = os.environ.get("DOCPILOT_RATE_LIMIT", "60/minute")
+rate_limit = "1000/minute"
 limiter = Limiter(key_func=get_remote_address, default_limits=[rate_limit])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -107,7 +111,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -139,7 +143,10 @@ app.include_router(organizations_router, dependencies=_protected)
 app.include_router(providers_router)
 app.include_router(invitations_router, dependencies=_protected)
 app.include_router(billing_router)
+app.include_router(notifications_router, dependencies=_protected)
 app.include_router(chat_router, dependencies=_protected)
+app.include_router(assistant_router, dependencies=_protected)
+app.include_router(usage_router, dependencies=_protected)
 
 
 @app.get("/health")

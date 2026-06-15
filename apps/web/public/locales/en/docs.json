@@ -27,7 +27,16 @@
     "enterpriseTitle": "Enterprise Ready",
     "enterpriseDesc": "RBAC, encrypted storage, provider-agnostic LLM integration, and production-grade infrastructure.",
     "pipelineTitle": "Workflow Pipeline",
-    "pipelineSteps": ["Project Setup", "RFP Ingestion", "Requirement Extraction", "Knowledge Retrieval", "Section Drafting", "Quality Review", "Human Approval", "Export & Delivery"]
+    "pipelineSteps": [
+      "Project Setup",
+      "RFP Ingestion",
+      "Requirement Extraction",
+      "Knowledge Retrieval",
+      "Section Drafting",
+      "Quality Review",
+      "Human Approval",
+      "Export & Delivery"
+    ]
   },
   "quickstart": {
     "label": "Quick Start",
@@ -47,7 +56,7 @@
     "step1Title": "Sign up / Log in",
     "step1Desc": "Navigate to the web UI and create an account.",
     "step2Title": "New Project",
-    "step2Desc": "Click 'New Project' on the dashboard and name your bid.",
+    "step2Desc": "Click \"New Project\" on the dashboard and name your bid.",
     "step3Title": "Upload RFP",
     "step3Desc": "Drag and drop your RFP document (PDF, DOCX, or Markdown).",
     "step4Title": "Review & Export",
@@ -100,7 +109,24 @@
     "description": "Every technology choice is deliberate: async-first, type-safe, and battle-tested in production.",
     "frontend": "Frontend",
     "backend": "Backend",
-    "dataStorage": "Data & Storage"
+    "dataStorage": "Data & Storage",
+    "reactDesc": "UI library with concurrent features",
+    "typescriptDesc": "End-to-end type safety",
+    "viteDesc": "Fast dev server and build tool",
+    "tailwindDesc": "Utility-first styling",
+    "shadcnDesc": "Accessible component primitives",
+    "queryDesc": "Server state management",
+    "routerDesc": "Client-side routing",
+    "fastapiDesc": "Async Python web framework",
+    "celeryDesc": "Distributed task queue",
+    "sqlalchemyDesc": "Async ORM with type hints",
+    "alembicDesc": "Database migration management",
+    "langgraphDesc": "Multi-agent workflow orchestration",
+    "langchainDesc": "LLM abstraction layer",
+    "postgresDesc": "Primary relational database",
+    "pgvectorDesc": "Vector similarity search",
+    "redisDesc": "Task queue broker + caching",
+    "minioDesc": "S3-compatible object storage"
   },
   "deployment": {
     "label": "Deployment",

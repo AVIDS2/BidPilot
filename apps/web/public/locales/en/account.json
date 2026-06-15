@@ -26,6 +26,22 @@
     "description": "Unlimited projects, all scenario packages, and priority support.",
     "viewPlans": "View Plans"
   },
+  "billing": {
+    "title": "Billing status",
+    "description": "Subscription and quota overview.",
+    "plan": "Plan: {{plan}}",
+    "customer": "Stripe customer connected: {{status}}",
+    "connected": "Yes",
+    "notConnected": "No",
+    "manage": "Manage plan",
+    "status": {
+      "active": "Active",
+      "trialing": "Trialing",
+      "past_due": "Past due",
+      "canceled": "Canceled",
+      "unpaid": "Unpaid"
+    }
+  },
   "admin": {
     "changePlan": "Admin: Change Plan",
     "changePlanDesc": "Manually update your subscription plan.",

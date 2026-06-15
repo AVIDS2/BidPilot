@@ -9,16 +9,35 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
 from app.db import get_db
+from app.models import ChatMessage as ChatMessageModel
 
-from .schemas import ChatConversationRead, ChatHistoryRead, ChatMessage, ChatRequest
+from .schemas import ChatConversationRead, ChatConversationUpdate, ChatHistoryRead, ChatMessage, ChatRequest
 from .service import (
     get_conversation,
     get_conversation_messages,
     list_conversations,
+    rename_conversation,
     stream_chat_response,
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+def _conversation_title(db: Session, conversation_id: str, stored_title: str | None) -> str | None:
+    if stored_title and stored_title.strip():
+        return stored_title
+    first_user_message = (
+        db.query(ChatMessageModel.content)
+        .filter(
+            ChatMessageModel.conversation_id == conversation_id,
+            ChatMessageModel.role == "user",
+        )
+        .order_by(ChatMessageModel.created_at.asc())
+        .first()
+    )
+    if first_user_message is None:
+        return None
+    return first_user_message[0].strip().replace("\n", " ")[:80] or None
 
 
 @router.post("/stream")
@@ -80,7 +99,7 @@ def list_chat_conversations(
         ChatConversationRead(
             id=c.id,
             project_id=c.project_id,
-            title=c.title,
+            title=_conversation_title(db, c.id, c.title),
             created_at=c.created_at.isoformat() if c.created_at else None,
         )
         for c in conversations
@@ -102,4 +121,28 @@ def get_chat_history(
     return ChatHistoryRead(
         items=[ChatMessage(role=m.role, content=m.content) for m in messages],
         total=len(messages),
+    )
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ChatConversationRead)
+def update_chat_conversation(
+    conversation_id: str,
+    payload: ChatConversationUpdate,
+    user: CurrentUser = Depends(require_auth),
+    db: Session = Depends(get_db),
+):
+    """Rename a chat conversation."""
+    try:
+        conversation = rename_conversation(db, conversation_id, user.id, payload.title)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    return ChatConversationRead(
+        id=conversation.id,
+        project_id=conversation.project_id,
+        title=conversation.title,
+        created_at=conversation.created_at.isoformat() if conversation.created_at else None,
     )

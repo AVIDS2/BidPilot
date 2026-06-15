@@ -17,7 +17,11 @@ def test_validate_environment_reports_missing_required_variables() -> None:
     assert "DOCPILOT_DATABASE_URL is required" in result.errors
     assert "DOCPILOT_REDIS_URL is required" in result.errors
     assert "DOCPILOT_JWT_SECRET is required" in result.errors
+    assert "DOCPILOT_SECRETS_KEY is required" in result.errors
     assert "DOCPILOT_AUTH_REQUIRED must be true for production" in result.errors
+    assert "DOCPILOT_APP_URL is required" in result.errors
+    assert "DOCPILOT_CORS_ORIGINS is required" in result.errors
+    assert "DOCPILOT_LANGGRAPH_CHECKPOINTER is required" in result.errors
 
 
 def test_validate_environment_rejects_development_defaults() -> None:
@@ -29,7 +33,11 @@ def test_validate_environment_rejects_development_defaults() -> None:
         "DOCPILOT_MINIO_SECRET_KEY": "docpilot123",
         "DOCPILOT_JWT_SECRET": "dev-secret-change-in-production-32bytes!",
         "DOCPILOT_AUTH_REQUIRED": "false",
-        "DOCPILOT_PROVIDER_DOMESTIC_API_KEY": "sk-local-development-placeholder",
+        "DOCPILOT_SECRETS_KEY": "not-a-fernet-key",
+        "DOCPILOT_PROVIDER_DOMESTIC_API_KEY": "test-provider-key",
+        "DOCPILOT_APP_URL": "http://localhost:5173",
+        "DOCPILOT_CORS_ORIGINS": "http://localhost:5173",
+        "DOCPILOT_LANGGRAPH_CHECKPOINTER": "memory",
     }
 
     result = production_readiness.validate_environment(env, target="production")
@@ -40,8 +48,16 @@ def test_validate_environment_rejects_development_defaults() -> None:
     assert "DOCPILOT_MINIO_ENDPOINT must not use localhost for production" in result.errors
     assert "DOCPILOT_JWT_SECRET must not use the development default" in result.errors
     assert "DOCPILOT_AUTH_REQUIRED must be true for production" in result.errors
+    assert "DOCPILOT_SECRETS_KEY must be a valid Fernet key" in result.errors
     assert "DOCPILOT_MINIO_ACCESS_KEY must not use the development default" in result.errors
     assert "DOCPILOT_MINIO_SECRET_KEY must not use the development default" in result.errors
+    assert "DOCPILOT_APP_URL must be https for production" in result.errors
+    assert "DOCPILOT_APP_URL must not use localhost for production" in result.errors
+    assert "DOCPILOT_CORS_ORIGINS must not use localhost for production" in result.errors
+    assert "DOCPILOT_LANGGRAPH_CHECKPOINTER must be postgres for production" in result.errors
+    assert "DOCPILOT_SMTP_HOST is required for production email" in result.errors
+    assert "DOCPILOT_SMTP_USER is required for production email" in result.errors
+    assert "DOCPILOT_SMTP_FROM is required for production email" in result.errors
 
 
 def test_validate_environment_accepts_production_ready_shape() -> None:
@@ -53,7 +69,14 @@ def test_validate_environment_accepts_production_ready_shape() -> None:
         "DOCPILOT_MINIO_SECRET_KEY": "prod-storage-secret",
         "DOCPILOT_JWT_SECRET": "prod-secret-value-with-more-than-thirty-two-bytes",
         "DOCPILOT_AUTH_REQUIRED": "true",
+        "DOCPILOT_SECRETS_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
         "DOCPILOT_PROVIDER_DOMESTIC_API_KEY": "prod-provider-key",
+        "DOCPILOT_APP_URL": "https://bidpilot.rglens.com",
+        "DOCPILOT_CORS_ORIGINS": "https://bidpilot.rglens.com",
+        "DOCPILOT_LANGGRAPH_CHECKPOINTER": "postgres",
+        "DOCPILOT_SMTP_HOST": "smtp.qq.com",
+        "DOCPILOT_SMTP_USER": "mailer@example.com",
+        "DOCPILOT_SMTP_FROM": "noreply@rglens.com",
     }
 
     result = production_readiness.validate_environment(env, target="production")

@@ -63,9 +63,11 @@ Expected:
 Use:
 
 - base URL: `https://dashscope.aliyuncs.com/compatible-mode/v1`
-- API key: `sk-d02b0d8022e744739caccd4997b0ea1e`
+- API key: `<your-api-key>`
 - primary model: `qwen3.5-flash`
 - multimodal embedding: `qwen3-vl-embedding`
+
+When creating an Aliyun Bailian/DashScope API key, remove the default `0.0.0.0/0` and `::/0` whitelist entries before saving the key. Allow only known server egress IPs. Do not use a key with a public wildcard whitelist for local demos or production.
 - text embedding: `text-embedding-v4`
 
 ### 7. Only after environment confirmation, start implementation
