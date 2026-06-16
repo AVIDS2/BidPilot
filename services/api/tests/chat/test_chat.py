@@ -129,7 +129,7 @@ class TestChatConversationsEndpoint:
         assert response.json() == []
 
     def test_list_conversations_uses_first_message_as_fallback_title(self, client, clear_dev_user_chat_state, monkeypatch):
-        monkeypatch.setattr("app.chat.service._DEEPSEEK_API_KEY", None)
+        monkeypatch.setattr("app.chat.service._resolve_platform_chat_provider", lambda: None)
 
         response = client.post("/chat/stream", json={"message": "请帮我创建一个新项目"})
         assert response.status_code == 200
@@ -169,6 +169,43 @@ class TestChatHistoryEndpoint:
 
 class TestChatService:
     """Unit tests for chat service functions."""
+
+    def test_resolve_platform_chat_provider_uses_domestic_env(self, monkeypatch):
+        """Official chat should use the unified domestic provider env."""
+        import importlib
+        from app.chat import service as chat_service
+
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        monkeypatch.setenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic-test-key")
+        monkeypatch.setenv("DOCPILOT_LLM_MODEL_PRIMARY", "deepseek-test-model")
+
+        reloaded = importlib.reload(chat_service)
+
+        provider = reloaded._resolve_platform_chat_provider()
+        assert provider is not None
+        assert provider.api_key == "domestic-test-key"
+        assert provider.base_url == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        assert provider.model == "deepseek-test-model"
+
+    def test_resolve_platform_chat_provider_preserves_deepseek_env(self, monkeypatch):
+        """Legacy DeepSeek env should keep using DeepSeek-compatible defaults."""
+        import importlib
+        from app.chat import service as chat_service
+
+        monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", raising=False)
+        monkeypatch.delenv("ALIYUN_API_KEY", raising=False)
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+        monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
+
+        reloaded = importlib.reload(chat_service)
+
+        provider = reloaded._resolve_platform_chat_provider()
+        assert provider is not None
+        assert provider.api_key == "deepseek-test-key"
+        assert provider.base_url == "https://api.deepseek.com/v1"
+        assert provider.model == "deepseek-chat"
 
     def test_resolve_provider_config_explicit_id(self, test_db, chat_test_user_id):
         """Resolves provider config by explicit ID."""

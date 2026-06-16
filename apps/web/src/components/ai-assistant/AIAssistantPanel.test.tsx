@@ -70,6 +70,67 @@ describe("AIAssistantPanel", () => {
     expect(screen.getAllByText(/Acme Bid/).length).toBeGreaterThan(0);
   });
 
+  it("does not render intent trace cards in the default chat flow", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c2","state":"thinking"}',
+            'event: assistant.intent_detected\ndata: {"mode":"answer","tool_name":"answer"}',
+            'event: assistant.message\ndata: {"content":"这是直接回答。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c2","full_response":"这是直接回答。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "What is this?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("这是直接回答。")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Intent: answer")).not.toBeInTheDocument();
+    expect(screen.queryByText("Intent detected")).not.toBeInTheDocument();
+  });
+
+  it("does not render successful tool trace cards in the default chat flow", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c3","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"open_page","arguments":{"route":"/projects"},"state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"open_page","result":{"route":"/projects"},"summary":"已打开项目页。","state":"completed"}',
+            'event: assistant.message\ndata: {"content":"已打开项目页。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c3","full_response":"已打开项目页。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Open projects" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("已打开项目页。")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("open_page")).not.toBeInTheDocument();
+    expect(screen.queryByText("succeeded")).not.toBeInTheDocument();
+  });
+
   it("supports renaming a conversation from history", async () => {
     const { listChatConversations, renameChatConversation } = await import("@/lib/api");
     vi.mocked(listChatConversations).mockResolvedValue([

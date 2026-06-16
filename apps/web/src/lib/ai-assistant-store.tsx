@@ -269,19 +269,6 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
   }
 
   if (eventType === "assistant.intent_detected") {
-    const toolName = typeof parsed.tool_name === "string" ? parsed.tool_name : undefined;
-    dispatch({
-      type: "ADD_EXECUTION_ITEM",
-      item: {
-        id: `intent-${Date.now()}`,
-        kind: "intent",
-        toolName,
-        status: "succeeded",
-        title: toolName ? `Intent: ${toolName}` : "Intent detected",
-        summary: typeof parsed.mode === "string" ? parsed.mode : undefined,
-        timestamp: Date.now(),
-      },
-    });
     return;
   }
 
@@ -355,6 +342,7 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
         summary: String(parsed.summary ?? ""),
       },
     });
+    dispatch({ type: "CLEAR_EXECUTION" });
     if (toolName === "open_page" && typeof result.route === "string") {
       window.history.pushState({}, "", result.route);
       window.dispatchEvent(new PopStateEvent("popstate"));

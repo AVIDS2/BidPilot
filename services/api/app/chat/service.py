@@ -7,6 +7,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
+from dataclasses import dataclass
 
 import httpx
 from sqlalchemy.orm import Session
@@ -26,9 +27,36 @@ _SYSTEM_PROMPT = (
 )
 
 # DeepSeek API configuration (platform-provided, free for users)
-_DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-_DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-_DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+_PLATFORM_CHAT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+_PLATFORM_CHAT_MODEL = "qwen3.5-flash"
+
+
+@dataclass(frozen=True)
+class PlatformChatProvider:
+    api_key: str
+    base_url: str
+    model: str
+
+
+def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
+    """Resolve the platform-owned chat provider from server env."""
+    api_key = (
+        os.getenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY")
+        or os.getenv("ALIYUN_API_KEY")
+        or os.getenv("DASHSCOPE_API_KEY")
+    )
+    if api_key:
+        base_url = os.getenv("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", _PLATFORM_CHAT_BASE_URL)
+        model = os.getenv("DOCPILOT_LLM_MODEL_PRIMARY", _PLATFORM_CHAT_MODEL)
+        return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model)
+
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        return None
+
+    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model)
 
 
 def _resolve_provider_config(
@@ -101,7 +129,8 @@ def _generate_conversation_title(
     if not fallback_title:
         return None
 
-    if not _DEEPSEEK_API_KEY:
+    provider = _resolve_platform_chat_provider()
+    if provider is None:
         return fallback_title
 
     prompt = (
@@ -113,13 +142,13 @@ def _generate_conversation_title(
 
     try:
         response = httpx.post(
-            f"{_DEEPSEEK_BASE_URL}/v1/chat/completions",
+            f"{provider.base_url.rstrip('/')}/chat/completions",
             headers={
-                "Authorization": f"Bearer {_DEEPSEEK_API_KEY}",
+                "Authorization": f"Bearer {provider.api_key}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": _DEEPSEEK_MODEL,
+                "model": provider.model,
                 "messages": [
                     {"role": "system", "content": "你负责为聊天会话生成简洁标题。只返回标题文本本身。"},
                     {"role": "user", "content": prompt},
@@ -333,10 +362,10 @@ async def stream_chat_response(
     # Call LLM with streaming - Priority: DeepSeek (platform free) > User provider config
     full_response = ""
     try:
-        # Try DeepSeek first (platform-provided, free for users)
-        if _DEEPSEEK_API_KEY:
-            logger.info("Using DeepSeek API for chat (platform-provided)")
-            async for chunk in _call_deepseek_streaming(llm_messages):
+        platform_provider = _resolve_platform_chat_provider()
+        if platform_provider:
+            logger.info("Using platform chat provider for chat")
+            async for chunk in _call_platform_streaming(platform_provider, llm_messages):
                 full_response += chunk
                 yield _sse("content", {"content": chunk})
         else:
@@ -367,17 +396,18 @@ async def stream_chat_response(
     })
 
 
-async def _call_deepseek_streaming(
+async def _call_platform_streaming(
+    provider: PlatformChatProvider,
     messages: list[dict[str, str]],
 ) -> AsyncGenerator[str, None]:
-    """Stream from DeepSeek API (platform-provided, free for users)."""
-    url = f"{_DEEPSEEK_BASE_URL}/v1/chat/completions"
+    """Stream from the platform-owned chat provider."""
+    url = f"{provider.base_url.rstrip('/')}/chat/completions"
     headers = {
-        "Authorization": f"Bearer {_DEEPSEEK_API_KEY}",
+        "Authorization": f"Bearer {provider.api_key}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": _DEEPSEEK_MODEL,
+        "model": provider.model,
         "messages": messages,
         "stream": True,
         "max_tokens": 4096,
