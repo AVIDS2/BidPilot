@@ -171,4 +171,51 @@ describe("AIAssistantPanel", () => {
       expect(renameChatConversation).toHaveBeenCalledWith("c1", "New title");
     });
   });
+
+  it("renders LangGraph workflow progress from run stream", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/assistant/stream")) {
+        return Promise.resolve({
+          ok: true,
+          body: streamFrom(
+            [
+              'event: assistant.start\ndata: {"conversation_id":"c4","state":"thinking"}',
+              'event: assistant.workflow_started\ndata: {"tool_name":"start_draft_section","arguments":{"section_key":"technical-approach"},"result":{"run_id":"run-1","status":"queued"},"state":"running_workflow"}',
+              'event: assistant.tool_succeeded\ndata: {"tool_name":"start_draft_section","result":{"run_id":"run-1","status":"queued"},"summary":"已启动章节起草工作流，运行 ID：run-1。","state":"completed"}',
+              'event: assistant.message\ndata: {"content":"已启动章节起草工作流，运行 ID：run-1。","state":"completed"}',
+              'event: assistant.end\ndata: {"conversation_id":"c4","full_response":"已启动章节起草工作流，运行 ID：run-1。"}',
+            ].join("\n\n") + "\n\n",
+          ),
+        });
+      }
+      if (url.includes("/drafting/runs/run-1/stream")) {
+        return Promise.resolve({
+          ok: true,
+          body: streamFrom(
+            [
+              'event: connected\ndata: {"run_id":"run-1","status":"running"}',
+              'event: node_started\ndata: {"node_name":"section_drafter"}',
+              'event: node_completed\ndata: {"node_name":"section_drafter","result_summary":"Draft created"}',
+              'event: graph_completed\ndata: {"persisted":true,"status":"succeeded"}',
+            ].join("\n\n") + "\n\n",
+          ),
+        });
+      }
+      return Promise.resolve({ ok: true, body: streamFrom("") });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Draft technical section" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("section_drafter")).toBeInTheDocument();
+    });
+    expect(screen.getByText("succeeded")).toBeInTheDocument();
+  });
 });

@@ -16,7 +16,18 @@
     "confirmAction": "Confirm action",
     "confirm": "Confirm",
     "cancel": "Cancel",
-    "workflowStarted": "Workflow started"
+    "workflowStarted": "Workflow started",
+    "currentNode": "Current node: {{node}}",
+    "review": "Review: {{result}} / {{score}}",
+    "reviewPassed": "passed",
+    "reviewFailed": "failed",
+    "waitingApproval": "Waiting for human approval",
+    "status": {
+      "pending": "pending",
+      "running": "running",
+      "succeeded": "succeeded",
+      "failed": "failed"
+    }
   },
   "welcome": {
     "title": "Welcome to DocPilot!",

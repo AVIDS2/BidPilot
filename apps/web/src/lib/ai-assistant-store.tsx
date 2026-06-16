@@ -43,6 +43,7 @@ export interface AssistantExecutionItem {
   id: string;
   kind: "intent" | "tool" | "workflow";
   toolName?: string;
+  runId?: string;
   status: "pending" | "running" | "succeeded" | "failed";
   title: string;
   summary?: string;
@@ -50,7 +51,27 @@ export interface AssistantExecutionItem {
   result?: Record<string, unknown>;
   errorMessage?: string;
   errorCode?: string;
+  currentNode?: string | null;
+  nodes?: WorkflowNodeProgress[];
+  reviewResult?: WorkflowReviewResult | null;
+  isWaitingApproval?: boolean;
+  approvalMessage?: string | null;
+  isRunning?: boolean;
   timestamp: number;
+}
+
+export interface WorkflowNodeProgress {
+  name: string;
+  status: "pending" | "running" | "completed" | "failed";
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface WorkflowReviewResult {
+  score: number;
+  feedback?: string;
+  pass: boolean;
 }
 
 export interface PageContext {
@@ -109,7 +130,8 @@ type Action =
   | { type: "UPDATE_LAST_ASSISTANT"; content: string }
   | { type: "SET_STATUS"; status: AssistantStatus }
   | { type: "ADD_EXECUTION_ITEM"; item: AssistantExecutionItem }
-  | { type: "UPDATE_EXECUTION_ITEM"; toolName: string; patch: Partial<AssistantExecutionItem> }
+  | { type: "UPDATE_EXECUTION_ITEM"; toolName: string; runId?: string; patch: Partial<AssistantExecutionItem> }
+  | { type: "MERGE_WORKFLOW_NODE"; runId: string; node: WorkflowNodeProgress; currentNode?: string | null }
   | { type: "SET_SESSION_ERROR"; message: string; errorCode?: string }
   | { type: "SET_PENDING_CONFIRMATION"; confirmation: AssistantConfirmationRequest | null }
   | { type: "CLEAR_EXECUTION" }
@@ -181,7 +203,8 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "UPDATE_EXECUTION_ITEM": {
       let updated = false;
       const executionItems = state.executionItems.map((item) => {
-        if (item.toolName === action.toolName) {
+        const matches = action.runId ? item.runId === action.runId : item.toolName === action.toolName;
+        if (matches) {
           updated = true;
           return { ...item, ...action.patch };
         }
@@ -192,12 +215,34 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           id: `exec-${Date.now()}`,
           kind: "tool",
           toolName: action.toolName,
+          runId: action.runId,
           status: action.patch.status ?? "pending",
           title: action.toolName,
           timestamp: Date.now(),
           ...action.patch,
         });
       }
+      return { ...state, executionItems };
+    }
+    case "MERGE_WORKFLOW_NODE": {
+      const executionItems = state.executionItems.map((item) => {
+        if (item.runId !== action.runId) return item;
+        const nodes = item.nodes ?? [];
+        const idx = nodes.findIndex((node) => node.name === action.node.name);
+        const nextNodes = [...nodes];
+        if (idx >= 0) {
+          nextNodes[idx] = { ...nextNodes[idx], ...action.node };
+        } else {
+          nextNodes.push(action.node);
+        }
+        return {
+          ...item,
+          nodes: nextNodes,
+          currentNode: action.currentNode,
+          status: item.status === "failed" || item.status === "succeeded" ? item.status : "running",
+          isRunning: true,
+        };
+      });
       return { ...state, executionItems };
     }
     case "SET_PENDING_CONFIRMATION":
@@ -221,7 +266,12 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         ],
       };
     case "CLEAR_EXECUTION":
-      return { ...state, executionItems: [], pendingConfirmation: null, sessionError: null };
+      return {
+        ...state,
+        executionItems: state.executionItems.filter((item) => item.kind === "workflow"),
+        pendingConfirmation: null,
+        sessionError: null,
+      };
     case "CLEAR_MESSAGES":
       return { ...state, messages: [], executionItems: [], pendingConfirmation: null, sessionError: null };
     case "SET_CONTEXT":
@@ -314,25 +364,61 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
 
   if (eventType === "assistant.workflow_started") {
     const toolName = String(parsed.tool_name ?? "");
+    const result = asRecord(parsed.result);
+    const runId = typeof result.run_id === "string" ? result.run_id : undefined;
+    dispatch({ type: "CLEAR_EXECUTION" });
     dispatch({
       type: "ADD_EXECUTION_ITEM",
       item: {
         id: `workflow-${Date.now()}`,
         kind: "workflow",
         toolName,
+        runId,
         status: "running",
         title: toolName,
         arguments: asRecord(parsed.arguments),
-        result: asRecord(parsed.result),
+        result,
+        isRunning: true,
         timestamp: Date.now(),
       },
     });
+    if (runId) {
+      dispatch({ type: "SET_STATUS", status: "running_workflow" });
+      void streamWorkflowRun(runId, dispatch).catch((error) => {
+        dispatch({
+          type: "UPDATE_EXECUTION_ITEM",
+          toolName,
+          runId,
+          patch: {
+            status: "failed",
+            isRunning: false,
+            errorMessage: error instanceof Error ? error.message : "Workflow stream failed",
+          },
+        });
+        dispatch({ type: "SET_STATUS", status: "failed" });
+      });
+    }
     return;
   }
 
   if (eventType === "assistant.tool_succeeded") {
     const toolName = String(parsed.tool_name ?? "");
     const result = asRecord(parsed.result);
+    if (typeof result.run_id === "string") {
+      dispatch({
+        type: "UPDATE_EXECUTION_ITEM",
+        toolName,
+        runId: result.run_id,
+        patch: {
+          status: "running",
+          result,
+          summary: String(parsed.summary ?? ""),
+          isRunning: true,
+        },
+      });
+      dispatch({ type: "CLEAR_EXECUTION" });
+      return;
+    }
     dispatch({
       type: "UPDATE_EXECUTION_ITEM",
       toolName,
@@ -342,11 +428,11 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
         summary: String(parsed.summary ?? ""),
       },
     });
-    dispatch({ type: "CLEAR_EXECUTION" });
     if (toolName === "open_page" && typeof result.route === "string") {
       window.history.pushState({}, "", result.route);
       window.dispatchEvent(new PopStateEvent("popstate"));
     }
+    dispatch({ type: "CLEAR_EXECUTION" });
     return;
   }
 
@@ -405,6 +491,131 @@ const AIAssistantContext = createContext<AIAssistantContextValue | null>(null);
 /* ─── Provider ─── */
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const TOKEN_KEY = "docpilot_token";
+
+function getAuthToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+async function streamWorkflowRun(
+  runId: string,
+  dispatch: Dispatch<Action>,
+  onTerminal?: () => void,
+) {
+  const token = getAuthToken();
+  const response = await fetch(`${API_BASE}/drafting/runs/${runId}/stream`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Workflow stream failed: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const updateWorkflow = (patch: Partial<AssistantExecutionItem>) => {
+    dispatch({ type: "UPDATE_EXECUTION_ITEM", toolName: "start_draft_section", runId, patch });
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+
+    for (const part of parts) {
+      const parsed = parseSsePart(part);
+      if (!parsed) continue;
+
+      const { eventType, data } = parsed;
+      if (eventType === "connected") {
+        updateWorkflow({
+          status: "running",
+          isRunning: true,
+          currentNode: null,
+        });
+        dispatch({ type: "SET_STATUS", status: "running_workflow" });
+      } else if (eventType === "node_started") {
+        const nodeName = typeof data.node_name === "string" ? data.node_name : "unknown";
+        dispatch({
+          type: "MERGE_WORKFLOW_NODE",
+          runId,
+          node: { name: nodeName, status: "running", startedAt: new Date().toISOString() },
+          currentNode: nodeName,
+        });
+      } else if (eventType === "node_completed") {
+        const nodeName = typeof data.node_name === "string" ? data.node_name : "unknown";
+        dispatch({
+          type: "MERGE_WORKFLOW_NODE",
+          runId,
+          node: { name: nodeName, status: "completed", completedAt: new Date().toISOString() },
+          currentNode: null,
+        });
+      } else if (eventType === "review_result") {
+        updateWorkflow({
+          reviewResult: {
+            score: Number(data.score ?? 0),
+            feedback: typeof data.feedback === "string" ? data.feedback : "",
+            pass: Boolean(data.passed ?? data.pass),
+          },
+        });
+      } else if (eventType === "human_approval_required") {
+        updateWorkflow({
+          status: "running",
+          isWaitingApproval: true,
+          approvalMessage: typeof data.draft_preview === "string" ? data.draft_preview : "等待人工审核",
+        });
+      } else if (eventType === "graph_completed") {
+        updateWorkflow({
+          status: data.persisted ? "succeeded" : "failed",
+          isRunning: false,
+          isWaitingApproval: false,
+          currentNode: null,
+        });
+        dispatch({ type: "SET_STATUS", status: data.persisted ? "completed" : "failed" });
+        onTerminal?.();
+        return;
+      } else if (eventType === "graph_error") {
+        updateWorkflow({
+          status: "failed",
+          isRunning: false,
+          currentNode: null,
+          errorMessage: typeof data.error_message === "string" ? data.error_message : "Workflow failed",
+        });
+        dispatch({ type: "SET_STATUS", status: "failed" });
+        onTerminal?.();
+        return;
+      }
+    }
+  }
+
+  onTerminal?.();
+}
+
+function parseSsePart(part: string): { eventType: string; data: Record<string, unknown> } | null {
+  const lines = part.split("\n");
+  let eventType = "";
+  let dataJson = "";
+  for (const line of lines) {
+    if (line.startsWith("event: ")) {
+      eventType = line.slice(7).trim();
+    } else if (line.startsWith("data: ")) {
+      dataJson = line.slice(6);
+    }
+  }
+  if (!eventType || !dataJson) return null;
+  try {
+    return { eventType, data: JSON.parse(dataJson) as Record<string, unknown> };
+  } catch {
+    return null;
+  }
+}
+
 
 export function isAssistantBusy(status: AssistantStatus) {
   return ["thinking", "executing_tool", "running_workflow"].includes(status);
