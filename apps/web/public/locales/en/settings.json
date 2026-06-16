@@ -20,7 +20,7 @@
     "label": "Label",
     "apiKey": "API Key",
     "apiKeyHint": "(leave blank to keep existing)",
-    "apiKeyPlaceholderNew": "sk-...",
+    "apiKeyPlaceholderNew": "<server-side-api-key>",
     "apiKeyPlaceholderEdit": "Enter new key or leave blank",
     "apiUrl": "API URL (optional)",
     "model": "Model",
