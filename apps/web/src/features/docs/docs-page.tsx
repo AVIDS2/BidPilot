@@ -425,9 +425,9 @@ MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 
 # LLM Provider
-OPENAI_API_KEY=sk-...
+OPENAI_API_KEY=<server-side-openai-api-key>
 # or
-ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_API_KEY=<server-side-anthropic-api-key>
 
 # Vector Store (pgvector)
 EMBEDDING_MODEL=text-embedding-3-small`}
