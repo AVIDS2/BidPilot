@@ -324,6 +324,7 @@ class ChatConversation(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     messages: Mapped[list["ChatMessage"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
+    task_state: Mapped["ChatTaskState | None"] = relationship(back_populates="conversation", cascade="all, delete-orphan")
 
 
 class ChatMessage(Base):
@@ -336,6 +337,22 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     conversation: Mapped["ChatConversation"] = relationship(back_populates="messages")
+
+
+class ChatTaskState(Base):
+    __tablename__ = "chat_task_state"
+
+    conversation_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("chat_conversation.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="idle")
+    tool_name: Mapped[str | None] = mapped_column(String(80))
+    arguments_json: Mapped[dict | None] = mapped_column(JSON)
+    missing_fields_json: Mapped[dict | None] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    conversation: Mapped["ChatConversation"] = relationship(back_populates="task_state")
 
 
 class RefreshToken(Base):

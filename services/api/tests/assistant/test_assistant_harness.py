@@ -8,6 +8,23 @@ import uuid
 from app.models import Project
 
 
+def _ensure_task_state_table() -> None:
+    from app.db import engine
+    from app.models import ChatTaskState
+
+    ChatTaskState.__table__.create(bind=engine, checkfirst=True)
+
+
+def _project_exists(name: str) -> bool:
+    from app.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return db.query(Project).filter(Project.name == name).first() is not None
+    finally:
+        db.close()
+
+
 def _events(response_text: str) -> list[tuple[str, dict]]:
     events: list[tuple[str, dict]] = []
     for part in response_text.strip().split("\n\n"):
@@ -24,6 +41,7 @@ def _events(response_text: str) -> list[tuple[str, dict]]:
 
 
 def test_create_project_requires_confirmation(client, test_db, default_user_id: str) -> None:
+    _ensure_task_state_table()
     response = client.post(
         "/assistant/stream",
         json={"message": "创建一个项目，名字叫 星河投标"},
@@ -40,7 +58,115 @@ def test_create_project_requires_confirmation(client, test_db, default_user_id: 
     assert test_db.query(Project).filter(Project.name == "星河投标").first() is None
 
 
+def test_create_project_missing_name_can_continue_with_followup(client, test_db, default_user_id: str) -> None:
+    _ensure_task_state_table()
+    first_response = client.post(
+        "/assistant/stream",
+        json={"message": "创建一个新项目"},
+    )
+    assert first_response.status_code == 200
+    first_events = _events(first_response.text)
+    start_events = [payload for event, payload in first_events if event == "assistant.start"]
+    assert start_events
+    conversation_id = start_events[0]["conversation_id"]
+
+    second_response = client.post(
+        "/assistant/stream",
+        json={
+            "message": "你来",
+            "conversation_id": conversation_id,
+        },
+    )
+
+    assert second_response.status_code == 200
+    second_events = _events(second_response.text)
+    confirmation_events = [payload for event, payload in second_events if event == "assistant.confirmation_requested"]
+    assert confirmation_events
+    assert confirmation_events[0]["tool_name"] == "create_project"
+    assert confirmation_events[0]["arguments"]["name"].startswith("新建投标项目")
+
+
+def test_create_project_missing_name_accepts_named_followup(client, test_db, default_user_id: str) -> None:
+    _ensure_task_state_table()
+    first_response = client.post(
+        "/assistant/stream",
+        json={"message": "创建一个新项目"},
+    )
+    assert first_response.status_code == 200
+    first_events = _events(first_response.text)
+    conversation_id = [payload for event, payload in first_events if event == "assistant.start"][0]["conversation_id"]
+
+    second_response = client.post(
+        "/assistant/stream",
+        json={
+            "message": "星河投标",
+            "conversation_id": conversation_id,
+        },
+    )
+
+    assert second_response.status_code == 200
+    second_events = _events(second_response.text)
+    confirmation_events = [payload for event, payload in second_events if event == "assistant.confirmation_requested"]
+    assert confirmation_events
+    assert confirmation_events[0]["arguments"]["name"] == "星河投标"
+
+
+def test_create_project_can_be_confirmed_by_text_followup(client, test_db, default_user_id: str) -> None:
+    _ensure_task_state_table()
+    project_name = f"Text Confirm Project {uuid.uuid4().hex[:6]}"
+    first_response = client.post(
+        "/assistant/stream",
+        json={"message": f"创建项目，名字叫 {project_name}"},
+    )
+    assert first_response.status_code == 200
+    first_events = _events(first_response.text)
+    conversation_id = [payload for event, payload in first_events if event == "assistant.start"][0]["conversation_id"]
+    assert [payload for event, payload in first_events if event == "assistant.confirmation_requested"]
+
+    second_response = client.post(
+        "/assistant/stream",
+        json={
+            "message": "确认",
+            "conversation_id": conversation_id,
+        },
+    )
+
+    assert second_response.status_code == 200
+    second_events = _events(second_response.text)
+    event_names = [event for event, _payload in second_events]
+    assert "assistant.tool_started" in event_names
+    assert "assistant.tool_succeeded" in event_names
+    assert _project_exists(project_name)
+
+
+def test_pending_confirmation_can_be_cancelled_by_text_followup(client, test_db, default_user_id: str) -> None:
+    _ensure_task_state_table()
+    project_name = f"Cancelled Project {uuid.uuid4().hex[:6]}"
+    first_response = client.post(
+        "/assistant/stream",
+        json={"message": f"创建项目，名字叫 {project_name}"},
+    )
+    assert first_response.status_code == 200
+    first_events = _events(first_response.text)
+    conversation_id = [payload for event, payload in first_events if event == "assistant.start"][0]["conversation_id"]
+
+    second_response = client.post(
+        "/assistant/stream",
+        json={
+            "message": "取消",
+            "conversation_id": conversation_id,
+        },
+    )
+
+    assert second_response.status_code == 200
+    second_events = _events(second_response.text)
+    messages = [payload["content"] for event, payload in second_events if event == "assistant.message"]
+    assert messages == ["已取消这次操作。"]
+    assert test_db.query(Project).filter(Project.name == project_name).first() is None
+
+
 def test_confirmed_create_project_executes_tool(client, test_db, default_user_id: str) -> None:
+    _ensure_task_state_table()
     project_name = f"Agent Project {uuid.uuid4().hex[:6]}"
 
     response = client.post(
@@ -70,6 +196,7 @@ def test_confirmed_create_project_executes_tool(client, test_db, default_user_id
 
 
 def test_open_page_executes_without_confirmation(client, default_user_id: str) -> None:
+    _ensure_task_state_table()
     response = client.post(
         "/assistant/stream",
         json={"message": "打开项目页面"},
@@ -86,6 +213,7 @@ def test_open_page_executes_without_confirmation(client, default_user_id: str) -
 
 
 def test_start_draft_section_requires_confirmation(client, test_db, default_org_id: str, default_user_id: str) -> None:
+    _ensure_task_state_table()
     project = Project(
         slug=f"assistant-draft-{uuid.uuid4().hex[:6]}",
         name="Assistant Draft Project",

@@ -21,8 +21,15 @@ except Exception:  # pragma: no cover
 
 
 _ASSISTANT_INSTRUCTIONS = """
-你是 BidPilot 平台助手。只输出结构化意图，不直接承诺已经完成平台动作。
-平台动作必须通过工具层执行。创建、起草、重写等变更类动作需要确认。
+你是 BidPilot 平台的执行型助手，只负责把用户请求路由成结构化意图。
+
+行为边界：
+- 只输出 AssistantIntent，不输出普通聊天文本之外的解释。
+- 不要反复复述“我能做什么”的能力清单；优先推进当前任务。
+- 如果上一轮已经在等待某个字段，用户的短回复如“你来”“开始吧”“都行”“默认”表示授权你使用合理默认值继续。
+- 平台动作必须通过工具层执行，不能直接声称已经创建、起草、重写或修改成功。
+- 创建、起草、重写等变更类动作需要确认；确认前只返回 confirmation 请求所需的结构化意图。
+- 信息不足时只问一个最关键的缺失字段。
 """
 
 
@@ -117,7 +124,7 @@ def classify_locally(message: str, project_id: str | None = None) -> AssistantIn
 
     return AssistantIntent(
         mode="answer",
-        response="我已经接入平台操作层了。你可以让我创建项目、打开页面，或在具体项目里启动章节起草。",
+        response="我没抓到一个明确的平台动作。你可以直接说“创建项目：项目名”或“打开项目页面”，我会继续执行到确认步骤。",
     )
 
 
@@ -139,8 +146,8 @@ def _looks_like_open_page(text: str) -> bool:
 
 def _extract_project_name(text: str) -> str | None:
     patterns = [
-        r"(?:名字叫|名称叫|名为|叫|为)\s*([^\s,，。.!！?？]+)",
-        r"项目\s*([^\s,，。.!！?？]+)",
+        r"(?:名字叫|名称叫|名为|叫|为)\s*([^,，。.!！?？]+)",
+        r"项目\s*([^,，。.!！?？]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text)
