@@ -212,6 +212,29 @@ def test_open_page_executes_without_confirmation(client, default_user_id: str) -
     assert succeeded[0]["result"]["route"] == "/projects"
 
 
+def test_assistant_conversation_auto_generates_title(client, test_db, default_user_id: str, monkeypatch) -> None:
+    _ensure_task_state_table()
+    monkeypatch.setattr(
+        "app.chat.service._generate_conversation_title",
+        lambda *_args, **_kwargs: "平台状态概览",
+    )
+
+    response = client.post(
+        "/assistant/stream",
+        json={"message": "给我一个平台状态和最近活动的概览"},
+    )
+
+    assert response.status_code == 200
+    events = _events(response.text)
+    conversation_id = [payload for event, payload in events if event == "assistant.start"][0]["conversation_id"]
+
+    from app.chat.service import get_conversation
+
+    conversation = get_conversation(test_db, conversation_id, default_user_id)
+    assert conversation is not None
+    assert conversation.title == "平台状态概览"
+
+
 def test_start_draft_section_requires_confirmation(client, test_db, default_org_id: str, default_user_id: str) -> None:
     _ensure_task_state_table()
     project = Project(

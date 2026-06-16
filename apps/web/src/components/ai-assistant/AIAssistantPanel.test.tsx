@@ -217,5 +217,6 @@ describe("AIAssistantPanel", () => {
       expect(screen.getByText("section_drafter")).toBeInTheDocument();
     });
     expect(screen.getByText("succeeded")).toBeInTheDocument();
+    expect(screen.getByText("1 of 1 steps completed")).toBeInTheDocument();
   });
 });

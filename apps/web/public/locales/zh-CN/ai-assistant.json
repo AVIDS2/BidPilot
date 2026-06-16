@@ -17,6 +17,9 @@
     "confirm": "确认",
     "cancel": "取消",
     "workflowStarted": "工作流已启动",
+    "workflowQueued": "正在等待工作流进度",
+    "nodesCompleted": "已完成 {{completed}} / {{total}} 个步骤",
+    "runId": "运行 ID",
     "currentNode": "当前节点：{{node}}",
     "review": "审核：{{result}} / {{score}}",
     "reviewPassed": "通过",
@@ -26,6 +29,12 @@
       "pending": "等待中",
       "running": "运行中",
       "succeeded": "已成功",
+      "failed": "失败"
+    },
+    "nodeStatus": {
+      "pending": "等待中",
+      "running": "运行中",
+      "completed": "已完成",
       "failed": "失败"
     }
   },

@@ -17,6 +17,9 @@
     "confirm": "Confirm",
     "cancel": "Cancel",
     "workflowStarted": "Workflow started",
+    "workflowQueued": "Waiting for workflow progress",
+    "nodesCompleted": "{{completed}} of {{total}} steps completed",
+    "runId": "Run ID",
     "currentNode": "Current node: {{node}}",
     "review": "Review: {{result}} / {{score}}",
     "reviewPassed": "passed",
@@ -26,6 +29,12 @@
       "pending": "pending",
       "running": "running",
       "succeeded": "succeeded",
+      "failed": "failed"
+    },
+    "nodeStatus": {
+      "pending": "pending",
+      "running": "running",
+      "completed": "completed",
       "failed": "failed"
     }
   },

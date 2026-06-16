@@ -140,6 +140,21 @@ class TestChatConversationsEndpoint:
         assert items
         assert items[0]["title"] == "请帮我创建一个新项目"
 
+    def test_assistant_stream_can_generate_auto_title(self, client, test_db, clear_dev_user_chat_state, monkeypatch):
+        """Assistant sessions should still reuse the conversation title generation flow."""
+        from app.chat.service import get_conversation
+
+        monkeypatch.setattr("app.chat.service._generate_conversation_title", lambda *_args, **_kwargs: "平台概览")
+
+        response = client.post("/assistant/stream", json={"message": "给我一个平台状态和最近活动的概览"})
+        assert response.status_code == 200
+
+        events = [part for part in response.text.strip().split("\n\n") if part]
+        start = next(json.loads(line[6:]) for part in events for line in part.splitlines() if line.startswith("data: ") and "assistant.start" in part)
+        conversation = get_conversation(test_db, start["conversation_id"], "dev-user")
+        assert conversation is not None
+        assert conversation.title == "平台概览"
+
     def test_rename_conversation(self, client, clear_dev_user_chat_state):
         response = client.post("/chat/stream", json={"message": "请帮我创建一个新项目"})
         assert response.status_code == 200
