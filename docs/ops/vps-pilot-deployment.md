@@ -34,6 +34,8 @@ Required values:
 - `DOCPILOT_SMTP_USER`
 - `DOCPILOT_SMTP_FROM`
 - one provider key, such as `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`
+- `DOCPILOT_TURNSTILE_SECRET_KEY`
+- `VITE_TURNSTILE_SITE_KEY`
 
 ## Build and start
 

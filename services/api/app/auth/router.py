@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.email.service import send_password_reset_email, send_email_verification_email, send_account_deletion_confirmation_email
 from app.models import Subscription, User
+from app.security.turnstile import verify_turnstile_or_raise
 
 import math
 from .schemas import CurrentUser, TokenResponse, UserLogin, UserRegister, UserUpdate, SubscriptionRead, SubscriptionUpdate, PasswordResetRequest, PasswordResetConfirm, UsersPaginatedResponse
@@ -16,8 +17,9 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 @router.post("/register", response_model=CurrentUser, status_code=status.HTTP_201_CREATED)
-def register(payload: UserRegister, db: Session = Depends(get_db)) -> CurrentUser:
+def register(payload: UserRegister, request: Request, db: Session = Depends(get_db)) -> CurrentUser:
     try:
+        verify_turnstile_or_raise(payload.turnstile_token, request)
         user = register_user_command(db, payload)
         # Send verification email (async-safe: logs to console if SMTP not configured)
         token = create_email_verification_token(db, user.id)
@@ -28,8 +30,9 @@ def register(payload: UserRegister, db: Session = Depends(get_db)) -> CurrentUse
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenResponse:
+def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
     try:
+        verify_turnstile_or_raise(payload.turnstile_token, request)
         login_rate_limiter.check(payload.email)
         result = login_command(db, payload.email, payload.password)
         login_rate_limiter.reset(payload.email)
@@ -202,12 +205,13 @@ def toggle_user_status(
 
 
 @router.post("/password-reset")
-def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(get_db)) -> dict:
+def request_password_reset(payload: PasswordResetRequest, request: Request, db: Session = Depends(get_db)) -> dict:
     """Request a password reset. Always returns success to avoid user enumeration.
 
     If the email exists, a reset link is sent. If SMTP is not configured,
     the token is logged to console for development.
     """
+    verify_turnstile_or_raise(payload.turnstile_token, request)
     token = create_password_reset_token(db, payload.email)
     if token is not None:
         send_password_reset_email(payload.email, token)
@@ -236,7 +240,9 @@ def verify_email(token: str, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/resend-verification")
 def resend_verification(
+    request: Request,
     email: str = Query("", description="Email address to resend verification to"),
+    turnstile_token: str = Query("", description="Turnstile verification token"),
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -257,6 +263,7 @@ def resend_verification(
         raise HTTPException(status_code=400, detail="Email or Bearer token required")
 
     try:
+        verify_turnstile_or_raise(turnstile_token or None, request)
         resend_rate_limiter.check(target_email)
     except ValueError as e:
         raise HTTPException(status_code=429, detail=str(e))

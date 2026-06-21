@@ -45,10 +45,10 @@ function RootRedirect() {
 // PublicLayout - Nav only on public pages (landing, auth, pricing, docs)
 function PublicLayout() {
   return (
-    <>
+    <div className="dark min-h-screen overflow-hidden bg-background text-foreground">
       <Nav />
       <Outlet />
-    </>
+    </div>
   );
 }
 

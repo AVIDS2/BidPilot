@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { resendVerification } from "@/lib/api"
 import { MailCheckIcon, ArrowLeftIcon } from "lucide-react"
 import { toast } from "sonner"
+import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget"
 
 export function VerifyEmailPromptPage() {
   const location = useLocation()
@@ -13,18 +14,26 @@ export function VerifyEmailPromptPage() {
   const email = (location.state as { email?: string } | null)?.email || ""
   const [resending, setResending] = useState(false)
   const [resent, setResent] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null)
   const { t } = useTranslation("auth")
 
   const handleResend = async () => {
     if (!email) return
+    if (isTurnstileConfigured() && !turnstileToken) {
+      toast.error(t("turnstile.required"))
+      return
+    }
     setResending(true)
     try {
-      await resendVerification("", email)
+      await resendVerification("", email, turnstileToken)
       setResent(true)
       toast.success(t("verifyEmail.resentToast"))
     } catch {
       toast.error(t("verifyEmail.resendFailed"))
     } finally {
+      resetTurnstile(turnstileWidgetId)
+      setTurnstileToken(null)
       setResending(false)
     }
   }
@@ -62,10 +71,16 @@ export function VerifyEmailPromptPage() {
               {t("verifyEmail.promptDesc", { email: email || t("verifyEmail.promptDescFallback") })}
             </p>
             <p className="text-sm mb-6" style={{ color: "var(--landing-text-tertiary)" }}>{t("verifyEmail.promptBody")}</p>
+            <TurnstileWidget
+              action="resend_verification"
+              onTokenChange={setTurnstileToken}
+              onWidgetIdChange={setTurnstileWidgetId}
+              className="mb-3 min-h-[65px]"
+            />
             {email && !resent && (
               <button
                 onClick={handleResend}
-                disabled={resending}
+                disabled={resending || (isTurnstileConfigured() && !turnstileToken)}
                 className="w-full py-3 text-sm font-medium transition-all duration-300 hover:scale-[0.98] mb-3"
                 style={{ border: "1px solid var(--landing-hairline)", color: "var(--landing-text-secondary)" }}
               >

@@ -8,11 +8,13 @@ class UserRegister(BaseModel):
     invitation_token: str | None = None
     org_name: str | None = None
     org_slug: str | None = None
+    turnstile_token: str | None = None
 
 
 class UserLogin(BaseModel):
     email: str
     password: str
+    turnstile_token: str | None = None
 
 
 class TokenResponse(BaseModel):
@@ -60,6 +62,7 @@ class UsersPaginatedResponse(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     email: str
+    turnstile_token: str | None = None
 
 
 class PasswordResetConfirm(BaseModel):

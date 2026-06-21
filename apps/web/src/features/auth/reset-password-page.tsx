@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { confirmPasswordReset } from "@/lib/api"
 import { toast } from "sonner"
 import { KeyIcon } from "lucide-react"
+import { isStrongPassword } from "@/lib/password"
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
@@ -19,6 +20,10 @@ export function ResetPasswordPage() {
     e.preventDefault()
     if (newPassword !== confirmPassword) {
       toast.error(t("resetPassword.passwordsMismatch"))
+      return
+    }
+    if (!isStrongPassword(newPassword)) {
+      toast.error(t("resetPassword.passwordHint"))
       return
     }
     setLoading(true)

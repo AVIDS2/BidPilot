@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 import { resendVerification } from "@/lib/api";
 import { toast } from "sonner";
 import { MailIcon } from "lucide-react";
+import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -12,29 +13,45 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
   const { login, token } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation("auth");
 
   const handleResendVerification = async () => {
     if (!unverifiedEmail) return;
+    if (isTurnstileConfigured() && !turnstileToken) {
+      toast.error(t("turnstile.required"));
+      return;
+    }
     setResending(true);
     try {
-      await resendVerification(token || "", unverifiedEmail);
+      await resendVerification(token || "", unverifiedEmail, turnstileToken);
       toast.success(t("toast.verificationSent"));
     } catch {
       toast.error(t("toast.verificationResendFailed"));
     } finally {
+      resetTurnstile(turnstileWidgetId);
+      setTurnstileToken(null);
       setResending(false);
     }
   };
 
+  const handleTurnstileToken = useCallback((value: string | null) => {
+    setTurnstileToken(value);
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isTurnstileConfigured() && !turnstileToken) {
+      toast.error(t("turnstile.required"));
+      return;
+    }
     setLoading(true);
     setUnverifiedEmail(null);
     try {
-      await login(email, password);
+      await login(email, password, turnstileToken);
       toast.success(t("toast.loggedIn"));
       navigate("/dashboard");
     } catch (err: unknown) {
@@ -53,6 +70,8 @@ export function LoginPage() {
         toast.error(t("toast.loginFailed"));
       }
     } finally {
+      resetTurnstile(turnstileWidgetId);
+      setTurnstileToken(null);
       setLoading(false);
     }
   };
@@ -149,9 +168,16 @@ export function LoginPage() {
               />
             </div>
 
+            <TurnstileWidget
+              action="login"
+              onTokenChange={handleTurnstileToken}
+              onWidgetIdChange={setTurnstileWidgetId}
+              className="min-h-[65px]"
+            />
+
             <button
               type="submit"
-              disabled={loading || !email || !password}
+              disabled={loading || !email || !password || (isTurnstileConfigured() && !turnstileToken)}
               className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {loading ? (
@@ -195,7 +221,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={handleResendVerification}
-                  disabled={resending}
+                  disabled={resending || (isTurnstileConfigured() && !turnstileToken)}
                   className="text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors duration-300 underline underline-offset-2"
                 >
                   {resending ? "发送中..." : t("unverified.resend")}

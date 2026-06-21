@@ -75,6 +75,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-https://bidpilot-api.rglens.com}
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY}
     container_name: bidpilot-web
     restart: unless-stopped
     depends_on:

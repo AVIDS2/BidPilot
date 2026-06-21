@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useTranslation } from "react-i18next"
+import { isStrongPassword } from "@/lib/password"
 
 const sidebarNavItems = [
   { titleKey: "nav.profile" as const, href: "profile", icon: UserIcon },
@@ -136,6 +137,28 @@ export function AccountPage() {
 
   const handleUpdateProfile = () => {
     updateMut.mutate({ display_name: displayName.trim() })
+  }
+
+  const handleChangePassword = () => {
+    if (!isStrongPassword(newPw)) {
+      toast.error(t("security.passwordHint"));
+      return;
+    }
+
+    updateMut.mutate(
+      { current_password: currentPw, new_password: newPw },
+      {
+        onSuccess: () => {
+          toast.success(t("security.changed"));
+          setCurrentPw("");
+          setNewPw("");
+        },
+        onError: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          toast.error(msg.includes("incorrect") ? t("security.currentIncorrect") : t("security.changeFailed"));
+        },
+      },
+    );
   }
 
   const initials = (user?.display_name || t("profile.userFallback")).charAt(0).toUpperCase()
@@ -440,22 +463,7 @@ export function AccountPage() {
               </div>
               <div className="flex gap-2">
                 <Button
-                  onClick={() => {
-                    updateMut.mutate(
-                      { current_password: currentPw, new_password: newPw },
-                      {
-                        onSuccess: () => {
-                          toast.success(t("security.changed"));
-                          setCurrentPw("");
-                          setNewPw("");
-                        },
-                        onError: (err: unknown) => {
-                          const msg = err instanceof Error ? err.message : String(err);
-                          toast.error(msg.includes("incorrect") ? t("security.currentIncorrect") : t("security.changeFailed"));
-                        },
-                      },
-                    );
-                  }}
+                  onClick={handleChangePassword}
                   disabled={!currentPw || !newPw || updateMut.isPending}
                 >
                   {updateMut.isPending && <Spinner data-icon="inline-start" />}

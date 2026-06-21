@@ -15,6 +15,7 @@ x-docpilot-env: &docpilot-env
   DOCPILOT_SMTP_USER: ${DOCPILOT_SMTP_USER}
   DOCPILOT_SMTP_FROM: ${DOCPILOT_SMTP_FROM}
   DOCPILOT_PROVIDER_DOMESTIC_API_KEY: ${DOCPILOT_PROVIDER_DOMESTIC_API_KEY}
+  DOCPILOT_TURNSTILE_SECRET_KEY: ${DOCPILOT_TURNSTILE_SECRET_KEY}
 
 services:
   postgres:
@@ -101,6 +102,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-https://bidpilot-api.rglens.com}
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY}
     container_name: docpilot-web
     restart: unless-stopped
     depends_on:

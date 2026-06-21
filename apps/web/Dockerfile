@@ -17,7 +17,9 @@ RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
 RUN pnpm install --frozen-lockfile
 
 ARG VITE_API_URL=http://localhost:8000
+ARG VITE_TURNSTILE_SITE_KEY
 ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY}
 
 RUN pnpm --filter @docpilot/web build
 

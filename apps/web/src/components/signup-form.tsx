@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "sonner"
 import { CheckIcon, FileTextIcon } from "lucide-react"
+import { isStrongPassword } from "@/lib/password"
 
 export function SignupForm({
   className,
@@ -42,7 +43,7 @@ export function SignupForm({
       toast.error(t("toast.passwordsMismatch"))
       return
     }
-    if (password.length < 8) {
+    if (!isStrongPassword(password)) {
       toast.error(t("toast.passwordTooShort"))
       return
     }

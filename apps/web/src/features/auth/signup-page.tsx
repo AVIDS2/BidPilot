@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
+import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget";
+import { isStrongPassword } from "@/lib/password";
 
 export function SignupPage() {
   const [searchParams] = useSearchParams();
@@ -17,6 +19,8 @@ export function SignupPage() {
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [loading, setLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
   const { register } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation("auth");
@@ -29,7 +33,7 @@ export function SignupPage() {
       toast.error(t("toast.passwordsMismatch"));
       return;
     }
-    if (password.length < 8) {
+    if (!isStrongPassword(password)) {
       toast.error(t("toast.passwordTooShort"));
       return;
     }
@@ -39,6 +43,10 @@ export function SignupPage() {
         return;
       }
     }
+    if (isTurnstileConfigured() && !turnstileToken) {
+      toast.error(t("turnstile.required"));
+      return;
+    }
     setLoading(true);
     try {
       await register(
@@ -47,7 +55,8 @@ export function SignupPage() {
         password,
         invitationToken || undefined,
         createOrg ? orgName || undefined : undefined,
-        createOrg ? orgSlug || undefined : undefined
+        createOrg ? orgSlug || undefined : undefined,
+        turnstileToken,
       );
       toast.success(t("toast.accountCreated"));
       navigate("/verify-email-prompt", { state: { email } });
@@ -64,6 +73,8 @@ export function SignupPage() {
         toast.error(t("toast.registrationGenericError"));
       }
     } finally {
+      resetTurnstile(turnstileWidgetId);
+      setTurnstileToken(null);
       setLoading(false);
     }
   };
@@ -277,10 +288,17 @@ export function SignupPage() {
               {t("signup.passwordHint")}
             </p>
 
+            <TurnstileWidget
+              action="signup"
+              onTokenChange={setTurnstileToken}
+              onWidgetIdChange={setTurnstileWidgetId}
+              className="min-h-[65px]"
+            />
+
             {/* 提交按钮 */}
             <button
               type="submit"
-              disabled={loading || !email || !displayName || !password}
+              disabled={loading || !email || !displayName || !password || (isTurnstileConfigured() && !turnstileToken)}
               className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {loading ? (

@@ -4,23 +4,32 @@ import { useTranslation } from "react-i18next"
 import { requestPasswordReset } from "@/lib/api"
 import { toast } from "sonner"
 import { MailIcon } from "lucide-react"
+import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget"
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null)
   const navigate = useNavigate()
   const { t } = useTranslation("auth")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isTurnstileConfigured() && !turnstileToken) {
+      toast.error(t("turnstile.required"))
+      return
+    }
     setLoading(true)
     try {
-      await requestPasswordReset(email)
+      await requestPasswordReset(email, turnstileToken)
       setSent(true)
     } catch {
       toast.error(t("forgotPassword.error"))
     } finally {
+      resetTurnstile(turnstileWidgetId)
+      setTurnstileToken(null)
       setLoading(false)
     }
   }
@@ -91,9 +100,15 @@ export function ForgotPasswordPage() {
                 className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
               />
             </div>
+            <TurnstileWidget
+              action="password_reset"
+              onTokenChange={setTurnstileToken}
+              onWidgetIdChange={setTurnstileWidgetId}
+              className="min-h-[65px]"
+            />
             <button
               type="submit"
-              disabled={loading || !email}
+              disabled={loading || !email || (isTurnstileConfigured() && !turnstileToken)}
               className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {loading ? (

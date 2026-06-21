@@ -420,11 +420,13 @@ export interface UserRegister {
   invitation_token?: string | null;
   org_name?: string | null;
   org_slug?: string | null;
+  turnstile_token?: string | null;
 }
 
 export interface UserLogin {
   email: string;
   password: string;
+  turnstile_token?: string | null;
 }
 
 export function registerUser(payload: UserRegister) {
@@ -450,8 +452,11 @@ export function updateCurrentUser(payload: UserUpdate) {
 }
 
 // Password reset
-export function requestPasswordReset(email: string) {
-  return request<{ message: string }>("/auth/password-reset", { method: "POST", body: JSON.stringify({ email }) });
+export function requestPasswordReset(email: string, turnstileToken?: string | null) {
+  return request<{ message: string }>(
+    "/auth/password-reset",
+    { method: "POST", body: JSON.stringify({ email, turnstile_token: turnstileToken || null }) },
+  );
 }
 
 export function confirmPasswordReset(token: string, new_password: string) {
@@ -488,9 +493,15 @@ export function verifyEmail(token: string) {
   return request<{ message: string }>(`/auth/verify-email?token=${token}`, { method: "POST" });
 }
 
-export function resendVerification(token: string, email?: string) {
-  const params = email ? `?email=${encodeURIComponent(email)}` : "";
-  return request<{ message: string }>(`/auth/resend-verification${params}`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+export function resendVerification(token: string, email?: string, turnstileToken?: string | null) {
+  const params = new URLSearchParams();
+  if (email) params.set("email", email);
+  if (turnstileToken) params.set("turnstile_token", turnstileToken);
+  const query = params.toString();
+  return request<{ message: string }>(
+    `/auth/resend-verification${query ? `?${query}` : ""}`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+  );
 }
 
 export function adminVerifyUser(userId: string) {

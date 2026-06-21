@@ -5,8 +5,8 @@ interface AuthState {
   user: CurrentUser | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, displayName: string, password: string, invitationToken?: string, orgName?: string, orgSlug?: string) => Promise<void>;
+  login: (email: string, password: string, turnstileToken?: string | null) => Promise<void>;
+  register: (email: string, displayName: string, password: string, invitationToken?: string, orgName?: string, orgSlug?: string, turnstileToken?: string | null) => Promise<void>;
   logout: () => void;
   setUser: (user: CurrentUser) => void;
 }
@@ -50,8 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await loginUser({ email, password });
+  const login = useCallback(async (email: string, password: string, turnstileToken?: string | null) => {
+    const res = await loginUser({ email, password, turnstile_token: turnstileToken || null });
     localStorage.setItem(TOKEN_KEY, res.access_token);
     if (res.refresh_token) localStorage.setItem(REFRESH_KEY, res.refresh_token);
     setToken(res.access_token);
@@ -66,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     invitationToken?: string,
     orgName?: string,
     orgSlug?: string,
+    turnstileToken?: string | null,
   ) => {
     await registerUser({
       email,
@@ -74,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       invitation_token: invitationToken || null,
       org_name: orgName || null,
       org_slug: orgSlug || null,
+      turnstile_token: turnstileToken || null,
     });
     // Don't auto-login — user must verify email first
   }, []);
