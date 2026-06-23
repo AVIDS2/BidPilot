@@ -250,7 +250,7 @@ export function AIAssistantPanel() {
 
   return (
     <div
-      className="fixed top-0 right-0 z-40 h-full w-[400px] flex flex-col animate-slide-in"
+      className="fixed top-0 right-0 z-40 h-full w-full sm:w-[320px] md:w-[400px] flex flex-col animate-slide-in"
       style={{
         background: "var(--background)",
         borderLeft: "1px solid var(--border)",

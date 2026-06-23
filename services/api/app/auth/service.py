@@ -1,7 +1,6 @@
 import hashlib
 import os
 import time
-from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
@@ -506,13 +505,13 @@ class LoginRateLimiter:
     def __init__(self, max_attempts: int = 5, window_seconds: int = 300) -> None:
         self.max_attempts = max_attempts
         self.window_seconds = window_seconds
-        self._attempts: dict[str, list[float]] = defaultdict(list)
+        self._attempts: dict[str, list[float]] = {}
 
     def check(self, email: str) -> None:
         """Raise ValueError if too many recent login attempts for this email."""
         now = time.monotonic()
         cutoff = now - self.window_seconds
-        self._attempts[email] = [t for t in self._attempts[email] if t > cutoff]
+        self._attempts[email] = [t for t in self._attempts.get(email, []) if t > cutoff]
         if len(self._attempts[email]) >= self.max_attempts:
             raise ValueError(f"Too many login attempts. Please try again in {self.window_seconds // 60} minutes.")
         self._attempts[email].append(now)
@@ -528,20 +527,30 @@ class ResendRateLimiter:
     def __init__(self, max_attempts: int = 3, window_seconds: int = 3600) -> None:
         self.max_attempts = max_attempts
         self.window_seconds = window_seconds
-        self._attempts: dict[str, list[float]] = defaultdict(list)
+        self._attempts: dict[str, list[float]] = {}
 
     def check(self, email: str) -> None:
         """Raise ValueError if too many recent resend attempts for this email."""
         now = time.monotonic()
         cutoff = now - self.window_seconds
-        self._attempts[email] = [t for t in self._attempts[email] if t > cutoff]
+        self._attempts[email] = [t for t in self._attempts.get(email, []) if t > cutoff]
         if len(self._attempts[email]) >= self.max_attempts:
             raise ValueError(f"Too many verification emails sent. Please try again in {self.window_seconds // 60} minutes.")
         self._attempts[email].append(now)
 
 
-login_rate_limiter = LoginRateLimiter()
-resend_rate_limiter = ResendRateLimiter()
+_redis_url = os.environ.get("DOCPILOT_REDIS_URL")
+if _redis_url:
+    try:
+        from app.security.redis_rate_limiter import create_rate_limiter
+        login_rate_limiter = create_rate_limiter(_redis_url, max_attempts=5, window_seconds=300, prefix="rl:login", label="login")
+        resend_rate_limiter = create_rate_limiter(_redis_url, max_attempts=3, window_seconds=3600, prefix="rl:resend", label="resend")
+    except Exception:
+        login_rate_limiter = LoginRateLimiter()
+        resend_rate_limiter = ResendRateLimiter()
+else:
+    login_rate_limiter = LoginRateLimiter()
+    resend_rate_limiter = ResendRateLimiter()
 
 
 def admin_verify_user_command(db: Session, user_id: str) -> CurrentUser:

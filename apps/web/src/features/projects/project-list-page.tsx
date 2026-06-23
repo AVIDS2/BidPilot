@@ -418,7 +418,20 @@ export function ProjectListPage() {
                     <Badge variant="outline">{p.scenario_package}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={p.status === "active" ? "default" : "secondary"}>
+                    <Badge
+                      variant="outline"
+                      className={
+                        p.status === "active"
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : p.status === "completed"
+                            ? "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                            : p.status === "archived"
+                              ? "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
+                              : p.status === "draft"
+                                ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                : ""
+                      }
+                    >
                       {t(`statusValues.${p.status}`, { defaultValue: p.status })}
                     </Badge>
                   </TableCell>

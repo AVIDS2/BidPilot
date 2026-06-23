@@ -3,33 +3,21 @@ import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
+  Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
 import { useAuth } from "@/lib/auth";
 import {
-  listProjects,
-  listExecutionRuns,
-  listProviderConfigs,
-  type ProjectRead,
-  type ExecutionRunRead,
+  listProjects, listExecutionRuns, listProviderConfigs,
+  type ProjectRead, type ExecutionRunRead,
 } from "@/lib/api";
 import {
-  FolderIcon,
-  FileTextIcon,
-  ClipboardCheckIcon,
-  CheckCircleIcon,
-  PlusIcon,
-  EyeIcon,
-  DownloadIcon,
-  SparklesIcon,
-  ClockIcon,
-  TrendingUpIcon,
+  FolderIcon, FileTextIcon, ClipboardCheckIcon, CheckCircleIcon,
+  PlusIcon, EyeIcon, DownloadIcon, SparklesIcon,
+  ClockIcon, TrendingUpIcon, ArrowRightIcon,
 } from "lucide-react";
 
 function DashboardSkeleton() {
@@ -38,71 +26,48 @@ function DashboardSkeleton() {
       <Skeleton className="h-8 w-64" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-7 w-16 mt-1" />
-            </CardHeader>
-          </Card>
+          <Card key={i}><CardHeader><Skeleton className="h-4 w-24" /><Skeleton className="h-7 w-16 mt-1" /></CardHeader></Card>
         ))}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <Skeleton className="h-5 w-32" />
-          </CardHeader>
-          <CardContent>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full mb-2" />
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-5 w-32" />
-          </CardHeader>
-          <CardContent>
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full mb-2" />
-            ))}
-          </CardContent>
-        </Card>
+        <Card className="lg:col-span-2"><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent>{Array.from({ length: 4 }).map((_, i) => (<Skeleton key={i} className="h-10 w-full mb-2" />))}</CardContent></Card>
+        <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent>{Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-10 w-full mb-2" />))}</CardContent></Card>
       </div>
     </div>
   );
 }
+
+const STAT_ICONS = [
+  { Icon: FolderIcon, bg: "bg-blue-500/10", color: "text-blue-500" },
+  { Icon: FileTextIcon, bg: "bg-amber-500/10", color: "text-amber-500" },
+  { Icon: ClipboardCheckIcon, bg: "bg-violet-500/10", color: "text-violet-500" },
+  { Icon: CheckCircleIcon, bg: "bg-emerald-500/10", color: "text-emerald-500" },
+];
 
 function RecentActivityItem({
   event,
 }: {
   event: { project: string; action: string; time: string; type: string };
 }) {
-  const typeColors: Record<string, string> = {
-    project_created: "bg-primary/10 text-primary",
-    status_changed: "bg-amber-500/10 text-amber-400",
-    draft_started: "bg-emerald-500/10 text-emerald-400",
-    draft_completed: "bg-primary/10 text-primary",
-    export: "bg-orange-500/10 text-orange-400",
+  const dotColors: Record<string, string> = {
+    project_created: "bg-blue-500",
+    status_changed: "bg-amber-500",
+    draft_started: "bg-emerald-500",
+    draft_completed: "bg-primary",
+    export: "bg-orange-500",
   };
 
   return (
-    <div className="flex items-center gap-3 py-2">
-      <div
-        className={`flex size-8 shrink-0 items-center justify-center rounded-md ${
-          typeColors[event.type] ?? "bg-muted"
-        }`}
-      >
-        <ClockIcon className="size-4" />
-      </div>
+    <div className="relative flex items-start gap-4 py-3 pl-6">
+      <div className={`absolute left-0 top-4 size-2.5 rounded-full ring-2 ring-background ${dotColors[event.type] ?? "bg-muted-foreground"}`} />
+      <div className="absolute left-[4.5px] top-6 bottom-0 w-px bg-border last:hidden" />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">
-          {event.action}{" "}
-          <span className="text-muted-foreground font-normal">
-            {event.project}
-          </span>
+        <p className="text-sm">
+          <span className="font-medium">{event.action}</span>{" "}
+          <span className="text-muted-foreground">{event.project}</span>
         </p>
       </div>
-      <span className="text-xs text-muted-foreground whitespace-nowrap">
+      <span className="text-xs text-muted-foreground whitespace-nowrap mt-0.5">
         {event.time}
       </span>
     </div>
@@ -114,49 +79,34 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const { data: projects, isLoading: projectsLoading } = useQuery<ProjectRead[]>(
-    {
-      queryKey: ["projects"],
-      queryFn: listProjects,
-      staleTime: 5 * 60 * 1000, // 5 minutes cache
-      retry: 2,
-    },
-  );
+  const { data: projects, isLoading: projectsLoading } = useQuery<ProjectRead[]>({
+    queryKey: ["projects"],
+    queryFn: listProjects,
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+  });
 
-  // Fetch recent execution runs across all projects
   const { data: allRuns } = useQuery<ExecutionRunRead[]>({
     queryKey: ["dashboard-runs"],
     queryFn: async () => {
       if (!projects || projects.length === 0) return [];
-
-      // Batch requests sequentially with delays to avoid rate limits
       const results: ExecutionRunRead[][] = [];
       for (const project of projects) {
         try {
           const runs = await listExecutionRuns(project.id);
           results.push(runs);
         } catch (error) {
-          // Gracefully handle individual project errors
-          console.warn(
-            `Failed to fetch runs for project ${project.id}:`,
-            error,
-          );
+          console.warn(`Failed to fetch runs for project ${project.id}:`, error);
         }
-        // Small delay between requests to respect rate limits
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-
       return results
         .flatMap((r) => r)
-        .sort(
-          (a, b) =>
-            new Date(b.output_json?.created_at as string ?? 0).getTime() -
-            new Date(a.output_json?.created_at as string ?? 0).getTime(),
-        )
+        .sort((a, b) => new Date(b.output_json?.created_at as string ?? 0).getTime() - new Date(a.output_json?.created_at as string ?? 0).getTime())
         .slice(0, 10);
     },
     enabled: !!projects && projects.length > 0,
-    staleTime: 2 * 60 * 1000, // 2 minutes stale time
+    staleTime: 2 * 60 * 1000,
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
@@ -164,7 +114,7 @@ export function DashboardPage() {
   const { data: providerData } = useQuery({
     queryKey: ["provider-configs"],
     queryFn: listProviderConfigs,
-    staleTime: 5 * 60 * 1000, // 5 minutes cache
+    staleTime: 5 * 60 * 1000,
   });
 
   const statusCounts = projects?.reduce(
@@ -178,37 +128,58 @@ export function DashboardPage() {
     { total: 0, active: 0, completed: 0, draft: 0 },
   ) ?? { total: 0, active: 0, completed: 0, draft: 0 };
 
-  // Build recent activity from projects
   const recentActivity = (projects ?? [])
     .slice()
     .sort((a, b) => (a.id > b.id ? -1 : 1))
     .slice(0, 10)
     .map((p) => ({
       project: p.name,
-      action:
-        p.status === "active"
-          ? t("dashboard:activity.activeProject")
-          : p.status === "completed"
-            ? t("dashboard:activity.completedProject")
-            : t("dashboard:activity.updatedProject"),
+      action: p.status === "active" ? t("dashboard:activity.activeProject") : p.status === "completed" ? t("dashboard:activity.completedProject") : t("dashboard:activity.updatedProject"),
       time: p.scenario_package,
-      type:
-        p.status === "active"
-          ? "project_created"
-          : p.status === "completed"
-            ? "draft_completed"
-            : "status_changed",
+      type: p.status === "active" ? "project_created" : p.status === "completed" ? "draft_completed" : "status_changed",
     }));
 
-  const activeProviders =
-    providerData?.data?.filter((p) => p.is_active).length ?? 0;
+  const activeProviders = providerData?.data?.filter((p) => p.is_active).length ?? 0;
   const totalProviders = providerData?.data?.length ?? 0;
+  const totalDrafts = allRuns?.filter((r) => r.run_type === "draft").length ?? 0;
+
+  // Plan limits for progress bar
+  const planLimit = user?.plan === "starter" ? 3 : -1;
+  const projectUsagePct = planLimit > 0 ? Math.min(100, (statusCounts.total / planLimit) * 100) : -1;
 
   if (projectsLoading) return <DashboardSkeleton />;
 
-  const greeting = user?.display_name
-    ? t("dashboard:greeting", { name: user.display_name })
-    : t("dashboard:greetingDefault");
+  const greeting = user?.display_name ? t("dashboard:greeting", { name: user.display_name }) : t("dashboard:greetingDefault");
+
+  // Empty state
+  if (statusCounts.total === 0) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{greeting}</h1>
+          <p className="text-muted-foreground">{t("dashboard:subtitle")}</p>
+        </div>
+        <Empty className="min-h-[400px] border-dashed">
+          <EmptyHeader>
+            <EmptyMedia variant="icon"><FolderIcon /></EmptyMedia>
+            <EmptyTitle>{t("dashboard:empty.title", { defaultValue: "Create your first project" })}</EmptyTitle>
+            <EmptyDescription>{t("dashboard:empty.description", { defaultValue: "Start by creating a BidPilot project to manage your bid documents." })}</EmptyDescription>
+          </EmptyHeader>
+          <Button onClick={() => navigate("/projects")} className="mt-4">
+            <PlusIcon className="size-4 mr-2" />
+            {t("dashboard:quickActions.newProject")}
+          </Button>
+        </Empty>
+      </div>
+    );
+  }
+
+  const statCards = [
+    { label: t("dashboard:stats.totalProjects"), value: statusCounts.total, sub: t("dashboard:stats.allTime") },
+    { label: t("dashboard:stats.activeDrafts"), value: statusCounts.active, sub: t("dashboard:stats.inProgress") },
+    { label: t("dashboard:stats.pendingReviews"), value: statusCounts.draft, sub: t("dashboard:stats.awaitingReview") },
+    { label: t("dashboard:stats.completed"), value: statusCounts.completed, sub: t("dashboard:stats.done") },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -218,90 +189,56 @@ export function DashboardPage() {
         <p className="text-muted-foreground">{t("dashboard:subtitle")}</p>
       </div>
 
-      {/* Stats cards */}
+      {/* Stats cards with unique colors */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardDescription>{t("dashboard:stats.totalProjects")}</CardDescription>
-              <FolderIcon className="size-4 text-muted-foreground" />
-            </div>
-            <CardTitle className="text-2xl font-semibold tabular-nums">
-              {statusCounts.total}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <TrendingUpIcon className="size-3" />
-              {t("dashboard:stats.allTime")}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardDescription>{t("dashboard:stats.activeDrafts")}</CardDescription>
-              <FileTextIcon className="size-4 text-muted-foreground" />
-            </div>
-            <CardTitle className="text-2xl font-semibold tabular-nums">
-              {statusCounts.active}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Badge variant="secondary" className="text-xs">
-              {t("dashboard:stats.inProgress")}
-            </Badge>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardDescription>{t("dashboard:stats.pendingReviews")}</CardDescription>
-              <ClipboardCheckIcon className="size-4 text-muted-foreground" />
-            </div>
-            <CardTitle className="text-2xl font-semibold tabular-nums">
-              {statusCounts.draft}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Badge variant="outline" className="text-xs">
-              {t("dashboard:stats.awaitingReview")}
-            </Badge>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardDescription>{t("dashboard:stats.completed")}</CardDescription>
-              <CheckCircleIcon className="size-4 text-muted-foreground" />
-            </div>
-            <CardTitle className="text-2xl font-semibold tabular-nums">
-              {statusCounts.completed}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-1.5 text-xs text-primary">
-              <CheckCircleIcon className="size-3" />
-              {t("dashboard:stats.done")}
-            </div>
-          </CardContent>
-        </Card>
+        {statCards.map((stat, i) => {
+          const { Icon, bg, color } = STAT_ICONS[i];
+          return (
+            <Card key={i} className="transition-shadow hover:shadow-md">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardDescription>{stat.label}</CardDescription>
+                  <div className={`flex size-8 items-center justify-center rounded-lg ${bg}`}>
+                    <Icon className={`size-4 ${color}`} />
+                  </div>
+                </div>
+                <CardTitle className="text-3xl font-bold tabular-nums">
+                  {stat.value}
+                </CardTitle>
+              </CardHeader>
+              <CardFooter className="pt-0">
+                <span className="text-xs text-muted-foreground">{stat.sub}</span>
+              </CardFooter>
+            </Card>
+          );
+        })}
       </div>
+
+      {/* Usage progress for starter plan */}
+      {projectUsagePct >= 0 && (
+        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">{t("dashboard:usage.planUsage", { defaultValue: "Project usage" })}</span>
+              <span className="text-sm text-muted-foreground">{statusCounts.total} / {planLimit}</span>
+            </div>
+            <Progress value={projectUsagePct} />
+            {projectUsagePct >= 80 && (
+              <p className="text-xs text-amber-500 mt-2">
+                {t("dashboard:usage.nearLimit", { defaultValue: "You're approaching your plan limit. Consider upgrading." })}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main content: activity + quick actions */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Recent Activity */}
+        {/* Recent Activity with timeline */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">
-              {t("dashboard:recentActivity.title")}
-            </CardTitle>
-            <CardDescription>
-              {t("dashboard:recentActivity.description")}
-            </CardDescription>
+            <CardTitle className="text-base">{t("dashboard:recentActivity.title")}</CardTitle>
+            <CardDescription>{t("dashboard:recentActivity.description")}</CardDescription>
           </CardHeader>
           <CardContent>
             {recentActivity.length === 0 ? (
@@ -309,7 +246,7 @@ export function DashboardPage() {
                 {t("dashboard:recentActivity.empty")}
               </p>
             ) : (
-              <div className="divide-y divide-border">
+              <div className="relative">
                 {recentActivity.map((event, i) => (
                   <RecentActivityItem key={i} event={event} />
                 ))}
@@ -334,36 +271,22 @@ export function DashboardPage() {
 
         {/* Right column: Quick Actions + AI Usage */}
         <div className="flex flex-col gap-4">
-          {/* Quick Actions */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">
-                {t("dashboard:quickActions.title")}
-              </CardTitle>
+              <CardTitle className="text-base">{t("dashboard:quickActions.title")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
-              <Button
-                className="w-full justify-start"
-                onClick={() => navigate("/projects")}
-              >
-                <PlusIcon className="size-4 mr-2" />
-                {t("dashboard:quickActions.newProject")}
+              <Button className="w-full justify-between group" onClick={() => navigate("/projects")}>
+                <span className="flex items-center gap-2"><PlusIcon className="size-4" />{t("dashboard:quickActions.newProject")}</span>
+                <ArrowRightIcon className="size-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
               </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => navigate("/projects")}
-              >
-                <EyeIcon className="size-4 mr-2" />
-                {t("dashboard:quickActions.viewPendingReviews")}
+              <Button variant="outline" className="w-full justify-between group" onClick={() => navigate("/projects")}>
+                <span className="flex items-center gap-2"><EyeIcon className="size-4" />{t("dashboard:quickActions.viewPendingReviews")}</span>
+                <ArrowRightIcon className="size-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
               </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => navigate("/projects")}
-              >
-                <DownloadIcon className="size-4 mr-2" />
-                {t("dashboard:quickActions.exportLatest")}
+              <Button variant="outline" className="w-full justify-between group" onClick={() => navigate("/projects")}>
+                <span className="flex items-center gap-2"><DownloadIcon className="size-4" />{t("dashboard:quickActions.exportLatest")}</span>
+                <ArrowRightIcon className="size-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
               </Button>
             </CardContent>
           </Card>
@@ -372,34 +295,26 @@ export function DashboardPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
-                <SparklesIcon className="size-4 text-primary" />
-                <CardTitle className="text-base">
-                  {t("dashboard:aiUsage.title")}
-                </CardTitle>
+                <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
+                  <SparklesIcon className="size-3.5 text-primary" />
+                </div>
+                <CardTitle className="text-base">{t("dashboard:aiUsage.title")}</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {t("dashboard:aiUsage.activeProviders")}
-                </span>
-                <span className="font-medium">
-                  {activeProviders} / {totalProviders}
-                </span>
+            <CardContent className="flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-muted/50 p-3 text-center">
+                  <p className="text-2xl font-bold tabular-nums">{activeProviders}</p>
+                  <p className="text-xs text-muted-foreground">{t("dashboard:aiUsage.activeProviders")}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-3 text-center">
+                  <p className="text-2xl font-bold tabular-nums">{totalDrafts}</p>
+                  <p className="text-xs text-muted-foreground">{t("dashboard:aiUsage.totalDrafts")}</p>
+                </div>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {t("dashboard:aiUsage.totalDrafts")}
-                </span>
-                <span className="font-medium">
-                  {allRuns?.filter((r) => r.run_type === "draft").length ?? 0}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {t("dashboard:aiUsage.totalRuns")}
-                </span>
-                <span className="font-medium">{allRuns?.length ?? 0}</span>
+                <span className="text-muted-foreground">{t("dashboard:aiUsage.totalRuns")}</span>
+                <span className="font-medium tabular-nums">{allRuns?.length ?? 0}</span>
               </div>
               {totalProviders === 0 && (
                 <Link to="/settings/providers">

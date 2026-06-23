@@ -32,10 +32,9 @@ export function AppSidebar({
   return (
     <Sidebar
       collapsible="icon"
-      className="border-r"
+      className="border-r dark:bg-[var(--surface-1)]"
       style={{
         borderColor: "var(--border)",
-        background: "var(--background)",
       }}
       {...props}
     >

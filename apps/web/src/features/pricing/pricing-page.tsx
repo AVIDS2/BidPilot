@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeftIcon, FileTextIcon } from "lucide-react";
+import { ArrowLeftIcon, CheckIcon, FileTextIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Link, useNavigate } from "react-router-dom";
 import { createCheckout } from "@/lib/api";
@@ -107,12 +107,10 @@ function TierCard({
       <ul className="space-y-4 flex-1">
         {tier.features.map((feat) => (
           <li key={feat} className="flex items-start gap-3">
-            <span
-              className="mt-1 w-4 h-4 flex items-center justify-center text-xs shrink-0"
+            <CheckIcon
+              className="mt-1 size-4 shrink-0"
               style={{ color: inPlatform ? "var(--primary)" : "var(--landing-accent)" }}
-            >
-              ✓
-            </span>
+            />
             <span className="text-sm" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-secondary)" }}>
               {feat}
             </span>

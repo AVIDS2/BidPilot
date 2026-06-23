@@ -8,13 +8,18 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.auth.service import check_plan_limit
 from app.bundles.service import list_bundles_query
-from app.deliverables.service import list_deliverables_query
+from app.deliverables.schemas import DeliverableCreate
+from app.deliverables.service import create_deliverable_command, list_deliverables_query
+from app.documents.service import list_documents_query
 from app.drafting.schemas import DraftSectionRequest, RedraftSectionRequest
 from app.drafting.service import draft_section_command, redraft_section_command
-from app.execution.service import list_runs_query
+from app.evidence.service import list_evidence_query
+from app.execution.service import list_runs_query, retry_failed_run_command
 from app.models import Deliverable, DeliverableSection, Project, ReviewThread
 from app.projects.schemas import ProjectCreate
 from app.projects.service import create_project_command
+from app.requirements.service import list_requirements_query
+from app.versions.service import list_versions_query
 
 from .schemas import AssistantToolResult
 
@@ -45,6 +50,26 @@ def execute_tool(
         return start_draft_section(db, user, arguments)
     if tool_name == "start_redraft_section":
         return start_redraft_section(db, user, arguments)
+    if tool_name == "list_requirements":
+        return list_requirements_tool(db, user, arguments)
+    if tool_name == "list_evidence":
+        return list_evidence_tool(db, user, arguments)
+    if tool_name == "list_deliverables":
+        return list_deliverables_tool(db, user, arguments)
+    if tool_name == "list_documents":
+        return list_documents_tool(db, user, arguments)
+    if tool_name == "get_section_versions":
+        return get_section_versions_tool(db, user, arguments)
+    if tool_name == "create_deliverable":
+        return create_deliverable_tool(db, user, arguments)
+    if tool_name == "retry_run":
+        return retry_run_tool(db, user, arguments)
+    if tool_name == "export_deliverable":
+        return export_deliverable_tool(db, user, arguments)
+    if tool_name == "delete_project":
+        return delete_project_tool(db, user, arguments)
+    if tool_name == "upload_document":
+        return upload_document_stub(arguments)
     raise ValueError(f"Unsupported assistant tool: {tool_name}")
 
 
@@ -251,3 +276,128 @@ def _get_project_for_user(db: Session, user: CurrentUser, project_id: str) -> Pr
     if project.org_id != (user.org_id or "default"):
         raise ValueError("Project not found")
     return project
+
+
+# ── New read-only tools ──────────────────────────────────────────────────────
+
+
+def list_requirements_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    items = list_requirements_query(db, project.id)
+    return AssistantToolResult(
+        tool_name="list_requirements",
+        result={"items": [item.model_dump() for item in items]},
+        summary=f"项目「{project.name}」下有 {len(items)} 条需求。",
+    )
+
+
+def list_evidence_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    items = list_evidence_query(db, project.id)
+    return AssistantToolResult(
+        tool_name="list_evidence",
+        result={"items": [item.model_dump() for item in items]},
+        summary=f"项目「{project.name}」下有 {len(items)} 条证据。",
+    )
+
+
+def list_deliverables_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    items = list_deliverables_query(db, project.id)
+    return AssistantToolResult(
+        tool_name="list_deliverables",
+        result={"items": [item.model_dump() for item in items]},
+        summary=f"项目「{project.name}」下有 {len(items)} 个交付物。",
+    )
+
+
+def list_documents_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    bundle_id = arguments.get("bundle_id")
+    if bundle_id:
+        items = list_documents_query(db, bundle_id)
+    else:
+        items = []
+    return AssistantToolResult(
+        tool_name="list_documents",
+        result={"items": [item.model_dump() for item in items]},
+        summary=f"找到 {len(items)} 个文档。",
+    )
+
+
+def get_section_versions_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    _get_project_for_user(db, user, arguments["project_id"])
+    section_id = arguments.get("section_id", "")
+    items = list_versions_query(db, section_id) if section_id else []
+    return AssistantToolResult(
+        tool_name="get_section_versions",
+        result={"items": [item.model_dump() for item in items]},
+        summary=f"找到 {len(items)} 个版本。",
+    )
+
+
+# ── New mutation tools ───────────────────────────────────────────────────────
+
+
+def create_deliverable_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    title = str(arguments.get("title") or "").strip()
+    if not title:
+        raise ValueError("Deliverable title is required")
+    deliverable = create_deliverable_command(
+        db, DeliverableCreate(project_id=project.id, type=arguments.get("type", "proposal"), title=title)
+    )
+    return AssistantToolResult(
+        tool_name="create_deliverable",
+        result=deliverable.model_dump(),
+        summary=f"交付物「{deliverable.title}」已创建。",
+    )
+
+
+def retry_run_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    run_id = arguments.get("run_id", "")
+    if not run_id:
+        raise ValueError("run_id is required")
+    run = retry_failed_run_command(db, run_id)
+    return AssistantToolResult(
+        tool_name="retry_run",
+        result=run.model_dump(),
+        summary=f"已重试运行 {run_id[:8]}。",
+    )
+
+
+def export_deliverable_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    deliverable_id = arguments.get("deliverable_id", "")
+    fmt = arguments.get("format", "docx")
+    if not deliverable_id:
+        raise ValueError("deliverable_id is required")
+    deliverable = db.get(Deliverable, deliverable_id)
+    if deliverable is None:
+        raise ValueError("Deliverable not found")
+    if deliverable.status != "approved":
+        raise ValueError("Deliverable must be approved before export")
+    return AssistantToolResult(
+        tool_name="export_deliverable",
+        result={"deliverable_id": deliverable_id, "format": fmt, "status": "ready"},
+        summary=f"交付物「{deliverable.title}」的 {fmt.upper()} 导出已就绪，请前往导出页面下载。",
+    )
+
+
+def delete_project_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    name = project.name
+    db.delete(project)
+    db.commit()
+    return AssistantToolResult(
+        tool_name="delete_project",
+        result={"deleted": True, "project_id": arguments["project_id"]},
+        summary=f"项目「{name}」已删除。",
+    )
+
+
+def upload_document_stub(arguments: dict) -> AssistantToolResult:
+    return AssistantToolResult(
+        tool_name="upload_document",
+        result={"action": "redirect_to_ui"},
+        summary="文档上传需要通过界面操作。请在项目的资料包页面中点击上传按钮。",
+    )

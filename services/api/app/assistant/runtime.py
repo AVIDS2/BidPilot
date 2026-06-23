@@ -122,6 +122,41 @@ def classify_locally(message: str, project_id: str | None = None) -> AssistantIn
             arguments={"query": _extract_search_query(text)},
         )
 
+    if _looks_like_list_requirements(text):
+        return AssistantIntent(
+            mode="tool_action",
+            tool_name="list_requirements",
+            arguments={"project_id": project_id or ""},
+        )
+
+    if _looks_like_list_evidence(text):
+        return AssistantIntent(
+            mode="tool_action",
+            tool_name="list_evidence",
+            arguments={"project_id": project_id or ""},
+        )
+
+    if _looks_like_list_documents(text):
+        return AssistantIntent(
+            mode="tool_action",
+            tool_name="list_documents",
+            arguments={"project_id": project_id or ""},
+        )
+
+    if _looks_like_list_versions(text):
+        return AssistantIntent(
+            mode="tool_action",
+            tool_name="get_section_versions",
+            arguments={"project_id": project_id or ""},
+        )
+
+    if _looks_like_export(text):
+        return AssistantIntent(
+            mode="tool_action",
+            tool_name="export_deliverable",
+            arguments={"project_id": project_id or ""},
+        )
+
     return AssistantIntent(
         mode="answer",
         response="我没抓到一个明确的平台动作。你可以直接说“创建项目：项目名”或“打开项目页面”，我会继续执行到确认步骤。",
@@ -183,3 +218,31 @@ def _route_for_message(lowered: str) -> str:
 def _extract_search_query(text: str) -> str | None:
     query = re.sub(r"(找|搜索|查询|列出|看看|项目)", "", text).strip()
     return query or None
+
+
+def _looks_like_list_requirements(text: str) -> bool:
+    return any(word in text for word in ("需求", "要求", "requirement")) and any(
+        word in text for word in ("查看", "列出", "看看", "有哪些", "多少", "list", "show")
+    )
+
+
+def _looks_like_list_evidence(text: str) -> bool:
+    return any(word in text for word in ("证据", "知识", "引用", "evidence", "chunk")) and any(
+        word in text for word in ("查看", "列出", "看看", "有哪些", "多少", "list", "show")
+    )
+
+
+def _looks_like_list_documents(text: str) -> bool:
+    return any(word in text for word in ("文档", "资料", "文件", "document")) and any(
+        word in text for word in ("查看", "列出", "看看", "有哪些", "多少", "list", "show")
+    )
+
+
+def _looks_like_list_versions(text: str) -> bool:
+    return any(word in text for word in ("版本", "历史", "version", "history")) and any(
+        word in text for word in ("查看", "列出", "看看", "有哪些", "list", "show")
+    )
+
+
+def _looks_like_export(text: str) -> bool:
+    return any(word in text for word in ("导出", "下载", "export", "download", "docx", "pdf"))

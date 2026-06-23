@@ -3,8 +3,19 @@ import { Link, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { requestPasswordReset } from "@/lib/api"
 import { toast } from "sonner"
-import { MailIcon } from "lucide-react"
+import { Loader2Icon, MailIcon } from "lucide-react"
 import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+
+const FilmFrameAnnotations = () => (
+  <div className="absolute inset-0 pointer-events-none z-10">
+    <span className="absolute top-6 left-6 text-[10px] text-foreground/20 font-mono">DocPilot v1.0</span>
+    <span className="absolute top-6 right-6 text-[10px] text-foreground/20 font-mono">[16:9]</span>
+    <span className="absolute bottom-6 left-6 text-[10px] text-foreground/20 font-mono">OVERSCAN: 1920 x 1080</span>
+    <span className="absolute bottom-6 right-6 text-[10px] text-foreground/20 font-mono">100%</span>
+  </div>
+)
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
@@ -37,26 +48,21 @@ export function ForgotPasswordPage() {
   if (sent) {
     return (
       <div className="h-screen flex items-center justify-center bg-background px-6">
-        <div className="absolute inset-0 pointer-events-none z-10">
-          <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">DocPilot v1.0</span>
-          <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">[16:9]</span>
-          <span className="absolute bottom-6 left-6 text-[10px] text-white/30 font-mono">OVERSCAN: 1920 x 1080</span>
-          <span className="absolute bottom-6 right-6 text-[10px] text-white/30 font-mono">100%</span>
-        </div>
+        <FilmFrameAnnotations />
         <div className="relative z-20 w-full max-w-md text-center">
-          <div className="p-8" style={{ background: "var(--landing-surface-1)", border: "1px solid var(--landing-hairline)" }}>
-            <MailIcon className="mx-auto size-8 mb-4" style={{ color: "var(--landing-accent)" }} />
-            <h1 className="text-xl font-bold text-white mb-2">{t("forgotPassword.checkEmail")}</h1>
-            <p className="text-sm mb-6" style={{ color: "var(--landing-text-secondary)" }}>
+          <div className="p-8 rounded-xl bg-card border border-border shadow-sm">
+            <MailIcon className="mx-auto size-8 mb-4 text-primary" />
+            <h1 className="text-xl font-bold text-foreground mb-2">{t("forgotPassword.checkEmail")}</h1>
+            <p className="text-sm mb-6 text-muted-foreground">
               {t("forgotPassword.emailSent", { email })}
             </p>
-            <button
+            <Button
+              variant="outline"
               onClick={() => navigate("/login")}
-              className="w-full py-3 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
-              style={{ border: "1px solid var(--landing-hairline)", color: "var(--landing-text-secondary)" }}
+              className="w-full h-10"
             >
               {t("forgotPassword.backToLogin")}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -65,12 +71,7 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="h-screen flex items-center justify-center bg-background px-6">
-      <div className="absolute inset-0 pointer-events-none z-10">
-        <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">DocPilot v1.0</span>
-        <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">[16:9]</span>
-        <span className="absolute bottom-6 left-6 text-[10px] text-white/30 font-mono">OVERSCAN: 1920 x 1080</span>
-        <span className="absolute bottom-6 right-6 text-[10px] text-white/30 font-mono">100%</span>
-      </div>
+      <FilmFrameAnnotations />
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -79,25 +80,25 @@ export function ForgotPasswordPage() {
       />
       <div className="relative z-20 w-full max-w-md">
         <div className="text-center mb-10">
-          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300">
+          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-foreground hover:text-primary transition-colors duration-300">
             DocPilot
           </Link>
-          <p className="mt-3 text-sm" style={{ color: "var(--landing-text-tertiary)" }}>{t("forgotPassword.title")}</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t("forgotPassword.title")}</p>
         </div>
-        <div className="p-8" style={{ background: "var(--landing-surface-1)", border: "1px solid var(--landing-hairline)" }}>
+        <div className="p-8 rounded-xl bg-card border border-border shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium mb-2" style={{ color: "var(--landing-text-secondary)" }}>
+            <div className="space-y-2">
+              <label htmlFor="email" className="block text-sm font-medium text-foreground">
                 {t("forgotPassword.emailLabel")}
               </label>
-              <input
+              <Input
                 id="email"
                 type="email"
                 placeholder={t("forgotPassword.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
+                className="h-10"
               />
             </div>
             <TurnstileWidget
@@ -106,29 +107,20 @@ export function ForgotPasswordPage() {
               onWidgetIdChange={setTurnstileWidgetId}
               className="min-h-[65px]"
             />
-            <button
+            <Button
               type="submit"
               disabled={loading || !email || (isTurnstileConfigured() && !turnstileToken)}
-              className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="w-full h-10"
             >
-              {loading ? (
-                <span className="inline-flex items-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  {t("forgotPassword.submit")}
-                </span>
-              ) : (
-                t("forgotPassword.submit")
-              )}
-            </button>
+              {loading && <Loader2Icon className="animate-spin" />}
+              {t("forgotPassword.submit")}
+            </Button>
           </form>
-          <p className="mt-6 text-center text-xs" style={{ color: "var(--landing-text-tertiary)" }}>
+          <p className="mt-6 text-center text-xs text-muted-foreground">
             {t("forgotPassword.rememberPassword")}{" "}
-            <a href="/login" className="text-muted-foreground hover:text-primary transition-colors duration-300">
+            <Link to="/login" className="text-foreground hover:text-primary transition-colors duration-300 font-medium">
               {t("forgotPassword.signIn")}
-            </a>
+            </Link>
           </p>
         </div>
       </div>

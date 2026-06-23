@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncGenerator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,9 @@ async def stream_assistant_response(
         return
 
     task_state = _get_task_state(db, conversation_id)
+    if _is_stale_task_state(task_state):
+        _clear_task_state(db, conversation_id)
+        task_state = None
     if _is_pending_confirmation(task_state):
         if _is_cancel_followup(payload.message):
             async for event in _handle_confirmation(
@@ -361,6 +364,15 @@ def _clear_task_state(db: Session, conversation_id: str) -> None:
 
 def _is_pending_confirmation(task_state: ChatTaskState | None) -> bool:
     return task_state is not None and task_state.status == "needs_confirmation" and bool(task_state.tool_name)
+
+
+_TASK_STATE_TTL = timedelta(minutes=30)
+
+
+def _is_stale_task_state(task_state: ChatTaskState | None) -> bool:
+    if task_state is None:
+        return False
+    return datetime.now(UTC) - task_state.updated_at.replace(tzinfo=UTC) > _TASK_STATE_TTL
 
 
 def _is_confirm_followup(message: str) -> bool:

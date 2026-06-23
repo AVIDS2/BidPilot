@@ -6,6 +6,9 @@ CONFIRMATION_REQUIRED_TOOLS = {
     "create_project",
     "start_draft_section",
     "start_redraft_section",
+    "create_deliverable",
+    "retry_run",
+    "delete_project",
 }
 
 

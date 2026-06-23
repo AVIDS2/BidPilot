@@ -3,8 +3,11 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
+import { EyeIcon, EyeOffIcon, Loader2Icon } from "lucide-react";
 import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget";
 import { isStrongPassword } from "@/lib/password";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export function SignupPage() {
   const [searchParams] = useSearchParams();
@@ -14,6 +17,8 @@ export function SignupPage() {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [invitationToken, setInvitationToken] = useState(invToken);
   const createOrg = !invitationToken;
   const [orgName, setOrgName] = useState("");
@@ -83,16 +88,16 @@ export function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12">
       {/* 影视画框标注 */}
       <div className="absolute inset-0 pointer-events-none z-10">
-        <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">
+        <span className="absolute top-6 left-6 text-[10px] text-foreground/20 font-mono">
           DocPilot v1.0
         </span>
-        <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">
+        <span className="absolute top-6 right-6 text-[10px] text-foreground/20 font-mono">
           [16:9]
         </span>
-        <span className="absolute bottom-6 left-6 text-[10px] text-white/30 font-mono">
+        <span className="absolute bottom-6 left-6 text-[10px] text-foreground/20 font-mono">
           OVERSCAN: 1920 x 1080
         </span>
-        <span className="absolute bottom-6 right-6 text-[10px] text-white/30 font-mono">
+        <span className="absolute bottom-6 right-6 text-[10px] text-foreground/20 font-mono">
           100%
         </span>
       </div>
@@ -110,7 +115,7 @@ export function SignupPage() {
         <div className="text-center mb-10">
           <Link
             to="/"
-            className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300"
+            className="text-3xl font-medium tracking-[-0.04em] text-foreground hover:text-primary transition-colors duration-300"
           >
             DocPilot
           </Link>
@@ -120,91 +125,85 @@ export function SignupPage() {
         </div>
 
         {/* 表单卡片 */}
-        <div
-          className="p-8"
-          style={{
-            background: "var(--landing-surface-1)",
-            border: "1px solid var(--landing-hairline)",
-          }}
-        >
+        <div className="p-8 rounded-xl bg-card border border-border shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* 显示名称 */}
-            <div>
+            <div className="space-y-2">
               <label
                 htmlFor="display-name"
-                className="block text-sm font-medium text-muted-foreground mb-2"
+                className="block text-sm font-medium text-foreground"
               >
                 {t("signup.displayNameLabel")}
               </label>
-              <input
+              <Input
                 id="display-name"
                 type="text"
                 placeholder={t("signup.displayNamePlaceholder")}
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 required
-                className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
+                className="h-10"
               />
             </div>
 
             {/* 邮箱 */}
-            <div>
+            <div className="space-y-2">
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-muted-foreground mb-2"
+                className="block text-sm font-medium text-foreground"
               >
                 {t("signup.emailLabel")}
               </label>
-              <input
+              <Input
                 id="email"
                 type="email"
                 placeholder={t("signup.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
+                className="h-10"
               />
-              <p className="mt-1.5 text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("signup.emailDescription")}
               </p>
             </div>
 
             {/* 组织区域 */}
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-foreground">
                 {t("signup.orgLabel")}
               </label>
-              <p className="mb-3 text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("signup.orgDescription")}
               </p>
 
               {!hasInvitation && (
-                <div className="space-y-4">
-                  <div>
+                <div className="space-y-4 mt-3">
+                  <div className="space-y-2">
                     <label
                       htmlFor="org-name"
-                      className="block text-xs font-medium text-muted-foreground mb-1.5"
+                      className="block text-xs font-medium text-muted-foreground"
                     >
                       {t("signup.orgNameLabel")}
                     </label>
-                    <input
+                    <Input
                       id="org-name"
                       type="text"
                       placeholder={t("signup.orgNamePlaceholder")}
                       value={orgName}
                       onChange={(e) => setOrgName(e.target.value)}
                       required={createOrg}
-                      className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
+                      className="h-10"
                     />
                   </div>
-                  <div>
+                  <div className="space-y-2">
                     <label
                       htmlFor="org-slug"
-                      className="block text-xs font-medium text-muted-foreground mb-1.5"
+                      className="block text-xs font-medium text-muted-foreground"
                     >
                       {t("signup.orgSlugLabel")}
                     </label>
-                    <input
+                    <Input
                       id="org-slug"
                       type="text"
                       placeholder={t("signup.orgSlugPlaceholder")}
@@ -217,9 +216,9 @@ export function SignupPage() {
                         )
                       }
                       required={createOrg}
-                      className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
+                      className="h-10"
                     />
-                    <p className="mt-1.5 text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {t("signup.orgSlugDescription")}
                     </p>
                   </div>
@@ -227,22 +226,22 @@ export function SignupPage() {
               )}
 
               {hasInvitation && (
-                <div className="p-3 bg-muted border border-border">
+                <div className="p-4 mt-3 rounded-lg bg-muted border border-border space-y-2">
                   <label
                     htmlFor="invitation-token"
-                    className="block text-xs font-medium text-muted-foreground mb-1.5"
+                    className="block text-xs font-medium text-muted-foreground"
                   >
                     {t("signup.invitationTokenLabel")}
                   </label>
-                  <input
+                  <Input
                     id="invitation-token"
                     type="text"
                     placeholder={t("signup.invitationTokenPlaceholder")}
                     value={invitationToken}
                     onChange={(e) => setInvitationToken(e.target.value)}
-                    className="w-full px-4 py-3 text-sm text-white bg-background border border-border outline-none focus:border-primary transition-colors duration-300"
+                    className="h-10"
                   />
-                  <p className="mt-1.5 text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t("signup.invitationTokenDescription")}
                   </p>
                 </div>
@@ -251,37 +250,65 @@ export function SignupPage() {
 
             {/* 密码 */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
+              <div className="space-y-2">
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-muted-foreground mb-2"
+                  className="block text-sm font-medium text-foreground"
                 >
                   {t("signup.passwordLabel")}
                 </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="h-10 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? (
+                      <EyeOffIcon className="size-4" />
+                    ) : (
+                      <EyeIcon className="size-4" />
+                    )}
+                  </button>
+                </div>
               </div>
-              <div>
+              <div className="space-y-2">
                 <label
                   htmlFor="confirm-password"
-                  className="block text-sm font-medium text-muted-foreground mb-2"
+                  className="block text-sm font-medium text-foreground"
                 >
                   {t("signup.confirmPasswordLabel")}
                 </label>
-                <input
-                  id="confirm-password"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
-                />
+                <div className="relative">
+                  <Input
+                    id="confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="h-10 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOffIcon className="size-4" />
+                    ) : (
+                      <EyeIcon className="size-4" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
             <p className="text-xs text-muted-foreground -mt-2">
@@ -296,38 +323,14 @@ export function SignupPage() {
             />
 
             {/* 提交按钮 */}
-            <button
+            <Button
               type="submit"
               disabled={loading || !email || !displayName || !password || (isTurnstileConfigured() && !turnstileToken)}
-              className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="w-full h-10"
             >
-              {loading ? (
-                <span className="inline-flex items-center gap-2">
-                  <svg
-                    className="animate-spin h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  {t("signup.submit")}
-                </span>
-              ) : (
-                t("signup.submit")
-              )}
-            </button>
+              {loading && <Loader2Icon className="animate-spin" />}
+              {t("signup.submit")}
+            </Button>
           </form>
         </div>
 
@@ -337,7 +340,7 @@ export function SignupPage() {
             {t("signup.hasAccount")}{" "}
             <Link
               to="/login"
-              className="text-muted-foreground hover:text-primary transition-colors duration-300"
+              className="text-foreground hover:text-primary transition-colors duration-300 font-medium"
             >
               {t("signup.signIn")}
             </Link>
@@ -345,7 +348,7 @@ export function SignupPage() {
         </div>
 
         {/* 条款 */}
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+        <p className="mt-6 text-center text-xs text-muted-foreground/60">
           {t("login.termsText")}{" "}
           <a
             href="#"

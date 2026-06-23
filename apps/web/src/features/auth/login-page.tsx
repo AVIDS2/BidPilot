@@ -4,12 +4,15 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 import { resendVerification } from "@/lib/api";
 import { toast } from "sonner";
-import { MailIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, Loader2Icon, MailIcon } from "lucide-react";
 import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
@@ -80,16 +83,16 @@ export function LoginPage() {
     <div className="h-screen flex items-center justify-center bg-background px-6">
       {/* 影视画框标注 */}
       <div className="absolute inset-0 pointer-events-none z-10">
-        <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">
+        <span className="absolute top-6 left-6 text-[10px] text-foreground/20 font-mono">
           DocPilot v1.0
         </span>
-        <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">
+        <span className="absolute top-6 right-6 text-[10px] text-foreground/20 font-mono">
           [16:9]
         </span>
-        <span className="absolute bottom-6 left-6 text-[10px] text-white/30 font-mono">
+        <span className="absolute bottom-6 left-6 text-[10px] text-foreground/20 font-mono">
           OVERSCAN: 1920 x 1080
         </span>
-        <span className="absolute bottom-6 right-6 text-[10px] text-white/30 font-mono">
+        <span className="absolute bottom-6 right-6 text-[10px] text-foreground/20 font-mono">
           100%
         </span>
       </div>
@@ -107,7 +110,7 @@ export function LoginPage() {
         <div className="text-center mb-10">
           <Link
             to="/"
-            className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300"
+            className="text-3xl font-medium tracking-[-0.04em] text-foreground hover:text-primary transition-colors duration-300"
           >
             DocPilot
           </Link>
@@ -117,37 +120,31 @@ export function LoginPage() {
         </div>
 
         {/* 表单卡片 */}
-        <div
-          className="p-8"
-          style={{
-            background: "var(--landing-surface-1)",
-            border: "1px solid var(--landing-hairline)",
-          }}
-        >
+        <div className="p-8 rounded-xl bg-card border border-border shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
+            <div className="space-y-2">
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-muted-foreground mb-2"
+                className="block text-sm font-medium text-foreground"
               >
                 {t("login.emailLabel")}
               </label>
-              <input
+              <Input
                 id="email"
                 type="email"
                 placeholder={t("login.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
+                className="h-10"
               />
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
                 <label
                   htmlFor="password"
-                  className="block text-sm font-medium text-muted-foreground"
+                  className="block text-sm font-medium text-foreground"
                 >
                   {t("login.passwordLabel")}
                 </label>
@@ -158,14 +155,28 @@ export function LoginPage() {
                   {t("login.forgotPassword")}
                 </Link>
               </div>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full px-4 py-3 text-sm text-white bg-muted border border-border outline-none focus:border-primary transition-colors duration-300"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="h-10 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOffIcon className="size-4" />
+                  ) : (
+                    <EyeIcon className="size-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <TurnstileWidget
@@ -175,54 +186,30 @@ export function LoginPage() {
               className="min-h-[65px]"
             />
 
-            <button
+            <Button
               type="submit"
               disabled={loading || !email || !password || (isTurnstileConfigured() && !turnstileToken)}
-              className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="w-full h-10"
             >
-              {loading ? (
-                <span className="inline-flex items-center gap-2">
-                  <svg
-                    className="animate-spin h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  {t("login.submit")}
-                </span>
-              ) : (
-                t("login.submit")
-              )}
-            </button>
+              {loading && <Loader2Icon className="animate-spin" />}
+              {t("login.submit")}
+            </Button>
 
             {/* 未验证邮箱提示 */}
             {unverifiedEmail && (
-              <div className="p-3 text-sm text-amber-400 bg-amber-400/10 border border-amber-400/20">
+              <div className="p-4 rounded-lg text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-400/10 border border-amber-200 dark:border-amber-400/20">
                 <div className="flex items-center gap-2 font-medium mb-1">
                   <MailIcon className="size-4" />
                   {t("unverified.title")}
                 </div>
-                <p className="mb-2 text-amber-400/80">
+                <p className="mb-2 text-amber-600/80 dark:text-amber-400/80">
                   {t("unverified.description")}
                 </p>
                 <button
                   type="button"
                   onClick={handleResendVerification}
                   disabled={resending || (isTurnstileConfigured() && !turnstileToken)}
-                  className="text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors duration-300 underline underline-offset-2"
+                  className="text-xs font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors duration-300 underline underline-offset-2"
                 >
                   {resending ? "发送中..." : t("unverified.resend")}
                 </button>
@@ -237,7 +224,7 @@ export function LoginPage() {
             {t("login.noAccount")}{" "}
             <Link
               to="/signup"
-              className="text-muted-foreground hover:text-primary transition-colors duration-300"
+              className="text-foreground hover:text-primary transition-colors duration-300 font-medium"
             >
               {t("login.signUp")}
             </Link>
@@ -245,7 +232,7 @@ export function LoginPage() {
         </div>
 
         {/* 条款 */}
-        <p className="mt-6 text-center text-xs text-muted-foreground">
+        <p className="mt-6 text-center text-xs text-muted-foreground/60">
           {t("login.termsText")}{" "}
           <a
             href="#"
