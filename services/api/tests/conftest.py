@@ -26,6 +26,11 @@ api_root = Path(__file__).resolve().parent.parent
 if str(api_root) not in sys.path:
     sys.path.insert(0, str(api_root))
 
+# Ensure shared packages are importable
+repo_root = api_root.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
 # Reset module-level AUTH_REQUIRED flag that may have been set during import
 try:
     from app.auth import service as _auth_service

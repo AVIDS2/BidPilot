@@ -1,10 +1,17 @@
 import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+
+# Ensure shared packages are importable
+_repo_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
 
 from app.db import Base, DATABASE_URL
 import app.models  # noqa: F401 — ensure models are registered on Base.metadata

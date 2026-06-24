@@ -6,6 +6,7 @@ dependencies = [
   "alembic>=1.15.0",
   "bcrypt>=4.0.0",
   "celery[redis]>=5.5.0",
+  "contracts",
   "fastapi>=0.115.12",
   "minio>=7.2.20",
   "pgvector>=0.4.2",

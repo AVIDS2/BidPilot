@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "celery[redis]>=5.5.0",
+  "contracts",
   "cryptography>=48.0.1",
   "httpx>=0.28.1",
   "langchain-anthropic>=0.3",

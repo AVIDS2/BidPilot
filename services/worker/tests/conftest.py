@@ -5,3 +5,8 @@ from pathlib import Path
 worker_root = Path(__file__).resolve().parent.parent
 if str(worker_root) not in sys.path:
     sys.path.insert(0, str(worker_root))
+
+# Ensure shared packages are importable
+repo_root = worker_root.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))

@@ -4,12 +4,14 @@ WORKDIR /app
 
 COPY pyproject.toml /app/pyproject.toml
 COPY uv.lock /app/uv.lock
+COPY packages/contracts/pyproject.toml /app/packages/contracts/pyproject.toml
 COPY services/api/pyproject.toml /app/services/api/pyproject.toml
 COPY services/worker/pyproject.toml /app/services/worker/pyproject.toml
 
 RUN uv sync --frozen --no-dev --no-install-workspace
 
 COPY services/api/app /app/services/api/app
+COPY packages/contracts /app/packages/contracts
 COPY services/api/alembic.ini /app/services/api/alembic.ini
 COPY services/api/alembic /app/services/api/alembic
 

@@ -421,6 +421,18 @@ def agent_1(state: MyState) -> dict:
 
 ---
 
+## 安全红线
+
+**绝对禁止将 API key、token、密码、secret 明文硬编码或提交到 git。**
+
+- 所有密钥通过环境变量（`.env`，不入仓库）或 secrets manager 注入
+- 代码中使用 `os.environ.get("KEY_NAME")` 读取，绝不写死值
+- 提交前检查 diff 中有无意外的 key/token/secret
+- 测试代码中的 mock key 使用明显占位符（如 `sk-test-placeholder-not-real`）
+- 发现已泄露的 key 立即提醒轮换
+
+---
+
 ## 最终原则
 
 **Optimize for continuous, reviewable progress toward a production system, not bursts of impressive but disconnected implementation.**
