@@ -7,14 +7,13 @@ ENV UV_HTTP_RETRIES=5
 
 COPY pyproject.toml /app/pyproject.toml
 COPY uv.lock /app/uv.lock
-COPY packages/contracts/pyproject.toml /app/packages/contracts/pyproject.toml
+COPY packages/contracts /app/packages/contracts
 COPY services/api/pyproject.toml /app/services/api/pyproject.toml
 COPY services/worker/pyproject.toml /app/services/worker/pyproject.toml
 
 RUN uv sync --frozen --no-dev --no-install-workspace
 
 COPY services/worker/app /app/services/worker/app
-COPY packages/contracts /app/packages/contracts
 
 RUN uv sync --frozen --no-dev --package docpilot-worker
 
