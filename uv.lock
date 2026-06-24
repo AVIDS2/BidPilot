@@ -8,6 +8,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "contracts",
     "docpilot",
     "docpilot-api",
     "docpilot-worker",
@@ -439,6 +440,21 @@ wheels = [
 ]
 
 [[package]]
+name = "contracts"
+version = "0.1.0"
+source = { editable = "packages/contracts" }
+dependencies = [
+    { name = "pgvector" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pgvector", specifier = ">=0.4.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.39" },
+]
+
+[[package]]
 name = "cryptography"
 version = "48.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -525,6 +541,7 @@ dependencies = [
     { name = "alembic" },
     { name = "bcrypt" },
     { name = "celery", extra = ["redis"] },
+    { name = "contracts" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "minio" },
@@ -556,6 +573,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.15.0" },
     { name = "bcrypt", specifier = ">=4.0.0" },
     { name = "celery", extras = ["redis"], specifier = ">=5.5.0" },
+    { name = "contracts", editable = "packages/contracts" },
     { name = "cryptography", specifier = ">=48.0.1" },
     { name = "fastapi", specifier = ">=0.115.12" },
     { name = "minio", specifier = ">=7.2.20" },
@@ -588,6 +606,7 @@ version = "0.1.0"
 source = { virtual = "services/worker" }
 dependencies = [
     { name = "celery", extra = ["redis"] },
+    { name = "contracts" },
     { name = "cryptography" },
     { name = "httpx" },
     { name = "langchain-anthropic" },
@@ -612,6 +631,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "celery", extras = ["redis"], specifier = ">=5.5.0" },
+    { name = "contracts", editable = "packages/contracts" },
     { name = "cryptography", specifier = ">=48.0.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain-anthropic", specifier = ">=0.3" },
