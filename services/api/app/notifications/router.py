@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import require_auth
+from app.auth.service import require_auth
 from app.auth.schemas import CurrentUser
 from app.db import get_db
 from app.models import Notification
