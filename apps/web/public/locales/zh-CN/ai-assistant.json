@@ -72,6 +72,15 @@
     "renameConversation": "重命名会话",
     "renameConversationHint": "双击重命名"
   },
+  "history": {
+    "today": "今天",
+    "yesterday": "昨天",
+    "thisWeek": "本周",
+    "earlier": "更早",
+    "searchPlaceholder": "搜索对话...",
+    "noResults": "没有匹配的对话",
+    "delete": "删除对话"
+  },
   "floating": {
     "ariaLabel": "DocPilot AI 助手",
     "openPanel": "打开面板",

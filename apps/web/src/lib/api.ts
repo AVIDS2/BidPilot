@@ -814,6 +814,12 @@ export function renameChatConversation(conversationId: string, title: string) {
   });
 }
 
+export function deleteChatConversation(conversationId: string) {
+  return request<void>(`/chat/conversations/${conversationId}`, {
+    method: "DELETE",
+  });
+}
+
 export function listProviderConfigs() {
   return request<{ data: ProviderConfig[] }>("/auth/me/providers");
 }

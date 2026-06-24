@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
 from app.db import get_db
-from app.models import ChatMessage as ChatMessageModel
+from app.models import ChatConversation, ChatMessage as ChatMessageModel
 
 from .schemas import ChatConversationRead, ChatConversationUpdate, ChatHistoryRead, ChatMessage, ChatRequest
 from .service import (
@@ -146,3 +146,17 @@ def update_chat_conversation(
         title=conversation.title,
         created_at=conversation.created_at.isoformat() if conversation.created_at else None,
     )
+
+
+@router.delete("/conversations/{conversation_id}", status_code=204)
+def delete_chat_conversation(
+    conversation_id: str,
+    user: CurrentUser = Depends(require_auth),
+    db: Session = Depends(get_db),
+):
+    """Delete a chat conversation owned by the current user."""
+    conversation = get_conversation(db, conversation_id, user.id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    db.delete(conversation)
+    db.commit()

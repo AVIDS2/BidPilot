@@ -72,6 +72,15 @@
     "renameConversation": "Rename conversation",
     "renameConversationHint": "Double-click to rename"
   },
+  "history": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This Week",
+    "earlier": "Earlier",
+    "searchPlaceholder": "Search conversations...",
+    "noResults": "No matching conversations",
+    "delete": "Delete conversation"
+  },
   "floating": {
     "ariaLabel": "DocPilot AI Assistant",
     "openPanel": "Open panel",
