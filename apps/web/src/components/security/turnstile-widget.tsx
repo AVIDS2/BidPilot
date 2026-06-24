@@ -64,7 +64,6 @@ export function TurnstileWidget({ action, onTokenChange, onWidgetIdChange, class
     script.id = TURNSTILE_SCRIPT_ID;
     script.src = TURNSTILE_SCRIPT_SRC;
     script.async = true;
-    script.defer = true;
     script.addEventListener("load", () => setScriptReady(true), { once: true });
     document.head.appendChild(script);
   }, []);
@@ -75,19 +74,17 @@ export function TurnstileWidget({ action, onTokenChange, onWidgetIdChange, class
 
     let cancelled = false;
 
-    window.turnstile.ready(() => {
-      if (cancelled || widgetIdRef.current || !window.turnstile || !containerRef.current) return;
+    if (cancelled || widgetIdRef.current || !window.turnstile || !containerRef.current) return;
 
-      widgetIdRef.current = window.turnstile.render(containerRef.current, {
-        sitekey: TURNSTILE_SITE_KEY,
-        action,
-        theme: "dark",
-        callback: (token) => onTokenChange(token),
-        "expired-callback": () => onTokenChange(null),
-        "error-callback": () => onTokenChange(null),
-      });
-      onWidgetIdChange?.(widgetIdRef.current);
+    widgetIdRef.current = window.turnstile.render(containerRef.current, {
+      sitekey: TURNSTILE_SITE_KEY,
+      action,
+      theme: "dark",
+      callback: (token) => onTokenChange(token),
+      "expired-callback": () => onTokenChange(null),
+      "error-callback": () => onTokenChange(null),
     });
+    onWidgetIdChange?.(widgetIdRef.current);
 
     return () => {
       cancelled = true;
