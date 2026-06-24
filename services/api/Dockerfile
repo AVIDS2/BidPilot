@@ -18,6 +18,8 @@ RUN uv sync --frozen --no-dev --package docpilot-api
 
 WORKDIR /app/services/api
 
+ENV PYTHONPATH=/app/packages
+
 EXPOSE 8000
 
 CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

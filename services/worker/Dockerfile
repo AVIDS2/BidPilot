@@ -19,4 +19,6 @@ RUN uv sync --frozen --no-dev --package docpilot-worker
 
 WORKDIR /app/services/worker
 
+ENV PYTHONPATH=/app/packages
+
 CMD ["/app/.venv/bin/celery", "-A", "app.celery_app", "worker", "--loglevel=info"]
