@@ -201,7 +201,7 @@ function HistorySidebar({
   };
 
   return (
-    <div className="w-64 shrink-0 flex flex-col border-r bg-card" style={{ borderColor: "var(--border)" }}>
+    <div className="w-64 h-full shrink-0 flex flex-col border-r bg-card shadow-xl" style={{ borderColor: "var(--border)" }}>
       {/* Header */}
       <div className="p-3 flex items-center justify-between border-b shrink-0" style={{ borderColor: "var(--border)" }}>
         <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -493,32 +493,41 @@ export function AIAssistantPanel() {
         </div>
       )}
 
-      {/* ─── Content: History sidebar (push) + Messages ─── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* ─── Content: Messages with floating history overlay ─── */}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
         {historyOpen && (
-          <HistorySidebar
-            conversations={Array.isArray(state.conversations) ? state.conversations : []}
-            currentId={state.currentConversationId}
-            searchQuery={historySearch}
-            onSearchChange={setHistorySearch}
-            onSelect={loadConversation}
-            onNew={startNewConversation}
-            onRename={beginRenameConversation}
-            onDelete={handleDeleteConversation}
-            onClose={() => setHistoryOpen(false)}
-            editingId={editingConversationId}
-            editingTitle={editingTitle}
-            onEditTitleChange={setEditingTitle}
-            onCommitRename={commitRenameConversation}
-            onCancelRename={cancelRenameConversation}
-            renamingId={renamingConversationId}
-            renameInputRef={renameInputRef}
-            t={t}
-          />
+          <>
+            <button
+              aria-label={t("panel.closeHistory")}
+              className="absolute inset-0 z-10 bg-black/20 backdrop-blur-[1px]"
+              onClick={() => setHistoryOpen(false)}
+            />
+            <div className="absolute inset-y-0 left-0 z-20">
+              <HistorySidebar
+                conversations={Array.isArray(state.conversations) ? state.conversations : []}
+                currentId={state.currentConversationId}
+                searchQuery={historySearch}
+                onSearchChange={setHistorySearch}
+                onSelect={loadConversation}
+                onNew={startNewConversation}
+                onRename={beginRenameConversation}
+                onDelete={handleDeleteConversation}
+                onClose={() => setHistoryOpen(false)}
+                editingId={editingConversationId}
+                editingTitle={editingTitle}
+                onEditTitleChange={setEditingTitle}
+                onCommitRename={commitRenameConversation}
+                onCancelRename={cancelRenameConversation}
+                renamingId={renamingConversationId}
+                renameInputRef={renameInputRef}
+                t={t}
+              />
+            </div>
+          </>
         )}
 
         {/* ─── Messages ─── */}
-        <ScrollArea className="flex-1 min-w-0">
+        <ScrollArea className="h-full">
           <div className="p-4 space-y-4">
             {state.messages.length === 0 ? (
               <div className="text-center py-10">
