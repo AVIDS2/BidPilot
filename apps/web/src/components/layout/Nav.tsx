@@ -34,7 +34,7 @@ export function Nav() {
         {/* Logo */}
         <Link
           to="/"
-          className="text-2xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300"
+          className="text-2xl font-medium tracking-[-0.04em] text-foreground hover:text-primary transition-colors duration-300"
         >
           DocPilot
         </Link>

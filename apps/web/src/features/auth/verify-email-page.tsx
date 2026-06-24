@@ -39,10 +39,10 @@ export function VerifyEmailPage() {
   return (
     <div className="h-screen flex items-center justify-center bg-background px-6">
       <div className="absolute inset-0 pointer-events-none z-10">
-        <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">DocPilot v1.0</span>
-        <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">[16:9]</span>
-        <span className="absolute bottom-6 left-6 text-[10px] text-white/30 font-mono">OVERSCAN: 1920 x 1080</span>
-        <span className="absolute bottom-6 right-6 text-[10px] text-white/30 font-mono">100%</span>
+        <span className="absolute top-6 left-6 text-[10px] text-foreground/20 font-mono">DocPilot v1.0</span>
+        <span className="absolute top-6 right-6 text-[10px] text-foreground/20 font-mono">[16:9]</span>
+        <span className="absolute bottom-6 left-6 text-[10px] text-foreground/20 font-mono">OVERSCAN: 1920 x 1080</span>
+        <span className="absolute bottom-6 right-6 text-[10px] text-foreground/20 font-mono">100%</span>
       </div>
       <div
         className="absolute inset-0 pointer-events-none"
@@ -52,11 +52,11 @@ export function VerifyEmailPage() {
       />
       <div className="relative z-20 w-full max-w-md">
         <div className="text-center mb-10">
-          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-white hover:text-primary transition-colors duration-300">
+          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-foreground hover:text-primary transition-colors duration-300">
             DocPilot
           </Link>
         </div>
-        <div className="p-8" style={{ background: "var(--landing-surface-1)", border: "1px solid var(--landing-hairline)" }}>
+        <div className="p-8 rounded-xl bg-card border border-border shadow-sm">
           <div className="text-center">
             <div className="flex justify-center mb-4">
               <div className={`rounded-full p-3 ${result === "success" ? "bg-green-900/30" : result === "error" ? "bg-red-900/30" : ""}`} style={result === null ? { background: "rgba(132, 204, 22, 0.1)" } : undefined}>
@@ -72,14 +72,14 @@ export function VerifyEmailPage() {
                 )}
               </div>
             </div>
-            <h2 className="text-xl font-bold text-white mb-2">
+            <h2 className="text-xl font-bold text-foreground mb-2">
               {result === "success"
                 ? t("verifyEmail.verifiedTitle")
                 : result === "error"
                 ? t("verifyEmail.failedTitle")
                 : t("verifyEmail.verifying")}
             </h2>
-            <p className="text-sm mb-6" style={{ color: "var(--landing-text-secondary)" }}>
+            <p className="text-sm mb-6 text-muted-foreground">
               {result === "success"
                 ? t("verifyEmail.verifiedDesc")
                 : result === "error"
@@ -98,15 +98,13 @@ export function VerifyEmailPage() {
               <div className="space-y-3">
                 <button
                   onClick={() => navigate("/verify-email-prompt")}
-                  className="w-full py-3 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
-                  style={{ border: "1px solid var(--landing-hairline)", color: "var(--landing-text-secondary)" }}
+                  className="w-full py-3 text-sm font-medium transition-all duration-300 hover:scale-[0.98] border border-border text-muted-foreground"
                 >
                   {t("verifyEmail.failedResend")}
                 </button>
                 <button
                   onClick={() => navigate("/login")}
-                  className="w-full py-3 text-sm font-medium inline-flex items-center justify-center gap-2 transition-colors duration-300"
-                  style={{ color: "var(--landing-text-tertiary)" }}
+                  className="w-full py-3 text-sm font-medium inline-flex items-center justify-center gap-2 transition-colors duration-300 text-muted-foreground/70"
                 >
                   <ArrowLeftIcon className="size-4" />
                   {t("verifyEmail.failedBack")}
