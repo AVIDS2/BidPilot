@@ -56,35 +56,19 @@ function Suggestions() {
 
 const Message: FC = () => {
   return (
-    <MessagePrimitive.Root className="mb-3">
-      <MessagePrimitive.Contents
-        components={{
-          Text: () => (
-            <div
-              className={cn(
-                "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words",
-                "[&>:first-child]:mt-0 [&>:last-child]:mb-0",
-                "[&_p]:mb-2 [&_p:last-child]:mb-0",
-                "[&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1",
-                "[&_pre]:my-2 [&_code]:break-words",
-                "[&_pre]:rounded-lg [&_pre]:bg-muted-foreground/10 [&_pre]:p-3",
-                "[&_code:not(pre_code)]:bg-muted-foreground/10 [&_code:not(pre_code)]:px-1.5 [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:rounded",
-              )}
-            >
-              <MessagePrimitive.Content />
-            </div>
-          ),
-          // Tool call rendering — inline in the message flow
-          ToolCall: () => (
-            <div className="my-2 px-3 py-2 rounded-lg bg-muted border border-border text-xs">
-              <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
-                <RefreshCwIcon className="size-3 animate-spin" />
-                <MessagePrimitive.ToolCall />
-              </div>
-            </div>
-          ),
-        }}
-      />
+    <MessagePrimitive.Root className="group mb-3">
+      <div
+        className={cn(
+          "max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words bg-muted text-foreground",
+          "[&>:first-child]:mt-0 [&>:last-child]:mb-0",
+          "[&_p]:mb-2 [&_p:last-child]:mb-0",
+          "[&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1",
+          "[&_pre]:my-2 [&_pre]:rounded-lg [&_pre]:bg-muted-foreground/10 [&_pre]:p-3",
+          "[&_code]:break-words [&_code:not(pre_code)]:bg-muted-foreground/10 [&_code:not(pre_code)]:px-1.5 [&_code:not(pre_code)]:py-0.5 [&_code:not(pre_code)]:rounded",
+        )}
+      >
+        <MessagePrimitive.Content />
+      </div>
       <MessagePrimitive.If assistant>
         <ActionBarPrimitive.Root className="flex items-center gap-1 mt-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <ActionBarPrimitive.Copy asChild>
