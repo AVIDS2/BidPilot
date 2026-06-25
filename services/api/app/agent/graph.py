@@ -46,7 +46,7 @@ def get_checkpointer():
         if _checkpointer is not None:
             return _checkpointer
 
-        mode = os.environ.get("DOCPILOT_LANGGRAPH_CHECKPOINTER", "postgres").lower()
+        mode = os.environ.get("DOCPILOT_AGENT_CHECKPOINTER", "memory").lower()
         if mode == "memory":
             _checkpointer = InMemorySaver()
             logger.info("Using InMemorySaver for agent checkpointer")
