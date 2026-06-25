@@ -1,13 +1,14 @@
 /**
- * Runtime bridge: connects BidPilot's backend /assistant/stream API
- * to assistant-ui's useLangGraphRuntime.
+ * BidPilot Runtime Bridge — connects our backend /assistant/stream API
+ * to assistant-ui components via useLocalRuntime.
  *
- * Our backend uses custom SSE events, not the LangGraph SDK format.
- * This bridge translates between the two so we can use assistant-ui
- * components directly without changing the backend API.
+ * We do NOT use useLangGraphRuntime because our backend emits custom
+ * SSE events, not LangGraph SDK format. useLocalRuntime gives us full
+ * control to push messages as we receive them from the SSE stream.
  */
 
-import { useLangGraphRuntime } from "@assistant-ui/react-langgraph";
+import { useLocalRuntime } from "@assistant-ui/react";
+import { useCallback } from "react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -19,21 +20,20 @@ function getAuthHeaders(): Record<string, string> {
   };
 }
 
-type StreamEvent =
-  | { type: "text"; content: string }
-  | { type: "tool_call"; toolName: string; args: unknown }
-  | { type: "tool_result"; toolName: string; result: unknown; summary: string }
-  | { type: "done" };
-
 /**
- * Parse our custom SSE format into typed events.
- * Our backend sends: event: <type>\ndata: <json>\n\n
+ * Parse our custom SSE stream from the backend.
+ * Backend events:
+ *   assistant.message    → text chunk
+ *   assistant.tool_started → tool call start
+ *   assistant.tool_succeeded → tool result
+ *   assistant.end         → stream complete
  */
-async function* parseSSEStream(
+async function* parseStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
-): AsyncGenerator<StreamEvent> {
+): AsyncGenerator<{ content?: string; done?: boolean }> {
   const decoder = new TextDecoder();
   let buffer = "";
+  let fullContent = "";
 
   while (true) {
     const { done, value } = await reader.read();
@@ -47,7 +47,7 @@ async function* parseSSEStream(
       let eventType = "";
       let dataStr = "";
       for (const line of part.split("\n")) {
-        if (line.startsWith("event: ")) eventType = line.slice(7);
+        if (line.startsWith("event: ")) eventType = line.slice(7).trim();
         if (line.startsWith("data: ")) dataStr = line.slice(6);
       }
       if (!dataStr) continue;
@@ -60,131 +60,45 @@ async function* parseSSEStream(
       }
 
       switch (eventType) {
-        case "assistant.message":
-          if (data.content) {
-            yield { type: "text", content: String(data.content) };
-          }
+        case "assistant.message": {
+          const text = String(data.content ?? "");
+          fullContent += text;
+          yield { content: text };
           break;
-        case "assistant.tool_started":
-          yield {
-            type: "tool_call",
-            toolName: String(data.tool_name ?? ""),
-            args: data.arguments ?? {},
-          };
-          break;
-        case "assistant.tool_succeeded":
-          yield {
-            type: "tool_result",
-            toolName: String(data.tool_name ?? ""),
-            result: data.result,
-            summary: String(data.summary ?? ""),
-          };
-          break;
-        case "assistant.tool_failed":
-          yield {
-            type: "text",
-            content: `\n\n工具执行失败: ${data.error_message ?? "未知错误"}`,
-          };
-          break;
+        }
         case "assistant.end":
-          yield { type: "done" };
+          yield { content: fullContent, done: true };
           return;
       }
     }
   }
-  yield { type: "done" };
+
+  yield { content: fullContent, done: true };
 }
 
-/**
- * Send a message to the assistant and yield assistant-ui compatible events.
- */
-async function* streamMessage(
-  message: string,
-  conversationId: string | null,
-  projectId?: string,
-) {
-  const response = await fetch(`${API_BASE}/assistant/stream`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify({
-      message,
-      conversation_id: conversationId,
-      project_id: projectId,
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "Unknown error");
-    yield {
-      type: "text" as const,
-      content: `请求失败 (${response.status}): ${errText}`,
-    };
-    yield { type: "done" as const };
-    return;
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    yield { type: "done" as const };
-    return;
-  }
-
-  yield* parseSSEStream(reader);
-}
-
-// ── Conversation management (maps to our chat API) ──
-
-async function createConversation(projectId?: string) {
-  // The assistant auto-creates conversations, so we just return a placeholder
-  // The actual conversation_id comes back in the SSE stream
-  return { thread_id: `new-${Date.now()}` };
-}
-
-async function loadConversation(conversationId: string) {
-  try {
-    const response = await fetch(
-      `${API_BASE}/chat/conversations/${conversationId}/messages`,
-      { headers: getAuthHeaders() },
-    );
-    if (!response.ok) return { messages: [] };
-    const data = await response.json();
-    return {
-      messages: (data.items ?? []).map(
-        (m: { role: string; content: string }) => ({
-          role: m.role,
-          content: m.content,
+export function useBidPilotRuntime({ projectId }: { projectId?: string } = {}) {
+  const onSend = useCallback(
+    async (message: string) => {
+      const response = await fetch(`${API_BASE}/assistant/stream`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          message,
+          project_id: projectId ?? null,
         }),
-      ),
-    };
-  } catch {
-    return { messages: [] };
-  }
-}
+      });
 
-// ── Hook ──
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
 
-interface UseBidPilotRuntimeOptions {
-  projectId?: string;
-}
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response body");
 
-export function useBidPilotRuntime({ projectId }: UseBidPilotRuntimeOptions = {}) {
-  return useLangGraphRuntime({
-    stream: async function* (messages) {
-      // Extract the last user message
-      const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-      const text =
-        lastUserMsg?.content
-          ?.map((part) => (part.type === "text" ? part.text : ""))
-          .join("") ?? "";
-
-      // Stream from our backend
-      yield* streamMessage(text, null, projectId);
+      return parseStream(reader);
     },
-    create: async () => {
-      return await createConversation(projectId);
-    },
-    load: async (externalId) => {
-      return await loadConversation(externalId);
-    },
-  });
+    [projectId],
+  );
+
+  return useLocalRuntime({ onSend });
 }
