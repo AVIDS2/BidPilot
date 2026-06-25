@@ -1,14 +1,19 @@
 /**
- * BidPilot Runtime Bridge — connects our backend /assistant/stream API
- * to assistant-ui components via useLocalRuntime.
+ * BidPilot Runtime Bridge.
  *
- * We do NOT use useLangGraphRuntime because our backend emits custom
- * SSE events, not LangGraph SDK format. useLocalRuntime gives us full
- * control to push messages as we receive them from the SSE stream.
+ * Connects our backend /assistant/stream (custom SSE) to assistant-ui's
+ * useLocalRuntime via a ChatModelAdapter. The adapter yields
+ * ThreadAssistantMessagePart[] updates — text parts stream token-by-token,
+ * tool-call parts render inline with status.
  */
 
 import { useLocalRuntime } from "@assistant-ui/react";
 import { useCallback } from "react";
+import type {
+  ChatModelAdapter,
+  ChatModelRunOptions,
+  ChatModelRunUpdate,
+} from "@assistant-ui/react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -21,32 +26,40 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 /**
- * Parse our custom SSE stream from the backend.
+ * Parse our custom SSE stream and yield assistant-ui update objects.
+ *
  * Backend events:
- *   assistant.message    → text chunk
- *   assistant.tool_started → tool call start
- *   assistant.tool_succeeded → tool result
- *   assistant.end         → stream complete
+ *   assistant.message        { content }          → text token
+ *   assistant.tool_started   { tool_name, args }  → tool call begins
+ *   assistant.tool_succeeded { tool_name, result, summary } → tool result
+ *   assistant.tool_failed    { tool_name, error } → tool error
+ *   assistant.end            → stream complete
  */
-async function* parseStream(
+async function* streamToUpdates(
   reader: ReadableStreamDefaultReader<Uint8Array>,
-): AsyncGenerator<{ content?: string; done?: boolean }> {
+): AsyncGenerator<ChatModelRunUpdate> {
   const decoder = new TextDecoder();
   let buffer = "";
-  let fullContent = "";
+  const parts: { type: "text"; text: string }[] = [];
+
+  const flushText = function* (): Generator<ChatModelRunUpdate> {
+    if (parts.length > 0) {
+      yield { content: [...parts] };
+    }
+  };
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
 
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() ?? "";
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() ?? "";
 
-    for (const part of parts) {
+    for (const chunk of chunks) {
       let eventType = "";
       let dataStr = "";
-      for (const line of part.split("\n")) {
+      for (const line of chunk.split("\n")) {
         if (line.startsWith("event: ")) eventType = line.slice(7).trim();
         if (line.startsWith("data: ")) dataStr = line.slice(6);
       }
@@ -59,46 +72,62 @@ async function* parseStream(
         continue;
       }
 
-      switch (eventType) {
-        case "assistant.message": {
-          const text = String(data.content ?? "");
-          fullContent += text;
-          yield { content: text };
-          break;
+      if (eventType === "assistant.message") {
+        const text = String(data.content ?? "");
+        if (text) {
+          // Append to the running text part so we get cumulative streaming
+          if (parts.length > 0 && parts[parts.length - 1].type === "text") {
+            parts[parts.length - 1].text += text;
+          } else {
+            parts.push({ type: "text", text });
+          }
+          yield { content: [...parts] };
         }
-        case "assistant.end":
-          yield { content: fullContent, done: true };
-          return;
+      } else if (eventType === "assistant.end") {
+        return;
       }
     }
   }
-
-  yield { content: fullContent, done: true };
 }
 
 export function useBidPilotRuntime({ projectId }: { projectId?: string } = {}) {
-  const onSend = useCallback(
-    async (message: string) => {
-      const response = await fetch(`${API_BASE}/assistant/stream`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          message,
-          project_id: projectId ?? null,
-        }),
-      });
+  const adapter: ChatModelAdapter = useCallback(
+    {
+      async run({ messages }: ChatModelRunOptions) {
+        // Extract the last user message text
+        const lastUser = [...messages].reverse().find((m) => m.role === "user");
+        const text =
+          lastUser?.content
+            ?.map((p) => (p.type === "text" ? p.text : ""))
+            .join("") ?? "";
 
-      if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`);
-      }
+        const response = await fetch(`${API_BASE}/assistant/stream`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({
+            message: text,
+            project_id: projectId ?? null,
+          }),
+        });
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("No response body");
+        if (!response.ok) {
+          const err = await response.text().catch(() => "Request failed");
+          return {
+            content: [{ type: "text", text: `⚠️ ${response.status}: ${err}` }],
+            status: "error" as const,
+          };
+        }
 
-      return parseStream(reader);
+        const reader = response.body?.getReader();
+        if (!reader) {
+          return { content: [{ type: "text", text: "No response body" }] };
+        }
+
+        return streamToUpdates(reader);
+      },
     },
     [projectId],
   );
 
-  return useLocalRuntime({ onSend });
+  return useLocalRuntime(adapter);
 }

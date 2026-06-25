@@ -1,9 +1,9 @@
 /**
  * BidPilot AI Assistant — powered by assistant-ui primitives.
  *
- * Uses @assistant-ui/react for Thread, Composer, Message, ThreadList,
- * BranchPicker, and Markdown rendering. Connects to our LangGraph
- * backend via useBidPilotRuntime → POST /assistant/stream.
+ * assistant-ui provides the behavior (streaming, tool calls, branches,
+ * auto-scroll). We provide the skin via assistant.css + Tailwind tokens.
+ * Connects to backend via useBidPilotRuntime → POST /assistant/stream.
  */
 
 import {
@@ -14,7 +14,6 @@ import {
   BranchPickerPrimitive,
   AssistantRuntimeProvider,
 } from "@assistant-ui/react";
-import { Markdown } from "@/components/ui/markdown";
 import {
   SparklesIcon,
   PanelRightCloseIcon,
@@ -27,6 +26,7 @@ import {
   MessageSquareIcon,
   Trash2Icon,
   SearchIcon,
+  CheckIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useState, useCallback, useMemo, type FC } from "react";
@@ -37,7 +37,7 @@ import { deleteChatConversation, type ChatConversationRead } from "@/lib/api";
 
 import "./assistant.css";
 
-/* ─── Date grouping for history ─── */
+/* ─── Date grouping ─── */
 
 function getDateGroup(dateStr: string | null): string {
   if (!dateStr) return "earlier";
@@ -52,36 +52,62 @@ function getDateGroup(dateStr: string | null): string {
   return "earlier";
 }
 
-/* ─── Suggestion prompts ─── */
+/* ─── Suggestion prompts — children rendered as the label ─── */
 
 function Suggestions() {
   const { t } = useTranslation("ai-assistant");
   const suggestions = [
-    { key: "createProject", text: t("actions.createProjectPrompt") },
-    { key: "uploadDoc", text: t("actions.uploadDocPrompt") },
-    { key: "generateSection", text: t("actions.generateSectionPrompt") },
-    { key: "howToUse", text: t("actions.howToUsePrompt") },
+    { key: "createProject", text: t("actions.createProjectPrompt"), label: t("actions.createProject") },
+    { key: "uploadDoc", text: t("actions.uploadDocPrompt"), label: t("actions.uploadDoc") },
+    { key: "generateSection", text: t("actions.generateSectionPrompt"), label: t("actions.generateSection") },
+    { key: "howToUse", text: t("actions.howToUsePrompt"), label: t("actions.howToUse") },
   ];
   return (
-    <div className="flex flex-wrap gap-2 px-1">
+    <div className="flex flex-wrap gap-2 px-1 justify-center">
       {suggestions.map((s) => (
         <ThreadPrimitive.Suggestion
           key={s.key}
           prompt={s.text}
-          className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
-        />
+          method="replace"
+          className="text-xs px-3 py-1.5 rounded-full bg-muted/60 text-muted-foreground border border-border hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all cursor-pointer backdrop-blur-sm"
+        >
+          {s.label}
+        </ThreadPrimitive.Suggestion>
       ))}
     </div>
   );
 }
 
-/* ─── Message components ─── */
+/* ─── Assistant message with tool-call aware content ─── */
 
 const AssistantMessage: FC = () => {
   return (
-    <MessagePrimitive.Root className="group mb-3">
-      <div className="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words bg-muted text-foreground">
-        <MessagePrimitive.Content />
+    <MessagePrimitive.Root className="group aui-assistant-message flex justify-start mb-3">
+      <div className="aui-assistant-message-content max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed break-words bg-muted text-foreground">
+        <MessagePrimitive.Content
+          components={{
+            Text: ({ text }) => (
+              <span className="whitespace-pre-wrap [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1 [&_pre]:my-2 [&_pre]:rounded-lg [&_pre]:bg-muted-foreground/10 [&_pre]:p-3 [&_code]:break-words">
+                {text}
+              </span>
+            ),
+            ToolCall: ({ toolName, args, result }) => (
+              <div className="aui-tool-call my-2 px-3 py-2 rounded-lg bg-background/60 border border-border text-xs">
+                <div className="flex items-center gap-1.5 text-muted-foreground font-medium">
+                  <RefreshCwIcon className="size-3" />
+                  <span>{toolName}</span>
+                  {result ? (
+                    <span className="ml-auto flex items-center gap-0.5 text-emerald-500">
+                      <CheckIcon className="size-3" /> done
+                    </span>
+                  ) : (
+                    <span className="ml-auto text-primary animate-pulse">running…</span>
+                  )}
+                </div>
+              </div>
+            ),
+          }}
+        />
       </div>
       <MessagePrimitive.If assistant>
         <ActionBarPrimitive.Root className="flex items-center gap-1 mt-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -95,16 +121,21 @@ const AssistantMessage: FC = () => {
               <RefreshCwIcon className="size-3" />
             </button>
           </ActionBarPrimitive.Reload>
-          <BranchPickerPrimitive.Root asChild>
-            <button className="flex items-center gap-0.5 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-[11px]">
-              <BranchPickerPrimitive.Previous asChild>
-                <button className="p-0"><RefreshCwIcon className="size-2.5 rotate-180" /></button>
-              </BranchPickerPrimitive.Previous>
-              <BranchPickerPrimitive.Number className="tabular-nums" />
-              <BranchPickerPrimitive.Next asChild>
-                <button className="p-0"><RefreshCwIcon className="size-2.5" /></button>
-              </BranchPickerPrimitive.Next>
-            </button>
+          <BranchPickerPrimitive.Root
+            hideWhenSingleBranch
+            className="flex items-center gap-0.5 text-[11px] text-muted-foreground"
+          >
+            <BranchPickerPrimitive.Previous asChild>
+              <button className="p-1 rounded hover:bg-muted transition-colors">
+                <RefreshCwIcon className="size-2.5 rotate-180" />
+              </button>
+            </BranchPickerPrimitive.Previous>
+            <BranchPickerPrimitive.Number className="tabular-nums" />
+            <BranchPickerPrimitive.Next asChild>
+              <button className="p-1 rounded hover:bg-muted transition-colors">
+                <RefreshCwIcon className="size-2.5" />
+              </button>
+            </BranchPickerPrimitive.Next>
           </BranchPickerPrimitive.Root>
         </ActionBarPrimitive.Root>
       </MessagePrimitive.If>
@@ -114,8 +145,8 @@ const AssistantMessage: FC = () => {
 
 const UserMessage: FC = () => {
   return (
-    <MessagePrimitive.Root className="flex justify-end mb-3">
-      <div className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)] text-primary-foreground">
+    <MessagePrimitive.Root className="aui-user-message flex justify-end mb-3">
+      <div className="aui-user-message-content max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)] text-primary-foreground">
         <MessagePrimitive.Content />
       </div>
     </MessagePrimitive.Root>
@@ -128,56 +159,46 @@ function Composer() {
   const { t } = useTranslation("ai-assistant");
 
   return (
-    <ComposerPrimitive.Root className="shrink-0 px-3 pt-2.5 pb-2 border-t border-border">
-      <div className="flex items-center gap-2 rounded-xl px-3 py-1.5 min-h-11 bg-muted border border-border">
-        <ComposerPrimitive.AddAttachment asChild>
-          <button
-            className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
-            aria-label={t("actions.uploadDoc")}
-          >
-            <PlusIcon className="size-4" />
-          </button>
-        </ComposerPrimitive.AddAttachment>
+    <ComposerPrimitive.Root className="shrink-0 px-3 pt-2.5 pb-2 border-t border-border bg-background/80 backdrop-blur">
+      <div className="flex items-end gap-2 rounded-xl px-3 py-1.5 min-h-11 bg-muted/60 border border-border focus-within:border-primary/50 transition-colors">
         <ComposerPrimitive.Input
           autoFocus
           rows={1}
-          className="flex-1 bg-transparent text-sm leading-5 outline-none resize-none min-h-5 max-h-24 placeholder:text-muted-foreground overflow-y-auto text-foreground"
+          className="flex-1 bg-transparent text-sm leading-5 outline-none resize-none min-h-5 max-h-32 placeholder:text-muted-foreground overflow-y-auto text-foreground py-1"
           placeholder={t("inputPlaceholder")}
         />
-        <ComposerPrimitive.If condition={(c) => !c.value.trim()}>
-          <div className="shrink-0 w-8 h-8 flex items-center justify-center text-muted-foreground/30">
-            <SendIcon className="w-4 h-4" />
-          </div>
+        <ComposerPrimitive.If running>
+          <ComposerPrimitive.Cancel asChild>
+            <button
+              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors"
+              aria-label={t("actions.stop")}
+            >
+              <SquareIcon className="w-4 h-4" />
+            </button>
+          </ComposerPrimitive.Cancel>
         </ComposerPrimitive.If>
-        <ComposerPrimitive.If condition={(c) => c.value.trim().length > 0}>
+        <ComposerPrimitive.If running={false}>
           <ComposerPrimitive.Send asChild>
             <button
-              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)] text-primary-foreground hover:opacity-90"
+              className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)] text-primary-foreground hover:opacity-90 disabled:opacity-40"
               aria-label={t("actions.send")}
             >
               <SendIcon className="w-4 h-4" />
             </button>
           </ComposerPrimitive.Send>
         </ComposerPrimitive.If>
-        <ComposerPrimitive.Cancel asChild>
-          <button
-            className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors"
-            aria-label={t("actions.stop")}
-          >
-            <SquareIcon className="w-4 h-4" />
-          </button>
-        </ComposerPrimitive.Cancel>
       </div>
       <div className="flex items-center justify-between mt-1 px-1">
         <span className="text-[10px] text-muted-foreground">
-          Enter 发送 · Shift+Enter 换行
+          Enter {t("panel.enterToSend")} · Shift+Enter 换行
         </span>
+        <span className="text-[10px] text-muted-foreground/60">DeepSeek V4</span>
       </div>
     </ComposerPrimitive.Root>
   );
 }
 
-/* ─── History sidebar using ThreadListPrimitive ─── */
+/* ─── History sidebar ─── */
 
 function HistorySidebar({
   conversations,
@@ -224,7 +245,7 @@ function HistorySidebar({
   };
 
   return (
-    <div className="w-64 h-full shrink-0 flex flex-col border-r bg-card shadow-xl" style={{ borderColor: "var(--border)" }}>
+    <div className="w-64 h-full shrink-0 flex flex-col border-r bg-card/95 backdrop-blur-xl shadow-2xl" style={{ borderColor: "var(--border)" }}>
       <div className="p-3 flex items-center justify-between border-b shrink-0" style={{ borderColor: "var(--border)" }}>
         <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{t("panel.history")}</span>
         <div className="flex items-center gap-1">
@@ -240,7 +261,7 @@ function HistorySidebar({
         <div className="relative">
           <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t("history.searchPlaceholder")}
-            className="w-full h-7 pl-8 pr-2 rounded-lg border border-border bg-background text-xs outline-none focus:border-primary" />
+            className="w-full h-7 pl-8 pr-2 rounded-lg border border-border bg-background text-xs outline-none focus:border-primary transition-colors" />
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-3">
@@ -311,9 +332,9 @@ export function AssistantPanel() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="fixed top-0 right-0 z-40 h-full w-full sm:w-[400px] md:w-[480px] lg:w-[520px] flex flex-col animate-slide-in bg-background border-l border-border shadow-[-8px_0_30px_oklch(0_0_0/0.08)]">
+      <div className="fixed top-0 right-0 z-40 h-full w-full sm:w-[400px] md:w-[480px] lg:w-[520px] flex flex-col animate-slide-in bg-background/95 backdrop-blur-xl border-l border-border shadow-[-8px_0_30px_oklch(0_0_0/0.12)]">
         {/* Header */}
-        <div className="flex items-center justify-between px-3 h-12 shrink-0 border-b border-border">
+        <div className="flex items-center justify-between px-3 h-12 shrink-0 border-b border-border bg-background/80 backdrop-blur">
           <div className="flex items-center gap-2 min-w-0">
             <button
               className={cn(
@@ -326,13 +347,14 @@ export function AssistantPanel() {
               <HistoryIcon className="size-4" />
             </button>
             <div className="flex items-center gap-2 min-w-0">
-              <SparklesIcon className="size-4 text-primary shrink-0" />
-              <span className="text-sm font-semibold truncate text-foreground">
-                {t("title")}
-              </span>
+              <div className="flex size-6 items-center justify-center rounded-md bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)]">
+                <SparklesIcon className="size-3.5 text-primary-foreground" />
+              </div>
+              <span className="text-sm font-semibold truncate text-foreground">{t("title")}</span>
             </div>
             <ThreadPrimitive.If running>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary animate-pulse flex items-center gap-1">
+                <span className="size-1.5 rounded-full bg-primary animate-ping" />
                 {t("status.thinking")}
               </span>
             </ThreadPrimitive.If>
@@ -350,10 +372,7 @@ export function AssistantPanel() {
         <div className="relative flex-1 min-h-0 overflow-hidden">
           {historyOpen && (
             <>
-              <div
-                className="absolute inset-0 z-10 bg-black/20 backdrop-blur-[1px]"
-                onClick={() => setHistoryOpen(false)}
-              />
+              <div className="absolute inset-0 z-10 bg-black/30 backdrop-blur-[2px]" onClick={() => setHistoryOpen(false)} />
               <div className="absolute inset-y-0 left-0 z-20">
                 <HistorySidebar
                   conversations={Array.isArray(state.conversations) ? state.conversations : []}
@@ -369,27 +388,20 @@ export function AssistantPanel() {
           )}
 
           <ThreadPrimitive.Root className="h-full flex flex-col">
-            <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto p-4">
+            <ThreadPrimitive.Viewport className="aui-thread-viewport flex-1 overflow-y-auto p-4">
               <ThreadPrimitive.Empty>
-                <div className="flex flex-col items-center justify-center h-full py-16">
-                  <div className="w-14 h-14 rounded-2xl mb-4 flex items-center justify-center bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)]">
+                <div className="aui-thread-empty flex flex-col items-center justify-center h-full py-16 text-center">
+                  <div className="w-14 h-14 rounded-2xl mb-4 flex items-center justify-center bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)] shadow-lg shadow-primary/20">
                     <SparklesIcon className="w-7 h-7 text-primary-foreground" />
                   </div>
-                  <h3 className="text-base font-semibold mb-1 text-foreground">
-                    {t("welcome.title")}
-                  </h3>
-                  <p className="text-sm mb-6 text-muted-foreground max-w-xs">
-                    {t("welcome.description")}
-                  </p>
+                  <h3 className="text-base font-semibold mb-1 text-foreground">{t("welcome.title")}</h3>
+                  <p className="text-sm mb-6 text-muted-foreground max-w-xs">{t("welcome.description")}</p>
                   <Suggestions />
                 </div>
               </ThreadPrimitive.Empty>
 
               <ThreadPrimitive.Messages
-                components={{
-                  UserMessage,
-                  AssistantMessage,
-                }}
+                components={{ UserMessage, AssistantMessage }}
               />
 
               <ThreadPrimitive.ScrollToBottom
