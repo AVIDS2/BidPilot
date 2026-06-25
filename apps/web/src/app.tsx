@@ -29,7 +29,9 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "next-themes";
 import { FileTextIcon, SettingsIcon, UsersIcon, UserPlusIcon, MailIcon, LayoutDashboardIcon, CreditCardIcon, BookOpenIcon } from "lucide-react";
 import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
-import { CommandPalette, AIAssistantPanel, FloatingAssistant, InlineSuggestionBar } from "@/components/ai-assistant";
+import { CommandPalette, FloatingAssistant, InlineSuggestionBar } from "@/components/ai-assistant";
+import { AssistantPanel } from "@/components/assistant/assistant-panel";
+import "@/components/assistant/assistant.css";
 import { useAIAssistantHotkeys } from "@/hooks/use-ai-assistant-hotkeys";
 
 const queryClient = new QueryClient();
@@ -112,7 +114,7 @@ function PlatformShell() {
           </div>
         </div>
       </SidebarInset>
-      <AIAssistantPanel />
+      <AssistantPanel />
       <FloatingAssistant />
     </SidebarProvider>
   );
