@@ -9,7 +9,6 @@ import {
   ThreadPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
-  ActionBarPrimitive,
   AssistantRuntimeProvider,
 } from "@assistant-ui/react";
 import {
@@ -215,8 +214,25 @@ export function AssistantPanel() {
                 </div>
               </ThreadPrimitive.Empty>
 
-              {/* Messages — assistant-ui renders user/assistant automatically */}
-              <ThreadPrimitive.Messages />
+              {/* Messages — must provide components prop */}
+              <ThreadPrimitive.Messages
+                components={{
+                  UserMessage: () => (
+                    <MessagePrimitive.Root className="flex justify-end mb-3">
+                      <div className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed bg-primary text-primary-foreground">
+                        <MessagePrimitive.Content />
+                      </div>
+                    </MessagePrimitive.Root>
+                  ),
+                  AssistantMessage: () => (
+                    <MessagePrimitive.Root className="flex justify-start mb-3">
+                      <div className="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-2.5 text-sm leading-relaxed bg-muted text-foreground whitespace-pre-wrap">
+                        <MessagePrimitive.Content />
+                      </div>
+                    </MessagePrimitive.Root>
+                  ),
+                }}
+              />
 
               {/* Scroll to bottom */}
               <ThreadPrimitive.ScrollToBottom className="sticky bottom-2 mx-auto size-8 rounded-full bg-muted border border-border shadow flex items-center justify-center cursor-pointer data-[hidden]:hidden" />
