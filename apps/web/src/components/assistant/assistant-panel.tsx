@@ -19,6 +19,8 @@ import {
   SearchIcon,
   Trash2Icon,
   MessageSquareIcon,
+  SendIcon,
+  ChevronDownIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useState, useCallback, useMemo } from "react";
@@ -206,10 +208,18 @@ export function AssistantPanel() {
                   <h3 className="text-base font-semibold mb-1 text-foreground">{t("welcome.title")}</h3>
                   <p className="text-sm mb-6 text-muted-foreground max-w-xs">{t("welcome.description")}</p>
                   <div className="flex flex-wrap gap-2 px-1 justify-center">
-                    <ThreadPrimitive.Suggestion prompt={t("actions.createProjectPrompt")} send className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer" />
-                    <ThreadPrimitive.Suggestion prompt={t("actions.uploadDocPrompt")} send className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer" />
-                    <ThreadPrimitive.Suggestion prompt={t("actions.generateSectionPrompt")} send className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer" />
-                    <ThreadPrimitive.Suggestion prompt={t("actions.howToUsePrompt")} send className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer" />
+                    <ThreadPrimitive.Suggestion prompt={t("actions.createProjectPrompt")} autoSend className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer">
+                      {t("actions.createProject")}
+                    </ThreadPrimitive.Suggestion>
+                    <ThreadPrimitive.Suggestion prompt={t("actions.uploadDocPrompt")} autoSend className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer">
+                      {t("actions.uploadDoc")}
+                    </ThreadPrimitive.Suggestion>
+                    <ThreadPrimitive.Suggestion prompt={t("actions.generateSectionPrompt")} autoSend className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer">
+                      {t("actions.generateSection")}
+                    </ThreadPrimitive.Suggestion>
+                    <ThreadPrimitive.Suggestion prompt={t("actions.howToUsePrompt")} autoSend className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer">
+                      {t("actions.howToUse")}
+                    </ThreadPrimitive.Suggestion>
                   </div>
                 </div>
               </ThreadPrimitive.Empty>
@@ -235,7 +245,9 @@ export function AssistantPanel() {
               />
 
               {/* Scroll to bottom */}
-              <ThreadPrimitive.ScrollToBottom className="sticky bottom-2 mx-auto size-8 rounded-full bg-muted border border-border shadow flex items-center justify-center cursor-pointer data-[hidden]:hidden" />
+              <ThreadPrimitive.ScrollToBottom className="sticky bottom-2 mx-auto size-8 rounded-full bg-muted border border-border shadow flex items-center justify-center cursor-pointer data-[hidden]:hidden">
+                <ChevronDownIcon className="size-4 text-muted-foreground" />
+              </ThreadPrimitive.ScrollToBottom>
             </ThreadPrimitive.Viewport>
 
             {/* ── Composer (input) ── */}
@@ -247,7 +259,9 @@ export function AssistantPanel() {
                   className="flex-1 bg-transparent text-sm outline-none resize-none min-h-5 max-h-24 placeholder:text-muted-foreground text-foreground"
                   placeholder={t("inputPlaceholder")}
                 />
-                <ComposerPrimitive.Send className="shrink-0 w-8 h-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" />
+                <ComposerPrimitive.Send className="shrink-0 w-8 h-8 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center">
+                  <SendIcon className="size-4" />
+                </ComposerPrimitive.Send>
               </div>
               <div className="flex items-center justify-between mt-1 px-1">
                 <span className="text-[10px] text-muted-foreground">Enter 发送 · Shift+Enter 换行</span>
