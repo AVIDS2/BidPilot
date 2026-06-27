@@ -57,6 +57,14 @@
     "send": "发送",
     "stop": "停止"
   },
+  "attachments": {
+    "add": "添加附件",
+    "uploadFile": "上传文件",
+    "uploadImage": "上传图片",
+    "addFromProject": "从项目资料添加",
+    "addFromProjectPrompt": "请从当前项目资料库中检索并添加相关材料。",
+    "hint": "文件仅保存在服务端"
+  },
   "panel": {
     "openCommand": "命令面板",
     "close": "关闭面板",
@@ -70,7 +78,9 @@
     "justNow": "刚刚",
     "closeHistory": "关闭历史会话",
     "renameConversation": "重命名会话",
-    "renameConversationHint": "双击重命名"
+    "renameConversationHint": "双击重命名",
+    "enterToQueue": "回车排队",
+    "queuedPrompt": "已排队"
   },
   "history": {
     "today": "今天",

@@ -8,6 +8,10 @@ vi.mock("@/lib/api", () => ({
   listChatConversations: vi.fn().mockResolvedValue([]),
   getChatConversationMessages: vi.fn(),
   renameChatConversation: vi.fn(),
+  deleteChatConversation: vi.fn(),
+  listBundles: vi.fn().mockResolvedValue([]),
+  createBundle: vi.fn(),
+  uploadDocument: vi.fn(),
 }));
 
 function streamFrom(text: string) {
@@ -100,7 +104,41 @@ describe("AIAssistantPanel", () => {
     expect(screen.queryByText("Intent detected")).not.toBeInTheDocument();
   });
 
-  it("renders completed tool activity inline in the chat flow", async () => {
+  it("keeps the composer editable while the assistant is responding", async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Promise(() => {
+          // Keep the request open so the assistant remains busy.
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+
+    const input = screen.getByPlaceholderText("Ask me anything...");
+    fireEvent.change(input, { target: { value: "Tell me the status" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    expect(screen.getByPlaceholderText("Ask me anything...")).not.toBeDisabled();
+  });
+
+  it("opens an attachment menu from the composer", async () => {
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
+
+    expect(screen.getByText("Upload file")).toBeInTheDocument();
+    expect(screen.getByText("Upload image")).toBeInTheDocument();
+    expect(screen.getByText("Add from project")).toBeInTheDocument();
+  });
+
+  it("renders completed tool activity as a compact expandable event", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -109,7 +147,7 @@ describe("AIAssistantPanel", () => {
           [
             'event: assistant.start\ndata: {"conversation_id":"c3","state":"thinking"}',
             'event: assistant.tool_started\ndata: {"tool_name":"open_page","arguments":{"route":"/projects"},"state":"executing_tool"}',
-            'event: assistant.tool_succeeded\ndata: {"tool_name":"open_page","result":{"route":"/projects"},"summary":"已打开项目页。","state":"completed"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"open_page","result":{"route":"/projects"},"summary":"raw detail should be hidden until expanded","state":"completed"}',
             'event: assistant.message\ndata: {"content":"已打开项目页。","state":"completed"}',
             'event: assistant.end\ndata: {"conversation_id":"c3","full_response":"已打开项目页。"}',
           ].join("\n\n") + "\n\n",
@@ -129,6 +167,11 @@ describe("AIAssistantPanel", () => {
     });
     expect(screen.getByText("open_page")).toBeInTheDocument();
     expect(screen.getByText("succeeded")).toBeInTheDocument();
+    expect(screen.queryByText("raw detail should be hidden until expanded")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show tool details" }));
+
+    expect(screen.getByText("raw detail should be hidden until expanded")).toBeInTheDocument();
   });
 
   it("keeps tool activity attached to the assistant turn that produced it", async () => {

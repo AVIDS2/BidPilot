@@ -57,6 +57,14 @@
     "send": "Send",
     "stop": "Stop"
   },
+  "attachments": {
+    "add": "Add attachment",
+    "uploadFile": "Upload file",
+    "uploadImage": "Upload image",
+    "addFromProject": "Add from project",
+    "addFromProjectPrompt": "Search the current project knowledge base and add the relevant materials.",
+    "hint": "Files stay server-side"
+  },
   "panel": {
     "openCommand": "Command palette",
     "close": "Close panel",
@@ -70,7 +78,9 @@
     "justNow": "Just now",
     "closeHistory": "Close conversation history",
     "renameConversation": "Rename conversation",
-    "renameConversationHint": "Double-click to rename"
+    "renameConversationHint": "Double-click to rename",
+    "enterToQueue": "Enter queues",
+    "queuedPrompt": "Queued"
   },
   "history": {
     "today": "Today",

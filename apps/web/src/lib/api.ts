@@ -215,6 +215,7 @@ export async function uploadDocument(bundleId: string, file: File): Promise<Sour
   formData.append("file", file);
   const resp = await fetch(`${API_BASE}/documents/upload?bundle_id=${bundleId}`, {
     method: "POST",
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);

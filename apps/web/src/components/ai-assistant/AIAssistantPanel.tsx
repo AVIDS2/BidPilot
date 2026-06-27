@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useMemo } from "react";
+import { useRef, useEffect, useCallback, useState, useMemo, type ChangeEvent, type RefObject } from "react";
 import {
   HistoryIcon,
   PlusIcon,
@@ -11,9 +11,23 @@ import {
   Trash2Icon,
   MessageSquareIcon,
   ChevronDownIcon,
+  FileIcon,
+  FolderOpenIcon,
+  ImageIcon,
+  Loader2Icon,
+  PaperclipIcon,
+  XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { renameChatConversation, deleteChatConversation, type ChatConversationRead } from "@/lib/api";
+import {
+  createBundle,
+  deleteChatConversation,
+  listBundles,
+  renameChatConversation,
+  uploadDocument,
+  type BundleRead,
+  type ChatConversationRead,
+} from "@/lib/api";
 import {
   isAssistantBusy,
   useAIAssistant,
@@ -58,6 +72,50 @@ function groupConversations(conversations: ChatConversationRead[]) {
     groups[group].push(c);
   }
   return groups;
+}
+
+type ComposerAttachmentKind = "file" | "image";
+type ComposerAttachmentStatus = "ready" | "uploading" | "uploaded" | "failed";
+
+interface ComposerAttachment {
+  id: string;
+  file: File;
+  kind: ComposerAttachmentKind;
+  status: ComposerAttachmentStatus;
+  documentId?: string;
+  error?: string;
+}
+
+function createAttachmentId(file: File, index: number) {
+  return `att-${Date.now()}-${index}-${file.name.replace(/[^a-zA-Z0-9]/g, "")}`;
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function ensureAssistantUploadBundle(projectId: string): Promise<BundleRead> {
+  const bundles = await listBundles(projectId);
+  const existing = bundles.find((bundle) => bundle.label === "AI uploads") ?? bundles[0];
+  if (existing) return existing;
+  return createBundle({ project_id: projectId, label: "AI uploads", source_type: "upload" });
+}
+
+function buildOutgoingPrompt(content: string, attachments: ComposerAttachment[]) {
+  if (attachments.length === 0) return content;
+  const attachmentLines = attachments.map((attachment) => {
+    if (attachment.status === "uploaded" && attachment.documentId) {
+      return `- ${attachment.file.name} (${attachment.kind}, document_id: ${attachment.documentId})`;
+    }
+    if (attachment.status === "failed") {
+      return `- ${attachment.file.name} (${attachment.kind}, upload failed: ${attachment.error ?? "unknown error"})`;
+    }
+    return `- ${attachment.file.name} (${attachment.kind}, selected locally)`;
+  });
+  const attachmentBlock = `附件上下文：\n${attachmentLines.join("\n")}`;
+  return [content, attachmentBlock].filter(Boolean).join("\n\n");
 }
 
 /* ─── Quick action chips shown in empty state ─── */
@@ -182,6 +240,43 @@ function AssistantTurnActivity({
   );
 }
 
+function ComposerAttachmentChip({
+  attachment,
+  onRemove,
+}: {
+  attachment: ComposerAttachment;
+  onRemove: (id: string) => void;
+}) {
+  const statusIcon =
+    attachment.status === "uploading" ? (
+      <Loader2Icon className="h-3 w-3 animate-spin" />
+    ) : attachment.kind === "image" ? (
+      <ImageIcon className="h-3 w-3" />
+    ) : (
+      <FileIcon className="h-3 w-3" />
+    );
+
+  return (
+    <div
+      className="flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[11px]"
+      style={{ background: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" }}
+    >
+      <span className="shrink-0 text-muted-foreground">{statusIcon}</span>
+      <span className="truncate">{attachment.file.name}</span>
+      <span className="shrink-0 text-muted-foreground">{formatFileSize(attachment.file.size)}</span>
+      {attachment.status === "failed" && <span className="shrink-0 text-destructive">failed</span>}
+      <button
+        type="button"
+        aria-label={`Remove ${attachment.file.name}`}
+        onClick={() => onRemove(attachment.id)}
+        className="shrink-0 rounded-full p-0.5 text-muted-foreground transition hover:bg-background hover:text-foreground"
+      >
+        <XIcon className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 /* ─── History Sidebar ─── */
 
 function HistorySidebar({
@@ -218,7 +313,7 @@ function HistorySidebar({
   onCommitRename: () => void;
   onCancelRename: () => void;
   renamingId: string | null;
-  renameInputRef: React.RefObject<HTMLInputElement | null>;
+  renameInputRef: RefObject<HTMLInputElement | null>;
   t: (key: string) => string;
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -388,12 +483,21 @@ export function AIAssistantPanel() {
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [queuedPrompts, setQueuedPrompts] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const queueDrainingRef = useRef(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const isBusy = isAssistantBusy(state.status);
+  const isUploadingAttachments = attachments.some((attachment) => attachment.status === "uploading");
+  const canSend = Boolean(input.trim() || attachments.length > 0) && !isUploadingAttachments;
   const executionItemsByMessageId = useMemo(() => {
     const grouped = new Map<string, AssistantExecutionItem[]>();
     for (const item of state.executionItems) {
@@ -452,13 +556,112 @@ export function AIAssistantPanel() {
     }
   }, [editingConversationId]);
 
+  const uploadAttachmentRecords = useCallback(async (records: ComposerAttachment[], projectId: string) => {
+    let bundle: BundleRead;
+    try {
+      bundle = await ensureAssistantUploadBundle(projectId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to prepare upload bundle";
+      setAttachments((current) =>
+        current.map((attachment) =>
+          records.some((record) => record.id === attachment.id)
+            ? { ...attachment, status: "failed", error: message }
+            : attachment,
+        ),
+      );
+      return;
+    }
+
+    for (const record of records) {
+      try {
+        const document = await uploadDocument(bundle.id, record.file);
+        setAttachments((current) =>
+          current.map((attachment) =>
+            attachment.id === record.id
+              ? { ...attachment, status: "uploaded", documentId: document.id }
+              : attachment,
+          ),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Upload failed";
+        setAttachments((current) =>
+          current.map((attachment) =>
+            attachment.id === record.id
+              ? { ...attachment, status: "failed", error: message }
+              : attachment,
+          ),
+        );
+      }
+    }
+  }, []);
+
+  const handleAttachmentInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>, kind: ComposerAttachmentKind) => {
+      const files = Array.from(event.currentTarget.files ?? []);
+      event.currentTarget.value = "";
+      if (files.length === 0) return;
+
+      const projectId = state.currentContext.projectId;
+      const records = files.map((file, index) => ({
+        id: createAttachmentId(file, index),
+        file,
+        kind,
+        status: projectId ? "uploading" : "ready",
+      }) satisfies ComposerAttachment);
+
+      setAttachmentMenuOpen(false);
+      setAttachments((current) => [...current, ...records]);
+      if (projectId) {
+        void uploadAttachmentRecords(records, projectId);
+      }
+    },
+    [state.currentContext.projectId, uploadAttachmentRecords],
+  );
+
+  const handleRemoveAttachment = useCallback((id: string) => {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+  }, []);
+
+  const handleAddFromProject = useCallback(() => {
+    setAttachmentMenuOpen(false);
+    setInput((current) => {
+      const prompt = t("attachments.addFromProjectPrompt", {
+        defaultValue: "请从当前项目资料库中检索并添加相关材料。",
+      });
+      return current.trim() ? `${current.trim()}\n${prompt}` : prompt;
+    });
+    inputRef.current?.focus();
+  }, [t]);
+
   const handleSend = useCallback(() => {
-    if (!input.trim() || isAssistantBusy(state.status)) return;
+    const outgoing = buildOutgoingPrompt(input.trim(), attachments);
+    if (!outgoing.trim() || isUploadingAttachments) return;
+
     shouldAutoScrollRef.current = true;
     setShowScrollToBottom(false);
-    sendMessage(input);
     setInput("");
-  }, [input, state.status, sendMessage]);
+    setAttachments([]);
+
+    if (isBusy) {
+      setQueuedPrompts((current) => [...current, outgoing]);
+      return;
+    }
+
+    void sendMessage(outgoing);
+  }, [attachments, input, isBusy, isUploadingAttachments, sendMessage]);
+
+  useEffect(() => {
+    if (queueDrainingRef.current || isAssistantBusy(state.status) || queuedPrompts.length === 0) return;
+
+    const nextPrompt = queuedPrompts[0];
+    queueDrainingRef.current = true;
+    setQueuedPrompts((current) => current.slice(1));
+    shouldAutoScrollRef.current = true;
+    setShowScrollToBottom(false);
+    void sendMessage(nextPrompt).finally(() => {
+      queueDrainingRef.current = false;
+    });
+  }, [queuedPrompts, sendMessage, state.status]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -474,9 +677,13 @@ export function AIAssistantPanel() {
     (text: string) => {
       shouldAutoScrollRef.current = true;
       setShowScrollToBottom(false);
-      sendMessage(text);
+      if (isBusy) {
+        setQueuedPrompts((current) => [...current, text]);
+        return;
+      }
+      void sendMessage(text);
     },
-    [sendMessage],
+    [isBusy, sendMessage],
   );
 
   const beginRenameConversation = useCallback((id: string, title: string | null) => {
@@ -617,23 +824,35 @@ export function AIAssistantPanel() {
               </div>
             ) : (
               <>
-                {state.messages.map((msg) => (
-                  <div key={msg.id} className="flex flex-col gap-2">
-                    <MessageBubble msg={msg} />
-                    {msg.role === "assistant" && (
-                      <AssistantTurnActivity
-                        items={executionItemsByMessageId.get(msg.id) ?? []}
-                        pendingConfirmation={
-                          state.pendingConfirmation?.messageId === msg.id
-                            ? state.pendingConfirmation
-                            : null
-                        }
-                        onConfirm={() => void confirmAssistantAction(true)}
-                        onCancel={() => void confirmAssistantAction(false)}
-                      />
-                    )}
-                  </div>
-                ))}
+                {state.messages.map((msg) => {
+                  const turnItems = executionItemsByMessageId.get(msg.id) ?? [];
+                  const activeItems = turnItems.filter((item) => item.status === "pending" || item.status === "running");
+                  const settledItems = turnItems.filter((item) => item.status !== "pending" && item.status !== "running");
+                  const pendingConfirmation =
+                    state.pendingConfirmation?.messageId === msg.id ? state.pendingConfirmation : null;
+
+                  return (
+                    <div key={msg.id} className="flex flex-col gap-2">
+                      {msg.role === "assistant" && activeItems.length > 0 && (
+                        <AssistantTurnActivity
+                          items={activeItems}
+                          pendingConfirmation={null}
+                          onConfirm={() => void confirmAssistantAction(true)}
+                          onCancel={() => void confirmAssistantAction(false)}
+                        />
+                      )}
+                      <MessageBubble msg={msg} />
+                      {msg.role === "assistant" && (settledItems.length > 0 || pendingConfirmation) && (
+                        <AssistantTurnActivity
+                          items={settledItems}
+                          pendingConfirmation={pendingConfirmation}
+                          onConfirm={() => void confirmAssistantAction(true)}
+                          onCancel={() => void confirmAssistantAction(false)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
                 {unassignedExecutionItems.map((item) =>
                   item.kind === "workflow" ? (
                     <AssistantWorkflowCard key={item.id} item={item} />
@@ -673,7 +892,89 @@ export function AIAssistantPanel() {
 
       {/* ─── Input ─── */}
       <div className="shrink-0 px-3 pt-2 pb-2 border-t border-border">
-        <div className="flex items-center gap-2 rounded-xl px-3 py-1.5 min-h-11 bg-muted border border-border">
+        {(attachments.length > 0 || queuedPrompts.length > 0) && (
+          <div className="mb-2 flex max-h-24 flex-col gap-1.5 overflow-y-auto">
+            {attachments.map((attachment) => (
+              <ComposerAttachmentChip
+                key={attachment.id}
+                attachment={attachment}
+                onRemove={handleRemoveAttachment}
+              />
+            ))}
+            {queuedPrompts.map((prompt, index) => (
+              <div
+                key={`${prompt}-${index}`}
+                className="flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px]"
+                style={{ background: "var(--muted)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
+              >
+                <Loader2Icon className="h-3 w-3 animate-spin" />
+                <span className="truncate">{t("panel.queuedPrompt", { defaultValue: "Queued" })}: {prompt}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(event) => handleAttachmentInputChange(event, "file")}
+        />
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(event) => handleAttachmentInputChange(event, "image")}
+        />
+        <div className="flex items-center gap-2 rounded-xl px-2 py-1.5 min-h-11 bg-muted border border-border">
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              aria-label={t("attachments.add", { defaultValue: "Add attachment" })}
+              aria-expanded={attachmentMenuOpen}
+              onClick={() => setAttachmentMenuOpen((value) => !value)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-background hover:text-foreground"
+            >
+              <PlusIcon className="h-4 w-4" />
+            </button>
+            {attachmentMenuOpen && (
+              <div
+                role="menu"
+                className="absolute bottom-10 left-0 z-30 w-56 overflow-hidden rounded-2xl border bg-popover p-1.5 text-sm shadow-xl"
+                style={{ borderColor: "var(--border)", color: "var(--popover-foreground)" }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                >
+                  <FileIcon className="h-4 w-4 text-muted-foreground" />
+                  <span>{t("attachments.uploadFile", { defaultValue: "Upload file" })}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                >
+                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  <span>{t("attachments.uploadImage", { defaultValue: "Upload image" })}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleAddFromProject}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                >
+                  <FolderOpenIcon className="h-4 w-4 text-muted-foreground" />
+                  <span>{t("attachments.addFromProject", { defaultValue: "Add from project" })}</span>
+                </button>
+              </div>
+            )}
+          </div>
           <textarea
             ref={inputRef}
             value={input}
@@ -682,28 +983,28 @@ export function AIAssistantPanel() {
             placeholder={t("inputPlaceholder")}
             rows={1}
             className="flex-1 bg-transparent text-sm leading-5 outline-none resize-none min-h-5 max-h-24 placeholder:text-muted-foreground overflow-y-auto text-foreground"
-            disabled={isAssistantBusy(state.status)}
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim() || isAssistantBusy(state.status)}
+            disabled={!canSend}
             aria-label={t("actions.send")}
             className={cn(
               "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 disabled:opacity-40",
-              input.trim()
+              canSend
                 ? "bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)] text-primary-foreground"
                 : "text-muted-foreground"
             )}
           >
-            <SendIcon className="w-4 h-4" />
+            {isUploadingAttachments ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
           </button>
         </div>
         <div className="flex items-center justify-between mt-1 px-1">
           <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-            <CornerDownLeftIcon className="w-3 h-3" /> {t("panel.enterToSend")}
+            <CornerDownLeftIcon className="w-3 h-3" /> {isBusy ? t("panel.enterToQueue", { defaultValue: "Enter queues" }) : t("panel.enterToSend")}
           </span>
-          <span className="text-[10px] text-muted-foreground">
-            {t("panel.escToClose")}
+          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <PaperclipIcon className="h-3 w-3" />
+            {t("attachments.hint", { defaultValue: "Files stay server-side" })}
           </span>
         </div>
       </div>

@@ -1,4 +1,11 @@
-import { AlertCircleIcon, CheckCircle2Icon, Loader2Icon, WrenchIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  AlertCircleIcon,
+  CheckCircle2Icon,
+  ChevronDownIcon,
+  Loader2Icon,
+  WrenchIcon,
+} from "lucide-react";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
 
@@ -6,15 +13,32 @@ export function AssistantExecutionCard({ item }: { item: AssistantExecutionItem 
   const failed = item.status === "failed";
   const running = item.status === "running";
   const succeeded = item.status === "succeeded";
+  const defaultExpanded = running || item.status === "pending" || failed;
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const hasDetails = Boolean(item.summary || item.errorMessage);
+
+  useEffect(() => {
+    setExpanded(defaultExpanded);
+  }, [defaultExpanded, item.id, item.status]);
 
   return (
     <div
-      className="w-full rounded-2xl rounded-bl-md border px-3 py-2.5 text-xs shadow-sm"
-      style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}
+      className={cn(
+        "w-full rounded-2xl rounded-bl-md border text-xs shadow-sm transition-all",
+        succeeded ? "px-2.5 py-2" : "px-3 py-2.5",
+      )}
+      style={{
+        background: succeeded ? "color-mix(in oklab, var(--card) 55%, transparent)" : "var(--card)",
+        borderColor: succeeded ? "color-mix(in oklab, var(--border) 70%, transparent)" : "var(--border)",
+        color: "var(--foreground)",
+      }}
     >
       <div className="flex items-start gap-2">
         <div
-          className={cn("mt-0.5 flex h-6 w-6 items-center justify-center rounded-md", running && "animate-pulse")}
+          className={cn(
+            "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+            running && "animate-pulse",
+          )}
           style={{ background: "var(--muted)", color: failed ? "var(--destructive)" : "var(--primary)" }}
         >
           {running ? (
@@ -30,16 +54,28 @@ export function AssistantExecutionCard({ item }: { item: AssistantExecutionItem 
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium truncate">{item.title}</span>
-            <span className="shrink-0 capitalize" style={{ color: "var(--muted-foreground)" }}>
-              {item.status}
-            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span className="capitalize" style={{ color: "var(--muted-foreground)" }}>
+                {item.status}
+              </span>
+              {hasDetails && (
+                <button
+                  type="button"
+                  aria-label={expanded ? "Hide tool details" : "Show tool details"}
+                  onClick={() => setExpanded((value) => !value)}
+                  className="rounded-full p-0.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                >
+                  <ChevronDownIcon className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+                </button>
+              )}
+            </div>
           </div>
-          {item.summary && (
+          {expanded && item.summary && (
             <p className="mt-1 leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
               {item.summary}
             </p>
           )}
-          {item.errorMessage && (
+          {expanded && item.errorMessage && (
             <p className="mt-1 leading-relaxed" style={{ color: "var(--destructive)" }}>
               {item.errorMessage}
             </p>
