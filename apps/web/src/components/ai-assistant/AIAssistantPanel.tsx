@@ -14,7 +14,13 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { renameChatConversation, deleteChatConversation, type ChatConversationRead } from "@/lib/api";
-import { isAssistantBusy, useAIAssistant, type ChatMessage } from "@/lib/ai-assistant-store";
+import {
+  isAssistantBusy,
+  useAIAssistant,
+  type AssistantConfirmationRequest,
+  type AssistantExecutionItem,
+  type ChatMessage,
+} from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -135,6 +141,41 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
             <span className="animate-pulse" style={{ animationDelay: "150ms" }}>●</span>
             <span className="animate-pulse" style={{ animationDelay: "300ms" }}>●</span>
           </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AssistantTurnActivity({
+  items,
+  pendingConfirmation,
+  onConfirm,
+  onCancel,
+}: {
+  items: AssistantExecutionItem[];
+  pendingConfirmation: AssistantConfirmationRequest | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (items.length === 0 && !pendingConfirmation) return null;
+
+  return (
+    <div className="flex justify-start">
+      <div className="flex w-[92%] max-w-[92%] flex-col gap-2">
+        {items.map((item) =>
+          item.kind === "workflow" ? (
+            <AssistantWorkflowCard key={item.id} item={item} />
+          ) : (
+            <AssistantExecutionCard key={item.id} item={item} />
+          ),
+        )}
+        {pendingConfirmation && (
+          <AssistantConfirmationCard
+            confirmation={pendingConfirmation}
+            onConfirm={onConfirm}
+            onCancel={onCancel}
+          />
         )}
       </div>
     </div>
@@ -353,6 +394,20 @@ export function AIAssistantPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const executionItemsByMessageId = useMemo(() => {
+    const grouped = new Map<string, AssistantExecutionItem[]>();
+    for (const item of state.executionItems) {
+      if (!item.messageId) continue;
+      const current = grouped.get(item.messageId) ?? [];
+      current.push(item);
+      grouped.set(item.messageId, current);
+    }
+    return grouped;
+  }, [state.executionItems]);
+  const unassignedExecutionItems = useMemo(
+    () => state.executionItems.filter((item) => !item.messageId),
+    [state.executionItems],
+  );
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     requestAnimationFrame(() => {
@@ -563,16 +618,30 @@ export function AIAssistantPanel() {
             ) : (
               <>
                 {state.messages.map((msg) => (
-                  <MessageBubble key={msg.id} msg={msg} />
+                  <div key={msg.id} className="flex flex-col gap-2">
+                    <MessageBubble msg={msg} />
+                    {msg.role === "assistant" && (
+                      <AssistantTurnActivity
+                        items={executionItemsByMessageId.get(msg.id) ?? []}
+                        pendingConfirmation={
+                          state.pendingConfirmation?.messageId === msg.id
+                            ? state.pendingConfirmation
+                            : null
+                        }
+                        onConfirm={() => void confirmAssistantAction(true)}
+                        onCancel={() => void confirmAssistantAction(false)}
+                      />
+                    )}
+                  </div>
                 ))}
-                {state.executionItems.map((item) =>
+                {unassignedExecutionItems.map((item) =>
                   item.kind === "workflow" ? (
                     <AssistantWorkflowCard key={item.id} item={item} />
                   ) : (
                     <AssistantExecutionCard key={item.id} item={item} />
                   ),
                 )}
-                {state.pendingConfirmation && (
+                {state.pendingConfirmation && !state.pendingConfirmation.messageId && (
                   <AssistantConfirmationCard
                     confirmation={state.pendingConfirmation}
                     onConfirm={() => void confirmAssistantAction(true)}

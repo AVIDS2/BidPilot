@@ -131,6 +131,60 @@ describe("AIAssistantPanel", () => {
     expect(screen.getByText("succeeded")).toBeInTheDocument();
   });
 
+  it("keeps tool activity attached to the assistant turn that produced it", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c5","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"open_page","arguments":{"route":"/projects"},"state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"open_page","result":{"route":"/projects"},"summary":"已打开项目页。","state":"completed"}',
+            'event: assistant.message\ndata: {"content":"第一轮完成。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c5","full_response":"第一轮完成。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c5","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"search_projects","arguments":{"query":"Acme"},"state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"search_projects","result":{"count":1},"summary":"找到 1 个项目。","state":"completed"}',
+            'event: assistant.message\ndata: {"content":"第二轮完成。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c5","full_response":"第二轮完成。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+
+    const input = screen.getByPlaceholderText("Ask me anything...");
+    fireEvent.change(input, { target: { value: "Open projects" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("第一轮完成。")).toBeInTheDocument();
+      expect(screen.getByText("open_page")).toBeInTheDocument();
+    });
+
+    fireEvent.change(input, { target: { value: "Search Acme projects" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("第二轮完成。")).toBeInTheDocument();
+      expect(screen.getByText("search_projects")).toBeInTheDocument();
+    });
+
+    const firstTool = screen.getByText("open_page");
+    const secondUserMessage = screen.getByText("Search Acme projects");
+    expect(firstTool.compareDocumentPosition(secondUserMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("supports renaming a conversation from history", async () => {
     const { listChatConversations, renameChatConversation } = await import("@/lib/api");
     vi.mocked(listChatConversations).mockResolvedValue([

@@ -38,7 +38,7 @@ export function AssistantWorkflowCard({ item }: { item: AssistantExecutionItem }
 
   return (
     <div
-      className="ml-0 max-w-[92%] overflow-hidden rounded-2xl rounded-bl-md border text-xs shadow-sm"
+      className="w-full overflow-hidden rounded-2xl rounded-bl-md border text-xs shadow-sm"
       style={{
         background:
           "linear-gradient(135deg, color-mix(in oklab, var(--primary) 8%, var(--card)), var(--card))",

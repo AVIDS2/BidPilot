@@ -34,6 +34,7 @@ export interface ChatMessage {
 }
 
 export interface AssistantConfirmationRequest {
+  messageId?: string;
   toolName: string;
   arguments: Record<string, unknown>;
   message: string;
@@ -41,6 +42,7 @@ export interface AssistantConfirmationRequest {
 
 export interface AssistantExecutionItem {
   id: string;
+  messageId?: string;
   kind: "intent" | "tool" | "workflow";
   toolName?: string;
   runId?: string;
@@ -104,6 +106,7 @@ export interface AIAssistantState {
   currentConversationId: string | null;
   conversations: ChatConversationRead[];
   messages: ChatMessage[];
+  activeAssistantMessageId: string | null;
   status: AssistantStatus;
   executionItems: AssistantExecutionItem[];
   pendingConfirmation: AssistantConfirmationRequest | null;
@@ -128,14 +131,14 @@ type Action =
   | { type: "ADD_MESSAGE"; message: ChatMessage }
   | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
   | { type: "UPDATE_LAST_ASSISTANT"; content: string }
+  | { type: "SET_ACTIVE_ASSISTANT_MESSAGE"; messageId: string | null }
   | { type: "SET_STATUS"; status: AssistantStatus }
   | { type: "ADD_EXECUTION_ITEM"; item: AssistantExecutionItem }
   | { type: "UPDATE_EXECUTION_ITEM"; toolName: string; runId?: string; patch: Partial<AssistantExecutionItem> }
   | { type: "MERGE_WORKFLOW_NODE"; runId: string; node: WorkflowNodeProgress; currentNode?: string | null }
   | { type: "SET_SESSION_ERROR"; message: string; errorCode?: string }
   | { type: "SET_PENDING_CONFIRMATION"; confirmation: AssistantConfirmationRequest | null }
-  | { type: "CLEAR_EXECUTION" }
-  | { type: "RESET_EXECUTION" }
+  | { type: "CLEAR_TRANSIENT_STATE" }
   | { type: "CLEAR_MESSAGES" }
   | { type: "SET_CONTEXT"; context: PageContext }
   | { type: "SET_SUGGESTIONS"; suggestions: InlineSuggestion[] }
@@ -149,6 +152,7 @@ const initialState: AIAssistantState = {
   currentConversationId: null,
   conversations: [],
   messages: [],
+  activeAssistantMessageId: null,
   status: "idle",
   executionItems: [],
   pendingConfirmation: null,
@@ -186,7 +190,14 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "ADD_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
     case "REPLACE_MESSAGES":
-      return { ...state, messages: action.messages };
+      return {
+        ...state,
+        messages: action.messages,
+        activeAssistantMessageId: null,
+        executionItems: [],
+        pendingConfirmation: null,
+        sessionError: null,
+      };
     case "UPDATE_LAST_ASSISTANT": {
       const msgs = [...state.messages];
       for (let i = msgs.length - 1; i >= 0; i--) {
@@ -197,14 +208,24 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       }
       return { ...state, messages: msgs };
     }
+    case "SET_ACTIVE_ASSISTANT_MESSAGE":
+      return { ...state, activeAssistantMessageId: action.messageId };
     case "SET_STATUS":
       return { ...state, status: action.status };
     case "ADD_EXECUTION_ITEM":
-      return { ...state, executionItems: [...state.executionItems, action.item] };
+      return {
+        ...state,
+        executionItems: [
+          ...state.executionItems,
+          { ...action.item, messageId: action.item.messageId ?? state.activeAssistantMessageId ?? undefined },
+        ],
+      };
     case "UPDATE_EXECUTION_ITEM": {
       let updated = false;
       const executionItems = state.executionItems.map((item) => {
-        const matches = action.runId ? item.runId === action.runId : item.toolName === action.toolName;
+        const matches = action.runId
+          ? item.runId === action.runId
+          : item.toolName === action.toolName && item.messageId === state.activeAssistantMessageId;
         if (matches) {
           updated = true;
           return { ...item, ...action.patch };
@@ -214,6 +235,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       if (!updated) {
         executionItems.push({
           id: `exec-${Date.now()}`,
+          messageId: state.activeAssistantMessageId ?? undefined,
           kind: "tool",
           toolName: action.toolName,
           runId: action.runId,
@@ -247,7 +269,12 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       return { ...state, executionItems };
     }
     case "SET_PENDING_CONFIRMATION":
-      return { ...state, pendingConfirmation: action.confirmation };
+      return {
+        ...state,
+        pendingConfirmation: action.confirmation
+          ? { ...action.confirmation, messageId: action.confirmation.messageId ?? state.activeAssistantMessageId ?? undefined }
+          : null,
+      };
     case "SET_SESSION_ERROR":
       return {
         ...state,
@@ -266,22 +293,21 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           },
         ],
       };
-    case "CLEAR_EXECUTION":
+    case "CLEAR_TRANSIENT_STATE":
       return {
         ...state,
-        executionItems: state.executionItems.filter((item) => item.kind === "workflow"),
-        pendingConfirmation: null,
-        sessionError: null,
-      };
-    case "RESET_EXECUTION":
-      return {
-        ...state,
-        executionItems: [],
         pendingConfirmation: null,
         sessionError: null,
       };
     case "CLEAR_MESSAGES":
-      return { ...state, messages: [], executionItems: [], pendingConfirmation: null, sessionError: null };
+      return {
+        ...state,
+        messages: [],
+        activeAssistantMessageId: null,
+        executionItems: [],
+        pendingConfirmation: null,
+        sessionError: null,
+      };
     case "SET_CONTEXT":
       return { ...state, currentContext: action.context };
     case "SET_SUGGESTIONS":
@@ -374,7 +400,7 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
     const toolName = String(parsed.tool_name ?? "");
     const result = asRecord(parsed.result);
     const runId = typeof result.run_id === "string" ? result.run_id : undefined;
-    dispatch({ type: "RESET_EXECUTION" });
+    dispatch({ type: "CLEAR_TRANSIENT_STATE" });
     dispatch({
       type: "ADD_EXECUTION_ITEM",
       item: {
@@ -704,7 +730,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         content: displayContent,
         timestamp: Date.now(),
       };
-      dispatch({ type: "RESET_EXECUTION" });
+      dispatch({ type: "CLEAR_TRANSIENT_STATE" });
       dispatch({ type: "ADD_MESSAGE", message: userMsg });
       dispatch({ type: "SET_STATUS", status: "thinking" });
 
@@ -715,6 +741,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         timestamp: Date.now(),
       };
       dispatch({ type: "ADD_MESSAGE", message: aiMsg });
+      dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: aiMsg.id });
 
       try {
         const token = localStorage.getItem("docpilot_token");
