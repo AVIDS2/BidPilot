@@ -10,6 +10,7 @@ import {
   SearchIcon,
   Trash2Icon,
   MessageSquareIcon,
+  ChevronDownIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { renameChatConversation, deleteChatConversation, type ChatConversationRead } from "@/lib/api";
@@ -272,6 +273,7 @@ function HistorySidebar({
                           {isEditing ? (
                             <input
                               ref={renameInputRef}
+                              aria-label={t("history.rename", { defaultValue: "Rename conversation" })}
                               value={editingTitle}
                               onChange={(e) => onEditTitleChange(e.target.value)}
                               onClick={(e) => e.stopPropagation()}
@@ -351,12 +353,32 @@ export function AIAssistantPanel() {
   const [editingTitle, setEditingTitle] = useState("");
   const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
+    });
+  }, []);
+
+  const handleMessagesScroll = useCallback(() => {
+    const viewport = scrollContainerRef.current;
+    if (!viewport) return;
+    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    const isNearBottom = distanceFromBottom < 120;
+    shouldAutoScrollRef.current = isNearBottom;
+    setShowScrollToBottom(!isNearBottom);
+  }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [state.messages]);
+    if (shouldAutoScrollRef.current) {
+      scrollToBottom("smooth");
+    }
+  }, [scrollToBottom, state.messages, state.executionItems, state.pendingConfirmation]);
 
   useEffect(() => {
     if (state.isOpen && state.mode === "panel") {
@@ -382,6 +404,8 @@ export function AIAssistantPanel() {
 
   const handleSend = useCallback(() => {
     if (!input.trim() || isAssistantBusy(state.status)) return;
+    shouldAutoScrollRef.current = true;
+    setShowScrollToBottom(false);
     sendMessage(input);
     setInput("");
   }, [input, state.status, sendMessage]);
@@ -397,7 +421,11 @@ export function AIAssistantPanel() {
   );
 
   const handleQuickAction = useCallback(
-    (text: string) => { sendMessage(text); },
+    (text: string) => {
+      shouldAutoScrollRef.current = true;
+      setShowScrollToBottom(false);
+      sendMessage(text);
+    },
     [sendMessage],
   );
 
@@ -527,7 +555,11 @@ export function AIAssistantPanel() {
         )}
 
         {/* ─── Messages ─── */}
-        <ScrollArea className="h-full">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleMessagesScroll}
+          className="h-full overflow-y-auto"
+        >
           <div className="p-4 space-y-4">
             {state.messages.length === 0 ? (
               <div className="text-center py-10">
@@ -561,7 +593,23 @@ export function AIAssistantPanel() {
               </>
             )}
           </div>
-        </ScrollArea>
+        </div>
+
+        {showScrollToBottom && state.messages.length > 0 && !historyOpen && (
+          <button
+            type="button"
+            aria-label={t("panel.scrollToBottom", { defaultValue: "Scroll to bottom" })}
+            onClick={() => {
+              shouldAutoScrollRef.current = true;
+              setShowScrollToBottom(false);
+              scrollToBottom("smooth");
+            }}
+            className="absolute bottom-3 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border bg-background/95 text-muted-foreground shadow-lg backdrop-blur transition hover:text-foreground"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <ChevronDownIcon className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* ─── Input ─── */}
