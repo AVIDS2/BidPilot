@@ -100,7 +100,7 @@ describe("AIAssistantPanel", () => {
     expect(screen.queryByText("Intent detected")).not.toBeInTheDocument();
   });
 
-  it("does not render successful tool trace cards in the default chat flow", async () => {
+  it("renders completed tool activity inline in the chat flow", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -125,10 +125,10 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => {
-      expect(screen.getByText("已打开项目页。")).toBeInTheDocument();
+      expect(screen.getAllByText("已打开项目页。").length).toBeGreaterThan(0);
     });
-    expect(screen.queryByText("open_page")).not.toBeInTheDocument();
-    expect(screen.queryByText("succeeded")).not.toBeInTheDocument();
+    expect(screen.getByText("open_page")).toBeInTheDocument();
+    expect(screen.getByText("succeeded")).toBeInTheDocument();
   });
 
   it("supports renaming a conversation from history", async () => {

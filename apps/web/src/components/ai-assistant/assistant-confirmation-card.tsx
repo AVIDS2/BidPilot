@@ -16,7 +16,7 @@ export function AssistantConfirmationCard({
 
   return (
     <div
-      className="rounded-lg border px-3 py-3 text-xs"
+      className="ml-0 max-w-[92%] rounded-2xl rounded-bl-md border px-3 py-3 text-xs shadow-sm"
       style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}
     >
       <div className="flex items-start gap-2">

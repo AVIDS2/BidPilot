@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { renameChatConversation, deleteChatConversation, type ChatConversationRead } from "@/lib/api";
-import { isAssistantBusy, useAIAssistant, type AssistantStatus, type ChatMessage } from "@/lib/ai-assistant-store";
+import { isAssistantBusy, useAIAssistant, type ChatMessage } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -139,11 +139,6 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       </div>
     </div>
   );
-}
-
-function statusLabel(status: AssistantStatus, t: (key: string) => string) {
-  if (status === "idle") return "";
-  return t(`status.${status}`);
 }
 
 /* ─── History Sidebar ─── */
@@ -494,11 +489,6 @@ export function AIAssistantPanel() {
                     : null) || t("panel.untitledConversation")
                   : t("title")}
               </span>
-              {isAssistantBusy(state.status) && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
-                  {statusLabel(state.status, t)}
-                </span>
-              )}
             </div>
           </div>
         </div>

@@ -135,6 +135,7 @@ type Action =
   | { type: "SET_SESSION_ERROR"; message: string; errorCode?: string }
   | { type: "SET_PENDING_CONFIRMATION"; confirmation: AssistantConfirmationRequest | null }
   | { type: "CLEAR_EXECUTION" }
+  | { type: "RESET_EXECUTION" }
   | { type: "CLEAR_MESSAGES" }
   | { type: "SET_CONTEXT"; context: PageContext }
   | { type: "SET_SUGGESTIONS"; suggestions: InlineSuggestion[] }
@@ -272,6 +273,13 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         pendingConfirmation: null,
         sessionError: null,
       };
+    case "RESET_EXECUTION":
+      return {
+        ...state,
+        executionItems: [],
+        pendingConfirmation: null,
+        sessionError: null,
+      };
     case "CLEAR_MESSAGES":
       return { ...state, messages: [], executionItems: [], pendingConfirmation: null, sessionError: null };
     case "SET_CONTEXT":
@@ -366,7 +374,7 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
     const toolName = String(parsed.tool_name ?? "");
     const result = asRecord(parsed.result);
     const runId = typeof result.run_id === "string" ? result.run_id : undefined;
-    dispatch({ type: "CLEAR_EXECUTION" });
+    dispatch({ type: "RESET_EXECUTION" });
     dispatch({
       type: "ADD_EXECUTION_ITEM",
       item: {
@@ -416,7 +424,6 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
           isRunning: true,
         },
       });
-      dispatch({ type: "CLEAR_EXECUTION" });
       return;
     }
     dispatch({
@@ -432,7 +439,6 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
       window.history.pushState({}, "", result.route);
       window.dispatchEvent(new PopStateEvent("popstate"));
     }
-    dispatch({ type: "CLEAR_EXECUTION" });
     return;
   }
 
@@ -698,6 +704,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         content: displayContent,
         timestamp: Date.now(),
       };
+      dispatch({ type: "RESET_EXECUTION" });
       dispatch({ type: "ADD_MESSAGE", message: userMsg });
       dispatch({ type: "SET_STATUS", status: "thinking" });
 
