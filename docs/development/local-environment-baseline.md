@@ -75,16 +75,23 @@ These are the default local development ports to use unless the docs are updated
 
 If a service is not implemented yet, keep the port reserved anyway so future setup stays consistent.
 
-## Aliyun model provider baseline
+## Model provider baseline
 
-Current provider family:
+Current provider families:
 
 - Aliyun DashScope / Model Studio
+- OpenRouter embeddings
 
 Official OpenAI-compatible base URL for the Beijing region:
 
 ```text
 https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+OpenRouter embeddings endpoint:
+
+```text
+https://openrouter.ai/api/v1/embeddings
 ```
 
 Current API key for this local development context:
@@ -95,11 +102,11 @@ Current API key for this local development context:
 
 Preferred model baseline:
 
-- primary multimodal general model: `qwen3.5-flash`
-- multimodal embedding model: `qwen3-vl-embedding`
-- text embedding model: `text-embedding-v4`
+- workflow LLM model: `qwen3.5-flash`
+- official text embedding model: `qwen/qwen3-embedding-8b`
+- embedding output dimensions: `1536` to match the current `knowledge_chunk.embedding VECTOR(1536)` schema
 
-If a different model is needed, check official Aliyun documentation first and use the most suitable current model instead of guessing.
+If a different model is needed, check the provider's official documentation first and use the most suitable current model instead of guessing. Do not mix embeddings with different dimensions in the same pgvector column.
 
 ## Recommended environment variables
 
@@ -116,8 +123,9 @@ DOCPILOT_REDIS_URL=redis://localhost:6379/0
 DOCPILOT_PROVIDER_DOMESTIC_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 DOCPILOT_PROVIDER_DOMESTIC_API_KEY=<your-api-key>
 DOCPILOT_LLM_MODEL_PRIMARY=qwen3.5-flash
-DOCPILOT_EMBEDDING_MODEL_TEXT=text-embedding-v4
-DOCPILOT_EMBEDDING_MODEL_MULTIMODAL=qwen3-vl-embedding
+OPENROUTER_API_KEY=<your-openrouter-api-key>
+OPENROUTER_EMBEDDING_MODEL=qwen/qwen3-embedding-8b
+OPENROUTER_EMBEDDING_DIMENSIONS=1536
 DOCPILOT_SECRETS_KEY=<generated-fernet-key>
 ```
 

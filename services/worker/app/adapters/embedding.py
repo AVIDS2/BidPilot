@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from app.adapters.provider_env import embedding_api_key, embedding_api_url, embedding_model
+from app.adapters.provider_env import embedding_api_key, embedding_api_url, embedding_dimensions, embedding_model
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,24 @@ def _api_model() -> str:
     return embedding_model(_DEFAULT_MODEL)
 
 
+def _api_dimensions() -> int | None:
+    return embedding_dimensions()
+
+
+def _request_payload(input_value: str | list[str], model: str) -> dict[str, object]:
+    payload: dict[str, object] = {"input": input_value, "model": model}
+    dimensions = _api_dimensions()
+    if dimensions:
+        payload["dimensions"] = dimensions
+    return payload
+
+
+def _ensure_embedding_dimension(embedding: list[float]) -> list[float]:
+    if len(embedding) != EMBEDDING_DIM:
+        raise ValueError(f"embedding dimension mismatch: expected {EMBEDDING_DIM}, got {len(embedding)}")
+    return embedding
+
+
 def generate_embedding(text: str) -> EmbeddingResult:
     """Generate an embedding vector for the given text.
 
@@ -58,12 +76,12 @@ def generate_embedding(text: str) -> EmbeddingResult:
         resp = httpx.post(
             url,
             headers={"Authorization": f"Bearer {api_key}"},
-            json={"input": text, "model": model},
+            json=_request_payload(text, model),
             timeout=30.0,
         )
         resp.raise_for_status()
         data = resp.json()
-        embedding = data["data"][0]["embedding"]
+        embedding = _ensure_embedding_dimension(data["data"][0]["embedding"])
         usage = data.get("usage", {})
         return EmbeddingResult(
             embedding=embedding,
@@ -95,7 +113,7 @@ def generate_embeddings_batch(texts: list[str]) -> list[EmbeddingResult]:
         resp = httpx.post(
             url,
             headers={"Authorization": f"Bearer {api_key}"},
-            json={"input": texts, "model": model},
+            json=_request_payload(texts, model),
             timeout=60.0,
         )
         resp.raise_for_status()
@@ -103,7 +121,7 @@ def generate_embeddings_batch(texts: list[str]) -> list[EmbeddingResult]:
         results: list[EmbeddingResult] = []
         for item in data["data"]:
             results.append(EmbeddingResult(
-                embedding=item["embedding"],
+                embedding=_ensure_embedding_dimension(item["embedding"]),
                 model=model,
                 token_count=data.get("usage", {}).get("total_tokens", 0),
             ))

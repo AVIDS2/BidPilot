@@ -65,9 +65,12 @@ VITE_API_URL=http://localhost:8000 pnpm dev
 | `LLM_API_KEY` / `OPENAI_API_KEY` | _(none)_ | LLM API key for drafting |
 | `LLM_API_URL` | `https://api.openai.com/v1/chat/completions` | LLM endpoint |
 | `LLM_MODEL` | `gpt-4o-mini` | LLM model name |
-| `EMBEDDING_API_KEY` / `OPENAI_API_KEY` | _(none)_ | Embedding API key |
-| `EMBEDDING_API_URL` | `https://api.openai.com/v1/embeddings` | Embedding endpoint |
-| `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
+| `OPENROUTER_API_KEY` | _(none)_ | Official OpenRouter key for embeddings |
+| `OPENROUTER_EMBEDDING_MODEL` | `qwen/qwen3-embedding-8b` | OpenRouter embedding model name |
+| `OPENROUTER_EMBEDDING_DIMENSIONS` | `1536` | Embedding output dimensions; must match `knowledge_chunk.embedding VECTOR(1536)` |
+| `EMBEDDING_API_KEY` / `OPENAI_API_KEY` | _(none)_ | Legacy embedding API key fallback |
+| `EMBEDDING_API_URL` | `https://api.openai.com/v1/embeddings` | Legacy embedding endpoint |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` | Legacy embedding model name |
 
 For the controlled VPS pilot deployment shape, see `docs/ops/vps-pilot-deployment.md` instead of this local/staging guide.
 
@@ -75,7 +78,7 @@ For the controlled VPS pilot deployment shape, see `docs/ops/vps-pilot-deploymen
 
 - [ ] Set `DOCPILOT_JWT_SECRET` to a cryptographically random 32+ byte string
 - [ ] Set `DOCPILOT_AUTH_REQUIRED=true`
-- [ ] Configure `LLM_API_KEY` and `EMBEDDING_API_KEY` (or `OPENAI_API_KEY`)
+- [ ] Configure workflow LLM credentials and `OPENROUTER_API_KEY` for embeddings
 - [ ] Use managed Postgres with pgvector extension
 - [ ] Use managed Redis (ElastiCache, etc.)
 - [ ] Use managed object storage (S3 with MinIO gateway or direct S3)

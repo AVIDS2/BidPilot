@@ -75,6 +75,10 @@ class TestEmbeddingAdapter:
     def test_stub_embedding_without_api_key(self) -> None:
         # Ensure no API key is set
         os.environ.pop("EMBEDDING_API_KEY", None)
+        os.environ.pop("OPENROUTER_API_KEY", None)
+        os.environ.pop("OPENROUTER_BASE_URL", None)
+        os.environ.pop("OPENROUTER_EMBEDDING_MODEL", None)
+        os.environ.pop("OPENROUTER_EMBEDDING_DIMENSIONS", None)
         os.environ.pop("OPENAI_API_KEY", None)
         os.environ.pop("DOCPILOT_PROVIDER_OPENAI_API_KEY", None)
         os.environ.pop("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", None)
@@ -87,6 +91,10 @@ class TestEmbeddingAdapter:
 
     def test_batch_stub_without_api_key(self) -> None:
         os.environ.pop("EMBEDDING_API_KEY", None)
+        os.environ.pop("OPENROUTER_API_KEY", None)
+        os.environ.pop("OPENROUTER_BASE_URL", None)
+        os.environ.pop("OPENROUTER_EMBEDDING_MODEL", None)
+        os.environ.pop("OPENROUTER_EMBEDDING_DIMENSIONS", None)
         os.environ.pop("OPENAI_API_KEY", None)
         os.environ.pop("DOCPILOT_PROVIDER_OPENAI_API_KEY", None)
         os.environ.pop("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", None)
@@ -100,6 +108,11 @@ class TestEmbeddingAdapter:
         monkeypatch.delenv("EMBEDDING_API_KEY", raising=False)
         monkeypatch.delenv("EMBEDDING_API_URL", raising=False)
         monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+        monkeypatch.delenv("EMBEDDING_DIMENSIONS", raising=False)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.delenv("OPENROUTER_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENROUTER_EMBEDDING_MODEL", raising=False)
+        monkeypatch.delenv("OPENROUTER_EMBEDDING_DIMENSIONS", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("DOCPILOT_PROVIDER_OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", raising=False)
@@ -111,6 +124,74 @@ class TestEmbeddingAdapter:
         assert embedding_adapter._api_key() == "test-aliyun-key"
         assert embedding_adapter._api_url() == "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"
         assert embedding_adapter._api_model() == "text-embedding-v4"
+
+    def test_openrouter_embedding_env_uses_qwen_defaults(self, monkeypatch) -> None:
+        monkeypatch.delenv("EMBEDDING_API_KEY", raising=False)
+        monkeypatch.delenv("EMBEDDING_API_URL", raising=False)
+        monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+        monkeypatch.delenv("EMBEDDING_DIMENSIONS", raising=False)
+        monkeypatch.delenv("OPENROUTER_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENROUTER_EMBEDDING_MODEL", raising=False)
+        monkeypatch.delenv("OPENROUTER_EMBEDDING_DIMENSIONS", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_EMBEDDING_MODEL_TEXT", raising=False)
+        monkeypatch.delenv("ALIYUN_API_KEY", raising=False)
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+
+        assert embedding_adapter._api_key() == "test-openrouter-key"
+        assert embedding_adapter._api_url() == "https://openrouter.ai/api/v1/embeddings"
+        assert embedding_adapter._api_model() == "qwen/qwen3-embedding-8b"
+        assert embedding_adapter._api_dimensions() == 1536
+
+    def test_openrouter_embedding_request_includes_dimensions(self, monkeypatch) -> None:
+        captured: dict[str, object] = {}
+
+        class Response:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return {
+                    "data": [{"embedding": [0.1] * 1536}],
+                    "usage": {"total_tokens": 3},
+                }
+
+        def fake_post(url: str, *, headers: dict[str, str], json: dict[str, object], timeout: float) -> Response:
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            captured["timeout"] = timeout
+            return Response()
+
+        monkeypatch.delenv("EMBEDDING_API_KEY", raising=False)
+        monkeypatch.delenv("EMBEDDING_API_URL", raising=False)
+        monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+        monkeypatch.delenv("EMBEDDING_DIMENSIONS", raising=False)
+        monkeypatch.delenv("OPENROUTER_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENROUTER_EMBEDDING_MODEL", raising=False)
+        monkeypatch.delenv("OPENROUTER_EMBEDDING_DIMENSIONS", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", raising=False)
+        monkeypatch.delenv("ALIYUN_API_KEY", raising=False)
+        monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+        monkeypatch.setattr(embedding_adapter.httpx, "post", fake_post)
+
+        result = generate_embedding("hello")
+
+        assert result.model == "qwen/qwen3-embedding-8b"
+        assert len(result.embedding) == 1536
+        assert captured["url"] == "https://openrouter.ai/api/v1/embeddings"
+        assert captured["json"] == {
+            "input": "hello",
+            "model": "qwen/qwen3-embedding-8b",
+            "dimensions": 1536,
+        }
 
 
 class TestLLMAdapter:

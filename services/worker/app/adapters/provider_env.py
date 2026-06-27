@@ -11,6 +11,9 @@ import os
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 DASHSCOPE_CHAT_MODEL = "qwen3.5-flash"
 DASHSCOPE_EMBEDDING_MODEL = "text-embedding-v4"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_EMBEDDING_MODEL = "qwen/qwen3-embedding-8b"
+OPENROUTER_EMBEDDING_DIMENSIONS = 1536
 
 
 def _first_present(names: list[tuple[str, str]]) -> tuple[str | None, str | None]:
@@ -91,6 +94,7 @@ def embedding_api_key() -> str | None:
     key, _family = _first_present(
         [
             ("EMBEDDING_API_KEY", "legacy"),
+            ("OPENROUTER_API_KEY", "openrouter"),
             ("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic"),
             ("ALIYUN_API_KEY", "domestic"),
             ("DASHSCOPE_API_KEY", "domestic"),
@@ -109,6 +113,7 @@ def embedding_api_url(default_url: str) -> str:
     _key, family = _first_present(
         [
             ("EMBEDDING_API_KEY", "legacy"),
+            ("OPENROUTER_API_KEY", "openrouter"),
             ("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic"),
             ("ALIYUN_API_KEY", "domestic"),
             ("DASHSCOPE_API_KEY", "domestic"),
@@ -119,6 +124,10 @@ def embedding_api_url(default_url: str) -> str:
 
     if family == "domestic":
         base_url = os.environ.get("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", DASHSCOPE_BASE_URL)
+        return _endpoint(base_url, "embeddings")
+
+    if family == "openrouter":
+        base_url = os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL)
         return _endpoint(base_url, "embeddings")
 
     if family == "openai":
@@ -137,6 +146,7 @@ def embedding_model(default_model: str) -> str:
     _key, family = _first_present(
         [
             ("EMBEDDING_API_KEY", "legacy"),
+            ("OPENROUTER_API_KEY", "openrouter"),
             ("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic"),
             ("ALIYUN_API_KEY", "domestic"),
             ("DASHSCOPE_API_KEY", "domestic"),
@@ -146,4 +156,30 @@ def embedding_model(default_model: str) -> str:
     )
     if family == "domestic":
         return os.environ.get("DOCPILOT_EMBEDDING_MODEL_TEXT", DASHSCOPE_EMBEDDING_MODEL)
+    if family == "openrouter":
+        return os.environ.get("OPENROUTER_EMBEDDING_MODEL", OPENROUTER_EMBEDDING_MODEL)
     return default_model
+
+
+def embedding_dimensions() -> int | None:
+    explicit_dimensions = (
+        os.environ.get("EMBEDDING_DIMENSIONS")
+        or os.environ.get("DOCPILOT_EMBEDDING_DIMENSIONS")
+    )
+    if explicit_dimensions:
+        return int(explicit_dimensions)
+
+    _key, family = _first_present(
+        [
+            ("EMBEDDING_API_KEY", "legacy"),
+            ("OPENROUTER_API_KEY", "openrouter"),
+            ("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic"),
+            ("ALIYUN_API_KEY", "domestic"),
+            ("DASHSCOPE_API_KEY", "domestic"),
+            ("DOCPILOT_PROVIDER_OPENAI_API_KEY", "openai"),
+            ("OPENAI_API_KEY", "openai"),
+        ]
+    )
+    if family == "openrouter":
+        return int(os.environ.get("OPENROUTER_EMBEDDING_DIMENSIONS", OPENROUTER_EMBEDDING_DIMENSIONS))
+    return None
