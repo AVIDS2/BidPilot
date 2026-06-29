@@ -12,6 +12,7 @@ import {
   MessageSquareIcon,
   ChevronDownIcon,
   FileIcon,
+  FileTextIcon,
   FolderOpenIcon,
   ImageIcon,
   Loader2Icon,
@@ -101,6 +102,36 @@ function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getFileExtension(name: string) {
+  const ext = name.split(".").pop()?.trim().toUpperCase();
+  return ext && ext !== name.toUpperCase() ? ext : "FILE";
+}
+
+function getAttachmentPreviewTone(name: string, kind: ComposerAttachmentKind | ChatMessageAttachment["kind"]) {
+  const ext = getFileExtension(name);
+  if (kind === "image") return { label: ext === "FILE" ? "IMG" : ext, tone: "image" as const };
+  if (ext === "PDF") return { label: "PDF", tone: "pdf" as const };
+  if (["DOC", "DOCX", "WPS"].includes(ext)) return { label: ext, tone: "doc" as const };
+  if (["XLS", "XLSX", "CSV"].includes(ext)) return { label: ext, tone: "sheet" as const };
+  return { label: ext, tone: "file" as const };
+}
+
+function useObjectUrl(file: File | undefined, enabled: boolean) {
+  const [url, setUrl] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!file || !enabled || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
+      setUrl(undefined);
+      return;
+    }
+    const nextUrl = URL.createObjectURL(file);
+    setUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [enabled, file]);
+
+  return url;
 }
 
 async function ensureAssistantUploadBundle(projectId: string): Promise<BundleRead> {
@@ -212,86 +243,151 @@ function normalizeAssistantMarkdown(content: string): string {
   return normalized;
 }
 
-function MessageAttachmentPreview({ attachment }: { attachment: ChatMessageAttachment }) {
+function AttachmentPreviewCard({
+  name,
+  kind,
+  size,
+  status,
+  previewUrl,
+  file,
+  onRemove,
+}: {
+  name: string;
+  kind: ComposerAttachmentKind | ChatMessageAttachment["kind"];
+  size: number;
+  status?: ComposerAttachmentStatus | ChatMessageAttachment["status"];
+  previewUrl?: string;
+  file?: File;
+  onRemove?: () => void;
+}) {
   const { t } = useTranslation("ai-assistant");
-  const isImage = attachment.kind === "image";
-  const statusLabel = t(`attachments.status.${attachment.status}`, { defaultValue: attachment.status });
+  const isImage = kind === "image";
+  const objectUrl = useObjectUrl(file, isImage && !previewUrl);
+  const imageUrl = previewUrl ?? objectUrl;
+  const { label, tone } = getAttachmentPreviewTone(name, kind);
+  const statusLabel = status ? t(`attachments.status.${status}`, { defaultValue: status }) : null;
+  const iconTone = {
+    image: "bg-emerald-500/12 text-emerald-500 border-emerald-500/20",
+    pdf: "bg-red-500/12 text-red-500 border-red-500/20",
+    doc: "bg-blue-500/12 text-blue-500 border-blue-500/20",
+    sheet: "bg-amber-500/12 text-amber-500 border-amber-500/20",
+    file: "bg-muted text-muted-foreground border-border",
+  }[tone];
+
   return (
     <div
       className={cn(
-        "overflow-hidden border text-xs shadow-[0_10px_30px_oklch(0_0_0/0.12)] backdrop-blur-xl",
-        isImage ? "w-20 rounded-2xl" : "max-w-52 rounded-2xl px-2.5 py-2",
+        "group relative flex h-16 max-w-[13.5rem] shrink-0 items-center gap-2 overflow-hidden rounded-2xl border px-2.5 text-xs shadow-[0_14px_40px_oklch(0_0_0/0.12)] backdrop-blur-xl transition hover:-translate-y-px",
+        isImage ? "w-20 justify-center p-1.5" : "w-[13.5rem]",
       )}
       style={{
-        background: "color-mix(in oklch, var(--background) 88%, transparent)",
-        borderColor: "color-mix(in oklch, var(--border) 70%, transparent)",
+        background: "color-mix(in oklch, var(--background) 92%, transparent)",
+        borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
         color: "var(--foreground)",
       }}
     >
       {isImage ? (
-        <div className="flex aspect-[4/3] items-center justify-center bg-muted">
-          {attachment.previewUrl ? (
-            <img src={attachment.previewUrl} alt="" className="h-full w-full object-cover" />
+        <div className="h-full w-full overflow-hidden rounded-xl bg-muted">
+          {imageUrl ? (
+            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            <ImageIcon className="h-5 w-5 text-muted-foreground" />
+            <div className="flex h-full w-full items-center justify-center">
+              <ImageIcon className="h-5 w-5 text-muted-foreground" />
+            </div>
           )}
         </div>
       ) : (
-        <div className="flex items-center gap-2">
-          <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <div className="min-w-0">
-            <div className="truncate font-medium">{attachment.name}</div>
-            <div className="text-[10px] text-muted-foreground">{formatFileSize(attachment.size)}</div>
+        <>
+          <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border", iconTone)}>
+            {tone === "pdf" || tone === "doc" ? <FileTextIcon className="h-5 w-5" /> : <FileIcon className="h-5 w-5" />}
           </div>
-        </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[13px] font-semibold tracking-[-0.01em]">{name}</div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span>{label}</span>
+              <span className="h-0.5 w-0.5 rounded-full bg-current opacity-60" />
+              <span>{formatFileSize(size)}</span>
+            </div>
+            {statusLabel && status !== "ready" && (
+              <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{statusLabel}</div>
+            )}
+          </div>
+        </>
       )}
       {isImage && (
-        <div className="truncate px-2 py-1 text-[10px] text-muted-foreground">
-          {attachment.name}
+        <div className="pointer-events-none absolute inset-x-1.5 bottom-1.5 truncate rounded-b-xl bg-black/45 px-1.5 py-0.5 text-[10px] text-white/90 opacity-0 transition group-hover:opacity-100">
+          {name}
         </div>
       )}
-      <div className="border-t px-2 py-1 text-[10px] text-muted-foreground" style={{ borderColor: "var(--border)" }}>
-        {statusLabel}
-      </div>
+      {onRemove && (
+        <button
+          type="button"
+          aria-label={`Remove ${name}`}
+          onClick={onRemove}
+          className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-background/95 text-muted-foreground shadow-sm transition hover:bg-foreground hover:text-background"
+        >
+          <XIcon className="h-3 w-3" />
+        </button>
+      )}
     </div>
   );
 }
 
 function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activityItems?: AssistantExecutionItem[] }) {
   const isUser = msg.role === "user";
-  return (
-    <div className={cn("flex flex-col gap-2 animate-fade-in", isUser ? "items-end" : "items-start")}>
-      {isUser && msg.attachments && msg.attachments.length > 0 && (
-        <div className="flex max-w-[85%] flex-wrap justify-end gap-2">
-          {msg.attachments.map((attachment) => (
-            <MessageAttachmentPreview key={attachment.id} attachment={attachment} />
-          ))}
+  if (isUser) {
+    const hasAttachments = Boolean(msg.attachments && msg.attachments.length > 0);
+    return (
+      <div className="flex animate-fade-in flex-col items-end gap-2">
+        <div
+          className={cn(
+            "max-w-[88%] rounded-[1.45rem] rounded-br-[0.55rem] border shadow-[0_14px_36px_oklch(0_0_0/0.16)]",
+            hasAttachments ? "space-y-2 px-2.5 py-2.5" : "px-4 py-2.5",
+          )}
+          style={{
+            background: "linear-gradient(180deg, color-mix(in oklch, var(--primary) 88%, white 12%), var(--primary))",
+            color: "var(--primary-foreground)",
+            borderColor: "color-mix(in oklch, var(--primary) 68%, white 24%)",
+          }}
+        >
+          {hasAttachments && (
+            <div className="flex max-w-full flex-wrap justify-end gap-2">
+              {msg.attachments?.map((attachment) => (
+                <AttachmentPreviewCard
+                  key={attachment.id}
+                  name={attachment.name}
+                  kind={attachment.kind}
+                  size={attachment.size}
+                  status={attachment.status}
+                  previewUrl={attachment.previewUrl}
+                />
+              ))}
+            </div>
+          )}
+          {msg.content && (
+            <div className={cn("whitespace-pre-wrap break-words text-[14px] leading-7", hasAttachments && "px-1")}>
+              {msg.content}
+            </div>
+          )}
         </div>
-      )}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-start gap-2 animate-fade-in">
       <div
-        className={cn(
-          "text-[14px] leading-7 break-words",
-          isUser
-            ? "max-w-[82%] rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 shadow-[0_14px_36px_oklch(0_0_0/0.16)]"
-            : "w-full max-w-[92%] px-1 py-1",
-        )}
+        className="w-full max-w-[92%] px-1 py-1 text-[14px] leading-7 break-words"
         style={{
-          background: isUser
-            ? "linear-gradient(180deg, color-mix(in oklch, var(--primary) 88%, white 12%), var(--primary))"
-            : "transparent",
-          color: isUser ? "var(--primary-foreground)" : "var(--foreground)",
-          borderColor: isUser ? "color-mix(in oklch, var(--primary) 68%, white 24%)" : "transparent",
+          background: "transparent",
+          color: "var(--foreground)",
+          borderColor: "transparent",
         }}
       >
-        {!isUser && activityItems.length > 0 && <AssistantActivityTimeline items={activityItems} />}
+        {activityItems.length > 0 && <AssistantActivityTimeline items={activityItems} />}
         {msg.content ? (
-          isUser ? (
-            <span className="whitespace-pre-wrap">{msg.content}</span>
-          ) : (
-            <Markdown className="[&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1 [&_pre]:my-2 [&_code]:break-words">
-              {normalizeAssistantMarkdown(msg.content)}
-            </Markdown>
-          )
+          <Markdown className="[&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1 [&_pre]:my-2 [&_code]:break-words">
+            {normalizeAssistantMarkdown(msg.content)}
+          </Markdown>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "0ms" }} />
@@ -300,43 +396,6 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
           </span>
         )}
       </div>
-    </div>
-  );
-}
-
-function ComposerAttachmentChip({
-  attachment,
-  onRemove,
-}: {
-  attachment: ComposerAttachment;
-  onRemove: (id: string) => void;
-}) {
-  const statusIcon =
-    attachment.status === "uploading" ? (
-      <Loader2Icon className="h-3 w-3 animate-spin" />
-    ) : attachment.kind === "image" ? (
-      <ImageIcon className="h-3 w-3" />
-    ) : (
-      <FileIcon className="h-3 w-3" />
-    );
-
-  return (
-    <div
-      className="flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[11px]"
-      style={{ background: "var(--muted)", borderColor: "var(--border)", color: "var(--foreground)" }}
-    >
-      <span className="shrink-0 text-muted-foreground">{statusIcon}</span>
-      <span className="truncate">{attachment.file.name}</span>
-      <span className="shrink-0 text-muted-foreground">{formatFileSize(attachment.file.size)}</span>
-      {attachment.status === "failed" && <span className="shrink-0 text-destructive">failed</span>}
-      <button
-        type="button"
-        aria-label={`Remove ${attachment.file.name}`}
-        onClick={() => onRemove(attachment.id)}
-        className="shrink-0 rounded-full p-0.5 text-muted-foreground transition hover:bg-background hover:text-foreground"
-      >
-        <XIcon className="h-3 w-3" />
-      </button>
     </div>
   );
 }
@@ -823,7 +882,7 @@ export function AIAssistantPanel() {
 
   return (
     <div
-      className="fixed top-0 right-0 z-40 flex h-full w-full flex-col animate-slide-in border-l sm:w-[360px] md:w-[440px] lg:w-[480px]"
+      className="fixed top-0 right-0 z-40 flex h-full w-full flex-col animate-slide-in border-l sm:w-[390px] md:w-[500px] xl:w-[560px]"
       style={{
         background: "color-mix(in oklch, var(--background) 94%, transparent)",
         borderColor: "color-mix(in oklch, var(--border) 78%, transparent)",
@@ -1008,29 +1067,6 @@ export function AIAssistantPanel() {
           background: "linear-gradient(180deg, transparent, color-mix(in oklch, var(--background) 96%, transparent) 28%)",
         }}
       >
-        {(attachments.length > 0 || queuedPrompts.length > 0) && (
-          <div className="mb-2 flex max-h-24 flex-col gap-1.5 overflow-y-auto">
-            {attachments.map((attachment) => (
-              <ComposerAttachmentChip
-                key={attachment.id}
-                attachment={attachment}
-                onRemove={handleRemoveAttachment}
-              />
-            ))}
-            {queuedPrompts.map((queued) => (
-              <div
-                key={queued.id}
-                className="flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px]"
-                style={{ background: "var(--muted)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
-              >
-                <Loader2Icon className="h-3 w-3 animate-spin" />
-                <span className="truncate">
-                  {t("panel.queuedPrompt", { defaultValue: "Queued" })}: {queued.displayContent}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -1047,87 +1083,120 @@ export function AIAssistantPanel() {
           onChange={(event) => handleAttachmentInputChange(event, "image")}
         />
         <div
-          className="flex min-h-12 items-end gap-1.5 rounded-[1.65rem] border px-2 py-2 shadow-[0_18px_55px_oklch(0_0_0/0.18),inset_0_1px_0_oklch(1_0_0/0.08)]"
+          className="rounded-[1.85rem] border px-2 py-2 shadow-[0_18px_55px_oklch(0_0_0/0.18),inset_0_1px_0_oklch(1_0_0/0.08)]"
           style={{
             background: "color-mix(in oklch, var(--card) 92%, transparent)",
             borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
             backdropFilter: "blur(18px) saturate(1.08)",
           }}
         >
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              aria-label={t("attachments.add", { defaultValue: "Add attachment" })}
-              aria-expanded={attachmentMenuOpen}
-              onClick={() => setAttachmentMenuOpen((value) => !value)}
-              className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            >
-              <PlusIcon className="h-4 w-4" />
-            </button>
-            {attachmentMenuOpen && (
-              <div
-                role="menu"
-                className="absolute bottom-11 left-0 z-30 w-60 overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
-                style={{
-                  borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
-                  color: "var(--popover-foreground)",
-                }}
+          {(attachments.length > 0 || queuedPrompts.length > 0) && (
+            <div className="mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pt-1 pb-2">
+              {attachments.map((attachment) => (
+                <AttachmentPreviewCard
+                  key={attachment.id}
+                  name={attachment.file.name}
+                  kind={attachment.kind}
+                  size={attachment.file.size}
+                  status={attachment.status}
+                  file={attachment.file}
+                  onRemove={() => handleRemoveAttachment(attachment.id)}
+                />
+              ))}
+              {queuedPrompts.map((queued) => (
+                <div
+                  key={queued.id}
+                  className="flex h-16 w-[13.5rem] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs"
+                  style={{
+                    background: "color-mix(in oklch, var(--background) 88%, transparent)",
+                    borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
+                    color: "var(--muted-foreground)",
+                  }}
+                >
+                  <Loader2Icon className="h-4 w-4 shrink-0 animate-spin" />
+                  <span className="min-w-0 truncate">
+                    {t("panel.queuedPrompt", { defaultValue: "Queued" })}: {queued.displayContent}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex min-h-12 items-end gap-1.5">
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                aria-label={t("attachments.add", { defaultValue: "Add attachment" })}
+                aria-expanded={attachmentMenuOpen}
+                onClick={() => setAttachmentMenuOpen((value) => !value)}
+                className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                <PlusIcon className="h-4 w-4" />
+              </button>
+              {attachmentMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute bottom-11 left-0 z-30 w-60 overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
+                  style={{
+                    borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
+                    color: "var(--popover-foreground)",
+                  }}
                 >
-                  <FileIcon className="h-4 w-4 text-muted-foreground" />
-                  <span>{t("attachments.uploadFile", { defaultValue: "Upload file" })}</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => imageInputRef.current?.click()}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
-                >
-                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                  <span>{t("attachments.uploadImage", { defaultValue: "Upload image" })}</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={handleAddFromProject}
-                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
-                >
-                  <FolderOpenIcon className="h-4 w-4 text-muted-foreground" />
-                  <span>{t("attachments.addFromProject", { defaultValue: "Add from project" })}</span>
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                  >
+                    <FileIcon className="h-4 w-4 text-muted-foreground" />
+                    <span>{t("attachments.uploadFile", { defaultValue: "Upload file" })}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                  >
+                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                    <span>{t("attachments.uploadImage", { defaultValue: "Upload image" })}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleAddFromProject}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                  >
+                    <FolderOpenIcon className="h-4 w-4 text-muted-foreground" />
+                    <span>{t("attachments.addFromProject", { defaultValue: "Add from project" })}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                requestAnimationFrame(resizeComposer);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={t("inputPlaceholder")}
+              rows={1}
+              className="min-h-8 max-h-28 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[14px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <button
+              onClick={handleSend}
+              disabled={!canSend}
+              aria-label={t("actions.send")}
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
+                canSend
+                  ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
+                  : "text-muted-foreground"
             )}
+            >
+              {isUploadingAttachments ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
+            </button>
           </div>
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              requestAnimationFrame(resizeComposer);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={t("inputPlaceholder")}
-            rows={1}
-            className="min-h-8 max-h-28 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[14px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!canSend}
-            aria-label={t("actions.send")}
-            className={cn(
-              "flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
-              canSend
-                ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
-                : "text-muted-foreground"
-            )}
-          >
-            {isUploadingAttachments ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
-          </button>
         </div>
         <div className="mt-1 flex items-center justify-between px-1">
           <span className="text-[10px] text-muted-foreground flex items-center gap-1">
