@@ -41,6 +41,12 @@
   "activity": {
     "summaryTools": "已运行 {{tools}} 个工具",
     "summaryWithWorkflows": "已运行 {{tools}} 个工具，已启动 {{workflows}} 个工作流",
+    "summaryDone": "已处理 {{tools}} 项操作",
+    "summaryDoneWithWorkflows": "已处理 {{tools}} 项操作，启动 {{workflows}} 个工作流",
+    "summaryDoneWorkflowsOnly": "已启动 {{workflows}} 个工作流",
+    "summaryRunning": "正在处理 {{tools}} 项操作",
+    "summaryRunningWithWorkflows": "正在处理 {{tools}} 项操作，启动 {{workflows}} 个工作流",
+    "summaryRunningWorkflowsOnly": "正在运行 {{workflows}} 个工作流",
     "expand": "展开执行细节",
     "collapse": "收起执行细节",
     "status": {

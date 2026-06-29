@@ -41,6 +41,12 @@
   "activity": {
     "summaryTools": "Ran {{tools}} tools",
     "summaryWithWorkflows": "Ran {{tools}} tools, started {{workflows}} workflows",
+    "summaryDone": "Processed {{tools}} actions",
+    "summaryDoneWithWorkflows": "Processed {{tools}} actions, started {{workflows}} workflows",
+    "summaryDoneWorkflowsOnly": "Started {{workflows}} workflows",
+    "summaryRunning": "Processing {{tools}} actions",
+    "summaryRunningWithWorkflows": "Processing {{tools}} actions, started {{workflows}} workflows",
+    "summaryRunningWorkflowsOnly": "Running {{workflows}} workflows",
     "expand": "Expand activity details",
     "collapse": "Collapse activity details",
     "status": {

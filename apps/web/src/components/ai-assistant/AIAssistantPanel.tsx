@@ -253,7 +253,7 @@ function MessageAttachmentPreview({ attachment }: { attachment: ChatMessageAttac
   );
 }
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activityItems?: AssistantExecutionItem[] }) {
   const isUser = msg.role === "user";
   return (
     <div className={cn("flex flex-col gap-1.5", isUser ? "items-end" : "items-start")}>
@@ -266,7 +266,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       )}
       <div
         className={cn(
-          "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words",
+          "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words",
           isUser ? "rounded-br-md" : "rounded-bl-md",
         )}
         style={{
@@ -276,9 +276,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           color: isUser ? "var(--primary-foreground)" : "var(--foreground)",
         }}
       >
+        {!isUser && activityItems.length > 0 && <AssistantActivityTimeline items={activityItems} />}
         {msg.content ? (
           isUser ? (
-            <span>{msg.content}</span>
+            <span className="whitespace-pre-wrap">{msg.content}</span>
           ) : (
             <Markdown className="[&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1 [&_pre]:my-2 [&_code]:break-words">
               {normalizeAssistantMarkdown(msg.content)}
@@ -294,10 +295,6 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
       </div>
     </div>
   );
-}
-
-function AssistantTurnActivity({ items }: { items: AssistantExecutionItem[] }) {
-  return <AssistantActivityTimeline items={items} />;
 }
 
 function ComposerAttachmentChip({
@@ -911,7 +908,6 @@ export function AIAssistantPanel() {
 
                   return (
                     <div key={msg.id} className="flex flex-col gap-2">
-                      {msg.role === "assistant" && turnItems.length > 0 && <AssistantTurnActivity items={turnItems} />}
                       {msg.role === "assistant" && pendingConfirmation && (
                         <AssistantConfirmationCard
                           confirmation={pendingConfirmation}
@@ -919,7 +915,7 @@ export function AIAssistantPanel() {
                           onCancel={() => void confirmAssistantAction(false)}
                         />
                       )}
-                      <MessageBubble msg={msg} />
+                      <MessageBubble msg={msg} activityItems={msg.role === "assistant" ? turnItems : []} />
                     </div>
                   );
                 })}

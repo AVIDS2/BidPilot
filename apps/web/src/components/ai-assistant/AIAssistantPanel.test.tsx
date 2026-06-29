@@ -165,9 +165,13 @@ describe("AIAssistantPanel", () => {
     await waitFor(() => {
       expect(screen.getAllByText("已打开项目页。").length).toBeGreaterThan(0);
     });
-    expect(screen.getByText("Ran 1 tools")).toBeInTheDocument();
+    expect(screen.getByText("Processed 1 actions")).toBeInTheDocument();
     expect(screen.getByText("done")).toBeInTheDocument();
     expect(screen.queryByText("raw detail should be hidden until expanded")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Processed 1 actions").compareDocumentPosition(screen.getByText("已打开项目页。")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
 
@@ -288,7 +292,7 @@ describe("AIAssistantPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByText("第一轮完成。")).toBeInTheDocument();
-      expect(screen.getByText("Ran 1 tools")).toBeInTheDocument();
+      expect(screen.getByText("Processed 1 actions")).toBeInTheDocument();
     });
 
     fireEvent.change(input, { target: { value: "Search Acme projects" } });
@@ -296,10 +300,10 @@ describe("AIAssistantPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByText("第二轮完成。")).toBeInTheDocument();
-      expect(screen.getAllByText("Ran 1 tools").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByText("Processed 1 actions").length).toBeGreaterThanOrEqual(2);
     });
 
-    const firstTool = screen.getAllByText("Ran 1 tools")[0];
+    const firstTool = screen.getAllByText("Processed 1 actions")[0];
     const secondUserMessage = screen.getByText("Search Acme projects");
     expect(firstTool.compareDocumentPosition(secondUserMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

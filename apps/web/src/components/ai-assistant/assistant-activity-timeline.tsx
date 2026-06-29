@@ -115,6 +115,41 @@ function countByKind(items: AssistantExecutionItem[]) {
   return { tools, workflows };
 }
 
+function buildActivityLabel(
+  tone: ActivityTone,
+  tools: number,
+  workflows: number,
+  t: Translate,
+) {
+  const keyPrefix = tone === "running" || tone === "pending" ? "activity.summaryRunning" : "activity.summaryDone";
+  if (workflows > 0) {
+    if (tools === 0) {
+      return t(`${keyPrefix}WorkflowsOnly`, {
+        workflows,
+        defaultValue:
+          tone === "running" || tone === "pending"
+            ? `正在运行 ${workflows} 个工作流`
+            : `已启动 ${workflows} 个工作流`,
+      });
+    }
+    return t(`${keyPrefix}WithWorkflows`, {
+      tools,
+      workflows,
+      defaultValue:
+        tone === "running" || tone === "pending"
+          ? `正在处理 ${tools} 项操作，启动 ${workflows} 个工作流`
+          : `已处理 ${tools} 项操作，启动 ${workflows} 个工作流`,
+    });
+  }
+  return t(keyPrefix, {
+    tools,
+    defaultValue:
+      tone === "running" || tone === "pending"
+        ? `正在处理 ${tools} 项操作`
+        : `已处理 ${tools} 项操作`,
+  });
+}
+
 function DetailValue({ value }: { value: unknown }) {
   if (value == null) return <span className="text-muted-foreground">-</span>;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -154,7 +189,7 @@ function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
   ].filter((row, index, rows) => rows.findIndex((candidate) => candidate.key === row.key) === index);
 
   return (
-    <div className="flex gap-2 rounded-xl px-2 py-1.5 text-xs">
+    <div className="flex gap-2 py-1.5 text-xs">
       <div className="mt-0.5 text-muted-foreground">
         <Icon className="h-3.5 w-3.5" />
       </div>
@@ -212,60 +247,46 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
 
   if (items.length === 0) return null;
 
-  const label = workflows > 0
-    ? t("activity.summaryWithWorkflows", {
-      tools,
-      workflows,
-      defaultValue: `已运行 ${tools} 个工具，已启动 ${workflows} 个工作流`,
-    })
-    : t("activity.summaryTools", {
-      tools,
-      defaultValue: `已运行 ${tools} 个工具`,
-    });
+  const label = buildActivityLabel(tone, tools, workflows, t);
   const statusLabel = t(`activity.status.${tone}`, { defaultValue: tone });
 
   return (
-    <div className="flex justify-start">
-      <div className="w-[92%] max-w-[92%]">
-        <button
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-          className="flex w-full items-center gap-2 rounded-xl px-1 py-1 text-left text-xs text-muted-foreground transition hover:bg-muted/40"
-          aria-expanded={expanded}
-          aria-label={expanded ? t("activity.collapse") : t("activity.expand")}
+    <div className="mb-2 border-b pb-2" style={{ borderColor: "var(--border)" }}>
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full items-center gap-2 rounded-md py-0.5 text-left text-xs text-muted-foreground transition hover:text-foreground"
+        aria-expanded={expanded}
+        aria-label={expanded ? t("activity.collapse") : t("activity.expand")}
+      >
+        <span
+          className={cn(
+            "flex h-4 w-4 shrink-0 items-center justify-center",
+            tone === "running" && "animate-pulse",
+          )}
+          style={{ color: tone === "failed" ? "var(--destructive)" : "var(--primary)" }}
         >
-          <span
-            className={cn(
-              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-              tone === "running" && "animate-pulse",
-            )}
-            style={{
-              background: "var(--muted)",
-              color: tone === "failed" ? "var(--destructive)" : "var(--primary)",
-            }}
-          >
-            {tone === "running" ? (
-              <Loader2Icon className="h-3 w-3 animate-spin" />
-            ) : tone === "failed" ? (
-              <XCircleIcon className="h-3 w-3" />
-            ) : tone === "succeeded" ? (
-              <CheckCircle2Icon className="h-3 w-3" />
-            ) : (
-              <CircleDashedIcon className="h-3 w-3" />
-            )}
-          </span>
-          <span className="min-w-0 flex-1 truncate">{label}</span>
-          <span className="shrink-0">{statusLabel}</span>
-          <ChevronDownIcon className={cn("h-3.5 w-3.5 shrink-0 transition-transform", expanded && "rotate-180")} />
-        </button>
-        {expanded && (
-          <div className="ml-7 mt-1 flex flex-col gap-1 border-l pl-2" style={{ borderColor: "var(--border)" }}>
-            {items.map((item) => (
-              <ActivityDetail key={item.id} item={item} />
-            ))}
-          </div>
-        )}
-      </div>
+          {tone === "running" ? (
+            <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+          ) : tone === "failed" ? (
+            <XCircleIcon className="h-3.5 w-3.5" />
+          ) : tone === "succeeded" ? (
+            <CheckCircle2Icon className="h-3.5 w-3.5" />
+          ) : (
+            <CircleDashedIcon className="h-3.5 w-3.5" />
+          )}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="shrink-0">{statusLabel}</span>
+        <ChevronDownIcon className={cn("h-3.5 w-3.5 shrink-0 transition-transform", expanded && "rotate-180")} />
+      </button>
+      {expanded && (
+        <div className="ml-6 mt-1 flex flex-col gap-1 border-l pl-2" style={{ borderColor: "var(--border)" }}>
+          {items.map((item) => (
+            <ActivityDetail key={item.id} item={item} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
