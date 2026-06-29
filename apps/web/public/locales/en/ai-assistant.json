@@ -38,6 +38,53 @@
       "failed": "failed"
     }
   },
+  "activity": {
+    "summaryTools": "Ran {{tools}} tools",
+    "summaryWithWorkflows": "Ran {{tools}} tools, started {{workflows}} workflows",
+    "expand": "Expand activity details",
+    "collapse": "Collapse activity details",
+    "status": {
+      "pending": "pending",
+      "running": "running",
+      "succeeded": "done",
+      "failed": "failed"
+    },
+    "tool": {
+      "default": "Tool call",
+      "search_projects": "Search projects",
+      "get_runtime_status": "Read execution status",
+      "open_page": "Open page",
+      "create_project": "Create project",
+      "start_draft_section": "Start section draft",
+      "start_redraft_section": "Redraft section",
+      "search_knowledge": "Search knowledge base"
+    },
+    "node": {
+      "document_analyzer": "Analyze materials",
+      "retriever": "Retrieve context",
+      "section_planner": "Plan section",
+      "section_drafter": "Draft section",
+      "quality_review": "Quality review",
+      "redrafter": "Redraft",
+      "exporter": "Generate deliverable"
+    },
+    "field": {
+      "route": "Page",
+      "query": "Keyword",
+      "section_key": "Section",
+      "status": "Status"
+    },
+    "result": {
+      "openedRoute": "Opened {{route}}",
+      "returnedCount": "Returned {{count}} results",
+      "foundProjects": "Found {{count}} projects",
+      "runningRuns": "{{count}} active runs",
+      "status": "Status: {{status}}",
+      "runCreated": "Run created",
+      "completed": "Completed",
+      "processing": "Processing"
+    }
+  },
   "welcome": {
     "title": "Welcome to BidPilot!",
     "description": "I can help you create projects, upload documents, generate sections, and more."
@@ -63,7 +110,14 @@
     "uploadImage": "Upload image",
     "addFromProject": "Add from project",
     "addFromProjectPrompt": "Search the current project knowledge base and add the relevant materials.",
-    "hint": "Files stay server-side"
+    "hint": "Files stay server-side",
+    "addedOne": "Added {{name}}",
+    "addedMany": "Added {{count}} attachments",
+    "status": {
+      "ready": "selected",
+      "uploaded": "uploaded",
+      "failed": "failed"
+    }
   },
   "panel": {
     "openCommand": "Command palette",

@@ -165,13 +165,89 @@ describe("AIAssistantPanel", () => {
     await waitFor(() => {
       expect(screen.getAllByText("已打开项目页。").length).toBeGreaterThan(0);
     });
-    expect(screen.getByText("open_page")).toBeInTheDocument();
-    expect(screen.getByText("succeeded")).toBeInTheDocument();
+    expect(screen.getByText("Ran 1 tools")).toBeInTheDocument();
+    expect(screen.getByText("done")).toBeInTheDocument();
     expect(screen.queryByText("raw detail should be hidden until expanded")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Show tool details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
 
+    expect(screen.getByText("Open page")).toBeInTheDocument();
     expect(screen.getByText("raw detail should be hidden until expanded")).toBeInTheDocument();
+  });
+
+  it("sanitizes raw tool payloads from activity details", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c6","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"search_projects","arguments":{"query":"test"},"state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"search_projects","result":{"projects":[{"id":"p1","name":"test"}],"count":1},"summary":"content=\'{\\"projects\\":[{\\"id\\":\\"p1\\"}]}\' name=\'search_projects\' tool_call_id=\'call_123\'","state":"completed"}',
+            'event: assistant.message\ndata: {"content":"找到 1 个项目。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c6","full_response":"找到 1 个项目。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Search test projects" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("找到 1 个项目。")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+
+    expect(screen.getByText("Search projects")).toBeInTheDocument();
+    expect(screen.getByText("Returned 1 results")).toBeInTheDocument();
+    expect(screen.queryByText(/tool_call_id/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/content='/)).not.toBeInTheDocument();
+  });
+
+  it("renders user attachments without leaking backend attachment context", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: streamFrom(
+        [
+          'event: assistant.start\ndata: {"conversation_id":"c7","state":"thinking"}',
+          'event: assistant.message\ndata: {"content":"我会参考这个文件。","state":"completed"}',
+          'event: assistant.end\ndata: {"conversation_id":"c7","full_response":"我会参考这个文件。"}',
+        ].join("\n\n") + "\n\n",
+      ),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
+
+    const fileInput = container.querySelector('input[type="file"]:not([accept])') as HTMLInputElement;
+    const file = new File(["hello"], "proposal.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitFor(() => {
+      expect(screen.getByText("proposal.docx")).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "请分析这个文档" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText("请分析这个文档")).toBeInTheDocument();
+    expect(screen.queryByText(/附件上下文/)).not.toBeInTheDocument();
+    expect(JSON.stringify(fetchMock.mock.calls[0]?.[1])).toContain("附件上下文");
   });
 
   it("keeps tool activity attached to the assistant turn that produced it", async () => {
@@ -212,7 +288,7 @@ describe("AIAssistantPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByText("第一轮完成。")).toBeInTheDocument();
-      expect(screen.getByText("open_page")).toBeInTheDocument();
+      expect(screen.getByText("Ran 1 tools")).toBeInTheDocument();
     });
 
     fireEvent.change(input, { target: { value: "Search Acme projects" } });
@@ -220,10 +296,10 @@ describe("AIAssistantPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByText("第二轮完成。")).toBeInTheDocument();
-      expect(screen.getByText("search_projects")).toBeInTheDocument();
+      expect(screen.getAllByText("Ran 1 tools").length).toBeGreaterThanOrEqual(2);
     });
 
-    const firstTool = screen.getByText("open_page");
+    const firstTool = screen.getAllByText("Ran 1 tools")[0];
     const secondUserMessage = screen.getByText("Search Acme projects");
     expect(firstTool.compareDocumentPosition(secondUserMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -311,9 +387,12 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => {
-      expect(screen.getByText("section_drafter")).toBeInTheDocument();
+      expect(screen.getByText("已启动章节起草工作流，运行 ID：run-1。")).toBeInTheDocument();
     });
-    expect(screen.getByText("succeeded")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+    await waitFor(() => {
+      expect(screen.getAllByText((_content, element) => element?.textContent === "Draft section · completed").length).toBeGreaterThan(0);
+    });
     expect(screen.getByText("1 of 1 steps completed")).toBeInTheDocument();
   });
 });

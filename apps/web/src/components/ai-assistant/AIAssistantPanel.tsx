@@ -33,6 +33,7 @@ import {
   useAIAssistant,
   type AssistantConfirmationRequest,
   type AssistantExecutionItem,
+  type ChatMessageAttachment,
   type ChatMessage,
 } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
@@ -41,8 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Markdown } from "@/components/ui/markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AssistantConfirmationCard } from "./assistant-confirmation-card";
-import { AssistantExecutionCard } from "./assistant-execution-card";
-import { AssistantWorkflowCard } from "./assistant-workflow-card";
+import { AssistantActivityTimeline } from "./assistant-activity-timeline";
 
 /* ─── Date grouping helpers ─── */
 
@@ -86,6 +86,13 @@ interface ComposerAttachment {
   error?: string;
 }
 
+interface QueuedPrompt {
+  id: string;
+  prompt: string;
+  displayContent: string;
+  attachments: ChatMessageAttachment[];
+}
+
 function createAttachmentId(file: File, index: number) {
   return `att-${Date.now()}-${index}-${file.name.replace(/[^a-zA-Z0-9]/g, "")}`;
 }
@@ -116,6 +123,42 @@ function buildOutgoingPrompt(content: string, attachments: ComposerAttachment[])
   });
   const attachmentBlock = `附件上下文：\n${attachmentLines.join("\n")}`;
   return [content, attachmentBlock].filter(Boolean).join("\n\n");
+}
+
+function buildDisplayContent(
+  content: string,
+  attachments: ComposerAttachment[],
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  if (content.trim()) return content.trim();
+  if (attachments.length === 1) {
+    return t("attachments.addedOne", {
+      name: attachments[0].file.name,
+      defaultValue: `Added ${attachments[0].file.name}`,
+    });
+  }
+  return t("attachments.addedMany", {
+    count: attachments.length,
+    defaultValue: `Added ${attachments.length} attachments`,
+  });
+}
+
+function createAttachmentPreviewUrl(attachment: ComposerAttachment) {
+  if (attachment.kind !== "image") return undefined;
+  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function") return undefined;
+  return URL.createObjectURL(attachment.file);
+}
+
+function toMessageAttachments(attachments: ComposerAttachment[]): ChatMessageAttachment[] {
+  return attachments.map((attachment) => ({
+    id: attachment.id,
+    name: attachment.file.name,
+    kind: attachment.kind,
+    size: attachment.file.size,
+    status: attachment.status === "uploading" ? "ready" : attachment.status,
+    documentId: attachment.documentId,
+    previewUrl: createAttachmentPreviewUrl(attachment),
+  }));
 }
 
 /* ─── Quick action chips shown in empty state ─── */
@@ -169,10 +212,58 @@ function normalizeAssistantMarkdown(content: string): string {
   return normalized;
 }
 
+function MessageAttachmentPreview({ attachment }: { attachment: ChatMessageAttachment }) {
+  const { t } = useTranslation("ai-assistant");
+  const isImage = attachment.kind === "image";
+  const statusLabel = t(`attachments.status.${attachment.status}`, { defaultValue: attachment.status });
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-xl border text-xs shadow-sm",
+        isImage ? "w-20" : "max-w-48 px-2.5 py-2",
+      )}
+      style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+    >
+      {isImage ? (
+        <div className="flex aspect-[4/3] items-center justify-center bg-muted">
+          {attachment.previewUrl ? (
+            <img src={attachment.previewUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <ImageIcon className="h-5 w-5 text-muted-foreground" />
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <div className="truncate font-medium">{attachment.name}</div>
+            <div className="text-[10px] text-muted-foreground">{formatFileSize(attachment.size)}</div>
+          </div>
+        </div>
+      )}
+      {isImage && (
+        <div className="truncate px-2 py-1 text-[10px] text-muted-foreground">
+          {attachment.name}
+        </div>
+      )}
+      <div className="border-t px-2 py-1 text-[10px] text-muted-foreground" style={{ borderColor: "var(--border)" }}>
+        {statusLabel}
+      </div>
+    </div>
+  );
+}
+
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
   return (
-    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("flex flex-col gap-1.5", isUser ? "items-end" : "items-start")}>
+      {isUser && msg.attachments && msg.attachments.length > 0 && (
+        <div className="flex max-w-[85%] flex-wrap justify-end gap-2">
+          {msg.attachments.map((attachment) => (
+            <MessageAttachmentPreview key={attachment.id} attachment={attachment} />
+          ))}
+        </div>
+      )}
       <div
         className={cn(
           "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words",
@@ -205,39 +296,8 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   );
 }
 
-function AssistantTurnActivity({
-  items,
-  pendingConfirmation,
-  onConfirm,
-  onCancel,
-}: {
-  items: AssistantExecutionItem[];
-  pendingConfirmation: AssistantConfirmationRequest | null;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  if (items.length === 0 && !pendingConfirmation) return null;
-
-  return (
-    <div className="flex justify-start">
-      <div className="flex w-[92%] max-w-[92%] flex-col gap-2">
-        {items.map((item) =>
-          item.kind === "workflow" ? (
-            <AssistantWorkflowCard key={item.id} item={item} />
-          ) : (
-            <AssistantExecutionCard key={item.id} item={item} />
-          ),
-        )}
-        {pendingConfirmation && (
-          <AssistantConfirmationCard
-            confirmation={pendingConfirmation}
-            onConfirm={onConfirm}
-            onCancel={onCancel}
-          />
-        )}
-      </div>
-    </div>
-  );
+function AssistantTurnActivity({ items }: { items: AssistantExecutionItem[] }) {
+  return <AssistantActivityTimeline items={items} />;
 }
 
 function ComposerAttachmentChip({
@@ -485,7 +545,7 @@ export function AIAssistantPanel() {
   const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
-  const [queuedPrompts, setQueuedPrompts] = useState<string[]>([]);
+  const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -634,8 +694,17 @@ export function AIAssistantPanel() {
   }, [t]);
 
   const handleSend = useCallback(() => {
-    const outgoing = buildOutgoingPrompt(input.trim(), attachments);
+    const trimmedInput = input.trim();
+    const outgoing = buildOutgoingPrompt(trimmedInput, attachments);
     if (!outgoing.trim() || isUploadingAttachments) return;
+    const displayContent = buildDisplayContent(trimmedInput, attachments, t);
+    const messageAttachments = toMessageAttachments(attachments);
+    const queuedPrompt: QueuedPrompt = {
+      id: `queued-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      prompt: outgoing,
+      displayContent,
+      attachments: messageAttachments,
+    };
 
     shouldAutoScrollRef.current = true;
     setShowScrollToBottom(false);
@@ -643,12 +712,12 @@ export function AIAssistantPanel() {
     setAttachments([]);
 
     if (isBusy) {
-      setQueuedPrompts((current) => [...current, outgoing]);
+      setQueuedPrompts((current) => [...current, queuedPrompt]);
       return;
     }
 
-    void sendMessage(outgoing);
-  }, [attachments, input, isBusy, isUploadingAttachments, sendMessage]);
+    void sendMessage(outgoing, { displayContent, attachments: messageAttachments });
+  }, [attachments, input, isBusy, isUploadingAttachments, sendMessage, t]);
 
   useEffect(() => {
     if (queueDrainingRef.current || isAssistantBusy(state.status) || queuedPrompts.length === 0) return;
@@ -658,7 +727,10 @@ export function AIAssistantPanel() {
     setQueuedPrompts((current) => current.slice(1));
     shouldAutoScrollRef.current = true;
     setShowScrollToBottom(false);
-    void sendMessage(nextPrompt).finally(() => {
+    void sendMessage(nextPrompt.prompt, {
+      displayContent: nextPrompt.displayContent,
+      attachments: nextPrompt.attachments,
+    }).finally(() => {
       queueDrainingRef.current = false;
     });
   }, [queuedPrompts, sendMessage, state.status]);
@@ -678,7 +750,15 @@ export function AIAssistantPanel() {
       shouldAutoScrollRef.current = true;
       setShowScrollToBottom(false);
       if (isBusy) {
-        setQueuedPrompts((current) => [...current, text]);
+        setQueuedPrompts((current) => [
+          ...current,
+          {
+            id: `queued-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            prompt: text,
+            displayContent: text,
+            attachments: [],
+          },
+        ]);
         return;
       }
       void sendMessage(text);
@@ -826,40 +906,24 @@ export function AIAssistantPanel() {
               <>
                 {state.messages.map((msg) => {
                   const turnItems = executionItemsByMessageId.get(msg.id) ?? [];
-                  const activeItems = turnItems.filter((item) => item.status === "pending" || item.status === "running");
-                  const settledItems = turnItems.filter((item) => item.status !== "pending" && item.status !== "running");
                   const pendingConfirmation =
                     state.pendingConfirmation?.messageId === msg.id ? state.pendingConfirmation : null;
 
                   return (
                     <div key={msg.id} className="flex flex-col gap-2">
-                      {msg.role === "assistant" && activeItems.length > 0 && (
-                        <AssistantTurnActivity
-                          items={activeItems}
-                          pendingConfirmation={null}
+                      {msg.role === "assistant" && turnItems.length > 0 && <AssistantTurnActivity items={turnItems} />}
+                      {msg.role === "assistant" && pendingConfirmation && (
+                        <AssistantConfirmationCard
+                          confirmation={pendingConfirmation}
                           onConfirm={() => void confirmAssistantAction(true)}
                           onCancel={() => void confirmAssistantAction(false)}
                         />
                       )}
                       <MessageBubble msg={msg} />
-                      {msg.role === "assistant" && (settledItems.length > 0 || pendingConfirmation) && (
-                        <AssistantTurnActivity
-                          items={settledItems}
-                          pendingConfirmation={pendingConfirmation}
-                          onConfirm={() => void confirmAssistantAction(true)}
-                          onCancel={() => void confirmAssistantAction(false)}
-                        />
-                      )}
                     </div>
                   );
                 })}
-                {unassignedExecutionItems.map((item) =>
-                  item.kind === "workflow" ? (
-                    <AssistantWorkflowCard key={item.id} item={item} />
-                  ) : (
-                    <AssistantExecutionCard key={item.id} item={item} />
-                  ),
-                )}
+                {unassignedExecutionItems.length > 0 && <AssistantActivityTimeline items={unassignedExecutionItems} />}
                 {state.pendingConfirmation && !state.pendingConfirmation.messageId && (
                   <AssistantConfirmationCard
                     confirmation={state.pendingConfirmation}
@@ -901,14 +965,16 @@ export function AIAssistantPanel() {
                 onRemove={handleRemoveAttachment}
               />
             ))}
-            {queuedPrompts.map((prompt, index) => (
+            {queuedPrompts.map((queued) => (
               <div
-                key={`${prompt}-${index}`}
+                key={queued.id}
                 className="flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px]"
                 style={{ background: "var(--muted)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
               >
                 <Loader2Icon className="h-3 w-3 animate-spin" />
-                <span className="truncate">{t("panel.queuedPrompt", { defaultValue: "Queued" })}: {prompt}</span>
+                <span className="truncate">
+                  {t("panel.queuedPrompt", { defaultValue: "Queued" })}: {queued.displayContent}
+                </span>
               </div>
             ))}
           </div>

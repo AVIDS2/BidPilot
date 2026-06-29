@@ -38,6 +38,53 @@
       "failed": "失败"
     }
   },
+  "activity": {
+    "summaryTools": "已运行 {{tools}} 个工具",
+    "summaryWithWorkflows": "已运行 {{tools}} 个工具，已启动 {{workflows}} 个工作流",
+    "expand": "展开执行细节",
+    "collapse": "收起执行细节",
+    "status": {
+      "pending": "等待中",
+      "running": "运行中",
+      "succeeded": "已完成",
+      "failed": "失败"
+    },
+    "tool": {
+      "default": "工具调用",
+      "search_projects": "搜索项目",
+      "get_runtime_status": "读取执行状态",
+      "open_page": "打开页面",
+      "create_project": "创建项目",
+      "start_draft_section": "启动章节起草",
+      "start_redraft_section": "重新起草章节",
+      "search_knowledge": "检索知识库"
+    },
+    "node": {
+      "document_analyzer": "分析资料",
+      "retriever": "检索资料",
+      "section_planner": "规划章节",
+      "section_drafter": "章节起草",
+      "quality_review": "质量审核",
+      "redrafter": "重新起草",
+      "exporter": "生成交付物"
+    },
+    "field": {
+      "route": "页面",
+      "query": "关键词",
+      "section_key": "章节",
+      "status": "状态"
+    },
+    "result": {
+      "openedRoute": "已打开 {{route}}",
+      "returnedCount": "返回 {{count}} 条结果",
+      "foundProjects": "找到 {{count}} 个项目",
+      "runningRuns": "当前 {{count}} 个运行任务",
+      "status": "状态：{{status}}",
+      "runCreated": "运行已创建",
+      "completed": "已完成",
+      "processing": "处理中"
+    }
+  },
   "welcome": {
     "title": "欢迎使用 BidPilot！",
     "description": "我可以帮您创建项目、上传文档、生成章节等。"
@@ -63,7 +110,14 @@
     "uploadImage": "上传图片",
     "addFromProject": "从项目资料添加",
     "addFromProjectPrompt": "请从当前项目资料库中检索并添加相关材料。",
-    "hint": "文件仅保存在服务端"
+    "hint": "文件仅保存在服务端",
+    "addedOne": "已添加 {{name}}",
+    "addedMany": "已添加 {{count}} 个附件",
+    "status": {
+      "ready": "已选择",
+      "uploaded": "已上传",
+      "failed": "上传失败"
+    }
   },
   "panel": {
     "openCommand": "命令面板",

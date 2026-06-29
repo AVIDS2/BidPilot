@@ -32,6 +32,17 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  attachments?: ChatMessageAttachment[];
+}
+
+export interface ChatMessageAttachment {
+  id: string;
+  name: string;
+  kind: "file" | "image";
+  size: number;
+  status: "ready" | "uploaded" | "failed";
+  documentId?: string;
+  previewUrl?: string;
 }
 
 export interface AssistantConfirmationRequest {
@@ -511,7 +522,10 @@ interface AIAssistantContextValue {
   open: (mode?: AssistantMode) => void;
   close: () => void;
   toggle: (mode?: AssistantMode) => void;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (
+    content: string,
+    options?: { displayContent?: string; attachments?: ChatMessageAttachment[] },
+  ) => Promise<void>;
   confirmAssistantAction: (approved: boolean) => Promise<void>;
   executeCommand: (commandId: string) => void;
   refreshConversations: () => Promise<void>;
@@ -715,13 +729,14 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   const sendAssistantRequest = useCallback(
     async (
       content: string,
+      options?: { displayContent?: string; attachments?: ChatMessageAttachment[] },
       confirmation?: { approved: boolean; tool_name: string; arguments: Record<string, unknown> },
     ) => {
       const displayContent = confirmation
         ? confirmation.approved
           ? "确认执行"
           : "取消操作"
-        : content.trim();
+        : (options?.displayContent ?? content).trim();
       if (!displayContent || isAssistantBusy(state.status)) return;
 
       const userMsg: ChatMessage = {
@@ -729,6 +744,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         role: "user",
         content: displayContent,
         timestamp: Date.now(),
+        attachments: options?.attachments,
       };
       dispatch({ type: "CLEAR_TRANSIENT_STATE" });
       dispatch({ type: "ADD_MESSAGE", message: userMsg });
@@ -752,7 +768,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
-            message: displayContent,
+            message: content,
             project_id: state.currentContext.projectId,
             conversation_id: state.currentConversationId,
             confirmation,
@@ -812,8 +828,8 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    async (content: string) => {
-      await sendAssistantRequest(content);
+    async (content: string, options?: { displayContent?: string; attachments?: ChatMessageAttachment[] }) => {
+      await sendAssistantRequest(content, options);
     },
     [sendAssistantRequest],
   );
@@ -823,7 +839,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       const pending = state.pendingConfirmation;
       if (!pending) return;
       dispatch({ type: "SET_PENDING_CONFIRMATION", confirmation: null });
-      await sendAssistantRequest(pending.message, {
+      await sendAssistantRequest(pending.message, undefined, {
         approved,
         tool_name: pending.toolName,
         arguments: pending.arguments,
