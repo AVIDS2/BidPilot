@@ -577,6 +577,13 @@ export function AIAssistantPanel() {
     [state.executionItems],
   );
 
+  const resizeComposer = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
+  }, []);
+
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
@@ -597,6 +604,10 @@ export function AIAssistantPanel() {
       scrollToBottom("smooth");
     }
   }, [scrollToBottom, state.messages, state.executionItems, state.pendingConfirmation]);
+
+  useEffect(() => {
+    resizeComposer();
+  }, [input, resizeComposer]);
 
   useEffect(() => {
     if (state.isOpen && state.mode === "panel") {
@@ -1095,7 +1106,10 @@ export function AIAssistantPanel() {
           <textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              requestAnimationFrame(resizeComposer);
+            }}
             onKeyDown={handleKeyDown}
             placeholder={t("inputPlaceholder")}
             rows={1}

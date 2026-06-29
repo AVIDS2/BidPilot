@@ -64,6 +64,7 @@ function getFieldLabel(key: string, t: Translate) {
     query: "关键词",
     section_key: "章节",
     status: "状态",
+    scenario: "场景",
   };
   return t(`activity.field.${key}`, { defaultValue: labels[key] ?? key });
 }
@@ -107,6 +108,16 @@ function sanitizeToolText(value?: string) {
     /^\s*\{[\s\S]*\}\s*$/.test(value);
   if (looksLikeRawToolDump) return "";
   return value.replace(/\btool_call_id=['"][^'"]+['"]/g, "").trim();
+}
+
+function isLowSignalField(key: string, value: unknown) {
+  if (["projects", "runs", "content", "tool_call_id", "run_id", "id", "count", "project_id"].includes(key)) {
+    return true;
+  }
+  if (typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value)) {
+    return true;
+  }
+  return false;
 }
 
 function countByKind(items: AssistantExecutionItem[]) {
@@ -153,17 +164,20 @@ function buildActivityLabel(
 function DetailValue({ value }: { value: unknown }) {
   if (value == null) return <span className="text-muted-foreground">-</span>;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return <span>{String(value)}</span>;
+    return <span className="break-words">{String(value)}</span>;
   }
   if (Array.isArray(value)) {
     return <span>{value.length} items</span>;
   }
   if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).slice(0, 3);
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([key, nestedValue]) => !isLowSignalField(key, nestedValue))
+      .slice(0, 3);
+    if (entries.length === 0) return <span className="text-muted-foreground">-</span>;
     return (
       <span className="inline-flex flex-wrap gap-1">
         {entries.map(([key, nestedValue]) => (
-          <span key={key} className="rounded-md bg-muted px-1.5 py-0.5">
+          <span key={key} className="rounded-md bg-muted/70 px-1.5 py-0.5">
             {key}: {Array.isArray(nestedValue) ? `${nestedValue.length} items` : String(nestedValue)}
           </span>
         ))}
@@ -181,26 +195,29 @@ function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
   const completedNodes = item.nodes?.filter((node) => node.status === "completed").length ?? 0;
   const totalNodes = item.nodes?.length ?? 0;
   const detailRows = [
-    ...Object.entries(item.arguments ?? {}).slice(0, 3).map(([key, value]) => ({ key, value })),
+    ...Object.entries(item.arguments ?? {})
+      .filter(([key, value]) => !isLowSignalField(key, value))
+      .slice(0, 3)
+      .map(([key, value]) => ({ key, value })),
     ...Object.entries(item.result ?? {})
-      .filter(([key]) => !["projects", "runs", "content", "tool_call_id", "run_id", "id"].includes(key))
+      .filter(([key, value]) => !isLowSignalField(key, value))
       .slice(0, 3)
       .map(([key, value]) => ({ key, value })),
   ].filter((row, index, rows) => rows.findIndex((candidate) => candidate.key === row.key) === index);
 
   return (
-    <div className="group flex gap-2 rounded-lg py-1.5 text-xs">
-      <div className="mt-0.5 text-muted-foreground/80">
+    <div className="group flex gap-2.5 py-1.5 text-xs">
+      <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/75">
         <Icon className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-medium text-foreground">{label}</span>
-          <span className="shrink-0 text-muted-foreground">
+          <span className="truncate font-medium tracking-[-0.01em] text-foreground/95">{label}</span>
+          <span className="shrink-0 text-[11px] text-muted-foreground/80">
             {t(`activity.status.${item.status}`, { defaultValue: item.status })}
           </span>
         </div>
-        <div className="mt-0.5 text-muted-foreground/85">{safeSummary || summarizeResult(item, t)}</div>
+        <div className="mt-0.5 leading-5 text-muted-foreground/85">{safeSummary || summarizeResult(item, t)}</div>
         {totalNodes > 0 && (
           <div className="mt-1 text-[11px] text-muted-foreground">
             {t("execution.nodesCompleted", {
@@ -211,10 +228,10 @@ function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
           </div>
         )}
         {detailRows.length > 0 && (
-          <div className="mt-1.5 flex flex-col gap-1 text-[11px] text-muted-foreground">
+          <div className="mt-1.5 flex flex-col gap-1 text-[11px] leading-5 text-muted-foreground">
             {detailRows.map(({ key, value }) => (
               <div key={`${item.id}-${key}`} className="flex gap-1.5">
-                <span className="shrink-0 font-medium">{getFieldLabel(key, t)}</span>
+                <span className="shrink-0 text-muted-foreground/65">{getFieldLabel(key, t)}</span>
                 <DetailValue value={value} />
               </div>
             ))}
@@ -251,14 +268,11 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
   const statusLabel = t(`activity.status.${tone}`, { defaultValue: tone });
 
   return (
-    <div
-      className="mb-3 border-b pb-2"
-      style={{ borderColor: "color-mix(in oklch, var(--border) 68%, transparent)" }}
-    >
+    <div className={cn("mb-4", expanded && "border-b pb-3")} style={{ borderColor: "color-mix(in oklch, var(--border) 54%, transparent)" }}>
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full items-center gap-2 rounded-md py-0.5 text-left text-[12px] text-muted-foreground transition hover:text-foreground"
+        className="group flex w-full items-center gap-2 rounded-md py-0.5 text-left text-[12px] text-muted-foreground transition hover:text-foreground"
         aria-expanded={expanded}
         aria-label={expanded ? t("activity.collapse") : t("activity.expand")}
       >
@@ -280,13 +294,13 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
           )}
         </span>
         <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">{label}</span>
-        <span className="shrink-0 text-[11px]">{statusLabel}</span>
-        <ChevronDownIcon className={cn("h-3.5 w-3.5 shrink-0 transition-transform", expanded && "rotate-180")} />
+        <span className="shrink-0 text-[11px] text-muted-foreground/80">{statusLabel}</span>
+        <ChevronDownIcon className={cn("h-3.5 w-3.5 shrink-0 transition-transform opacity-70 group-hover:opacity-100", expanded && "rotate-180")} />
       </button>
       {expanded && (
         <div
-          className="ml-6 mt-1 flex flex-col gap-0.5 border-l pl-2"
-          style={{ borderColor: "color-mix(in oklch, var(--border) 70%, transparent)" }}
+          className="ml-[7px] mt-2 flex flex-col gap-1 border-l pl-5"
+          style={{ borderColor: "color-mix(in oklch, var(--border) 62%, transparent)" }}
         >
           {items.map((item) => (
             <ActivityDetail key={item.id} item={item} />
