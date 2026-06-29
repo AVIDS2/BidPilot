@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 
 
 AssistantMode = Literal["answer", "needs_input", "tool_action", "workflow_trigger"]
+AssistantAttachmentKind = Literal["file", "image"]
+AssistantAttachmentStatus = Literal["extracted", "empty", "unsupported", "failed"]
 AssistantState = Literal[
     "idle",
     "thinking",
@@ -26,12 +28,36 @@ class AssistantConfirmation(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
+class AssistantAttachmentPayload(BaseModel):
+    id: str | None = None
+    name: str
+    kind: AssistantAttachmentKind = "file"
+    mime_type: str | None = None
+    size: int | None = None
+    extraction_status: AssistantAttachmentStatus | None = None
+    extracted_text: str | None = None
+    document_id: str | None = None
+    error: str | None = None
+
+
+class AssistantAttachmentUploadResponse(BaseModel):
+    id: str
+    name: str
+    kind: AssistantAttachmentKind
+    mime_type: str
+    size: int
+    extraction_status: AssistantAttachmentStatus
+    extracted_text: str = ""
+    error: str | None = None
+
+
 class AssistantRequest(BaseModel):
     message: str
     project_id: str | None = None
     conversation_id: str | None = None
     provider_config_id: str | None = None
     confirmation: AssistantConfirmation | None = None
+    attachments: list[AssistantAttachmentPayload] = Field(default_factory=list)
 
 
 class AssistantIntent(BaseModel):

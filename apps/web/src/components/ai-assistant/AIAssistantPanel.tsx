@@ -25,7 +25,9 @@ import {
   deleteChatConversation,
   listBundles,
   renameChatConversation,
+  uploadAssistantAttachment,
   uploadDocument,
+  type AssistantAttachmentUploadResponse,
   type BundleRead,
   type ChatConversationRead,
 } from "@/lib/api";
@@ -34,6 +36,7 @@ import {
   useAIAssistant,
   type AssistantConfirmationRequest,
   type AssistantExecutionItem,
+  type AssistantRequestAttachment,
   type ChatMessageAttachment,
   type ChatMessage,
 } from "@/lib/ai-assistant-store";
@@ -83,6 +86,10 @@ interface ComposerAttachment {
   file: File;
   kind: ComposerAttachmentKind;
   status: ComposerAttachmentStatus;
+  assistantAttachmentId?: string;
+  mimeType?: string;
+  extractionStatus?: AssistantAttachmentUploadResponse["extraction_status"];
+  extractedText?: string;
   documentId?: string;
   error?: string;
 }
@@ -92,6 +99,7 @@ interface QueuedPrompt {
   prompt: string;
   displayContent: string;
   attachments: ChatMessageAttachment[];
+  requestAttachments: AssistantRequestAttachment[];
 }
 
 function createAttachmentId(file: File, index: number) {
@@ -142,18 +150,10 @@ async function ensureAssistantUploadBundle(projectId: string): Promise<BundleRea
 }
 
 function buildOutgoingPrompt(content: string, attachments: ComposerAttachment[]) {
-  if (attachments.length === 0) return content;
-  const attachmentLines = attachments.map((attachment) => {
-    if (attachment.status === "uploaded" && attachment.documentId) {
-      return `- ${attachment.file.name} (${attachment.kind}, document_id: ${attachment.documentId})`;
-    }
-    if (attachment.status === "failed") {
-      return `- ${attachment.file.name} (${attachment.kind}, upload failed: ${attachment.error ?? "unknown error"})`;
-    }
-    return `- ${attachment.file.name} (${attachment.kind}, selected locally)`;
-  });
-  const attachmentBlock = `附件上下文：\n${attachmentLines.join("\n")}`;
-  return [content, attachmentBlock].filter(Boolean).join("\n\n");
+  const trimmed = content.trim();
+  if (trimmed) return trimmed;
+  if (attachments.length > 0) return "请结合我上传的附件进行分析。";
+  return "";
 }
 
 function buildDisplayContent(
@@ -189,6 +189,20 @@ function toMessageAttachments(attachments: ComposerAttachment[]): ChatMessageAtt
     status: attachment.status === "uploading" ? "ready" : attachment.status,
     documentId: attachment.documentId,
     previewUrl: createAttachmentPreviewUrl(attachment),
+  }));
+}
+
+function toRequestAttachments(attachments: ComposerAttachment[]): AssistantRequestAttachment[] {
+  return attachments.map((attachment) => ({
+    id: attachment.assistantAttachmentId ?? attachment.id,
+    name: attachment.file.name,
+    kind: attachment.kind,
+    mime_type: attachment.mimeType ?? attachment.file.type,
+    size: attachment.file.size,
+    extraction_status: attachment.extractionStatus,
+    extracted_text: attachment.extractedText,
+    document_id: attachment.documentId,
+    error: attachment.error ?? null,
   }));
 }
 
@@ -685,38 +699,57 @@ export function AIAssistantPanel() {
     }
   }, [editingConversationId]);
 
-  const uploadAttachmentRecords = useCallback(async (records: ComposerAttachment[], projectId: string) => {
-    let bundle: BundleRead;
-    try {
-      bundle = await ensureAssistantUploadBundle(projectId);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to prepare upload bundle";
-      setAttachments((current) =>
-        current.map((attachment) =>
-          records.some((record) => record.id === attachment.id)
-            ? { ...attachment, status: "failed", error: message }
-            : attachment,
-        ),
-      );
-      return;
-    }
-
+  const uploadAttachmentRecords = useCallback(async (records: ComposerAttachment[], projectId?: string) => {
+    let bundlePromise: Promise<BundleRead> | null = projectId ? ensureAssistantUploadBundle(projectId) : null;
     for (const record of records) {
       try {
+        const assistantAttachment = await uploadAssistantAttachment(record.file, record.kind);
+        setAttachments((current) =>
+          current.map((attachment) =>
+            attachment.id === record.id
+              ? {
+                  ...attachment,
+                  status: "uploaded",
+                  assistantAttachmentId: assistantAttachment.id,
+                  mimeType: assistantAttachment.mime_type,
+                  extractionStatus: assistantAttachment.extraction_status,
+                  extractedText: assistantAttachment.extracted_text,
+                  error: assistantAttachment.error ?? undefined,
+                }
+              : attachment,
+          ),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Attachment upload failed";
+        setAttachments((current) =>
+          current.map((attachment) =>
+            attachment.id === record.id
+              ? { ...attachment, status: "failed", extractionStatus: "failed", error: message }
+              : attachment,
+          ),
+        );
+        continue;
+      }
+
+      if (!bundlePromise) continue;
+
+      try {
+        const bundle = await bundlePromise;
         const document = await uploadDocument(bundle.id, record.file);
         setAttachments((current) =>
           current.map((attachment) =>
             attachment.id === record.id
-              ? { ...attachment, status: "uploaded", documentId: document.id }
+              ? { ...attachment, documentId: document.id }
               : attachment,
           ),
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : "Upload failed";
+        bundlePromise = null;
         setAttachments((current) =>
           current.map((attachment) =>
             attachment.id === record.id
-              ? { ...attachment, status: "failed", error: message }
+              ? { ...attachment, error: attachment.error ?? message }
               : attachment,
           ),
         );
@@ -735,14 +768,12 @@ export function AIAssistantPanel() {
         id: createAttachmentId(file, index),
         file,
         kind,
-        status: projectId ? "uploading" : "ready",
+        status: "uploading",
       }) satisfies ComposerAttachment);
 
       setAttachmentMenuOpen(false);
       setAttachments((current) => [...current, ...records]);
-      if (projectId) {
-        void uploadAttachmentRecords(records, projectId);
-      }
+      void uploadAttachmentRecords(records, projectId);
     },
     [state.currentContext.projectId, uploadAttachmentRecords],
   );
@@ -768,11 +799,13 @@ export function AIAssistantPanel() {
     if (!outgoing.trim() || isUploadingAttachments) return;
     const displayContent = buildDisplayContent(trimmedInput, attachments, t);
     const messageAttachments = toMessageAttachments(attachments);
+    const requestAttachments = toRequestAttachments(attachments);
     const queuedPrompt: QueuedPrompt = {
       id: `queued-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       prompt: outgoing,
       displayContent,
       attachments: messageAttachments,
+      requestAttachments,
     };
 
     shouldAutoScrollRef.current = true;
@@ -785,7 +818,11 @@ export function AIAssistantPanel() {
       return;
     }
 
-    void sendMessage(outgoing, { displayContent, attachments: messageAttachments });
+    void sendMessage(outgoing, {
+      displayContent,
+      attachments: messageAttachments,
+      requestAttachments,
+    });
   }, [attachments, input, isBusy, isUploadingAttachments, sendMessage, t]);
 
   useEffect(() => {
@@ -799,6 +836,7 @@ export function AIAssistantPanel() {
     void sendMessage(nextPrompt.prompt, {
       displayContent: nextPrompt.displayContent,
       attachments: nextPrompt.attachments,
+      requestAttachments: nextPrompt.requestAttachments,
     }).finally(() => {
       queueDrainingRef.current = false;
     });
@@ -826,6 +864,7 @@ export function AIAssistantPanel() {
             prompt: text,
             displayContent: text,
             attachments: [],
+            requestAttachments: [],
           },
         ]);
         return;

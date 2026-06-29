@@ -45,6 +45,24 @@ export interface ChatMessageAttachment {
   previewUrl?: string;
 }
 
+export interface AssistantRequestAttachment {
+  id?: string;
+  name: string;
+  kind: "file" | "image";
+  mime_type?: string;
+  size?: number;
+  extraction_status?: "extracted" | "empty" | "unsupported" | "failed";
+  extracted_text?: string;
+  document_id?: string;
+  error?: string | null;
+}
+
+interface SendAssistantOptions {
+  displayContent?: string;
+  attachments?: ChatMessageAttachment[];
+  requestAttachments?: AssistantRequestAttachment[];
+}
+
 export interface AssistantConfirmationRequest {
   messageId?: string;
   toolName: string;
@@ -524,7 +542,7 @@ interface AIAssistantContextValue {
   toggle: (mode?: AssistantMode) => void;
   sendMessage: (
     content: string,
-    options?: { displayContent?: string; attachments?: ChatMessageAttachment[] },
+    options?: SendAssistantOptions,
   ) => Promise<void>;
   confirmAssistantAction: (approved: boolean) => Promise<void>;
   executeCommand: (commandId: string) => void;
@@ -729,7 +747,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   const sendAssistantRequest = useCallback(
     async (
       content: string,
-      options?: { displayContent?: string; attachments?: ChatMessageAttachment[] },
+      options?: SendAssistantOptions,
       confirmation?: { approved: boolean; tool_name: string; arguments: Record<string, unknown> },
     ) => {
       const displayContent = confirmation
@@ -772,6 +790,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
             project_id: state.currentContext.projectId,
             conversation_id: state.currentConversationId,
             confirmation,
+            attachments: options?.requestAttachments ?? [],
           }),
         });
 
@@ -828,7 +847,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   );
 
   const sendMessage = useCallback(
-    async (content: string, options?: { displayContent?: string; attachments?: ChatMessageAttachment[] }) => {
+    async (content: string, options?: SendAssistantOptions) => {
       await sendAssistantRequest(content, options);
     },
     [sendAssistantRequest],

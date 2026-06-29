@@ -226,6 +226,33 @@ export function getDocumentDownloadUrl(documentId: string) {
   return `${API_BASE}/documents/${documentId}/download`;
 }
 
+// Assistant Attachments
+export interface AssistantAttachmentUploadResponse {
+  id: string;
+  name: string;
+  kind: "file" | "image";
+  mime_type: string;
+  size: number;
+  extraction_status: "extracted" | "empty" | "unsupported" | "failed";
+  extracted_text: string;
+  error?: string | null;
+}
+
+export async function uploadAssistantAttachment(
+  file: File,
+  kind: "file" | "image",
+): Promise<AssistantAttachmentUploadResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const resp = await fetch(`${API_BASE}/assistant/attachments?kind=${encodeURIComponent(kind)}`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: formData,
+  });
+  if (!resp.ok) throw new Error(`Assistant attachment upload failed: ${resp.status}`);
+  return resp.json();
+}
+
 // Drafting
 export interface DraftResponse {
   run_id: string;

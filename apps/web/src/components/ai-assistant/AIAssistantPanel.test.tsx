@@ -12,6 +12,7 @@ vi.mock("@/lib/api", () => ({
   listBundles: vi.fn().mockResolvedValue([]),
   createBundle: vi.fn(),
   uploadDocument: vi.fn(),
+  uploadAssistantAttachment: vi.fn(),
 }));
 
 function streamFrom(text: string) {
@@ -216,6 +217,16 @@ describe("AIAssistantPanel", () => {
   });
 
   it("renders user attachments without leaking backend attachment context", async () => {
+    const { uploadAssistantAttachment } = await import("@/lib/api");
+    vi.mocked(uploadAssistantAttachment).mockResolvedValue({
+      id: "att-1",
+      name: "proposal.docx",
+      kind: "file",
+      mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      size: 5,
+      extraction_status: "extracted",
+      extracted_text: "",
+    });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       body: streamFrom(
@@ -238,6 +249,7 @@ describe("AIAssistantPanel", () => {
     });
     fireEvent.change(fileInput, { target: { files: [file] } });
     await waitFor(() => {
+      expect(uploadAssistantAttachment).toHaveBeenCalledWith(file, "file");
       expect(screen.getByText("proposal.docx")).toBeInTheDocument();
     });
     fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
@@ -251,7 +263,18 @@ describe("AIAssistantPanel", () => {
 
     expect(screen.getByText("请分析这个文档")).toBeInTheDocument();
     expect(screen.queryByText(/附件上下文/)).not.toBeInTheDocument();
-    expect(JSON.stringify(fetchMock.mock.calls[0]?.[1])).toContain("附件上下文");
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(requestBody.message).toBe("请分析这个文档");
+    expect(requestBody.message).not.toContain("selected locally");
+    expect(requestBody.attachments).toEqual([
+      expect.objectContaining({
+        id: "att-1",
+        name: "proposal.docx",
+        kind: "file",
+        extraction_status: "extracted",
+      }),
+    ]);
+    expect(requestBody.attachments[0].extracted_text).toBe("");
   });
 
   it("keeps tool activity attached to the assistant turn that produced it", async () => {
