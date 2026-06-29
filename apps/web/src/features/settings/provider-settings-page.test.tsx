@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProviderSettingsPage } from "./provider-settings-page";
 
@@ -61,5 +61,36 @@ describe("ProviderSettingsPage", () => {
       const pageContent = document.body.textContent || "";
       expect(pageContent.length).toBeGreaterThan(0);
     });
+  });
+
+  it("shows user-facing branded provider presets", async () => {
+    renderWithProviders(<ProviderSettingsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /addProvider/i }));
+
+    expect(await screen.findByText("自定义配置")).toBeTruthy();
+    expect(screen.getByText("OpenAI Official")).toBeTruthy();
+    expect(screen.getByText("Claude Official")).toBeTruthy();
+    expect(screen.getByText("DeepSeek")).toBeTruthy();
+    expect(screen.getByText("阿里云百炼")).toBeTruthy();
+    expect(screen.getByText("MiniMax")).toBeTruthy();
+    expect(screen.getByText("智谱 GLM")).toBeTruthy();
+    expect(screen.getByText("火山方舟 / 豆包")).toBeTruthy();
+    expect(screen.getByText("Xiaomi MiMo")).toBeTruthy();
+  });
+
+  it("fills provider form from a preset", async () => {
+    renderWithProviders(<ProviderSettingsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /addProvider/i }));
+    const deepseekCardLabel = await screen.findByText("DeepSeek");
+    const deepseekCard = deepseekCardLabel.closest("button");
+
+    expect(deepseekCard).not.toBeNull();
+    fireEvent.click(deepseekCard as HTMLButtonElement);
+
+    expect(screen.getByDisplayValue("DeepSeek")).toBeTruthy();
+    expect(screen.getByDisplayValue("https://api.deepseek.com")).toBeTruthy();
+    expect(screen.getByDisplayValue("deepseek-v4-flash")).toBeTruthy();
   });
 });

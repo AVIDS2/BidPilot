@@ -37,6 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
   Plus,
+  Search,
   Trash2,
   Wifi,
   Settings2,
@@ -45,7 +46,9 @@ import {
   Circle,
   Pencil,
   Cpu,
+  Star,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type ProviderProtocol = "openai" | "anthropic";
 
@@ -55,49 +58,126 @@ const DEFAULT_MODELS: Record<string, string> = {
 };
 
 const PROTOCOL_LABELS: Record<ProviderProtocol, string> = {
-  openai: "OpenAI-compatible",
-  anthropic: "Anthropic Messages",
+  openai: "OpenAI 兼容",
+  anthropic: "Claude Messages",
 };
 
-const PROVIDER_PRESETS: Array<{
+type ProviderPreset = {
   id: string;
   label: string;
   providerType: ProviderProtocol;
   apiUrl: string;
   model: string;
   description: string;
-}> = [
+  logoText: string;
+  logoUrl?: string;
+  logoBackground: string;
+  logoColor: string;
+  recommended?: boolean;
+  modelHint?: string;
+};
+
+const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: "custom-openai",
-    label: "Custom OpenAI",
+    label: "自定义配置",
     providerType: "openai",
     apiUrl: "",
     model: "gpt-4o",
-    description: "/v1/chat/completions",
+    description: "接入任何 OpenAI 兼容服务、企业网关或你自己的代理地址。",
+    logoText: "AI",
+    logoBackground: "#0f172a",
+    logoColor: "#ffffff",
+    modelHint: "按供应商模型名填写",
+  },
+  {
+    id: "openai",
+    label: "OpenAI Official",
+    providerType: "openai",
+    apiUrl: "https://api.openai.com/v1",
+    model: "gpt-4o",
+    description: "ChatGPT 背后的 OpenAI 官方 API，适合 GPT 系列模型。",
+    logoText: "OA",
+    logoUrl: "https://openai.com/favicon.ico",
+    logoBackground: "#111827",
+    logoColor: "#ffffff",
+    recommended: true,
   },
   {
     id: "deepseek",
     label: "DeepSeek",
     providerType: "openai",
-    apiUrl: "https://api.deepseek.com/v1",
-    model: "deepseek-chat",
-    description: "DeepSeek official OpenAI-compatible API",
+    apiUrl: "https://api.deepseek.com",
+    model: "deepseek-v4-flash",
+    description: "深度求索官方 API，适合 DeepSeek V4 Flash 与推理模型。",
+    logoText: "DS",
+    logoUrl: "https://www.deepseek.com/favicon.ico",
+    logoBackground: "#2563eb",
+    logoColor: "#ffffff",
+    recommended: true,
   },
   {
     id: "dashscope",
-    label: "Alibaba Bailian",
+    label: "阿里云百炼",
     providerType: "openai",
     apiUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     model: "qwen-plus",
-    description: "DashScope compatible-mode",
+    description: "阿里云百炼 Model Studio，适合通义千问 Qwen 系列模型。",
+    logoText: "百",
+    logoUrl: "https://www.alibabacloud.com/favicon.ico",
+    logoBackground: "#ff6a00",
+    logoColor: "#ffffff",
+    recommended: true,
   },
   {
-    id: "openrouter",
-    label: "OpenRouter",
+    id: "doubao",
+    label: "火山方舟 / 豆包",
     providerType: "openai",
-    apiUrl: "https://openrouter.ai/api/v1",
-    model: "openai/gpt-4o-mini",
-    description: "OpenRouter OpenAI-compatible API",
+    apiUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    model: "ep-xxxxxxxx",
+    description: "火山方舟承载豆包模型，模型栏通常填写你的 Endpoint ID。",
+    logoText: "豆",
+    logoUrl: "https://www.volcengine.com/favicon.ico",
+    logoBackground: "#1d4ed8",
+    logoColor: "#ffffff",
+    recommended: true,
+  },
+  {
+    id: "anthropic",
+    label: "Claude Official",
+    providerType: "anthropic",
+    apiUrl: "https://api.anthropic.com",
+    model: "claude-sonnet-4-20250514",
+    description: "Anthropic 官方 Claude API，适合 Claude Sonnet 与 Opus。",
+    logoText: "A",
+    logoUrl: "https://www.anthropic.com/favicon.ico",
+    logoBackground: "#111827",
+    logoColor: "#ffffff",
+    recommended: true,
+  },
+  {
+    id: "zhipu",
+    label: "智谱 GLM",
+    providerType: "openai",
+    apiUrl: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-4-flash",
+    description: "智谱 AI 开放平台，适合 GLM 系列模型。",
+    logoText: "GLM",
+    logoUrl: "https://www.bigmodel.cn/favicon.ico",
+    logoBackground: "#2563eb",
+    logoColor: "#ffffff",
+  },
+  {
+    id: "minimax",
+    label: "MiniMax",
+    providerType: "openai",
+    apiUrl: "https://api.minimax.io/v1",
+    model: "MiniMax-M3",
+    description: "MiniMax 官方模型接口，适合 M 系列长上下文与 Agent 任务。",
+    logoText: "MM",
+    logoUrl: "https://www.minimax.io/favicon.ico",
+    logoBackground: "#ff4778",
+    logoColor: "#ffffff",
   },
   {
     id: "siliconflow",
@@ -105,29 +185,79 @@ const PROVIDER_PRESETS: Array<{
     providerType: "openai",
     apiUrl: "https://api.siliconflow.cn/v1",
     model: "deepseek-ai/DeepSeek-V3",
-    description: "SiliconFlow OpenAI-compatible API",
+    description: "硅基流动模型云，适合 DeepSeek、Qwen 等开源模型。",
+    logoText: "SF",
+    logoUrl: "https://siliconflow.cn/favicon.ico",
+    logoBackground: "#6d28d9",
+    logoColor: "#ffffff",
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    providerType: "openai",
+    apiUrl: "https://openrouter.ai/api/v1",
+    model: "openai/gpt-4o-mini",
+    description: "统一接入多家模型市场，适合快速切换模型。",
+    logoText: "OR",
+    logoUrl: "https://openrouter.ai/favicon.ico",
+    logoBackground: "#3b0764",
+    logoColor: "#ffffff",
+  },
+  {
+    id: "mimo",
+    label: "Xiaomi MiMo",
+    providerType: "openai",
+    apiUrl: "https://api.xiaomimimo.com/v1",
+    model: "mimo-v2.5-pro",
+    description: "小米 MiMo API 开放平台，支持 OpenAI 兼容格式。",
+    logoText: "Mi",
+    logoUrl: "https://mimo.mi.com/favicon.ico",
+    logoBackground: "#ff6900",
+    logoColor: "#ffffff",
   },
   {
     id: "custom-anthropic",
-    label: "Custom Claude",
+    label: "Claude 协议自定义",
     providerType: "anthropic",
     apiUrl: "",
     model: "claude-sonnet-4-20250514",
-    description: "/v1/messages",
-  },
-  {
-    id: "anthropic",
-    label: "Anthropic",
-    providerType: "anthropic",
-    apiUrl: "https://api.anthropic.com",
-    model: "claude-sonnet-4-20250514",
-    description: "Official Anthropic Messages API",
+    description: "接入 Anthropic Messages 兼容网关，适合 Claude 代理或企业网关。",
+    logoText: "C",
+    logoBackground: "#1f2937",
+    logoColor: "#ffffff",
   },
 ];
 
 function maskApiKey(key: string): string {
   if (key.length <= 8) return "****";
   return key.slice(0, 3) + "****" + key.slice(-4);
+}
+
+function ProviderLogo({ preset }: { preset: ProviderPreset }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  return (
+    <span
+      className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl text-xs font-bold shadow-sm ring-1 ring-black/5"
+      style={{
+        background: preset.logoBackground,
+        color: preset.logoColor,
+      }}
+      aria-hidden="true"
+    >
+      {preset.logoUrl && !logoFailed ? (
+        <img
+          src={preset.logoUrl}
+          alt=""
+          className="size-6 rounded-sm object-contain"
+          loading="lazy"
+          onError={() => setLogoFailed(true)}
+        />
+      ) : (
+        preset.logoText
+      )}
+    </span>
+  );
 }
 
 function ProviderSettingsSkeleton() {
@@ -172,6 +302,8 @@ export function ProviderSettingsPage() {
   const [formApiUrl, setFormApiUrl] = useState("");
   const [formModel, setFormModel] = useState("");
   const [formIsActive, setFormIsActive] = useState(false);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [providerPresetQuery, setProviderPresetQuery] = useState("");
 
   // Test connection state
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -247,6 +379,18 @@ export function ProviderSettingsPage() {
 
   const providers = data?.data ?? [];
   const isSaving = createMut.isPending || updateMut.isPending;
+  const visibleProviderPresets = PROVIDER_PRESETS.filter((preset) => {
+    const query = providerPresetQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    return [
+      preset.label,
+      preset.description,
+      preset.model,
+      preset.apiUrl,
+      preset.providerType,
+    ].some((value) => value.toLowerCase().includes(query));
+  });
 
   function resetForm() {
     setFormProviderType("openai");
@@ -255,12 +399,14 @@ export function ProviderSettingsPage() {
     setFormApiUrl("");
     setFormModel(DEFAULT_MODELS.openai);
     setFormIsActive(false);
+    setSelectedPresetId(null);
   }
 
   function applyPreset(presetId: string) {
     const preset = PROVIDER_PRESETS.find((item) => item.id === presetId);
     if (!preset) return;
 
+    setSelectedPresetId(preset.id);
     setFormProviderType(preset.providerType);
     setFormApiUrl(preset.apiUrl);
     setFormModel(preset.model);
@@ -283,6 +429,7 @@ export function ProviderSettingsPage() {
     setFormApiUrl(provider.api_url ?? "");
     setFormModel(provider.model);
     setFormIsActive(provider.is_active);
+    setSelectedPresetId(null);
     setIsDialogOpen(true);
   }
 
@@ -486,7 +633,7 @@ export function ProviderSettingsPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
               {editingProvider ? t("dialog.editTitle") : t("dialog.addTitle")}
@@ -498,27 +645,82 @@ export function ProviderSettingsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-5 py-2">
             {/* Provider Presets */}
-            <div className="space-y-2">
-              <Label>{t("dialog.presets")}</Label>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {PROVIDER_PRESETS.map((preset) => (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm font-semibold">{t("dialog.presets")}</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    选择一个常见平台后，下面的 Base URL 和模型会自动带入，你仍然可以手动修改。
+                  </p>
+                </div>
+                <div className="relative hidden w-56 sm:block">
+                  <Search
+                    className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <Input
+                    value={providerPresetQuery}
+                    onChange={(event) => setProviderPresetQuery(event.target.value)}
+                    placeholder="搜索供应商"
+                    className="h-9 rounded-full bg-muted/60 pl-9 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {visibleProviderPresets.map((preset) => (
                   <button
                     key={preset.id}
                     type="button"
                     onClick={() => applyPreset(preset.id)}
-                    className="rounded-lg border bg-card p-3 text-left transition hover:border-primary/60 hover:bg-primary/5"
+                    className={cn(
+                      "group relative min-h-[132px] overflow-hidden rounded-2xl border bg-card p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-[0_18px_50px_rgba(15,23,42,0.10)]",
+                      selectedPresetId === preset.id &&
+                        "border-primary bg-primary/10 shadow-[0_18px_50px_rgba(132,204,22,0.12)] ring-1 ring-primary/30",
+                    )}
+                    aria-pressed={selectedPresetId === preset.id}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{preset.label}</span>
-                      <Badge variant="outline" className="text-[10px]">
-                        {PROTOCOL_LABELS[preset.providerType]}
-                      </Badge>
+                    {preset.recommended && (
+                      <span className="absolute right-3 top-3 inline-flex size-5 items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm">
+                        <Star className="size-3 fill-current" aria-hidden="true" />
+                      </span>
+                    )}
+                    <div className="flex items-start gap-3 pr-5">
+                      <ProviderLogo preset={preset} />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-foreground">
+                          {preset.label}
+                        </div>
+                        <div className="mt-1">
+                          <Badge variant="outline" className="rounded-full px-2 py-0 text-[10px] font-medium">
+                            {PROTOCOL_LABELS[preset.providerType]}
+                          </Badge>
+                        </div>
+                      </div>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{preset.description}</p>
+                    <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                      {preset.description}
+                    </p>
+                    <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                      <span className="truncate rounded-full bg-muted px-2 py-1 font-mono">
+                        {preset.modelHint ?? preset.model}
+                      </span>
+                      {preset.apiUrl ? (
+                        <span className="max-w-[42%] truncate text-right">
+                          {new URL(preset.apiUrl).hostname}
+                        </span>
+                      ) : (
+                        <span className="text-right">自定义地址</span>
+                      )}
+                    </div>
                   </button>
                 ))}
+                {visibleProviderPresets.length === 0 && (
+                  <div className="rounded-2xl border border-dashed p-5 text-sm text-muted-foreground sm:col-span-2 lg:col-span-3">
+                    没有匹配的供应商。可以选择“自定义配置”，手动填写 Base URL 和模型名。
+                  </div>
+                )}
               </div>
             </div>
 
@@ -539,8 +741,8 @@ export function ProviderSettingsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="openai">OpenAI-compatible (/v1/chat/completions)</SelectItem>
-                  <SelectItem value="anthropic">Anthropic Messages (/v1/messages)</SelectItem>
+                  <SelectItem value="openai">OpenAI 兼容接口 (/v1/chat/completions)</SelectItem>
+                  <SelectItem value="anthropic">Claude Messages 接口 (/v1/messages)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
@@ -591,7 +793,7 @@ export function ProviderSettingsPage() {
                 onChange={(e) => setFormApiUrl(e.target.value)}
                 placeholder={
                   formProviderType === "openai"
-                    ? "https://api.deepseek.com/v1"
+                    ? "https://api.deepseek.com"
                     : "https://api.anthropic.com"
                 }
               />
@@ -612,7 +814,7 @@ export function ProviderSettingsPage() {
               <p className="text-xs text-muted-foreground">
                 e.g.,{" "}
                 {formProviderType === "openai"
-                  ? "deepseek-chat, gpt-4o, qwen-plus"
+                  ? "deepseek-v4-flash, gpt-4o, qwen-plus, glm-4-flash"
                   : "claude-sonnet-4-20250514, claude-3-5-sonnet-20241022"}
               </p>
             </div>

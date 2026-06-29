@@ -16,7 +16,7 @@
     "editTitle": "Edit Provider",
     "addDesc": "Configure a new AI provider connection.",
     "editDesc": "Update your AI provider configuration.",
-    "presets": "Common Presets",
+    "presets": "Preset Providers",
     "providerType": "API Protocol",
     "providerTypeHelp": "Choose the wire protocol, not the model brand. DeepSeek, OpenRouter, and DashScope compatible mode usually use OpenAI-compatible; only true Claude/Anthropic Messages endpoints should use Anthropic Messages.",
     "label": "Label",

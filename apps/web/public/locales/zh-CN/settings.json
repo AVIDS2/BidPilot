@@ -16,7 +16,7 @@
     "editTitle": "编辑提供商",
     "addDesc": "配置新的 AI 提供商连接。",
     "editDesc": "更新 AI 提供商配置。",
-    "presets": "常用预设",
+    "presets": "预设供应商",
     "providerType": "接口协议",
     "providerTypeHelp": "选择 API 请求协议，而不是模型品牌。DeepSeek、OpenRouter、百炼兼容模式通常选 OpenAI-compatible；真正的 Claude/Anthropic Messages 端点才选 Anthropic Messages。",
     "label": "标签",
