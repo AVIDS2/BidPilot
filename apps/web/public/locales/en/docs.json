@@ -17,9 +17,9 @@
   },
   "overview": {
     "label": "/ Enterprise AI Document System",
-    "titleLine1": "DocPilot",
+    "titleLine1": "BidPilot",
     "titleLine2": "Documentation",
-    "description": "DocPilot is an enterprise-grade AI document execution system designed for complex document workflows. From RFP ingestion to final delivery, DocPilot orchestrates multi-agent workflows to automate the entire bid response process.",
+    "description": "BidPilot is an enterprise-grade AI bid execution system designed for complex RFP response workflows. From RFP ingestion to final delivery, BidPilot orchestrates multi-agent workflows to automate the entire bid response process.",
     "aiNativeTitle": "AI-Native",
     "aiNativeDesc": "Built on LangGraph multi-agent architecture with specialized agents for each workflow stage.",
     "statefulTitle": "Stateful Workflows",
@@ -41,7 +41,7 @@
   "quickstart": {
     "label": "Quick Start",
     "title": "Get Running in Minutes",
-    "description": "DocPilot is fully containerized. A single command brings up the entire stack: API, Worker, PostgreSQL, Redis, and MinIO.",
+    "description": "BidPilot is fully containerized. A single command brings up the entire stack: API, Worker, PostgreSQL, Redis, and MinIO.",
     "prerequisites": "Prerequisites",
     "prereq1": "Docker Engine 24+ and Docker Compose v2",
     "prereq2": "Node.js 20+ (for frontend development)",
@@ -65,11 +65,11 @@
   "features": {
     "label": "Core Features",
     "title": "End-to-End Document Automation",
-    "description": "DocPilot covers every stage of the document lifecycle, from initial ingestion to final export.",
+    "description": "BidPilot covers every stage of the document lifecycle, from initial ingestion to final export.",
     "projectMgmtTitle": "Project Management",
     "projectMgmtDesc": "Create and manage bid projects. Each project is a self-contained workspace with its own RFP documents, knowledge base, deliverables, and review history. Search, filter, and organize across your portfolio.",
     "docIngestTitle": "Document Ingestion",
-    "docIngestDesc": "Upload RFP documents in PDF, DOCX, or Markdown format. DocPilot automatically parses structure, extracts tables, and chunks content into searchable segments stored in MinIO.",
+    "docIngestDesc": "Upload RFP documents in PDF, DOCX, or Markdown format. BidPilot automatically parses structure, extracts tables, and chunks content into searchable segments stored in MinIO.",
     "reqExtractTitle": "Requirement Extraction",
     "reqExtractDesc": "AI agents analyze the RFP and extract structured requirements: mandatory criteria, evaluation factors, compliance requirements, and submission guidelines. All requirements are linked back to source pages.",
     "knowledgeTitle": "Knowledge Retrieval",
@@ -86,7 +86,7 @@
   "architecture": {
     "label": "Architecture",
     "title": "Layered System Design",
-    "description": "DocPilot follows a clean separation of concerns: Web, API, Worker, and Data layers.",
+    "description": "BidPilot follows a clean separation of concerns: Web, API, Worker, and Data layers.",
     "systemLayers": "System Layers",
     "webApp": "Web Application",
     "webAppTech": "React 19 + TypeScript + Vite + Tailwind CSS",
@@ -131,7 +131,7 @@
   "deployment": {
     "label": "Deployment",
     "title": "Production Deployment",
-    "description": "DocPilot is designed for containerized deployment. The Docker Compose stack includes all services with health checks.",
+    "description": "BidPilot is designed for containerized deployment. The Docker Compose stack includes all services with health checks.",
     "dockerTitle": "Docker Compose Stack",
     "dockerDesc": "The production stack includes 6 services, all orchestrated via Docker Compose:",
     "healthTitle": "Health & Monitoring",
@@ -142,7 +142,7 @@
     "storageConnectivity": "MinIO connectivity"
   },
   "footer": {
-    "title": "DocPilot Documentation",
+    "title": "BidPilot Documentation",
     "subtitle": "Built for teams that ship winning proposals."
   }
 }

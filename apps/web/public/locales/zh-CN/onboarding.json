@@ -1,8 +1,8 @@
 {
   "steps": {
     "welcome": {
-      "title": "欢迎使用 DocPilot",
-      "description": "DocPilot 帮助您将 RFP 和售前文档包转化为可审核的草稿包。让我们设置您的第一个项目。"
+      "title": "欢迎使用 BidPilot",
+      "description": "BidPilot 帮助您将 RFP 和售前文档包转化为可审核的草稿包。让我们设置您的第一个项目。"
     },
     "createProject": {
       "title": "创建您的第一个项目",

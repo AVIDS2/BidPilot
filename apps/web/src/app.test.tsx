@@ -22,9 +22,9 @@ describe("App", () => {
   it("renders the signup page without unavailable social auth actions", () => {
     window.history.pushState({}, "", "/signup");
     render(<App />);
-    // 注册页面有DocPilot文本（Logo或影视标注）
+    // 注册页面有BidPilot文本（Logo或影视标注）
     const pageContent = document.body.textContent || "";
-    expect(pageContent).toContain("DocPilot");
+    expect(pageContent).toContain("BidPilot");
     expect(screen.queryByText(/Sign up with (Apple|Google|Meta)/)).not.toBeInTheDocument();
   });
 });

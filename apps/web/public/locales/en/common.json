@@ -1,8 +1,8 @@
 {
   "app": {
-    "title": "DocPilot",
+    "title": "BidPilot",
     "documents": "Documents",
-    "tagline": "AI Document Execution"
+    "tagline": "AI Bid Execution"
   },
   "nav": {
     "dashboard": "Dashboard",

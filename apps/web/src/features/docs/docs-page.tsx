@@ -390,8 +390,8 @@ function QuickStartSection() {
             {t("quickstart.installDesc")}
           </p>
           <CodeBlock language="bash" filename="terminal">
-{`git clone https://github.com/your-org/docpilot.git
-cd docpilot
+{`git clone https://github.com/your-org/BidPilot.git
+cd BidPilot
 
 # Copy environment template
 cp .env.example .env
@@ -414,7 +414,7 @@ curl http://localhost:8000/health`}
           </p>
           <CodeBlock language="env" filename=".env">
 {`# Database
-DATABASE_URL=postgresql+asyncpg://docpilot:secret@postgres:5432/docpilot
+DATABASE_URL=postgresql+asyncpg://BidPilot:secret@postgres:5432/BidPilot
 
 # Redis (task queue + cache)
 REDIS_URL=redis://redis:6379/0
@@ -814,7 +814,7 @@ function DeploymentSection() {
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U docpilot"]
+      test: ["CMD-SHELL", "pg_isready -U BidPilot"]
 
   redis:
     image: redis:7-alpine
@@ -883,7 +883,7 @@ function DeploymentSection() {
             {t("deployment.structureTitle")}
           </h3>
           <CodeBlock language="text" filename="directory tree">
-{`docpilot/
+{`BidPilot/
   apps/
     web/                  # React frontend
       src/
@@ -984,7 +984,7 @@ export function DocsPage() {
                 <FileTextIcon className="size-3.5" style={{ color: inPlatform ? "var(--primary-foreground)" : "var(--background)" }} />
               </div>
               <span className="text-sm font-medium" style={{ color: inPlatform ? "var(--foreground)" : "var(--foreground)" }}>
-                DocPilot
+                BidPilot
               </span>
               <span
                 className="text-xs px-2 py-0.5 font-mono"

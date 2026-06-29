@@ -1,8 +1,8 @@
 {
   "app": {
-    "title": "DocPilot",
+    "title": "BidPilot",
     "documents": "文档",
-    "tagline": "AI 文档执行"
+    "tagline": "AI 投标执行"
   },
   "nav": {
     "dashboard": "仪表盘",

@@ -1,8 +1,8 @@
 {
   "steps": {
     "welcome": {
-      "title": "Welcome to DocPilot",
-      "description": "DocPilot helps you turn RFPs and presales bundles into reviewable draft packages. Let's set up your first project."
+      "title": "Welcome to BidPilot",
+      "description": "BidPilot helps you turn RFPs and presales bundles into reviewable draft packages. Let's set up your first project."
     },
     "createProject": {
       "title": "Create Your First Project",

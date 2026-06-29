@@ -17,9 +17,9 @@
   },
   "overview": {
     "label": "/ 企业级 AI 文档系统",
-    "titleLine1": "DocPilot",
+    "titleLine1": "BidPilot",
     "titleLine2": "文档中心",
-    "description": "DocPilot 是一个企业级 AI 文档执行系统，专为复杂文档工作流设计。从 RFP 导入到最终交付，DocPilot 编排多智能体工作流，自动化整个投标响应过程。",
+    "description": "BidPilot 是一个企业级 AI 投标执行系统，专为复杂 RFP 响应工作流设计。从 RFP 导入到最终交付，BidPilot 编排多智能体工作流，自动化整个投标响应过程。",
     "aiNativeTitle": "AI 原生",
     "aiNativeDesc": "基于 LangGraph 多智能体架构构建，每个工作流阶段都有专用智能体。",
     "statefulTitle": "有状态工作流",
@@ -41,7 +41,7 @@
   "quickstart": {
     "label": "快速开始",
     "title": "几分钟内即可运行",
-    "description": "DocPilot 完全容器化。一条命令即可启动整个技术栈：API、Worker、PostgreSQL、Redis 和 MinIO。",
+    "description": "BidPilot 完全容器化。一条命令即可启动整个技术栈：API、Worker、PostgreSQL、Redis 和 MinIO。",
     "prerequisites": "前置要求",
     "prereq1": "Docker Engine 24+ 和 Docker Compose v2",
     "prereq2": "Node.js 20+（前端开发）",
@@ -65,11 +65,11 @@
   "features": {
     "label": "核心功能",
     "title": "端到端文档自动化",
-    "description": "DocPilot 覆盖文档生命周期的每个阶段，从初始导入到最终导出。",
+    "description": "BidPilot 覆盖文档生命周期的每个阶段，从初始导入到最终导出。",
     "projectMgmtTitle": "项目管理",
     "projectMgmtDesc": "创建和管理投标项目。每个项目都是一个独立的工作空间，包含自己的 RFP 文档、知识库、交付物和审核历史。支持搜索、过滤和跨项目组合管理。",
     "docIngestTitle": "文档导入",
-    "docIngestDesc": "上传 PDF、DOCX 或 Markdown 格式的 RFP 文档。DocPilot 自动解析结构、提取表格，并将内容分块存储在 MinIO 中的可搜索片段中。",
+    "docIngestDesc": "上传 PDF、DOCX 或 Markdown 格式的 RFP 文档。BidPilot 自动解析结构、提取表格，并将内容分块存储在 MinIO 中的可搜索片段中。",
     "reqExtractTitle": "需求提取",
     "reqExtractDesc": "AI 智能体分析 RFP 并提取结构化需求：强制性标准、评估因素、合规要求和提交指南。所有需求都链接回源页面。",
     "knowledgeTitle": "知识检索",
@@ -86,7 +86,7 @@
   "architecture": {
     "label": "系统架构",
     "title": "分层系统设计",
-    "description": "DocPilot 遵循关注点清晰分离：Web、API、Worker 和数据层。",
+    "description": "BidPilot 遵循关注点清晰分离：Web、API、Worker 和数据层。",
     "systemLayers": "系统层级",
     "webApp": "Web 应用",
     "webAppTech": "React 19 + TypeScript + Vite + Tailwind CSS",
@@ -131,7 +131,7 @@
   "deployment": {
     "label": "部署方案",
     "title": "生产环境部署",
-    "description": "DocPilot 专为容器化部署设计。Docker Compose 技术栈包含所有服务和健康检查。",
+    "description": "BidPilot 专为容器化部署设计。Docker Compose 技术栈包含所有服务和健康检查。",
     "dockerTitle": "Docker Compose 技术栈",
     "dockerDesc": "生产技术栈包含 6 个服务，全部通过 Docker Compose 编排：",
     "healthTitle": "健康检查与监控",
@@ -142,7 +142,7 @@
     "storageConnectivity": "MinIO 连接"
   },
   "footer": {
-    "title": "DocPilot 文档中心",
+    "title": "BidPilot 文档中心",
     "subtitle": "为交付中标方案的团队而生。"
   }
 }

@@ -10,10 +10,10 @@
       "name": "Starter",
       "price": "Free",
       "period": "",
-      "description": "Try DocPilot on a single RFP response.",
+      "description": "Try BidPilot on a single RFP response.",
       "features": [
         "Up to 3 projects",
-        "1 scenario package (DocPilot)",
+        "1 scenario package (BidPilot)",
         "Community support",
         "Basic audit trail"
       ],

@@ -1,7 +1,7 @@
 {
   "hero": {
     "title": "AI 驱动的投标响应",
-    "label": "/ AI 驱动的文档执行",
+    "label": "/ AI 驱动的投标执行",
     "description": "几分钟内生成有据可查的投标方案，而非数天。",
     "getStarted": "免费试用",
     "viewPricing": "查看工作原理",
@@ -17,7 +17,7 @@
     "steps": {
       "upload": {
         "title": "上传招标文件",
-        "description": "拖入招标文件。DocPilot 自动提取需求、评审标准和合规规则。"
+        "description": "拖入招标文件。BidPilot 自动提取需求、评审标准和合规规则。"
       },
       "generate": {
         "title": "生成草稿回复",
@@ -55,7 +55,7 @@
       "starter": {
         "label": "入门版",
         "price": "免费",
-        "sub": "适合评估 DocPilot 的个人用户。",
+        "sub": "适合评估 BidPilot 的个人用户。",
         "features": [
           "每月 3 份方案",
           "基础招标解析",

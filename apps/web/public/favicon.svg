@@ -1,15 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DocPilot">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="BidPilot">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#111827" />
-      <stop offset="100%" stop-color="#0f172a" />
+    <linearGradient id="shell" x1="8" y1="4" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111827" />
+      <stop offset="0.48" stop-color="#05070A" />
+      <stop offset="1" stop-color="#162019" />
     </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#a3e635" />
-      <stop offset="100%" stop-color="#22c55e" />
+    <linearGradient id="paper" x1="16" y1="10" x2="48" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8FAFC" />
+      <stop offset="0.58" stop-color="#CBD5E1" />
+      <stop offset="1" stop-color="#7F8B99" />
+    </linearGradient>
+    <linearGradient id="accent" x1="17" y1="45" x2="49" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#A3E635" />
+      <stop offset="0.52" stop-color="#34D399" />
+      <stop offset="1" stop-color="#2DD4BF" />
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="16" fill="url(#bg)" />
-  <path d="M18 18h14c8.284 0 15 6.716 15 15s-6.716 15-15 15H18V18Z" fill="none" stroke="url(#accent)" stroke-width="5" stroke-linejoin="round" />
-  <path d="M26 24h9.5c4.142 0 7.5 3.358 7.5 7.5S39.642 39 35.5 39H26V24Z" fill="url(#accent)" opacity="0.95" />
+  <rect x="3.5" y="3.5" width="57" height="57" rx="18" fill="url(#shell)" />
+  <rect x="4.25" y="4.25" width="55.5" height="55.5" rx="17.25" fill="none" stroke="#fff" stroke-opacity="0.12" stroke-width="1.5" />
+  <path d="M18.5 12.5H39.8L50.5 23.2V49.5C50.5 51.2 49.2 52.5 47.5 52.5H18.5C16.8 52.5 15.5 51.2 15.5 49.5V15.5C15.5 13.8 16.8 12.5 18.5 12.5Z" fill="url(#paper)" fill-opacity="0.92" />
+  <path d="M39.5 12.8V21.2C39.5 22.8 40.8 24.1 42.4 24.1H50.1" fill="none" stroke="#F8FAFC" stroke-opacity="0.72" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M23 24.5H35.5M23 31H39M23 37.5H32.5" fill="none" stroke="#111827" stroke-opacity="0.34" stroke-width="2" stroke-linecap="round" />
+  <path d="M18.8 45.2C25.2 36.3 30.5 38.9 35.7 30.1C39.2 24.1 43.5 20.2 49.2 17.5" fill="none" stroke="url(#accent)" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M43.1 16.4L49.8 17.1L47.7 23.6" fill="none" stroke="url(#accent)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="25.6" cy="37.9" r="2.4" fill="#05070A" stroke="#A3E635" stroke-width="1.8" />
+  <circle cx="36.3" cy="29.1" r="2.4" fill="#05070A" stroke="#34D399" stroke-width="1.8" />
+  <path d="M12.5 51.5L20.7 43.3" fill="none" stroke="#A3E635" stroke-opacity="0.36" stroke-width="1.4" stroke-linecap="round" />
 </svg>

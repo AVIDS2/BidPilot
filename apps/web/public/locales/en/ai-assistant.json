@@ -1,5 +1,5 @@
 {
-  "title": "DocPilot AI",
+  "title": "BidPilot AI",
   "subtitle": "Your document assistant",
   "inputPlaceholder": "Ask me anything...",
   "thinking": "Thinking",
@@ -39,7 +39,7 @@
     }
   },
   "welcome": {
-    "title": "Welcome to DocPilot!",
+    "title": "Welcome to BidPilot!",
     "description": "I can help you create projects, upload documents, generate sections, and more."
   },
   "error": {
@@ -53,7 +53,7 @@
     "generateSection": "Generate Section",
     "generateSectionPrompt": "Generate an executive summary",
     "howToUse": "How to use?",
-    "howToUsePrompt": "How to use DocPilot?",
+    "howToUsePrompt": "How to use BidPilot?",
     "send": "Send",
     "stop": "Stop"
   },
@@ -92,7 +92,7 @@
     "delete": "Delete conversation"
   },
   "floating": {
-    "ariaLabel": "DocPilot AI Assistant",
+    "ariaLabel": "BidPilot AI Assistant",
     "openPanel": "Open panel",
     "commandPalette": "Command palette",
     "aiChat": "AI chat"

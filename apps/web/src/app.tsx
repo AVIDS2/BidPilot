@@ -28,6 +28,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "next-themes";
 import { FileTextIcon, SettingsIcon, UsersIcon, UserPlusIcon, MailIcon, LayoutDashboardIcon, CreditCardIcon, BookOpenIcon } from "lucide-react";
+import { BrandMark } from "@/components/brand";
 import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
 import { AIAssistantPanel, CommandPalette, FloatingAssistant, InlineSuggestionBar } from "@/components/ai-assistant";
 import { useAIAssistantHotkeys } from "@/hooks/use-ai-assistant-hotkeys";
@@ -72,7 +73,7 @@ function PlatformShell() {
   ];
 
   const teams = [
-    { name: "DocPilot", logo: <FileTextIcon className="size-3" />, plan: t("app.tagline") },
+    { name: "BidPilot", logo: <BrandMark decorative className="size-5" />, plan: t("app.tagline") },
   ];
 
   const adminOnlyUrls = ["/admin/users", "/admin/teams", "/admin/invitations"];

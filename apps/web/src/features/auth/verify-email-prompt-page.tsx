@@ -7,6 +7,7 @@ import { resendVerification } from "@/lib/api"
 import { MailCheckIcon, ArrowLeftIcon } from "lucide-react"
 import { toast } from "sonner"
 import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget"
+import { BrandLogo } from "@/components/brand"
 
 export function VerifyEmailPromptPage() {
   const location = useLocation()
@@ -41,7 +42,7 @@ export function VerifyEmailPromptPage() {
   return (
     <div className="h-screen flex items-center justify-center bg-background px-6">
       <div className="absolute inset-0 pointer-events-none z-10">
-        <span className="absolute top-6 left-6 text-[10px] text-foreground/20 font-mono">DocPilot v1.0</span>
+        <span className="absolute top-6 left-6 text-[10px] text-foreground/20 font-mono">BidPilot v1.0</span>
         <span className="absolute top-6 right-6 text-[10px] text-foreground/20 font-mono">[16:9]</span>
         <span className="absolute bottom-6 left-6 text-[10px] text-foreground/20 font-mono">OVERSCAN: 1920 x 1080</span>
         <span className="absolute bottom-6 right-6 text-[10px] text-foreground/20 font-mono">100%</span>
@@ -54,8 +55,8 @@ export function VerifyEmailPromptPage() {
       />
       <div className="relative z-20 w-full max-w-md">
         <div className="text-center mb-10">
-          <Link to="/" className="text-3xl font-medium tracking-[-0.04em] text-foreground hover:text-primary transition-colors duration-300">
-            DocPilot
+          <Link to="/" className="inline-flex transition-colors duration-300 hover:text-primary">
+            <BrandLogo markClassName="size-10" textClassName="text-3xl" />
           </Link>
           <p className="mt-3 text-sm" style={{ color: "var(--landing-text-tertiary)" }}>{t("verifyEmail.promptTitle")}</p>
         </div>

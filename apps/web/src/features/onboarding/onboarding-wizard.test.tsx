@@ -6,7 +6,7 @@ describe("OnboardingWizard", () => {
   it("renders the welcome step first", () => {
     render(<OnboardingWizard />);
 
-    expect(screen.getByText(/Welcome to DocPilot/i)).not.toBeNull();
+    expect(screen.getByText(/Welcome to BidPilot/i)).not.toBeNull();
   });
 
   it("advances to the create-project step on next", () => {

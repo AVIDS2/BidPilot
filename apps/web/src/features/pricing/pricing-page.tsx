@@ -253,7 +253,7 @@ export function PricingPage() {
             >
               <FileTextIcon className="size-4" />
             </div>
-            DocPilot
+            BidPilot
           </Link>
           <div className="w-20" />
         </div>}

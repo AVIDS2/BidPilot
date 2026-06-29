@@ -110,7 +110,7 @@ function FieldGuide() {
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
       <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">
-        DocPilot v1.0
+        BidPilot v1.0
       </span>
       <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">
         [16:9]

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
+import { BrandLogo } from "@/components/brand";
 
 export function Nav() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -34,9 +35,9 @@ export function Nav() {
         {/* Logo */}
         <Link
           to="/"
-          className="text-2xl font-medium tracking-[-0.04em] text-foreground hover:text-primary transition-colors duration-300"
+          className="text-2xl transition-colors duration-300 hover:text-primary"
         >
-          DocPilot
+          <BrandLogo markClassName="size-8" textClassName="text-2xl" />
         </Link>
 
         {/* Navigation links */}

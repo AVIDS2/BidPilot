@@ -8,6 +8,7 @@ import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/compon
 import { isStrongPassword } from "@/lib/password";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand";
 
 export function SignupPage() {
   const [searchParams] = useSearchParams();
@@ -89,7 +90,7 @@ export function SignupPage() {
       {/* 影视画框标注 */}
       <div className="absolute inset-0 pointer-events-none z-10">
         <span className="absolute top-6 left-6 text-[10px] text-foreground/20 font-mono">
-          DocPilot v1.0
+          BidPilot v1.0
         </span>
         <span className="absolute top-6 right-6 text-[10px] text-foreground/20 font-mono">
           [16:9]
@@ -115,12 +116,12 @@ export function SignupPage() {
         <div className="text-center mb-10">
           <Link
             to="/"
-            className="text-3xl font-medium tracking-[-0.04em] text-foreground hover:text-primary transition-colors duration-300"
+            className="inline-flex transition-colors duration-300 hover:text-primary"
           >
-            DocPilot
+            <BrandLogo markClassName="size-10" textClassName="text-3xl" />
           </Link>
           <p className="mt-3 text-sm text-muted-foreground">
-            AI-Powered Document Execution
+            AI-Powered Bid Execution
           </p>
         </div>
 

@@ -11,13 +11,13 @@ test.beforeEach(async ({ page }) => {
 
 test("shows landing page for unauthenticated users", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText(/AI-Powered Document Execution/i)).toBeVisible();
+  await expect(page.getByText(/AI-Powered Bid Execution/i)).toBeVisible();
   await expect(page.getByRole("link", { name: /Get Started/i })).toBeVisible();
 });
 
 test("renders login page with forgot password link", async ({ page }) => {
   await page.goto("/login");
-  await expect(page.getByRole("heading", { name: "Welcome to DocPilot" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome to BidPilot" })).toBeVisible();
   await expect(page.getByText("Forgot password?")).toBeVisible();
 });
 
@@ -56,7 +56,7 @@ test.describe("auth flow with API backend @api", () => {
     const apiCtx = await request.newContext({ baseURL: "http://localhost:8000" });
     // Login as admin
     const loginResp = await apiCtx.post("/auth/login", {
-      data: { email: "demo@docpilot.ai", password: "Demo1234" },
+      data: { email: "demo@BidPilot.ai", password: "Demo1234" },
     });
     const { access_token } = await loginResp.json();
 
@@ -75,7 +75,7 @@ test.describe("auth flow with API backend @api", () => {
   }
 
   test("register, verify email, login, and view account page", async ({ page }) => {
-    const email = `e2e-${Date.now()}@docpilot.local`;
+    const email = `e2e-${Date.now()}@BidPilot.local`;
     const password = "TestPass123";
 
     // Register
@@ -110,7 +110,7 @@ test.describe("auth flow with API backend @api", () => {
   });
 
   test("member user does not see Users nav item", async ({ page }) => {
-    const email = `e2e-member-${Date.now()}@docpilot.local`;
+    const email = `e2e-member-${Date.now()}@BidPilot.local`;
     const password = "TestPass123";
 
     await page.goto("/signup");
@@ -136,7 +136,7 @@ test.describe("auth flow with API backend @api", () => {
   });
 
   test("logout and redirect to login", async ({ page }) => {
-    const email = `e2e-logout-${Date.now()}@docpilot.local`;
+    const email = `e2e-logout-${Date.now()}@BidPilot.local`;
     const password = "TestPass123";
 
     await page.goto("/signup");

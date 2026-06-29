@@ -45,7 +45,7 @@ export function AIAssistant() {
     setMessages(prev => [...prev, aiMessage]);
 
     try {
-      const token = localStorage.getItem("docpilot_token");
+      const token = localStorage.getItem("BidPilot_token");
       const response = await fetch("http://localhost:8000/chat/stream", {
         method: "POST",
         headers: {
@@ -107,7 +107,7 @@ export function AIAssistant() {
   // 快捷操作
   const quickActions = [
     { label: t("actions.createProject"), action: "帮我创建一个新项目" },
-    { label: t("actions.howToUse"), action: "怎么使用DocPilot？" },
+    { label: t("actions.howToUse"), action: "怎么使用BidPilot？" },
     { label: t("actions.generateSection"), action: "帮我生成执行摘要" },
   ];
 

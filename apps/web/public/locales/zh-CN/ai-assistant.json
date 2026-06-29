@@ -1,5 +1,5 @@
 {
-  "title": "DocPilot AI",
+  "title": "BidPilot AI",
   "subtitle": "您的文档助手",
   "inputPlaceholder": "问我任何问题...",
   "thinking": "思考中",
@@ -39,7 +39,7 @@
     }
   },
   "welcome": {
-    "title": "欢迎使用 DocPilot！",
+    "title": "欢迎使用 BidPilot！",
     "description": "我可以帮您创建项目、上传文档、生成章节等。"
   },
   "error": {
@@ -53,7 +53,7 @@
     "generateSection": "生成章节",
     "generateSectionPrompt": "生成执行摘要",
     "howToUse": "如何使用？",
-    "howToUsePrompt": "怎么使用DocPilot？",
+    "howToUsePrompt": "怎么使用BidPilot？",
     "send": "发送",
     "stop": "停止"
   },
@@ -92,7 +92,7 @@
     "delete": "删除对话"
   },
   "floating": {
-    "ariaLabel": "DocPilot AI 助手",
+    "ariaLabel": "BidPilot AI 助手",
     "openPanel": "打开面板",
     "commandPalette": "命令面板",
     "aiChat": "AI 对话"

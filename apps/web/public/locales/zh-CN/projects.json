@@ -51,9 +51,9 @@
   "guide": {
     "title": "快速入门向导",
     "dismiss": "关闭",
-    "welcome": "欢迎使用 DocPilot！按照以下步骤将源材料转化为可审核、可导出的交付物：",
+    "welcome": "欢迎使用 BidPilot！按照以下步骤将源材料转化为可审核、可导出的交付物：",
     "step1Title": "1. 创建项目",
-    "step1Desc": "点击\"+ 新建项目\"，选择一个场景包（如 DocPilot）。",
+    "step1Desc": "点击\"+ 新建项目\"，选择一个场景包（如 BidPilot）。",
     "step2Title": "2. 上传素材包",
     "step2Desc": "打开项目 -> 素材包标签页 -> 注册素材包 -> 上传 PDF/DOCX。",
     "step3Title": "3. 生成草稿",

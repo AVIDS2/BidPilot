@@ -47,13 +47,7 @@ export function TeamSwitcher({
               />
             }
           >
-            <div
-              className="flex aspect-square size-6 items-center justify-center rounded-md"
-              style={{
-                background: "var(--primary)",
-                color: "var(--primary-foreground)",
-              }}
-            >
+            <div className="flex aspect-square size-7 items-center justify-center rounded-lg">
               {activeTeam.logo}
             </div>
             <span className="truncate font-medium text-sm">{activeTeam.name}</span>
@@ -82,13 +76,7 @@ export function TeamSwitcher({
                   onClick={() => setActiveTeam(team)}
                   className="gap-2 p-2 text-muted-foreground focus:text-white focus:bg-[rgba(163,163,163,0.08)]"
                 >
-                  <div
-                    className="flex size-6 items-center justify-center rounded-xs"
-                    style={{
-                      background: "rgba(132, 204, 22, 0.1)",
-                      border: "1px solid rgba(132, 204, 22, 0.2)",
-                    }}
-                  >
+                  <div className="flex size-7 items-center justify-center rounded-lg">
                     {team.logo}
                   </div>
                   {team.name}
