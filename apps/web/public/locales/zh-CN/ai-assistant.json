@@ -57,14 +57,29 @@
       "failed": "失败"
     },
     "tool": {
-      "default": "工具调用",
+      "default": "平台操作",
       "search_projects": "搜索项目",
       "get_runtime_status": "读取执行状态",
       "open_page": "打开页面",
       "create_project": "创建项目",
+      "get_project_summary": "读取项目概览",
+      "list_project_bundles": "查看资料包",
+      "list_sections": "查看章节",
+      "list_pending_reviews": "查看待审核项",
+      "list_requirements": "查看需求",
+      "list_evidence": "查看证据",
+      "list_deliverables": "查看交付物",
+      "list_documents": "查看文档",
+      "get_section_versions": "查看章节版本",
+      "create_deliverable": "创建交付物",
       "start_draft_section": "启动章节起草",
       "start_redraft_section": "重新起草章节",
-      "search_knowledge": "检索知识库"
+      "retry_run": "重试任务",
+      "export_deliverable": "导出交付物",
+      "semantic_search": "检索资料",
+      "search_knowledge": "检索知识库",
+      "upload_document": "上传文档",
+      "delete_project": "删除项目"
     },
     "node": {
       "document_analyzer": "分析资料",

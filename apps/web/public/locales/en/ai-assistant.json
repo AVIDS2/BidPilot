@@ -57,14 +57,29 @@
       "failed": "failed"
     },
     "tool": {
-      "default": "Tool call",
+      "default": "Platform action",
       "search_projects": "Search projects",
       "get_runtime_status": "Read execution status",
       "open_page": "Open page",
       "create_project": "Create project",
+      "get_project_summary": "Read project overview",
+      "list_project_bundles": "Check material bundles",
+      "list_sections": "Check sections",
+      "list_pending_reviews": "Check pending reviews",
+      "list_requirements": "Check requirements",
+      "list_evidence": "Check evidence",
+      "list_deliverables": "Check deliverables",
+      "list_documents": "Check documents",
+      "get_section_versions": "Check section versions",
+      "create_deliverable": "Create deliverable",
       "start_draft_section": "Start section draft",
       "start_redraft_section": "Redraft section",
-      "search_knowledge": "Search knowledge base"
+      "retry_run": "Retry task",
+      "export_deliverable": "Export deliverable",
+      "semantic_search": "Search materials",
+      "search_knowledge": "Search knowledge base",
+      "upload_document": "Upload document",
+      "delete_project": "Delete project"
     },
     "node": {
       "document_analyzer": "Analyze materials",

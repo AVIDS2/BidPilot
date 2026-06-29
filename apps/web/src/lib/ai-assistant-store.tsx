@@ -192,6 +192,11 @@ const initialState: AIAssistantState = {
   commands: [],
 };
 
+function createExecutionId(prefix: string, key?: string) {
+  const safeKey = key ? `-${key.replace(/[^a-zA-Z0-9_-]/g, "")}` : "";
+  return `${prefix}${safeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function reducer(state: AIAssistantState, action: Action): AIAssistantState {
   switch (action.type) {
     case "OPEN":
@@ -264,7 +269,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       });
       if (!updated) {
         executionItems.push({
-          id: `exec-${Date.now()}`,
+          id: createExecutionId("exec", action.runId ?? action.toolName),
           messageId: state.activeAssistantMessageId ?? undefined,
           kind: "tool",
           toolName: action.toolName,
@@ -313,7 +318,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         executionItems: [
           ...state.executionItems,
           {
-            id: `exec-error-${Date.now()}`,
+            id: createExecutionId("exec-error", action.errorCode),
             kind: "tool",
             status: "failed",
             title: action.errorCode ?? "assistant_error",

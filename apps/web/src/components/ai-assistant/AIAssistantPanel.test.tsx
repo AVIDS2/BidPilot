@@ -216,6 +216,52 @@ describe("AIAssistantPanel", () => {
     expect(screen.queryByText(/content='/)).not.toBeInTheDocument();
   });
 
+  it("renders platform tool names as user-facing labels", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-tools","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"get_project_summary","arguments":{"project_id":"p1"},"state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"get_project_summary","result":{"name":"test","status":"active"},"summary":"项目 test 当前为 active。","state":"completed"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"list_project_bundles","arguments":{"project_id":"p1"},"state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"list_project_bundles","result":{"bundles":[],"count":0},"summary":"暂无资料包。","state":"completed"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"list_deliverables","arguments":{"project_id":"p1"},"state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"list_deliverables","result":{"deliverables":[],"count":0},"summary":"暂无交付物。","state":"completed"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"list_sections","arguments":{"project_id":"p1"},"state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"list_sections","result":{"sections":[],"count":0},"summary":"暂无章节。","state":"completed"}',
+            'event: assistant.message\ndata: {"content":"我查看了项目概况。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-tools","full_response":"我查看了项目概况。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "查看项目状态" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("我查看了项目概况。")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+
+    expect(screen.getByText("Read project overview")).toBeInTheDocument();
+    expect(screen.getByText("Check material bundles")).toBeInTheDocument();
+    expect(screen.getByText("Check deliverables")).toBeInTheDocument();
+    expect(screen.getByText("Check sections")).toBeInTheDocument();
+    expect(screen.queryByText("get_project_summary")).not.toBeInTheDocument();
+    expect(screen.queryByText("list_project_bundles")).not.toBeInTheDocument();
+    expect(screen.queryByText("list_deliverables")).not.toBeInTheDocument();
+    expect(screen.queryByText("list_sections")).not.toBeInTheDocument();
+  });
+
   it("renders user attachments without leaking backend attachment context", async () => {
     const { uploadAssistantAttachment } = await import("@/lib/api");
     vi.mocked(uploadAssistantAttachment).mockResolvedValue({

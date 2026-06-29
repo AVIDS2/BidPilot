@@ -3,16 +3,13 @@ import {
   CheckCircle2Icon,
   ChevronDownIcon,
   CircleDashedIcon,
-  FilePenLineIcon,
   Loader2Icon,
-  SearchIcon,
-  TerminalIcon,
-  WrenchIcon,
   XCircleIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
+import { getAssistantToolIcon, getAssistantToolLabel } from "./assistant-tool-metadata";
 
 type ActivityTone = "running" | "succeeded" | "failed" | "pending";
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -22,27 +19,6 @@ function getTone(items: AssistantExecutionItem[]): ActivityTone {
   if (items.some((item) => item.status === "running")) return "running";
   if (items.some((item) => item.status === "pending")) return "pending";
   return "succeeded";
-}
-
-function getToolLabel(toolName: string | undefined, t: Translate) {
-  const labels: Record<string, string> = {
-    search_projects: "搜索项目",
-    get_runtime_status: "读取执行状态",
-    open_page: "打开页面",
-    create_project: "创建项目",
-    start_draft_section: "启动章节起草",
-    start_redraft_section: "重新起草章节",
-    search_knowledge: "检索知识库",
-  };
-  const fallback = labels[toolName ?? ""] ?? toolName ?? "工具调用";
-  return t(`activity.tool.${toolName ?? "default"}`, { defaultValue: fallback });
-}
-
-function getToolIcon(item: AssistantExecutionItem) {
-  if (item.kind === "workflow") return FilePenLineIcon;
-  if (item.toolName?.includes("search")) return SearchIcon;
-  if (item.toolName?.includes("status") || item.toolName?.includes("runtime")) return TerminalIcon;
-  return WrenchIcon;
 }
 
 function getWorkflowNodeLabel(nodeName: string, t: Translate) {
@@ -189,8 +165,8 @@ function DetailValue({ value }: { value: unknown }) {
 
 function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
   const { t } = useTranslation("ai-assistant");
-  const Icon = getToolIcon(item);
-  const label = getToolLabel(item.toolName, t);
+  const Icon = getAssistantToolIcon(item);
+  const label = getAssistantToolLabel(item.toolName, t);
   const safeSummary = sanitizeToolText(item.summary);
   const completedNodes = item.nodes?.filter((node) => node.status === "completed").length ?? 0;
   const totalNodes = item.nodes?.length ?? 0;

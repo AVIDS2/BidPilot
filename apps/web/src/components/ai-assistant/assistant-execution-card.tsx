@@ -6,16 +6,20 @@ import {
   Loader2Icon,
   WrenchIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
+import { getAssistantToolLabel } from "./assistant-tool-metadata";
 
 export function AssistantExecutionCard({ item }: { item: AssistantExecutionItem }) {
+  const { t } = useTranslation("ai-assistant");
   const failed = item.status === "failed";
   const running = item.status === "running";
   const succeeded = item.status === "succeeded";
   const defaultExpanded = running || item.status === "pending" || failed;
   const [expanded, setExpanded] = useState(defaultExpanded);
   const hasDetails = Boolean(item.summary || item.errorMessage);
+  const title = getAssistantToolLabel(item.toolName ?? item.title, t);
 
   useEffect(() => {
     setExpanded(defaultExpanded);
@@ -53,10 +57,10 @@ export function AssistantExecutionCard({ item }: { item: AssistantExecutionItem 
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-medium truncate">{item.title}</span>
+            <span className="font-medium truncate">{title}</span>
             <div className="flex shrink-0 items-center gap-1.5">
               <span className="capitalize" style={{ color: "var(--muted-foreground)" }}>
-                {item.status}
+                {t(`activity.status.${item.status}`, { defaultValue: item.status })}
               </span>
               {hasDetails && (
                 <button
