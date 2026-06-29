@@ -13,6 +13,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.models import ChatConversation, ChatMessage as ChatMessageModel, Project, ProviderConfig
+from app.providers.endpoints import normalize_provider_endpoint
 from app.security.secrets import decrypt_secret
 
 logger = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ def _generate_conversation_title(
 
     try:
         response = httpx.post(
-            f"{provider.base_url.rstrip('/')}/chat/completions",
+            normalize_provider_endpoint("openai", provider.base_url),
             headers={
                 "Authorization": f"Bearer {provider.api_key}",
                 "Content-Type": "application/json",
@@ -401,7 +402,7 @@ async def _call_platform_streaming(
     messages: list[dict[str, str]],
 ) -> AsyncGenerator[str, None]:
     """Stream from the platform-owned chat provider."""
-    url = f"{provider.base_url.rstrip('/')}/chat/completions"
+    url = normalize_provider_endpoint("openai", provider.base_url)
     headers = {
         "Authorization": f"Bearer {provider.api_key}",
         "Content-Type": "application/json",
@@ -456,7 +457,7 @@ async def _call_openai_streaming(
     messages: list[dict[str, str]],
 ) -> AsyncGenerator[str, None]:
     """Stream from an OpenAI-compatible API."""
-    url = (config.api_url or "https://api.openai.com/v1/chat/completions").rstrip("/")
+    url = normalize_provider_endpoint("openai", config.api_url)
     headers = {
         "Authorization": f"Bearer {decrypt_secret(config.api_key)}",
         "Content-Type": "application/json",
@@ -495,7 +496,7 @@ async def _call_anthropic_streaming(
     messages: list[dict[str, str]],
 ) -> AsyncGenerator[str, None]:
     """Stream from the Anthropic Messages API."""
-    url = (config.api_url or "https://api.anthropic.com/v1/messages").rstrip("/")
+    url = normalize_provider_endpoint("anthropic", config.api_url)
     headers = {
         "x-api-key": decrypt_secret(config.api_key),
         "anthropic-version": "2023-06-01",

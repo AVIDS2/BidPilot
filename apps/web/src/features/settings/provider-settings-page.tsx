@@ -47,10 +47,83 @@ import {
   Cpu,
 } from "lucide-react";
 
+type ProviderProtocol = "openai" | "anthropic";
+
 const DEFAULT_MODELS: Record<string, string> = {
   openai: "gpt-4o",
   anthropic: "claude-sonnet-4-20250514",
 };
+
+const PROTOCOL_LABELS: Record<ProviderProtocol, string> = {
+  openai: "OpenAI-compatible",
+  anthropic: "Anthropic Messages",
+};
+
+const PROVIDER_PRESETS: Array<{
+  id: string;
+  label: string;
+  providerType: ProviderProtocol;
+  apiUrl: string;
+  model: string;
+  description: string;
+}> = [
+  {
+    id: "custom-openai",
+    label: "Custom OpenAI",
+    providerType: "openai",
+    apiUrl: "",
+    model: "gpt-4o",
+    description: "/v1/chat/completions",
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    providerType: "openai",
+    apiUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+    description: "DeepSeek official OpenAI-compatible API",
+  },
+  {
+    id: "dashscope",
+    label: "Alibaba Bailian",
+    providerType: "openai",
+    apiUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen-plus",
+    description: "DashScope compatible-mode",
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    providerType: "openai",
+    apiUrl: "https://openrouter.ai/api/v1",
+    model: "openai/gpt-4o-mini",
+    description: "OpenRouter OpenAI-compatible API",
+  },
+  {
+    id: "siliconflow",
+    label: "SiliconFlow",
+    providerType: "openai",
+    apiUrl: "https://api.siliconflow.cn/v1",
+    model: "deepseek-ai/DeepSeek-V3",
+    description: "SiliconFlow OpenAI-compatible API",
+  },
+  {
+    id: "custom-anthropic",
+    label: "Custom Claude",
+    providerType: "anthropic",
+    apiUrl: "",
+    model: "claude-sonnet-4-20250514",
+    description: "/v1/messages",
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    providerType: "anthropic",
+    apiUrl: "https://api.anthropic.com",
+    model: "claude-sonnet-4-20250514",
+    description: "Official Anthropic Messages API",
+  },
+];
 
 function maskApiKey(key: string): string {
   if (key.length <= 8) return "****";
@@ -93,7 +166,7 @@ export function ProviderSettingsPage() {
   const [editingProvider, setEditingProvider] = useState<ProviderConfig | null>(null);
 
   // Form state
-  const [formProviderType, setFormProviderType] = useState<"openai" | "anthropic">("openai");
+  const [formProviderType, setFormProviderType] = useState<ProviderProtocol>("openai");
   const [formLabel, setFormLabel] = useState("");
   const [formApiKey, setFormApiKey] = useState("");
   const [formApiUrl, setFormApiUrl] = useState("");
@@ -182,6 +255,18 @@ export function ProviderSettingsPage() {
     setFormApiUrl("");
     setFormModel(DEFAULT_MODELS.openai);
     setFormIsActive(false);
+  }
+
+  function applyPreset(presetId: string) {
+    const preset = PROVIDER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+
+    setFormProviderType(preset.providerType);
+    setFormApiUrl(preset.apiUrl);
+    setFormModel(preset.model);
+    if (!editingProvider || !formLabel.trim()) {
+      setFormLabel(preset.label);
+    }
   }
 
   function handleAddProvider() {
@@ -302,7 +387,7 @@ export function ProviderSettingsPage() {
                       className="capitalize gap-1 px-2 py-1"
                     >
                       <Cpu className="size-3" />
-                      {provider.provider_type}
+                      {PROTOCOL_LABELS[provider.provider_type]}
                     </Badge>
                     {provider.is_active && (
                       <span className="text-xs px-2 py-0.5 rounded flex items-center gap-1" style={{ background: "rgba(132, 204, 22, 0.15)", color: "var(--primary)" }}>
@@ -401,7 +486,7 @@ export function ProviderSettingsPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {editingProvider ? t("dialog.editTitle") : t("dialog.addTitle")}
@@ -414,16 +499,39 @@ export function ProviderSettingsPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Provider Type */}
+            {/* Provider Presets */}
+            <div className="space-y-2">
+              <Label>{t("dialog.presets")}</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {PROVIDER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyPreset(preset.id)}
+                    className="rounded-lg border bg-card p-3 text-left transition hover:border-primary/60 hover:bg-primary/5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{preset.label}</span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {PROTOCOL_LABELS[preset.providerType]}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{preset.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Provider Protocol */}
             <div className="space-y-2">
               <Label>{t("dialog.providerType")}</Label>
               <Select
                 value={formProviderType}
                 onValueChange={(v: string | null) => {
                   if (!v) return;
-                  setFormProviderType(v as "openai" | "anthropic");
+                  setFormProviderType(v as ProviderProtocol);
                   if (!editingProvider) {
-                    setFormModel(DEFAULT_MODELS[v as "openai" | "anthropic"]);
+                    setFormModel(DEFAULT_MODELS[v as ProviderProtocol]);
                   }
                 }}
               >
@@ -431,10 +539,13 @@ export function ProviderSettingsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="openai">OpenAI</SelectItem>
-                  <SelectItem value="anthropic">Anthropic</SelectItem>
+                  <SelectItem value="openai">OpenAI-compatible (/v1/chat/completions)</SelectItem>
+                  <SelectItem value="anthropic">Anthropic Messages (/v1/messages)</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                {t("dialog.providerTypeHelp")}
+              </p>
             </div>
 
             {/* Label */}
@@ -480,10 +591,13 @@ export function ProviderSettingsPage() {
                 onChange={(e) => setFormApiUrl(e.target.value)}
                 placeholder={
                   formProviderType === "openai"
-                    ? "https://api.openai.com"
+                    ? "https://api.deepseek.com/v1"
                     : "https://api.anthropic.com"
                 }
               />
+              <p className="text-xs text-muted-foreground">
+                {t("dialog.apiUrlHelp")}
+              </p>
             </div>
 
             {/* Model */}
@@ -498,7 +612,7 @@ export function ProviderSettingsPage() {
               <p className="text-xs text-muted-foreground">
                 e.g.,{" "}
                 {formProviderType === "openai"
-                  ? "gpt-4o, gpt-4-turbo"
+                  ? "deepseek-chat, gpt-4o, qwen-plus"
                   : "claude-sonnet-4-20250514, claude-3-5-sonnet-20241022"}
               </p>
             </div>

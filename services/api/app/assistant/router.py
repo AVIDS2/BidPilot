@@ -72,18 +72,19 @@ async def assistant_stream(
     save_message(db, conversation_id, "user", payload.message)
 
     # Resolve user's BYOK provider if specified
-    api_key, base_url, model = None, None, None
+    provider_type, api_key, base_url, model = "openai", None, None, None
     if payload.provider_config_id:
         from app.chat.service import _resolve_provider_config
         from app.security.secrets import decrypt_secret
         config = _resolve_provider_config(db, user.id, payload.provider_config_id)
         if config:
+            provider_type = config.provider_type
             api_key = decrypt_secret(config.api_key)
             base_url = config.api_url
             model = config.model
 
     # Build agent with fresh db session and user context
-    agent = build_agent(db, user, api_key=api_key, base_url=base_url, model=model)
+    agent = build_agent(db, user, provider_type=provider_type, api_key=api_key, base_url=base_url, model=model)
 
     config = {"configurable": {"thread_id": conversation_id}}
     agent_message = build_attachment_context(payload.message, payload.attachments)

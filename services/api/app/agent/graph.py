@@ -90,12 +90,13 @@ def close_checkpointer():
 def build_agent(
     db: Session,
     user: CurrentUser,
+    provider_type: str = "openai",
     api_key: str | None = None,
     base_url: str | None = None,
     model: str | None = None,
 ):
     """Build a ReAct agent with tools bound to the current db session and user."""
-    llm = get_agent_llm(api_key=api_key, base_url=base_url, model=model)
+    llm = get_agent_llm(provider_type=provider_type, api_key=api_key, base_url=base_url, model=model)
     tools = create_tools(db, user)
     checkpointer = get_checkpointer()
 

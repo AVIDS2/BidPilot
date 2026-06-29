@@ -12,6 +12,7 @@ from app.security.secrets import (
     mask_secret,
 )
 
+from .endpoints import normalize_provider_endpoint
 from .schemas import ProviderConfigCreate, ProviderConfigUpdate, TestConnectionRequest, TestConnectionResponse
 
 
@@ -108,7 +109,7 @@ def test_connection(db: Session, user_id: str, config_id: str | None, payload: T
     url = ""
     try:
         if provider_type == "anthropic":
-            url = api_url or "https://api.anthropic.com/v1/messages"
+            url = normalize_provider_endpoint(provider_type, api_url)
             resp = httpx.post(
                 url,
                 headers={
@@ -131,7 +132,7 @@ def test_connection(db: Session, user_id: str, config_id: str | None, payload: T
                 return TestConnectionResponse(success=False, message=f"API error: {resp.status_code} {resp.text[:200]}")
         else:
             # OpenAI-compatible
-            url = api_url or "https://api.openai.com/v1/chat/completions"
+            url = normalize_provider_endpoint(provider_type, api_url)
             resp = httpx.post(
                 url,
                 headers={
