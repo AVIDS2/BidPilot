@@ -5,8 +5,24 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAgentStream, type AgentNode, type AgentStreamState } from "@/components/agent-status-stream";
+import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { CheckCircle2Icon, XCircleIcon, CircleDotIcon, ClockIcon, ShieldQuestionIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
+const NODE_LABELS: Record<string, string> = {
+  supervisor: "调度规划",
+  rfp_parser: "解析资料",
+  knowledge_retriever: "检索证据",
+  section_drafter: "起草章节",
+  quality_reviewer: "质量审核",
+  human_approval: "人工确认",
+  persist_result: "保存结果",
+  workflow: "工作流",
+};
+
+function getNodeLabel(name: string) {
+  return NODE_LABELS[name] ?? name;
+}
 
 function NodeStatusIcon({ status }: { status: AgentNode["status"] }) {
   switch (status) {
@@ -145,6 +161,8 @@ export function AgentProgress({ runId, onApprove, onReject }: AgentProgressProps
             </div>
           )}
 
+          <WorkflowCanvas nodes={stream.nodes} currentNode={stream.currentNode} />
+
           {stream.error && (
             <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
               <XCircleIcon className="size-4 text-destructive shrink-0" />
@@ -167,7 +185,7 @@ export function AgentProgress({ runId, onApprove, onReject }: AgentProgressProps
               >
                 <NodeStatusIcon status={node.status} />
                 <span className={cn("flex-1", node.status === "pending" && "text-muted-foreground")}>
-                  {node.name}
+                  {getNodeLabel(node.name)}
                 </span>
                 {node.status === "completed" && node.completed_at && (
                   <span className="text-xs text-muted-foreground">

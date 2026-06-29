@@ -1,6 +1,7 @@
 import React, { Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import "./lib/i18n";
+import "@xyflow/react/dist/style.css";
 import "./index.css";
 import { App } from "./app";
 

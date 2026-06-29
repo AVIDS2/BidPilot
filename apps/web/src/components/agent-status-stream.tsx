@@ -11,6 +11,7 @@ export interface AgentNode {
   started_at?: string;
   completed_at?: string;
   error?: string;
+  summary?: string;
 }
 
 export interface ReviewResult {
@@ -74,24 +75,33 @@ export function useAgentStream(runId: string | null): AgentStreamState {
         const parsed = data as Record<string, unknown>;
 
         switch (event) {
-          case "node_start": {
-            const name = parsed.node as string;
+          case "node_start":
+          case "node_started": {
+            const name = (parsed.node_name ?? parsed.node) as string;
             next.currentNode = name;
             next.nodes = mergeNode(next.nodes, { name, status: "running", started_at: new Date().toISOString() });
             next.isRunning = true;
             break;
           }
-          case "node_complete": {
-            const name = parsed.node as string;
-            next.nodes = mergeNode(next.nodes, { name, status: "completed", completed_at: new Date().toISOString() });
+          case "node_complete":
+          case "node_completed": {
+            const name = (parsed.node_name ?? parsed.node) as string;
+            next.nodes = mergeNode(next.nodes, {
+              name,
+              status: "completed",
+              completed_at: new Date().toISOString(),
+              summary: parsed.result_summary as string | undefined,
+            });
             next.currentNode = null;
             break;
           }
-          case "node_error": {
-            const name = parsed.node as string;
-            const errorMsg = parsed.error as string | undefined;
+          case "node_error":
+          case "graph_error": {
+            const name = (parsed.node_name ?? parsed.node ?? next.currentNode ?? "workflow") as string;
+            const errorMsg = (parsed.error_message ?? parsed.error) as string | undefined;
             next.nodes = mergeNode(next.nodes, { name, status: "failed", error: errorMsg });
             next.currentNode = null;
+            next.error = errorMsg ?? "Agent run failed";
             break;
           }
           case "review_result": {
@@ -102,9 +112,10 @@ export function useAgentStream(runId: string | null): AgentStreamState {
             };
             break;
           }
-          case "approval_required": {
+          case "approval_required":
+          case "human_approval_required": {
             next.isWaitingApproval = true;
-            next.approvalMessage = (parsed.message as string) ?? null;
+            next.approvalMessage = ((parsed.message ?? parsed.draft_preview) as string | undefined) ?? null;
             break;
           }
           case "approval_granted": {
@@ -112,7 +123,8 @@ export function useAgentStream(runId: string | null): AgentStreamState {
             next.approvalMessage = null;
             break;
           }
-          case "run_complete": {
+          case "run_complete":
+          case "graph_completed": {
             next.isRunning = false;
             break;
           }
@@ -172,11 +184,20 @@ export function useAgentStream(runId: string | null): AgentStreamState {
       es.addEventListener("node_start", (e) => {
         if (!cancelled) processEvent("node_start", JSON.parse(e.data));
       });
+      es.addEventListener("node_started", (e) => {
+        if (!cancelled) processEvent("node_started", JSON.parse(e.data));
+      });
       es.addEventListener("node_complete", (e) => {
         if (!cancelled) processEvent("node_complete", JSON.parse(e.data));
       });
+      es.addEventListener("node_completed", (e) => {
+        if (!cancelled) processEvent("node_completed", JSON.parse(e.data));
+      });
       es.addEventListener("node_error", (e) => {
         if (!cancelled) processEvent("node_error", JSON.parse(e.data));
+      });
+      es.addEventListener("graph_error", (e) => {
+        if (!cancelled) processEvent("graph_error", JSON.parse(e.data));
       });
       es.addEventListener("review_result", (e) => {
         if (!cancelled) processEvent("review_result", JSON.parse(e.data));
@@ -184,11 +205,17 @@ export function useAgentStream(runId: string | null): AgentStreamState {
       es.addEventListener("approval_required", (e) => {
         if (!cancelled) processEvent("approval_required", JSON.parse(e.data));
       });
+      es.addEventListener("human_approval_required", (e) => {
+        if (!cancelled) processEvent("human_approval_required", JSON.parse(e.data));
+      });
       es.addEventListener("approval_granted", (e) => {
         if (!cancelled) processEvent("approval_granted", JSON.parse(e.data));
       });
       es.addEventListener("run_complete", (e) => {
         if (!cancelled) processEvent("run_complete", JSON.parse(e.data));
+      });
+      es.addEventListener("graph_completed", (e) => {
+        if (!cancelled) processEvent("graph_completed", JSON.parse(e.data));
       });
       es.addEventListener("run_error", (e) => {
         if (!cancelled) processEvent("run_error", JSON.parse(e.data));
