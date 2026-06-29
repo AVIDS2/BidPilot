@@ -189,8 +189,8 @@ function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
   ].filter((row, index, rows) => rows.findIndex((candidate) => candidate.key === row.key) === index);
 
   return (
-    <div className="flex gap-2 py-1.5 text-xs">
-      <div className="mt-0.5 text-muted-foreground">
+    <div className="group flex gap-2 rounded-lg py-1.5 text-xs">
+      <div className="mt-0.5 text-muted-foreground/80">
         <Icon className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1">
@@ -200,7 +200,7 @@ function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
             {t(`activity.status.${item.status}`, { defaultValue: item.status })}
           </span>
         </div>
-        <div className="mt-0.5 text-muted-foreground">{safeSummary || summarizeResult(item, t)}</div>
+        <div className="mt-0.5 text-muted-foreground/85">{safeSummary || summarizeResult(item, t)}</div>
         {totalNodes > 0 && (
           <div className="mt-1 text-[11px] text-muted-foreground">
             {t("execution.nodesCompleted", {
@@ -251,11 +251,14 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
   const statusLabel = t(`activity.status.${tone}`, { defaultValue: tone });
 
   return (
-    <div className="mb-2 border-b pb-2" style={{ borderColor: "var(--border)" }}>
+    <div
+      className="mb-3 border-b pb-2"
+      style={{ borderColor: "color-mix(in oklch, var(--border) 68%, transparent)" }}
+    >
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full items-center gap-2 rounded-md py-0.5 text-left text-xs text-muted-foreground transition hover:text-foreground"
+        className="flex w-full items-center gap-2 rounded-md py-0.5 text-left text-[12px] text-muted-foreground transition hover:text-foreground"
         aria-expanded={expanded}
         aria-label={expanded ? t("activity.collapse") : t("activity.expand")}
       >
@@ -276,12 +279,15 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
             <CircleDashedIcon className="h-3.5 w-3.5" />
           )}
         </span>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className="shrink-0">{statusLabel}</span>
+        <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">{label}</span>
+        <span className="shrink-0 text-[11px]">{statusLabel}</span>
         <ChevronDownIcon className={cn("h-3.5 w-3.5 shrink-0 transition-transform", expanded && "rotate-180")} />
       </button>
       {expanded && (
-        <div className="ml-6 mt-1 flex flex-col gap-1 border-l pl-2" style={{ borderColor: "var(--border)" }}>
+        <div
+          className="ml-6 mt-1 flex flex-col gap-0.5 border-l pl-2"
+          style={{ borderColor: "color-mix(in oklch, var(--border) 70%, transparent)" }}
+        >
           {items.map((item) => (
             <ActivityDetail key={item.id} item={item} />
           ))}

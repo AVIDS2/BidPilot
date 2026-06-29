@@ -219,10 +219,14 @@ function MessageAttachmentPreview({ attachment }: { attachment: ChatMessageAttac
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border text-xs shadow-sm",
-        isImage ? "w-20" : "max-w-48 px-2.5 py-2",
+        "overflow-hidden border text-xs shadow-[0_10px_30px_oklch(0_0_0/0.12)] backdrop-blur-xl",
+        isImage ? "w-20 rounded-2xl" : "max-w-52 rounded-2xl px-2.5 py-2",
       )}
-      style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}
+      style={{
+        background: "color-mix(in oklch, var(--background) 88%, transparent)",
+        borderColor: "color-mix(in oklch, var(--border) 70%, transparent)",
+        color: "var(--foreground)",
+      }}
     >
       {isImage ? (
         <div className="flex aspect-[4/3] items-center justify-center bg-muted">
@@ -256,7 +260,7 @@ function MessageAttachmentPreview({ attachment }: { attachment: ChatMessageAttac
 function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activityItems?: AssistantExecutionItem[] }) {
   const isUser = msg.role === "user";
   return (
-    <div className={cn("flex flex-col gap-1.5", isUser ? "items-end" : "items-start")}>
+    <div className={cn("flex flex-col gap-2 animate-fade-in", isUser ? "items-end" : "items-start")}>
       {isUser && msg.attachments && msg.attachments.length > 0 && (
         <div className="flex max-w-[85%] flex-wrap justify-end gap-2">
           {msg.attachments.map((attachment) => (
@@ -266,14 +270,17 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
       )}
       <div
         className={cn(
-          "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words",
-          isUser ? "rounded-br-md" : "rounded-bl-md",
+          "text-[14px] leading-7 break-words",
+          isUser
+            ? "max-w-[82%] rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 shadow-[0_14px_36px_oklch(0_0_0/0.16)]"
+            : "w-full max-w-[92%] px-1 py-1",
         )}
         style={{
           background: isUser
-            ? "linear-gradient(135deg, var(--primary), oklch(from var(--primary) calc(l + 0.08) c h))"
-            : "var(--muted)",
+            ? "linear-gradient(180deg, color-mix(in oklch, var(--primary) 88%, white 12%), var(--primary))"
+            : "transparent",
           color: isUser ? "var(--primary-foreground)" : "var(--foreground)",
+          borderColor: isUser ? "color-mix(in oklch, var(--primary) 68%, white 24%)" : "transparent",
         }}
       >
         {!isUser && activityItems.length > 0 && <AssistantActivityTimeline items={activityItems} />}
@@ -286,10 +293,10 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
             </Markdown>
           )
         ) : (
-          <span className="inline-flex gap-1 items-center text-muted-foreground">
-            <span className="animate-pulse" style={{ animationDelay: "0ms" }}>●</span>
-            <span className="animate-pulse" style={{ animationDelay: "150ms" }}>●</span>
-            <span className="animate-pulse" style={{ animationDelay: "300ms" }}>●</span>
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "0ms" }} />
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "150ms" }} />
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "300ms" }} />
           </span>
         )}
       </div>
@@ -805,10 +812,22 @@ export function AIAssistantPanel() {
 
   return (
     <div
-      className="fixed top-0 right-0 z-40 h-full w-full sm:w-[320px] md:w-[400px] flex flex-col animate-slide-in bg-background border-l border-border shadow-[-8px_0_30px_oklch(0_0_0/0.08)]"
+      className="fixed top-0 right-0 z-40 flex h-full w-full flex-col animate-slide-in border-l sm:w-[360px] md:w-[440px] lg:w-[480px]"
+      style={{
+        background: "color-mix(in oklch, var(--background) 94%, transparent)",
+        borderColor: "color-mix(in oklch, var(--border) 78%, transparent)",
+        boxShadow: "-28px 0 72px oklch(0 0 0 / 0.34), inset 1px 0 0 color-mix(in oklch, white 5%, transparent)",
+        backdropFilter: "blur(22px) saturate(1.18)",
+      }}
     >
       {/* ─── Header ─── */}
-      <div className="flex items-center justify-between px-3 h-12 shrink-0 border-b border-border">
+      <div
+        className="flex h-14 shrink-0 items-center justify-between border-b px-3.5"
+        style={{
+          borderColor: "color-mix(in oklch, var(--border) 64%, transparent)",
+          background: "linear-gradient(180deg, color-mix(in oklch, var(--background) 96%, white 4%), color-mix(in oklch, var(--background) 86%, transparent))",
+        }}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <Button
             variant="ghost"
@@ -819,6 +838,16 @@ export function AIAssistantPanel() {
           >
             <HistoryIcon className="size-4" />
           </Button>
+          <div
+            className="flex size-8 shrink-0 items-center justify-center rounded-2xl border shadow-sm"
+            style={{
+              background: "linear-gradient(145deg, color-mix(in oklch, var(--primary) 88%, white 12%), var(--primary))",
+              borderColor: "color-mix(in oklch, var(--primary) 55%, white 20%)",
+              color: "var(--primary-foreground)",
+            }}
+          >
+            <SparklesIcon className="size-4" />
+          </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-semibold truncate text-foreground">
@@ -828,6 +857,11 @@ export function AIAssistantPanel() {
                     : null) || t("panel.untitledConversation")
                   : t("title")}
               </span>
+            </div>
+            <div className="truncate text-[11px] text-muted-foreground">
+              {state.status === "idle"
+                ? t("status.ready", { defaultValue: "Ready" })
+                : t(`status.${state.status}`, { defaultValue: t("thinking") })}
             </div>
           </div>
         </div>
@@ -889,14 +923,20 @@ export function AIAssistantPanel() {
           onScroll={handleMessagesScroll}
           className="h-full overflow-y-auto"
         >
-          <div className="p-4 space-y-4">
+          <div className="flex flex-col gap-5 px-4 py-5">
             {state.messages.length === 0 ? (
-              <div className="text-center py-10">
-                <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)]">
-                  <SparklesIcon className="w-7 h-7 text-primary-foreground" />
+              <div className="flex min-h-[55vh] flex-col items-center justify-center text-center">
+                <div
+                  className="mx-auto mb-4 flex size-14 items-center justify-center rounded-[1.4rem] border shadow-[0_18px_50px_oklch(0_0_0/0.16)]"
+                  style={{
+                    background: "linear-gradient(145deg, color-mix(in oklch, var(--primary) 86%, white 14%), var(--primary))",
+                    borderColor: "color-mix(in oklch, var(--primary) 56%, white 20%)",
+                  }}
+                >
+                  <SparklesIcon className="size-7 text-primary-foreground" />
                 </div>
                 <h3 className="text-base font-semibold mb-1 text-foreground">{t("welcome.title")}</h3>
-                <p className="text-sm mb-6 text-muted-foreground">{t("welcome.description")}</p>
+                <p className="mb-6 max-w-[28ch] text-sm leading-6 text-muted-foreground">{t("welcome.description")}</p>
                 <QuickActions onSelect={handleQuickAction} />
               </div>
             ) : (
@@ -951,7 +991,12 @@ export function AIAssistantPanel() {
       </div>
 
       {/* ─── Input ─── */}
-      <div className="shrink-0 px-3 pt-2 pb-2 border-t border-border">
+      <div
+        className="shrink-0 px-3 pb-3 pt-2"
+        style={{
+          background: "linear-gradient(180deg, transparent, color-mix(in oklch, var(--background) 96%, transparent) 28%)",
+        }}
+      >
         {(attachments.length > 0 || queuedPrompts.length > 0) && (
           <div className="mb-2 flex max-h-24 flex-col gap-1.5 overflow-y-auto">
             {attachments.map((attachment) => (
@@ -990,22 +1035,32 @@ export function AIAssistantPanel() {
           className="hidden"
           onChange={(event) => handleAttachmentInputChange(event, "image")}
         />
-        <div className="flex items-center gap-2 rounded-xl px-2 py-1.5 min-h-11 bg-muted border border-border">
+        <div
+          className="flex min-h-12 items-end gap-1.5 rounded-[1.65rem] border px-2 py-2 shadow-[0_18px_55px_oklch(0_0_0/0.18),inset_0_1px_0_oklch(1_0_0/0.08)]"
+          style={{
+            background: "color-mix(in oklch, var(--card) 92%, transparent)",
+            borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
+            backdropFilter: "blur(18px) saturate(1.08)",
+          }}
+        >
           <div className="relative shrink-0">
             <button
               type="button"
               aria-label={t("attachments.add", { defaultValue: "Add attachment" })}
               aria-expanded={attachmentMenuOpen}
               onClick={() => setAttachmentMenuOpen((value) => !value)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-background hover:text-foreground"
+              className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
             >
               <PlusIcon className="h-4 w-4" />
             </button>
             {attachmentMenuOpen && (
               <div
                 role="menu"
-                className="absolute bottom-10 left-0 z-30 w-56 overflow-hidden rounded-2xl border bg-popover p-1.5 text-sm shadow-xl"
-                style={{ borderColor: "var(--border)", color: "var(--popover-foreground)" }}
+                className="absolute bottom-11 left-0 z-30 w-60 overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
+                style={{
+                  borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
+                  color: "var(--popover-foreground)",
+                }}
               >
                 <button
                   type="button"
@@ -1044,23 +1099,23 @@ export function AIAssistantPanel() {
             onKeyDown={handleKeyDown}
             placeholder={t("inputPlaceholder")}
             rows={1}
-            className="flex-1 bg-transparent text-sm leading-5 outline-none resize-none min-h-5 max-h-24 placeholder:text-muted-foreground overflow-y-auto text-foreground"
+            className="min-h-8 max-h-28 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[14px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
           />
           <button
             onClick={handleSend}
             disabled={!canSend}
             aria-label={t("actions.send")}
             className={cn(
-              "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 disabled:opacity-40",
+              "flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
               canSend
-                ? "bg-gradient-to-br from-primary to-[oklch(from_var(--primary)_calc(l+0.08)_c_h)] text-primary-foreground"
+                ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
                 : "text-muted-foreground"
             )}
           >
             {isUploadingAttachments ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
           </button>
         </div>
-        <div className="flex items-center justify-between mt-1 px-1">
+        <div className="mt-1 flex items-center justify-between px-1">
           <span className="text-[10px] text-muted-foreground flex items-center gap-1">
             <CornerDownLeftIcon className="w-3 h-3" /> {isBusy ? t("panel.enterToQueue", { defaultValue: "Enter queues" }) : t("panel.enterToSend")}
           </span>

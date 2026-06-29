@@ -4,6 +4,7 @@
   "inputPlaceholder": "Ask me anything...",
   "thinking": "Thinking",
   "status": {
+    "ready": "Ready",
     "thinking": "Understanding request",
     "needs_input": "Waiting for input",
     "needs_confirmation": "Waiting for your confirmation",
