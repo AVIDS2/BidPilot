@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { listProjects, createProject, updateProjectStatus, deleteProject, type ProjectRead } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser-storage";
 import { ScenarioSelector } from "@/features/scenarios/scenario-selector";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
@@ -83,17 +84,17 @@ export function ProjectListPage() {
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [showGuide, setShowGuide] = useState(() => localStorage.getItem("docpilot_guide_dismissed") !== "true");
-  const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem("docpilot_onboarding_done") !== "true");
+  const [showGuide, setShowGuide] = useState(() => getStoredValue("guideDismissed") !== "true");
+  const [showOnboarding, setShowOnboarding] = useState(() => getStoredValue("onboardingDone") !== "true");
   const [deleteTarget, setDeleteTarget] = useState<ProjectRead | null>(null);
 
   const dismissGuide = () => {
-    localStorage.setItem("docpilot_guide_dismissed", "true");
+    setStoredValue("guideDismissed", "true");
     setShowGuide(false);
   };
 
   const finishOnboarding = () => {
-    localStorage.setItem("docpilot_onboarding_done", "true");
+    setStoredValue("onboardingDone", "true");
     setShowOnboarding(false);
   };
 
@@ -173,7 +174,7 @@ export function ProjectListPage() {
         <h1 className="text-2xl font-bold">{t("list.title")}</h1>
         <div className="flex items-center gap-2">
           {!showGuide && (
-            <Button variant="outline" size="sm" onClick={() => { localStorage.removeItem("docpilot_guide_dismissed"); setShowGuide(true); }}>
+            <Button variant="outline" size="sm" onClick={() => { removeStoredValue("guideDismissed"); setShowGuide(true); }}>
               <BookOpenIcon className="size-4" />
               {t("list.showGuide")}
             </Button>

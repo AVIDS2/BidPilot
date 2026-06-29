@@ -1,7 +1,7 @@
 import { expect, test, request } from "@playwright/test";
 
 const runDemo = process.env.E2E_DEMO === "1";
-const demoEmail = process.env.E2E_DEMO_EMAIL ?? "demo@docpilot.ai";
+const demoEmail = process.env.E2E_DEMO_EMAIL ?? "demo@bidpilot.local";
 const demoPassword = process.env.E2E_DEMO_PASSWORD ?? "Demo1234";
 
 test.describe("admin user management @admin", () => {
@@ -68,7 +68,7 @@ test.describe("member governance restriction @member-gov", () => {
 
   test("member user does NOT see Audit or System tabs", async ({ page }) => {
     // Register a new member user
-    const memberEmail = `e2e-member-${Date.now()}@docpilot.local`;
+    const memberEmail = `e2e-member-${Date.now()}@bidpilot.local`;
     const memberPassword = "Member123";
 
     await page.goto("/signup");

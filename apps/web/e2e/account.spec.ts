@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const runWithAPI = process.env.E2E_DEMO === "1";
-const demoEmail = process.env.E2E_DEMO_EMAIL ?? "demo@docpilot.ai";
+const demoEmail = process.env.E2E_DEMO_EMAIL ?? "demo@bidpilot.local";
 
 test.describe("Account page", () => {
   test("redirects to login when unauthenticated", async ({ page }) => {

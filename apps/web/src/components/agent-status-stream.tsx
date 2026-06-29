@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { getStoredValue } from "@/lib/browser-storage";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const TOKEN_KEY = "docpilot_token";
 
 export type AgentNodeStatus = "pending" | "running" | "completed" | "failed";
 
@@ -157,7 +157,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
     function connect() {
       if (cancelled) return;
 
-      const token = localStorage.getItem(TOKEN_KEY);
+      const token = getStoredValue("token");
       const url = `${API_BASE}/drafting/runs/${runId}/stream`;
       const es = token ? new EventSource(url, { withCredentials: false }) : new EventSource(url);
       esRef.current = es;

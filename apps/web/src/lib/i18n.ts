@@ -2,6 +2,10 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import HttpBackend from "i18next-http-backend";
+import { STORAGE_KEYS, getStoredValue, setStoredValue } from "@/lib/browser-storage";
+
+const storedLanguage = getStoredValue("language");
+if (storedLanguage) setStoredValue("language", storedLanguage);
 
 i18n
   .use(HttpBackend)
@@ -16,7 +20,7 @@ i18n
     detection: {
       order: ["localStorage", "navigator"],
       caches: ["localStorage"],
-      lookupLocalStorage: "docpilot_lang",
+      lookupLocalStorage: STORAGE_KEYS.language,
     },
     backend: {
       loadPath: "/locales/{{lng}}/{{ns}}.json",

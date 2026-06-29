@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { loginUser, registerUser, getCurrentUser, type CurrentUser } from "@/lib/api";
+import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser-storage";
 
 interface AuthState {
   user: CurrentUser | null;
@@ -13,11 +14,8 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-const TOKEN_KEY = "docpilot_token";
-const REFRESH_KEY = "docpilot_refresh_token";
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const [token, setToken] = useState<string | null>(() => getStoredValue("token"));
   const [user, setUser] = useState<CurrentUser | null>(null);
 
   // Fetch user info on mount when token exists
@@ -25,24 +23,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token && !user) {
       getCurrentUser(token).then(setUser).catch(() => {
         // Token invalid, try refresh
-        const refreshToken = localStorage.getItem(REFRESH_KEY);
+        const refreshToken = getStoredValue("refreshToken");
         if (refreshToken) {
           fetch(`${import.meta.env.VITE_API_URL || "http://localhost:8000"}/auth/refresh?refresh_token=${encodeURIComponent(refreshToken)}`, { method: "POST" })
             .then(r => r.ok ? r.json() : Promise.reject())
             .then((data: { access_token: string; refresh_token?: string }) => {
-              localStorage.setItem(TOKEN_KEY, data.access_token);
-              if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
+              setStoredValue("token", data.access_token);
+              if (data.refresh_token) setStoredValue("refreshToken", data.refresh_token);
               setToken(data.access_token);
               return getCurrentUser(data.access_token);
             })
             .then(setUser)
             .catch(() => {
-              localStorage.removeItem(TOKEN_KEY);
-              localStorage.removeItem(REFRESH_KEY);
+              removeStoredValue("token");
+              removeStoredValue("refreshToken");
               setToken(null);
             });
         } else {
-          localStorage.removeItem(TOKEN_KEY);
+          removeStoredValue("token");
           setToken(null);
         }
       });
@@ -52,8 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string, turnstileToken?: string | null) => {
     const res = await loginUser({ email, password, turnstile_token: turnstileToken || null });
-    localStorage.setItem(TOKEN_KEY, res.access_token);
-    if (res.refresh_token) localStorage.setItem(REFRESH_KEY, res.refresh_token);
+    setStoredValue("token", res.access_token);
+    if (res.refresh_token) setStoredValue("refreshToken", res.refresh_token);
     setToken(res.access_token);
     const u = await getCurrentUser(res.access_token);
     setUser(u);
@@ -81,8 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
+    removeStoredValue("token");
+    removeStoredValue("refreshToken");
     setToken(null);
     setUser(null);
   }, []);

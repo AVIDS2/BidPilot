@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageCircleIcon, XIcon, SparklesIcon, SendIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { getStoredValue } from "@/lib/browser-storage";
 
 interface ChatMessage {
   id: string;
@@ -45,7 +46,7 @@ export function AIAssistant() {
     setMessages(prev => [...prev, aiMessage]);
 
     try {
-      const token = localStorage.getItem("BidPilot_token");
+      const token = getStoredValue("token");
       const response = await fetch("http://localhost:8000/chat/stream", {
         method: "POST",
         headers: {

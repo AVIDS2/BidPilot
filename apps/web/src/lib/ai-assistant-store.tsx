@@ -12,6 +12,7 @@ import {
   listChatConversations,
   type ChatConversationRead,
 } from "@/lib/api";
+import { getStoredValue } from "@/lib/browser-storage";
 
 /* ─── Types ─── */
 
@@ -523,10 +524,9 @@ const AIAssistantContext = createContext<AIAssistantContextValue | null>(null);
 /* ─── Provider ─── */
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const TOKEN_KEY = "docpilot_token";
 
 function getAuthToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  return getStoredValue("token");
 }
 
 async function streamWorkflowRun(
@@ -744,7 +744,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: aiMsg.id });
 
       try {
-        const token = localStorage.getItem("docpilot_token");
+        const token = getAuthToken();
         const response = await fetch(`${API_BASE}/assistant/stream`, {
           method: "POST",
           headers: {

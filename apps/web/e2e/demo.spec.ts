@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const runDemo = process.env.E2E_DEMO === "1";
-const demoEmail = process.env.E2E_DEMO_EMAIL ?? "demo@docpilot.ai";
+const demoEmail = process.env.E2E_DEMO_EMAIL ?? "demo@bidpilot.local";
 const demoPassword = process.env.E2E_DEMO_PASSWORD ?? "Demo1234";
 const demoProjectName = process.env.E2E_DEMO_PROJECT ?? "Acme Corp RFP Response";
 

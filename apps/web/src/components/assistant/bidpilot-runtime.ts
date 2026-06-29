@@ -12,11 +12,12 @@
 import { useLocalRuntime } from "@assistant-ui/react";
 import { useMemo } from "react";
 import type { ChatModelAdapter } from "@assistant-ui/react";
+import { getStoredValue } from "@/lib/browser-storage";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem("docpilot_token");
+  const token = getStoredValue("token");
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

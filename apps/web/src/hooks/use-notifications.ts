@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { getStoredValue } from "@/lib/browser-storage";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const TOKEN_KEY = "docpilot_token";
 
 export type NotificationType =
   | "draft_completed"
@@ -20,7 +20,7 @@ export interface Notification {
 }
 
 function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = getStoredValue("token");
   if (token) {
     return { Authorization: `Bearer ${token}` };
   }
