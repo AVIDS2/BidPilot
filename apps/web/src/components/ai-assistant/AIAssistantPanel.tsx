@@ -339,37 +339,32 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
     const hasAttachments = Boolean(msg.attachments && msg.attachments.length > 0);
     return (
       <div className="flex animate-fade-in flex-col items-end gap-2">
-        <div
-          className={cn(
-            "max-w-[88%] rounded-[1.45rem] rounded-br-[0.55rem] border shadow-[0_14px_36px_oklch(0_0_0/0.16)]",
-            hasAttachments ? "space-y-2 px-2.5 py-2.5" : "px-4 py-2.5",
-          )}
-          style={{
-            background: "linear-gradient(180deg, color-mix(in oklch, var(--primary) 88%, white 12%), var(--primary))",
-            color: "var(--primary-foreground)",
-            borderColor: "color-mix(in oklch, var(--primary) 68%, white 24%)",
-          }}
-        >
-          {hasAttachments && (
-            <div className="flex max-w-full flex-wrap justify-end gap-2">
-              {msg.attachments?.map((attachment) => (
-                <AttachmentPreviewCard
-                  key={attachment.id}
-                  name={attachment.name}
-                  kind={attachment.kind}
-                  size={attachment.size}
-                  status={attachment.status}
-                  previewUrl={attachment.previewUrl}
-                />
-              ))}
-            </div>
-          )}
-          {msg.content && (
-            <div className={cn("whitespace-pre-wrap break-words text-[14px] leading-7", hasAttachments && "px-1")}>
-              {msg.content}
-            </div>
-          )}
-        </div>
+        {hasAttachments && (
+          <div className="flex max-w-[88%] flex-wrap justify-end gap-2">
+            {msg.attachments?.map((attachment) => (
+              <AttachmentPreviewCard
+                key={attachment.id}
+                name={attachment.name}
+                kind={attachment.kind}
+                size={attachment.size}
+                status={attachment.status}
+                previewUrl={attachment.previewUrl}
+              />
+            ))}
+          </div>
+        )}
+        {msg.content && (
+          <div
+            className="max-w-[88%] rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 text-[14px] leading-7 shadow-[0_12px_32px_oklch(0_0_0/0.10)]"
+            style={{
+              background: "color-mix(in oklch, var(--muted) 82%, var(--background) 18%)",
+              color: "var(--foreground)",
+              borderColor: "color-mix(in oklch, var(--border) 58%, transparent)",
+            }}
+          >
+            <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+          </div>
+        )}
       </div>
     );
   }
