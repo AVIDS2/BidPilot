@@ -29,7 +29,7 @@ function NodeStatusIcon({ status }: { status: AgentNode["status"] }) {
     case "running":
       return <Spinner className="size-4 text-primary" />;
     case "completed":
-      return <CheckCircle2Icon className="size-4 text-green-600" />;
+      return <CheckCircle2Icon className="size-4 text-primary" />;
     case "failed":
       return <XCircleIcon className="size-4 text-destructive" />;
     case "pending":
@@ -43,10 +43,10 @@ function ReviewScoreCard({ reviewResult }: { reviewResult: AgentStreamState["rev
   if (!reviewResult) return null;
 
   const scorePercent = Math.round(reviewResult.score * 100);
-  const scoreColor = reviewResult.pass ? "text-green-600" : "text-destructive";
+  const scoreColor = reviewResult.pass ? "text-primary" : "text-destructive";
 
   return (
-    <Card size="sm" className="border-primary/20">
+    <Card size="sm" className="border-primary/20 bg-card/95">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm">{t("agent.reviewTitle")}</CardTitle>
@@ -87,10 +87,10 @@ function ApprovalPrompt({
 }) {
   const { t } = useTranslation(["projects"]);
   return (
-    <Card size="sm" className="border-yellow-500/50 bg-yellow-500/5">
+    <Card size="sm" className="border-primary/25 bg-primary/5">
       <CardContent className="flex flex-col gap-3 py-3">
         <div className="flex items-center gap-2">
-          <ShieldQuestionIcon className="size-5 text-yellow-600" />
+          <ShieldQuestionIcon className="size-5 text-primary" />
           <span className="text-sm font-medium">{t("agent.approvalRequired")}</span>
         </div>
         {message && <p className="text-xs text-muted-foreground">{message}</p>}
@@ -134,16 +134,16 @@ export function AgentProgress({ runId, onApprove, onReject }: AgentProgressProps
   const progressPercent = totalNodes > 0 ? Math.round((completedCount / totalNodes) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-4">
       {/* Overall progress */}
-      <Card>
+      <Card className="border-foreground/10 bg-card/95 shadow-sm">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <CardTitle className="text-lg">{t("agent.title")}</CardTitle>
-              <CardDescription>{t("agent.runId", { id: runId.slice(0, 8) })}</CardDescription>
+              <CardDescription className="truncate">{t("agent.runId", { id: runId.slice(0, 8) })}</CardDescription>
             </div>
-            <Badge variant={stream.isRunning ? "default" : stream.error ? "destructive" : "outline"}>
+            <Badge className="w-fit" variant={stream.isRunning ? "default" : stream.error ? "destructive" : "outline"}>
               {stream.isRunning ? t("agent.running") : stream.error ? t("agent.failed") : t("agent.idle")}
             </Badge>
           </div>
@@ -176,7 +176,7 @@ export function AgentProgress({ runId, onApprove, onReject }: AgentProgressProps
               <div
                 key={node.name}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                  "flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
                   node.status === "running" && "bg-primary/5 border border-primary/20",
                   node.status === "completed" && "opacity-80",
                   node.status === "failed" && "bg-destructive/5 border border-destructive/20",
@@ -184,7 +184,7 @@ export function AgentProgress({ runId, onApprove, onReject }: AgentProgressProps
                 )}
               >
                 <NodeStatusIcon status={node.status} />
-                <span className={cn("flex-1", node.status === "pending" && "text-muted-foreground")}>
+                <span className={cn("min-w-0 flex-1 truncate", node.status === "pending" && "text-muted-foreground")}>
                   {getNodeLabel(node.name)}
                 </span>
                 {node.status === "completed" && node.completed_at && (
@@ -193,7 +193,7 @@ export function AgentProgress({ runId, onApprove, onReject }: AgentProgressProps
                   </span>
                 )}
                 {node.status === "failed" && node.error && (
-                  <span className="text-xs text-destructive truncate max-w-[200px]">{node.error}</span>
+                  <span className="max-w-[45%] truncate text-xs text-destructive sm:max-w-[200px]">{node.error}</span>
                 )}
               </div>
             ))}

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProviderSettingsPage } from "./provider-settings-page";
@@ -10,6 +11,7 @@ vi.mock("@/lib/api", () => ({
   updateProviderConfig: vi.fn(),
   deleteProviderConfig: vi.fn(),
   testProviderConnection: vi.fn(),
+  listProviderModels: vi.fn(),
 }));
 
 const qc = new QueryClient({
@@ -24,6 +26,15 @@ function renderWithProviders(ui: React.ReactElement) {
       {ui}
     </QueryClientProvider>,
   );
+}
+
+async function clickAddProvider() {
+  const buttons = await screen.findAllByRole("button", { name: /add/i });
+  const addProviderButton = buttons.find((button) =>
+    /add provider|add your first provider/i.test(button.textContent ?? ""),
+  );
+  expect(addProviderButton).toBeTruthy();
+  fireEvent.click(addProviderButton as HTMLButtonElement);
 }
 
 describe("ProviderSettingsPage", () => {
@@ -66,7 +77,7 @@ describe("ProviderSettingsPage", () => {
   it("shows user-facing branded provider presets", async () => {
     renderWithProviders(<ProviderSettingsPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /addProvider/i }));
+    await clickAddProvider();
 
     expect(await screen.findByText("自定义配置")).toBeTruthy();
     expect(screen.getByText("OpenAI Official")).toBeTruthy();
@@ -82,7 +93,7 @@ describe("ProviderSettingsPage", () => {
   it("fills provider form from a preset", async () => {
     renderWithProviders(<ProviderSettingsPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /addProvider/i }));
+    await clickAddProvider();
     const deepseekCardLabel = await screen.findByText("DeepSeek");
     const deepseekCard = deepseekCardLabel.closest("button");
 
@@ -92,5 +103,43 @@ describe("ProviderSettingsPage", () => {
     expect(screen.getByDisplayValue("DeepSeek")).toBeTruthy();
     expect(screen.getByDisplayValue("https://api.deepseek.com")).toBeTruthy();
     expect(screen.getByDisplayValue("deepseek-v4-flash")).toBeTruthy();
+  });
+
+  it("keeps the provider dialog inside the viewport with an internal scroll area", async () => {
+    renderWithProviders(<ProviderSettingsPage />);
+
+    await clickAddProvider();
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveClass("h-[100dvh]");
+    expect(dialog).toHaveClass("max-h-[100dvh]");
+    expect(dialog).toHaveClass("sm:max-h-[88dvh]");
+    expect(dialog).toHaveClass("overflow-hidden");
+    expect(screen.getByTestId("provider-dialog-body")).toHaveClass("overflow-y-auto");
+  });
+
+  it("fetches provider models and fills the selected model", async () => {
+    const { listProviderModels } = await import("@/lib/api");
+    vi.mocked(listProviderModels).mockResolvedValue({
+      data: {
+        models: [
+          { id: "deepseek-chat" },
+          { id: "deepseek-reasoner" },
+        ],
+      },
+    });
+
+    renderWithProviders(<ProviderSettingsPage />);
+
+    await clickAddProvider();
+    const deepseekCardLabel = await screen.findByText("DeepSeek");
+    fireEvent.click(deepseekCardLabel.closest("button") as HTMLButtonElement);
+    fireEvent.change(screen.getByLabelText(/API Key/i), { target: { value: "sk-test" } });
+    fireEvent.click(screen.getByRole("button", { name: /fetch models/i }));
+
+    expect(await screen.findByRole("button", { name: "deepseek-chat" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "deepseek-reasoner" }));
+
+    expect(screen.getByDisplayValue("deepseek-reasoner")).toBeInTheDocument();
   });
 });

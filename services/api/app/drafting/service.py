@@ -48,6 +48,8 @@ def draft_section_command(
     kwargs: dict = {}
     if payload.provider_config_id:
         kwargs["provider_config_id"] = payload.provider_config_id
+    if payload.reasoning_effort:
+        kwargs["reasoning_effort"] = payload.reasoning_effort
     celery.send_task(
         "worker.draft_section",
         args=[run.id, payload.project_id, payload.section_key],
@@ -89,6 +91,8 @@ def redraft_section_command(
         task_kwargs["review_feedback"] = payload.review_feedback
     if payload.provider_config_id:
         task_kwargs["provider_config_id"] = payload.provider_config_id
+    if payload.reasoning_effort:
+        task_kwargs["reasoning_effort"] = payload.reasoning_effort
     celery.send_task(
         "worker.draft_section",
         args=[run.id, payload.project_id, payload.section_key],

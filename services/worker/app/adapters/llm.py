@@ -6,6 +6,7 @@ Falls back to a structured stub when no API key is configured.
 
 import logging
 from dataclasses import dataclass
+from typing import Literal
 
 import httpx
 
@@ -15,6 +16,23 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_URL = "https://api.openai.com/v1/chat/completions"
 _DEFAULT_MODEL = "gpt-4o-mini"
+ReasoningEffort = Literal["low", "medium", "high", "ultra", "max"]
+
+_REASONING_INSTRUCTIONS: dict[str, str] = {
+    "low": "Use concise reasoning. Prefer a fast, direct answer.",
+    "medium": "Use balanced reasoning. Check key assumptions before writing.",
+    "high": "Use deeper reasoning. Validate structure, evidence, and edge cases before writing.",
+    "ultra": "Use very deep reasoning. Build a careful outline, verify evidence fit, then write.",
+    "max": "Use maximum reasoning. Exhaustively validate requirements, evidence, gaps, and final structure before writing.",
+}
+
+_OPENAI_REASONING_EFFORT: dict[str, str] = {
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "ultra": "high",
+    "max": "high",
+}
 
 
 @dataclass
@@ -57,7 +75,26 @@ Evidence:
 Write the section content now:"""
 
 
-def draft_section(section_key: str, evidence_texts: list[str], project_id: str, review_feedback: str | None = None, system_prompt: str | None = None, provider_config: dict | None = None) -> DraftResult:
+def _supports_reasoning_effort(url: str, model: str) -> bool:
+    normalized = f"{url} {model}".lower()
+    return "api.openai.com" in normalized or model.lower().startswith(("o1", "o3", "o4", "gpt-5"))
+
+
+def _system_prompt_with_reasoning(system_prompt: str, reasoning_effort: str | None) -> str:
+    if reasoning_effort not in _REASONING_INSTRUCTIONS:
+        return system_prompt
+    return f"{system_prompt}\n\nReasoning intensity: {_REASONING_INSTRUCTIONS[reasoning_effort]}"
+
+
+def draft_section(
+    section_key: str,
+    evidence_texts: list[str],
+    project_id: str,
+    review_feedback: str | None = None,
+    system_prompt: str | None = None,
+    provider_config: dict | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
+) -> DraftResult:
     """Draft a section using evidence.
 
     Calls the configured LLM API. Falls back to a structured stub if unavailable.
@@ -95,21 +132,27 @@ This is a draft section for **{section_key}**.
         )
 
     prompt = _build_prompt(section_key, evidence_texts, review_feedback)
-    effective_system_prompt = system_prompt or "You are a professional document writer. Write clear, evidence-backed sections in markdown."
+    effective_system_prompt = _system_prompt_with_reasoning(
+        system_prompt or "You are a professional document writer. Write clear, evidence-backed sections in markdown.",
+        reasoning_effort,
+    )
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": effective_system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+        "max_tokens": 2000,
+    }
+    if reasoning_effort and _supports_reasoning_effort(url, model):
+        payload["reasoning_effort"] = _OPENAI_REASONING_EFFORT[reasoning_effort]
 
     try:
         resp = httpx.post(
             url,
             headers={"Authorization": f"Bearer {api_key}"},
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": effective_system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.3,
-                "max_tokens": 2000,
-            },
+            json=payload,
             timeout=60.0,
         )
         resp.raise_for_status()

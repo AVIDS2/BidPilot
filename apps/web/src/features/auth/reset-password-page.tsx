@@ -54,7 +54,7 @@ export function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background px-6">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-background px-6">
         <FilmFrameAnnotations />
         <div className="relative z-20 w-full max-w-md text-center">
           <div className="p-8 rounded-xl bg-card border border-border shadow-sm">
@@ -75,7 +75,7 @@ export function ResetPasswordPage() {
 
   if (done) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background px-6">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-background px-6">
         <FilmFrameAnnotations />
         <div className="relative z-20 w-full max-w-md text-center">
           <div className="p-8 rounded-xl bg-card border border-border shadow-sm">
@@ -95,7 +95,7 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="h-screen flex items-center justify-center bg-background px-6">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-6">
       <FilmFrameAnnotations />
       <div
         className="absolute inset-0 pointer-events-none"

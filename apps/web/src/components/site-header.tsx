@@ -38,14 +38,14 @@ export function SiteHeader() {
         background: "var(--background)",
       }}
     >
-      <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
+      <div className="flex min-w-0 w-full items-center gap-1 px-3 sm:px-4 lg:gap-2 lg:px-6">
         <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
         <Separator
           orientation="vertical"
-          className="mx-2 h-4 data-vertical:self-auto"
+          className="mx-1 h-4 data-vertical:self-auto sm:mx-2"
         />
-        <h1 className="text-sm font-medium text-foreground">{title}</h1>
-        <div className="ml-auto flex items-center gap-2">
+        <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{title}</h1>
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
           <NotificationBell />
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -60,7 +60,7 @@ export function SiteHeader() {
             variant="ghost"
             size="sm"
             onClick={toggleLang}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            className="px-2 text-xs text-muted-foreground hover:text-foreground sm:px-3"
           >
             {t("language.switch")}
           </Button>

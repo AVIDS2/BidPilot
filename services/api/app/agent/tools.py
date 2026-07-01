@@ -37,7 +37,12 @@ def _get_project_for_user(db: Session, user: CurrentUser, project_id: str) -> Pr
     return project
 
 
-def create_tools(db: Session, user: CurrentUser) -> list:
+def create_tools(
+    db: Session,
+    user: CurrentUser,
+    provider_config_id: str | None = None,
+    reasoning_effort: str | None = None,
+) -> list:
     """Create tool list with injected db session and user context."""
 
     @tool
@@ -203,7 +208,7 @@ def create_tools(db: Session, user: CurrentUser) -> list:
         )
 
     @tool
-    def start_draft_section(project_id: str, section_key: str, provider_config_id: str = "") -> str:
+    def start_draft_section(project_id: str, section_key: str) -> str:
         """启动某个章节的 AI 起草工作流。需要项目 ID 和章节键（如 technical-approach、executive-summary）。启动前请向用户确认。"""
         _get_project_for_user(db, user, project_id)
         response = draft_section_command(
@@ -211,7 +216,8 @@ def create_tools(db: Session, user: CurrentUser) -> list:
             DraftSectionRequest(
                 project_id=project_id,
                 section_key=section_key,
-                provider_config_id=provider_config_id or None,
+                provider_config_id=provider_config_id,
+                reasoning_effort=reasoning_effort,
             ),
             user,
         )
@@ -230,6 +236,8 @@ def create_tools(db: Session, user: CurrentUser) -> list:
                 project_id=project_id,
                 section_key=section_key,
                 review_feedback=review_feedback or None,
+                provider_config_id=provider_config_id,
+                reasoning_effort=reasoning_effort,
             ),
             user,
         )

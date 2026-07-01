@@ -87,3 +87,81 @@ def test_test_connection_endpoint(client, default_org_id, default_user_id):
     data = resp.json()["data"]
     assert "success" in data
     assert data["success"] is False  # Invalid key should fail
+
+
+def test_list_models_openai_compatible_payload(client, default_org_id, default_user_id, monkeypatch):
+    """POST /auth/me/providers/models should list OpenAI-compatible models without storing the key."""
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "data": [
+                    {"id": "deepseek-chat", "owned_by": "deepseek"},
+                    {"id": "deepseek-reasoner"},
+                ]
+            }
+
+    captured = {}
+
+    def fake_get(url, headers, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr("app.providers.service.httpx.get", fake_get)
+
+    resp = client.post(
+        "/auth/me/providers/models",
+        json={
+            "provider_type": "openai",
+            "api_key": "sk-runtime-only",
+            "api_url": "https://api.deepseek.com",
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert [model["id"] for model in data["models"]] == ["deepseek-chat", "deepseek-reasoner"]
+    assert captured["url"] == "https://api.deepseek.com/v1/models"
+    assert captured["headers"]["Authorization"] == "Bearer sk-runtime-only"
+
+
+def test_list_models_uses_stored_encrypted_config(client, default_org_id, default_user_id, monkeypatch):
+    """Saved provider configs should use the encrypted server-side key for model listing."""
+    create_resp = client.post(
+        "/auth/me/providers",
+        json={
+            "provider_type": "anthropic",
+            "api_key": "sk-ant-stored",
+            "model": "claude-sonnet-4-20250514",
+            "label": "My Claude",
+        },
+    )
+    config_id = create_resp.json()["data"]["id"]
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"id": "claude-sonnet-4-20250514", "display_name": "Claude Sonnet 4"}]}
+
+    captured = {}
+
+    def fake_get(url, headers, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        return FakeResponse()
+
+    monkeypatch.setattr("app.providers.service.httpx.get", fake_get)
+
+    resp = client.post("/auth/me/providers/models", json={"config_id": config_id})
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["models"][0]["id"] == "claude-sonnet-4-20250514"
+    assert data["models"][0]["name"] == "Claude Sonnet 4"
+    assert captured["url"] == "https://api.anthropic.com/v1/models"
+    assert captured["headers"]["x-api-key"] == "sk-ant-stored"

@@ -38,7 +38,7 @@ export function VerifyEmailPage() {
   }, [token, result, verifying, t])
 
   return (
-    <div className="h-screen flex items-center justify-center bg-background px-6">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-6">
       <div className="absolute inset-0 pointer-events-none z-10">
         <span className="absolute top-6 left-6 text-[10px] text-foreground/20 font-mono">BidPilot v1.0</span>
         <span className="absolute top-6 right-6 text-[10px] text-foreground/20 font-mono">[16:9]</span>

@@ -3,6 +3,24 @@
   "subtitle": "您的文档助手",
   "inputPlaceholder": "问我任何问题...",
   "thinking": "思考中",
+  "model": {
+    "select": "选择模型",
+    "menuTitle": "模型",
+    "platformDefault": "平台默认",
+    "platformHint": "使用 BidPilot 官方模型",
+    "empty": "还没有自定义提供商"
+  },
+  "reasoning": {
+    "select": "选择推理强度",
+    "menuTitle": "推理",
+    "options": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "ultra": "超高",
+      "max": "Max"
+    }
+  },
   "status": {
     "ready": "准备就绪",
     "thinking": "正在理解请求",
@@ -42,6 +60,9 @@
   "activity": {
     "summaryTools": "已运行 {{tools}} 个工具",
     "summaryWithWorkflows": "已运行 {{tools}} 个工具，已启动 {{workflows}} 个工作流",
+    "summarySingleRunning": "正在{{label}}",
+    "summarySingleDone": "{{label}}已完成",
+    "summarySingleFailed": "{{label}}失败",
     "summaryDone": "已处理 {{tools}} 项操作",
     "summaryDoneWithWorkflows": "已处理 {{tools}} 项操作，启动 {{workflows}} 个工作流",
     "summaryDoneWorkflowsOnly": "已启动 {{workflows}} 个工作流",
@@ -80,6 +101,9 @@
       "search_knowledge": "检索知识库",
       "upload_document": "上传文档",
       "delete_project": "删除项目"
+    },
+    "workflow": {
+      "default": "工作流"
     },
     "node": {
       "document_analyzer": "分析资料",

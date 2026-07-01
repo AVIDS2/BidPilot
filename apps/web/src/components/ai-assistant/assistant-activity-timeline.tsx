@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
 import {
   CheckCircle2Icon,
   ChevronDownIcon,
@@ -7,6 +9,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
 import { getAssistantToolIcon, getAssistantToolLabel } from "./assistant-tool-metadata";
@@ -103,11 +106,26 @@ function countByKind(items: AssistantExecutionItem[]) {
 }
 
 function buildActivityLabel(
+  items: AssistantExecutionItem[],
   tone: ActivityTone,
   tools: number,
   workflows: number,
   t: Translate,
 ) {
+  if (items.length === 1) {
+    const item = items[0];
+    const label =
+      item.kind === "workflow"
+        ? t("activity.workflow.default", { defaultValue: "工作流" })
+        : getAssistantToolLabel(item.toolName, t);
+    const key =
+      tone === "running" || tone === "pending"
+        ? "activity.summarySingleRunning"
+        : tone === "failed"
+          ? "activity.summarySingleFailed"
+          : "activity.summarySingleDone";
+    return t(key, { label, defaultValue: `${label} ${tone}` });
+  }
   const keyPrefix = tone === "running" || tone === "pending" ? "activity.summaryRunning" : "activity.summaryDone";
   if (workflows > 0) {
     if (tools === 0) {
@@ -232,23 +250,50 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
   const tone = getTone(items);
   const defaultExpanded = tone === "running" || tone === "failed";
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const activityRef = useRef<HTMLDivElement | null>(null);
   const { tools, workflows } = useMemo(() => countByKind(items), [items]);
 
   useEffect(() => {
     setExpanded(defaultExpanded);
   }, [defaultExpanded, items.length, tone]);
 
-  if (items.length === 0) return null;
-
-  const label = buildActivityLabel(tone, tools, workflows, t);
+  const label = items.length > 0 ? buildActivityLabel(items, tone, tools, workflows, t) : "";
   const statusLabel = t(`activity.status.${tone}`, { defaultValue: tone });
 
+  useGSAP(
+    () => {
+      if (prefersReducedMotion || !activityRef.current) return;
+
+      gsap.fromTo(
+        ".assistant-activity-summary",
+        { opacity: 0, y: 5 },
+        { opacity: 1, y: 0, duration: 0.28, ease: "power3.out" },
+      );
+
+      if (expanded) {
+        gsap.fromTo(
+          ".assistant-activity-detail",
+          { opacity: 0, y: 8 },
+          { opacity: 1, y: 0, duration: 0.26, stagger: 0.045, ease: "power3.out" },
+        );
+      }
+    },
+    { dependencies: [expanded, items.length, tone, prefersReducedMotion], scope: activityRef },
+  );
+
+  if (items.length === 0) return null;
+
   return (
-    <div className={cn("mb-4", expanded && "border-b pb-3")} style={{ borderColor: "color-mix(in oklch, var(--border) 54%, transparent)" }}>
+    <div
+      ref={activityRef}
+      className={cn("mb-4", expanded && "border-b pb-3")}
+      style={{ borderColor: "color-mix(in oklch, var(--border) 54%, transparent)" }}
+    >
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="group flex w-full items-center gap-2 rounded-md py-0.5 text-left text-[12px] text-muted-foreground transition hover:text-foreground"
+        className="assistant-activity-summary group flex w-full items-center gap-2 rounded-md py-0.5 text-left text-[12px] text-muted-foreground transition hover:text-foreground"
         aria-expanded={expanded}
         aria-label={expanded ? t("activity.collapse") : t("activity.expand")}
       >
@@ -279,7 +324,9 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
           style={{ borderColor: "color-mix(in oklch, var(--border) 62%, transparent)" }}
         >
           {items.map((item) => (
-            <ActivityDetail key={item.id} item={item} />
+            <div key={item.id} className="assistant-activity-detail">
+              <ActivityDetail item={item} />
+            </div>
           ))}
         </div>
       )}

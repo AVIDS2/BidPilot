@@ -11,6 +11,7 @@ import enAccount from "./public/locales/en/account.json";
 import enPricing from "./public/locales/en/pricing.json";
 import enOnboarding from "./public/locales/en/onboarding.json";
 import enAIAssistant from "./public/locales/en/ai-assistant.json";
+import enSettings from "./public/locales/en/settings.json";
 
 vi.mock("@/lib/i18n", () => ({ default: i18n }));
 
@@ -18,10 +19,23 @@ if (!Element.prototype.getAnimations) {
   Element.prototype.getAnimations = () => [];
 }
 
+if (!window.matchMedia) {
+  window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
 i18n.use(initReactI18next).init({
   lng: "en",
   fallbackLng: "en",
-  ns: ["common", "admin", "auth", "landing", "projects", "account", "pricing", "onboarding", "ai-assistant"],
+  ns: ["common", "admin", "auth", "landing", "projects", "account", "pricing", "onboarding", "ai-assistant", "settings"],
   defaultNS: "common",
   resources: {
     en: {
@@ -34,6 +48,7 @@ i18n.use(initReactI18next).init({
       pricing: enPricing,
       onboarding: enOnboarding,
       "ai-assistant": enAIAssistant,
+      settings: enSettings,
     },
   },
   interpolation: { escapeValue: false },

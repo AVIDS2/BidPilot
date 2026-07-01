@@ -29,6 +29,7 @@ def draft_section(
     section_key: str,
     review_feedback: str | None = None,
     provider_config_id: str | None = None,
+    reasoning_effort: str | None = None,
 ) -> dict[str, str]:
     """Draft a section: retrieve evidence, call LLM, write section version.
 
@@ -50,6 +51,7 @@ def draft_section(
             section_key=section_key,
             run_id=run_id,
             provider_config_id=provider_config_id,
+            reasoning_effort=reasoning_effort,
             review_feedback=review_feedback,
         )
 
@@ -80,6 +82,7 @@ def draft_section(
         section_key,
         review_feedback=review_feedback,
         provider_config_id=provider_config_id,
+        reasoning_effort=reasoning_effort,
     )
 
 

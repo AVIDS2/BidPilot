@@ -261,6 +261,7 @@ def invoke_graph(
     section_key: str,
     run_id: str,
     provider_config_id: str | None = None,
+    reasoning_effort: str | None = None,
     review_feedback: str | None = None,
     input_review_feedback: str | None = None,
     max_iterations: int = 3,
@@ -276,6 +277,7 @@ def invoke_graph(
         section_key: Kebab-case section identifier (e.g. "exec-summary").
         run_id: UUID of the ExecutionRun record.
         provider_config_id: Optional user provider config UUID.
+        reasoning_effort: Optional reasoning intensity for supported models.
         review_feedback: (deprecated) Use input_review_feedback instead.
             If both are provided, input_review_feedback takes precedence.
         input_review_feedback: Optional review feedback for revision rounds.
@@ -293,6 +295,7 @@ def invoke_graph(
         "section_key": section_key,
         "run_id": run_id,
         "provider_config_id": provider_config_id,
+        "reasoning_effort": reasoning_effort,
         "input_review_feedback": effective_feedback,
         "requirements": [],
         "requirements_parsed": False,

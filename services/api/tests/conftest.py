@@ -13,6 +13,10 @@ os.environ["DOCPILOT_RATE_LIMIT"] = "10000/minute"
 # Stable Fernet key for test-only provider secret encryption.
 os.environ["DOCPILOT_SECRETS_KEY"] = "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
 
+# Keep assistant endpoint deterministic in tests. Production defaults to the
+# LangGraph engine, but tests must never call external model providers.
+os.environ["DOCPILOT_ASSISTANT_ENGINE"] = "deterministic"
+
 # Disable auth requirement in tests (uses dev fallback)
 # Must happen before app modules are imported
 os.environ.pop("DOCPILOT_AUTH_REQUIRED", None)

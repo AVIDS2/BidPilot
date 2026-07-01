@@ -274,8 +274,21 @@
   },
   "agent": {
     "tabTitle": "Agent Progress",
+    "workbenchDesc": "Watch workflow nodes, execution state, and human approval gates.",
+    "metrics": {
+      "total": "Total runs",
+      "active": "Active",
+      "done": "Archived"
+    },
     "selectRun": "Select Run",
     "selectRunPlaceholder": "Choose an execution run...",
+    "selectedRunHint": "Viewing {{id}}, current status: {{status}}.",
+    "runTypes": {
+      "draft": "Section draft",
+      "redraft": "Section redraft",
+      "ingest": "Material ingest",
+      "export": "Deliverable export"
+    },
     "title": "Agent Execution",
     "runId": "Run {{id}}",
     "running": "Running",

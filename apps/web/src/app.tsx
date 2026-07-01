@@ -46,7 +46,7 @@ function RootRedirect() {
 // PublicLayout - Nav only on public pages (landing, auth, pricing, docs)
 function PublicLayout() {
   return (
-    <div className="dark min-h-screen overflow-hidden bg-background text-foreground">
+    <div className="dark min-h-[100dvh] overflow-x-hidden bg-background text-foreground">
       <Nav />
       <Outlet />
     </div>
@@ -100,12 +100,12 @@ function PlatformShell() {
         teams={teams}
         user={sidebarUser}
       />
-      <SidebarInset>
+      <SidebarInset className="min-w-0 overflow-x-hidden">
         <SiteHeader />
         <InlineSuggestionBar />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 px-4 lg:px-6">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="@container/main flex min-w-0 flex-1 flex-col gap-2">
+            <div className="flex min-w-0 flex-col gap-4 px-3 py-4 sm:px-4 md:gap-6 md:py-6 lg:px-6">
               <ErrorBoundary>
                 <Outlet />
               </ErrorBoundary>

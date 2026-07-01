@@ -45,3 +45,20 @@ class TestConnectionResponse(BaseModel):
     success: bool
     message: str
     model: str | None = None
+
+
+class ProviderModelsRequest(BaseModel):
+    config_id: str | None = None
+    provider_type: str | None = Field(default=None, pattern="^(openai|anthropic)$")
+    api_key: str | None = None
+    api_url: str | None = None
+
+
+class ProviderModelInfo(BaseModel):
+    id: str
+    name: str | None = None
+    owned_by: str | None = None
+
+
+class ProviderModelsResponse(BaseModel):
+    models: list[ProviderModelInfo]

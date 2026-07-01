@@ -88,7 +88,14 @@ def _link_evidence(db, project_id: str, section_version_id: str, chunks: list[Kn
         db.add(ev)
 
 
-def run_draft(run_id: str, project_id: str, section_key: str, review_feedback: str | None = None, provider_config_id: str | None = None) -> dict[str, str]:
+def run_draft(
+    run_id: str,
+    project_id: str,
+    section_key: str,
+    review_feedback: str | None = None,
+    provider_config_id: str | None = None,
+    reasoning_effort: str | None = None,
+) -> dict[str, str]:
     """Execute the full drafting pipeline for a section.
 
     Args:
@@ -142,6 +149,7 @@ def run_draft(run_id: str, project_id: str, section_key: str, review_feedback: s
             review_feedback=review_feedback,
             system_prompt=system_prompt,
             provider_config=provider_config_dict,
+            reasoning_effort=reasoning_effort,
         )
     else:
         # Default to OpenAI-compatible (also handles fallback when no provider_config)
@@ -150,6 +158,7 @@ def run_draft(run_id: str, project_id: str, section_key: str, review_feedback: s
             review_feedback=review_feedback,
             system_prompt=system_prompt,
             provider_config=provider_config_dict,
+            reasoning_effort=reasoning_effort,
         )
 
     # Write section version if a matching section exists

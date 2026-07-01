@@ -6,6 +6,7 @@ import { AIAssistantPanel } from "./AIAssistantPanel";
 
 vi.mock("@/lib/api", () => ({
   listChatConversations: vi.fn().mockResolvedValue([]),
+  listProviderConfigs: vi.fn().mockResolvedValue({ data: [] }),
   getChatConversationMessages: vi.fn(),
   renameChatConversation: vi.fn(),
   deleteChatConversation: vi.fn(),
@@ -139,6 +140,80 @@ describe("AIAssistantPanel", () => {
     expect(screen.getByText("Add from project")).toBeInTheDocument();
   });
 
+  it("sends selected model config and reasoning effort with assistant requests", async () => {
+    const { listProviderConfigs } = await import("@/lib/api");
+    vi.mocked(listProviderConfigs).mockResolvedValue({
+      data: [
+        {
+          id: "provider-1",
+          user_id: "u1",
+          provider_type: "openai",
+          api_key: "sk-****",
+          api_url: "https://api.example.com/v1",
+          model: "gpt-5.5",
+          label: "GPT-5.5",
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: streamFrom(
+        [
+          'event: assistant.start\ndata: {"conversation_id":"c-model","state":"thinking"}',
+          'event: assistant.message\ndata: {"content":"ok","state":"completed"}',
+          'event: assistant.end\ndata: {"conversation_id":"c-model","full_response":"ok"}',
+        ].join("\n\n") + "\n\n",
+      ),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Select model" }));
+    fireEvent.click(await screen.findByText("GPT-5.5"));
+    fireEvent.click(screen.getByRole("button", { name: "Select reasoning effort" }));
+    fireEvent.click(screen.getByText("Ultra"));
+
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Use my selected model" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(requestBody.provider_config_id).toBe("provider-1");
+    expect(requestBody.reasoning_effort).toBe("ultra");
+  });
+
+  it("closes history before opening the attachment menu", async () => {
+    const { listChatConversations } = await import("@/lib/api");
+    vi.mocked(listChatConversations).mockResolvedValue([
+      {
+        id: "c-menu",
+        project_id: null,
+        title: "Menu overlap check",
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.click(screen.getByTitle("Conversation history"));
+
+    expect(await screen.findByPlaceholderText("Search conversations...")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
+
+    expect(screen.getByText("Upload file")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Search conversations...")).not.toBeInTheDocument();
+  });
+
   it("renders completed tool activity as a compact expandable event", async () => {
     vi.stubGlobal(
       "fetch",
@@ -166,17 +241,19 @@ describe("AIAssistantPanel", () => {
     await waitFor(() => {
       expect(screen.getAllByText("已打开项目页。").length).toBeGreaterThan(0);
     });
-    expect(screen.getByText("Processed 1 actions")).toBeInTheDocument();
+    expect(screen.getByText("Open page completed")).toBeInTheDocument();
     expect(screen.getByText("done")).toBeInTheDocument();
     expect(screen.queryByText("raw detail should be hidden until expanded")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Processed 1 actions").compareDocumentPosition(screen.getByText("已打开项目页。")) &
+      screen.getByText("Open page completed").compareDocumentPosition(screen.getByText("已打开项目页。")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
 
-    expect(screen.getByText("Open page")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Open page")).toBeInTheDocument();
+    });
     expect(screen.getByText("raw detail should be hidden until expanded")).toBeInTheDocument();
   });
 
@@ -361,7 +438,7 @@ describe("AIAssistantPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByText("第一轮完成。")).toBeInTheDocument();
-      expect(screen.getByText("Processed 1 actions")).toBeInTheDocument();
+      expect(screen.getByText("Open page completed")).toBeInTheDocument();
     });
 
     fireEvent.change(input, { target: { value: "Search Acme projects" } });
@@ -369,12 +446,72 @@ describe("AIAssistantPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByText("第二轮完成。")).toBeInTheDocument();
-      expect(screen.getAllByText("Processed 1 actions").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText("Search projects completed")).toBeInTheDocument();
     });
 
-    const firstTool = screen.getAllByText("Processed 1 actions")[0];
+    const firstTool = screen.getAllByText("Open page completed")[0];
     const secondUserMessage = screen.getByText("Search Acme projects");
     expect(firstTool.compareDocumentPosition(secondUserMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("buffers assistant text until running tool activity finishes", async () => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: new ReadableStream({
+          start(streamController) {
+            controller = streamController;
+          },
+        }),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Search projects before answering" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(controller).not.toBeNull();
+    });
+
+    controller!.enqueue(
+      encoder.encode(
+        [
+          'event: assistant.start\ndata: {"conversation_id":"c-buffer","state":"thinking"}',
+          'event: assistant.tool_started\ndata: {"tool_name":"search_projects","arguments":{"query":"test"},"state":"executing_tool"}',
+          'event: assistant.message\ndata: {"content":"找到 test 项目。","state":"completed"}',
+        ].join("\n\n") + "\n\n",
+      ),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Search projects running")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("找到 test 项目。")).not.toBeInTheDocument();
+
+    controller!.enqueue(
+      encoder.encode(
+        [
+          'event: assistant.tool_succeeded\ndata: {"tool_name":"search_projects","result":{"count":1},"summary":"找到 1 个项目。","state":"completed"}',
+          'event: assistant.end\ndata: {"conversation_id":"c-buffer","full_response":"找到 test 项目。"}',
+        ].join("\n\n") + "\n\n",
+      ),
+    );
+    controller!.close();
+
+    await waitFor(() => {
+      expect(screen.getByText("找到 test 项目。")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText("Search projects completed").compareDocumentPosition(screen.getByText("找到 test 项目。")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("supports renaming a conversation from history", async () => {
@@ -416,6 +553,71 @@ describe("AIAssistantPanel", () => {
     await waitFor(() => {
       expect(renameChatConversation).toHaveBeenCalledWith("c1", "New title");
     });
+  });
+
+  it("exposes a visible rename action for history conversations", async () => {
+    const { listChatConversations, renameChatConversation } = await import("@/lib/api");
+    vi.mocked(listChatConversations).mockResolvedValue([
+      {
+        id: "c-visible-rename",
+        project_id: null,
+        title: "Visible rename",
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    vi.mocked(renameChatConversation).mockResolvedValue({
+      id: "c-visible-rename",
+      project_id: null,
+      title: "Renamed from button",
+      created_at: new Date().toISOString(),
+    });
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.click(screen.getByTitle("Conversation history"));
+
+    await screen.findByText("Visible rename");
+    const row = screen.getByText("Visible rename").closest("[data-conversation-row]");
+    expect(row).not.toBeNull();
+    fireEvent.mouseEnter(row as HTMLElement);
+    fireEvent.click(screen.getByTitle("Rename conversation"));
+
+    const input = await screen.findByLabelText("Rename conversation");
+    fireEvent.change(input, { target: { value: "Renamed from button" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(renameChatConversation).toHaveBeenCalledWith("c-visible-rename", "Renamed from button");
+    });
+  });
+
+  it("switches the active conversation immediately while messages load", async () => {
+    const { getChatConversationMessages, listChatConversations } = await import("@/lib/api");
+    vi.mocked(listChatConversations).mockResolvedValue([
+      {
+        id: "c-slow",
+        project_id: null,
+        title: "Slow conversation",
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    vi.mocked(getChatConversationMessages).mockImplementation(
+      () =>
+        new Promise(() => {
+          // Keep the request pending to prove the active title updates optimistically.
+        }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.click(screen.getByTitle("Conversation history"));
+
+    fireEvent.click(await screen.findByText("Slow conversation"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Slow conversation")).toBeInTheDocument();
+    });
+    expect(screen.queryByPlaceholderText("Search conversations...")).not.toBeInTheDocument();
   });
 
   it("renders LangGraph workflow progress from run stream", async () => {
@@ -469,3 +671,4 @@ describe("AIAssistantPanel", () => {
     expect(screen.getByText("1 of 1 steps completed")).toBeInTheDocument();
   });
 });
+

@@ -239,6 +239,7 @@ def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> Assi
             project_id=arguments["project_id"],
             section_key=arguments["section_key"],
             provider_config_id=arguments.get("provider_config_id"),
+            reasoning_effort=arguments.get("reasoning_effort"),
         ),
         user,
     )
@@ -258,6 +259,7 @@ def start_redraft_section(db: Session, user: CurrentUser, arguments: dict) -> As
             section_key=arguments["section_key"],
             review_feedback=arguments.get("review_feedback"),
             provider_config_id=arguments.get("provider_config_id"),
+            reasoning_effort=arguments.get("reasoning_effort"),
         ),
         user,
     )

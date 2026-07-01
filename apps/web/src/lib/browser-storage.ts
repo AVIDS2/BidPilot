@@ -4,6 +4,8 @@ export const STORAGE_KEYS = {
   language: "bidpilot_lang",
   guideDismissed: "bidpilot_guide_dismissed",
   onboardingDone: "bidpilot_onboarding_done",
+  assistantProviderConfigId: "bidpilot_assistant_provider_config_id",
+  assistantReasoningEffort: "bidpilot_assistant_reasoning_effort",
 } as const;
 
 const LEGACY_PREFIX = [100, 111, 99, 112, 105, 108, 111, 116]

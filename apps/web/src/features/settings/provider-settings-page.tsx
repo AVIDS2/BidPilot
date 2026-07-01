@@ -7,8 +7,10 @@ import {
   updateProviderConfig,
   deleteProviderConfig,
   testProviderConnection,
+  listProviderModels,
   type ProviderConfig,
   type ProviderConfigCreate,
+  type ProviderModelInfo,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,7 @@ import {
   Pencil,
   Cpu,
   Star,
+  ListTree,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -304,6 +307,7 @@ export function ProviderSettingsPage() {
   const [formIsActive, setFormIsActive] = useState(false);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [providerPresetQuery, setProviderPresetQuery] = useState("");
+  const [availableModels, setAvailableModels] = useState<ProviderModelInfo[]>([]);
 
   // Test connection state
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -366,6 +370,23 @@ export function ProviderSettingsPage() {
     },
   });
 
+  const listModelsMut = useMutation({
+    mutationFn: (payload: Parameters<typeof listProviderModels>[0]) =>
+      listProviderModels(payload),
+    onSuccess: (result) => {
+      const models = result.data.models;
+      setAvailableModels(models);
+      if (models.length > 0) {
+        toast.success(t("toast.modelsLoaded", { count: models.length }));
+      } else {
+        toast.message(t("toast.modelsEmpty"));
+      }
+    },
+    onError: (err: Error) => {
+      toast.error(t("toast.modelsFailed", { message: err.message }));
+    },
+  });
+
   const setActiveMut = useMutation({
     mutationFn: (id: string) => updateProviderConfig(id, { is_active: true }),
     onSuccess: () => {
@@ -400,6 +421,8 @@ export function ProviderSettingsPage() {
     setFormModel(DEFAULT_MODELS.openai);
     setFormIsActive(false);
     setSelectedPresetId(null);
+    setProviderPresetQuery("");
+    setAvailableModels([]);
   }
 
   function applyPreset(presetId: string) {
@@ -410,6 +433,7 @@ export function ProviderSettingsPage() {
     setFormProviderType(preset.providerType);
     setFormApiUrl(preset.apiUrl);
     setFormModel(preset.model);
+    setAvailableModels([]);
     if (!editingProvider || !formLabel.trim()) {
       setFormLabel(preset.label);
     }
@@ -430,6 +454,8 @@ export function ProviderSettingsPage() {
     setFormModel(provider.model);
     setFormIsActive(provider.is_active);
     setSelectedPresetId(null);
+    setProviderPresetQuery("");
+    setAvailableModels([]);
     setIsDialogOpen(true);
   }
 
@@ -483,25 +509,42 @@ export function ProviderSettingsPage() {
     }
   }
 
+  function handleFetchModels() {
+    setAvailableModels([]);
+    if (editingProvider && !formApiKey.trim()) {
+      listModelsMut.mutate({ config_id: editingProvider.id });
+      return;
+    }
+    if (!formApiKey.trim()) {
+      toast.error(t("toast.apiKeyRequired"));
+      return;
+    }
+    listModelsMut.mutate({
+      provider_type: formProviderType,
+      api_key: formApiKey.trim(),
+      api_url: formApiUrl.trim() || undefined,
+    });
+  }
+
   if (isLoading) return <ProviderSettingsSkeleton />;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("title")}</h1>
+    <div className="min-w-0 space-y-6">
+      <div className="min-w-0">
+        <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">{t("title")}</h1>
         <p style={{ color: "var(--muted-foreground)" }}>
           {t("description")}
         </p>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <Settings2 className="size-5" style={{ color: "var(--muted-foreground)" }} />
           <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
             {t("providersCount", { count: providers.length })}
           </span>
         </div>
-        <Button onClick={handleAddProvider} className="bg-primary text-primary-foreground hover:bg-primary/90">
+        <Button onClick={handleAddProvider} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">
           <Plus className="size-4" />
           {t("addProvider")}
         </Button>
@@ -523,12 +566,12 @@ export function ProviderSettingsPage() {
           </Button>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid min-w-0 gap-4 md:grid-cols-2">
           {providers.map((provider) => (
             <Card key={provider.id} className="relative">
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <Badge
                       variant="outline"
                       className="capitalize gap-1 px-2 py-1"
@@ -543,7 +586,7 @@ export function ProviderSettingsPage() {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
                     <Button
                       variant="ghost"
                       size="icon-sm"
@@ -579,7 +622,7 @@ export function ProviderSettingsPage() {
               <CardContent>
                 <div className="space-y-2">
                   <div>
-                    <p className="font-medium">{provider.label}</p>
+                    <p className="truncate font-medium">{provider.label}</p>
                     <p className="text-sm text-muted-foreground">
                       {t("modelLabel")}{" "}
                       <code className="text-xs bg-muted px-1 py-0.5 rounded">
@@ -633,8 +676,8 @@ export function ProviderSettingsPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-5xl">
-          <DialogHeader>
+        <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full grid-rows-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:h-auto sm:max-h-[88dvh] sm:w-[min(1120px,calc(100vw-2rem))] sm:rounded-xl sm:max-w-none">
+          <DialogHeader className="shrink-0 border-b px-4 pb-4 pt-5 sm:px-6" style={{ borderColor: "var(--border)" }}>
             <DialogTitle>
               {editingProvider ? t("dialog.editTitle") : t("dialog.addTitle")}
             </DialogTitle>
@@ -645,17 +688,17 @@ export function ProviderSettingsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 py-2">
+          <div data-testid="provider-dialog-body" className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
             {/* Provider Presets */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <Label className="text-sm font-semibold">{t("dialog.presets")}</Label>
                   <p className="mt-1 text-xs text-muted-foreground">
                     选择一个常见平台后，下面的 Base URL 和模型会自动带入，你仍然可以手动修改。
                   </p>
                 </div>
-                <div className="relative hidden w-56 sm:block">
+                <div className="relative w-full sm:w-56">
                   <Search
                     className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                     aria-hidden="true"
@@ -668,14 +711,14 @@ export function ProviderSettingsPage() {
                   />
                 </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {visibleProviderPresets.map((preset) => (
                   <button
                     key={preset.id}
                     type="button"
                     onClick={() => applyPreset(preset.id)}
                     className={cn(
-                      "group relative min-h-[132px] overflow-hidden rounded-2xl border bg-card p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-[0_18px_50px_rgba(15,23,42,0.10)]",
+                      "group relative min-h-[132px] min-w-0 overflow-hidden rounded-2xl border bg-card p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-[0_18px_50px_rgba(15,23,42,0.10)]",
                       selectedPresetId === preset.id &&
                         "border-primary bg-primary/10 shadow-[0_18px_50px_rgba(132,204,22,0.12)] ring-1 ring-primary/30",
                     )}
@@ -804,7 +847,20 @@ export function ProviderSettingsPage() {
 
             {/* Model */}
             <div className="space-y-2">
-              <Label htmlFor="model">{t("dialog.model")}</Label>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="model">{t("dialog.model")}</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleFetchModels}
+                  disabled={listModelsMut.isPending}
+                  className="shrink-0 gap-1.5"
+                >
+                  {listModelsMut.isPending ? <Spinner className="size-3.5" /> : <ListTree className="size-3.5" />}
+                  {t("dialog.fetchModels")}
+                </Button>
+              </div>
               <Input
                 id="model"
                 value={formModel}
@@ -817,10 +873,33 @@ export function ProviderSettingsPage() {
                   ? "deepseek-v4-flash, gpt-4o, qwen-plus, glm-4-flash"
                   : "claude-sonnet-4-20250514, claude-3-5-sonnet-20241022"}
               </p>
+              {availableModels.length > 0 && (
+                <div className="rounded-xl border bg-muted/30 p-2" style={{ borderColor: "var(--border)" }}>
+                  <div className="mb-2 flex items-center justify-between px-1 text-xs text-muted-foreground">
+                    <span>{t("dialog.modelsFound", { count: availableModels.length })}</span>
+                    <span>{t("dialog.clickToFill")}</span>
+                  </div>
+                  <div className="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
+                    {availableModels.map((model) => (
+                      <button
+                        key={model.id}
+                        type="button"
+                        onClick={() => setFormModel(model.id)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs transition hover:border-primary hover:bg-primary/10",
+                          formModel === model.id ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground",
+                        )}
+                      >
+                        {model.id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Active Switch */}
-            <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="is-active">{t("dialog.setActive")}</Label>
                 <p className="text-xs text-muted-foreground">
@@ -835,7 +914,7 @@ export function ProviderSettingsPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none border-t bg-muted/40 px-4 py-4 sm:px-6">
             <Button
               variant="outline"
               onClick={() => {

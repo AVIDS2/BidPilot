@@ -274,8 +274,21 @@
   },
   "agent": {
     "tabTitle": "智能体进度",
+    "workbenchDesc": "观察工作流节点、执行状态和人工确认点。",
+    "metrics": {
+      "total": "总运行",
+      "active": "活跃",
+      "done": "已归档"
+    },
     "selectRun": "选择运行",
     "selectRunPlaceholder": "选择一个执行运行...",
+    "selectedRunHint": "正在查看 {{id}}，当前状态：{{status}}。",
+    "runTypes": {
+      "draft": "章节起草",
+      "redraft": "重新起草",
+      "ingest": "资料解析",
+      "export": "导出交付物"
+    },
     "title": "智能体执行",
     "runId": "运行 {{id}}",
     "running": "运行中",

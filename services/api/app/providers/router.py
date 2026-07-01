@@ -6,11 +6,13 @@ from app.auth.service import require_auth
 from app.security.secrets import SecretConfigurationError
 from .schemas import (
     ProviderConfigCreate, ProviderConfigUpdate,
+    ProviderModelsRequest,
     TestConnectionRequest,
 )
 from .service import (
     list_provider_configs, get_provider_config, create_provider_config,
-    update_provider_config, delete_provider_config, test_connection, mask_read_config,
+    update_provider_config, delete_provider_config, test_connection,
+    list_provider_models, mask_read_config,
 )
 
 router = APIRouter(prefix="/auth/me/providers", tags=["providers"], dependencies=[Depends(require_auth)])
@@ -72,4 +74,20 @@ def test_provider_connection(
 ):
     """Test a provider connection."""
     result = test_connection(db, user.id, config_id, payload)
+    return {"data": result.model_dump()}
+
+
+@router.post("/models")
+def get_provider_models(
+    payload: ProviderModelsRequest,
+    user=Depends(require_auth),
+    db: Session = Depends(get_db),
+):
+    """List provider models through the backend without exposing provider keys to the browser."""
+    try:
+        result = list_provider_models(db, user.id, payload)
+    except SecretConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"data": result.model_dump()}

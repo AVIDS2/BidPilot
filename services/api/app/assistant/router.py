@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -21,6 +22,7 @@ from .attachments import (
     remember_attachment_text,
 )
 from .schemas import AssistantAttachmentUploadResponse, AssistantRequest
+from .service import stream_assistant_response
 from ..agent.graph import build_agent
 from ..agent.streaming import stream_agent_events
 
@@ -67,6 +69,17 @@ async def assistant_stream(
     - ``assistant.tool_failed``: tool execution failed
     - ``assistant.end``: agent finished
     """
+    if os.getenv("DOCPILOT_ASSISTANT_ENGINE", "langgraph").lower() == "deterministic":
+        return StreamingResponse(
+            stream_assistant_response(db, user, payload),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     # Resolve or create conversation
     conversation_id = _ensure_conversation(db, user, payload)
     save_message(db, conversation_id, "user", payload.message)
@@ -84,7 +97,16 @@ async def assistant_stream(
             model = config.model
 
     # Build agent with fresh db session and user context
-    agent = build_agent(db, user, provider_type=provider_type, api_key=api_key, base_url=base_url, model=model)
+    agent = build_agent(
+        db,
+        user,
+        provider_type=provider_type,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        provider_config_id=payload.provider_config_id,
+        reasoning_effort=payload.reasoning_effort,
+    )
 
     config = {"configurable": {"thread_id": conversation_id}}
     agent_message = build_attachment_context(payload.message, payload.attachments)

@@ -808,6 +808,16 @@ export interface TestConnectionResult {
   model: string | null;
 }
 
+export interface ProviderModelInfo {
+  id: string;
+  name?: string | null;
+  owned_by?: string | null;
+}
+
+export interface ProviderModelsResult {
+  models: ProviderModelInfo[];
+}
+
 // Chat
 export interface ChatMessageRead {
   role: "user" | "assistant";
@@ -876,6 +886,17 @@ export function testProviderConnection(payload: TestProviderConnectionPayload) {
     );
   }
   return request<{ data: TestConnectionResult }>("/auth/me/providers/test", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export type ListProviderModelsPayload =
+  | { config_id: string }
+  | { provider_type: "openai" | "anthropic"; api_key: string; api_url?: string };
+
+export function listProviderModels(payload: ListProviderModelsPayload) {
+  return request<{ data: ProviderModelsResult }>("/auth/me/providers/models", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 // Invitations

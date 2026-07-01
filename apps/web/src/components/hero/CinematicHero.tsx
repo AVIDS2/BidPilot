@@ -21,7 +21,7 @@ export function CinematicHero({
   const showGrid = variant === "grid" || variant === "mixed";
 
   return (
-    <div className="relative h-screen overflow-hidden">
+    <div className="relative min-h-[100dvh] overflow-hidden">
       {/* 层1: 纯黑底色（兜底） */}
       <div className="absolute inset-0 bg-[#0a0a0a]" />
 

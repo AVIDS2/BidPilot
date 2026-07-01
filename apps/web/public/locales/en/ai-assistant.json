@@ -3,6 +3,24 @@
   "subtitle": "Your document assistant",
   "inputPlaceholder": "Ask me anything...",
   "thinking": "Thinking",
+  "model": {
+    "select": "Select model",
+    "menuTitle": "Model",
+    "platformDefault": "Platform default",
+    "platformHint": "Use BidPilot official model",
+    "empty": "No custom providers yet"
+  },
+  "reasoning": {
+    "select": "Select reasoning effort",
+    "menuTitle": "Reasoning",
+    "options": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "ultra": "Ultra",
+      "max": "Max"
+    }
+  },
   "status": {
     "ready": "Ready",
     "thinking": "Understanding request",
@@ -42,6 +60,9 @@
   "activity": {
     "summaryTools": "Ran {{tools}} tools",
     "summaryWithWorkflows": "Ran {{tools}} tools, started {{workflows}} workflows",
+    "summarySingleRunning": "{{label}} running",
+    "summarySingleDone": "{{label}} completed",
+    "summarySingleFailed": "{{label}} failed",
     "summaryDone": "Processed {{tools}} actions",
     "summaryDoneWithWorkflows": "Processed {{tools}} actions, started {{workflows}} workflows",
     "summaryDoneWorkflowsOnly": "Started {{workflows}} workflows",
@@ -80,6 +101,9 @@
       "search_knowledge": "Search knowledge base",
       "upload_document": "Upload document",
       "delete_project": "Delete project"
+    },
+    "workflow": {
+      "default": "Workflow"
     },
     "node": {
       "document_analyzer": "Analyze materials",

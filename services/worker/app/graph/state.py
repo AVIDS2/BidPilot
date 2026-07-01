@@ -64,6 +64,7 @@ class BidPilotState(TypedDict):
     section_key: str
     run_id: str
     provider_config_id: str | None
+    reasoning_effort: str | None
     input_review_feedback: str | None  # feedback from prior review round (redraft input)
 
     # ── RFP parser output ─────────────────────────────────────────────

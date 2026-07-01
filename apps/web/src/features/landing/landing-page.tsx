@@ -464,7 +464,7 @@ function FinalCtaSection() {
 // 导出落地页
 export function LandingPage() {
   return (
-    <div className="min-h-screen" style={{ background: "var(--landing-canvas)" }}>
+    <div className="landing-page-shell min-h-screen" style={{ background: "var(--landing-canvas)" }}>
       <HeroSection />
       <SocialProofSection />
       <HowItWorksSection />

@@ -66,11 +66,11 @@ export function FloatingAssistant() {
   const isProcessing = isAssistantBusy(state.status);
 
   return (
-    <div className="fixed bottom-6 right-6 z-50" ref={menuRef}>
+    <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-50 sm:bottom-6 sm:right-6" ref={menuRef}>
       {/* ─── Radial quick menu ─── */}
       {showMenu && (
         <div
-          className="absolute bottom-16 right-0 flex flex-col gap-2 items-end animate-scale-in"
+          className="absolute bottom-14 right-0 flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2 animate-scale-in sm:bottom-16"
           style={{ transformOrigin: "bottom right" }}
         >
           <MenuAction
@@ -109,7 +109,7 @@ export function FloatingAssistant() {
         onPointerLeave={handlePointerUp}
         aria-label={t("floating.ariaLabel")}
         className={cn(
-          "relative w-12 h-12 rounded-full flex items-center justify-center",
+          "relative flex size-11 items-center justify-center rounded-full sm:size-12",
           "transition-all duration-300",
           "hover:scale-110 active:scale-95",
           "shadow-lg hover:shadow-xl",
@@ -153,7 +153,7 @@ function MenuAction({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-200 hover:scale-105 whitespace-nowrap"
+      className="flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-xl px-3 py-2 text-sm whitespace-nowrap transition-all duration-200 hover:scale-105"
       style={{
         background: "var(--card)",
         border: "1px solid var(--border)",

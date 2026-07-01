@@ -92,8 +92,8 @@ export function ProjectDetailPage() {
   if (!project) return <div className="flex flex-col gap-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-40" /><Skeleton className="h-40" /></div>;
 
   return (
-    <div className="flex flex-col gap-6">
-      <Breadcrumb>
+    <div className="flex min-w-0 flex-col gap-6">
+      <Breadcrumb className="min-w-0 overflow-hidden">
         <BreadcrumbList>
           <BreadcrumbItem><BreadcrumbLink render={<Link to="/projects" />}>{t("detail.projects")}</BreadcrumbLink></BreadcrumbItem>
           <BreadcrumbSeparator />
@@ -101,9 +101,9 @@ export function ProjectDetailPage() {
         </BreadcrumbList>
       </Breadcrumb>
 
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{project.name}</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="break-words text-2xl font-bold sm:truncate">{project.name}</h1>
           <p className="text-muted-foreground">
             {project.scenario_package} &middot; <Badge>{t(`statusValues.${project.status}`, { defaultValue: project.status })}</Badge>
           </p>
@@ -148,7 +148,7 @@ export function ProjectDetailPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="bundles">
+      <Tabs defaultValue="bundles" className="min-w-0">
         <ScrollArea className="w-full">
           <TabsList className="w-max min-w-full justify-start">
             <TabsTrigger value="bundles">{t("tabs.bundles")}</TabsTrigger>

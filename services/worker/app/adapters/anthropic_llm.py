@@ -7,6 +7,7 @@ Falls back to a structured stub when no API key is configured.
 import logging
 import os
 from dataclasses import dataclass
+from typing import Literal
 
 import httpx
 
@@ -14,6 +15,23 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_URL = "https://api.anthropic.com/v1/messages"
 _DEFAULT_MODEL = "claude-sonnet-4-20250514"
+ReasoningEffort = Literal["low", "medium", "high", "ultra", "max"]
+
+_REASONING_INSTRUCTIONS: dict[str, str] = {
+    "low": "Use concise reasoning. Prefer a fast, direct answer.",
+    "medium": "Use balanced reasoning. Check key assumptions before writing.",
+    "high": "Use deeper reasoning. Validate structure, evidence, and edge cases before writing.",
+    "ultra": "Use very deep reasoning. Build a careful outline, verify evidence fit, then write.",
+    "max": "Use maximum reasoning. Exhaustively validate requirements, evidence, gaps, and final structure before writing.",
+}
+
+_THINKING_BUDGETS: dict[str, int] = {
+    "low": 1024,
+    "medium": 4096,
+    "high": 8192,
+    "ultra": 16000,
+    "max": 32000,
+}
 
 
 @dataclass
@@ -56,7 +74,26 @@ Evidence:
 Write the section content now:"""
 
 
-def draft_section(section_key: str, evidence_texts: list[str], project_id: str, review_feedback: str | None = None, system_prompt: str | None = None, provider_config: dict | None = None) -> DraftResult:
+def _system_prompt_with_reasoning(system_prompt: str, reasoning_effort: str | None) -> str:
+    if reasoning_effort not in _REASONING_INSTRUCTIONS:
+        return system_prompt
+    return f"{system_prompt}\n\nReasoning intensity: {_REASONING_INSTRUCTIONS[reasoning_effort]}"
+
+
+def _supports_thinking(url: str, model: str) -> bool:
+    normalized = f"{url} {model}".lower()
+    return "api.anthropic.com" in normalized and ("claude-3-7" in normalized or "claude-sonnet-4" in normalized or "claude-opus-4" in normalized)
+
+
+def draft_section(
+    section_key: str,
+    evidence_texts: list[str],
+    project_id: str,
+    review_feedback: str | None = None,
+    system_prompt: str | None = None,
+    provider_config: dict | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
+) -> DraftResult:
     """Draft a section using Anthropic Claude.
 
     Calls the Anthropic Messages API. Falls back to a structured stub if unavailable.
@@ -93,7 +130,24 @@ This is a draft section for **{section_key}**.
         )
 
     prompt = _build_prompt(section_key, evidence_texts, review_feedback)
-    effective_system_prompt = system_prompt or "You are a professional document writer. Write clear, evidence-backed sections in markdown."
+    effective_system_prompt = _system_prompt_with_reasoning(
+        system_prompt or "You are a professional document writer. Write clear, evidence-backed sections in markdown.",
+        reasoning_effort,
+    )
+    payload = {
+        "model": model,
+        "max_tokens": 4000,
+        "system": effective_system_prompt,
+        "messages": [
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+    }
+    if reasoning_effort and _supports_thinking(url, model):
+        payload["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": _THINKING_BUDGETS[reasoning_effort],
+        }
 
     try:
         resp = httpx.post(
@@ -103,15 +157,7 @@ This is a draft section for **{section_key}**.
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
             },
-            json={
-                "model": model,
-                "max_tokens": 4000,
-                "system": effective_system_prompt,
-                "messages": [
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.3,
-            },
+            json=payload,
             timeout=120.0,
         )
         resp.raise_for_status()

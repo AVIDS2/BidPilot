@@ -74,17 +74,19 @@ export function TurnstileWidget({ action, onTokenChange, onWidgetIdChange, class
 
     let cancelled = false;
 
-    if (cancelled || widgetIdRef.current || !window.turnstile || !containerRef.current) return;
+    window.turnstile.ready(() => {
+      if (cancelled || widgetIdRef.current || !window.turnstile || !containerRef.current) return;
 
-    widgetIdRef.current = window.turnstile.render(containerRef.current, {
-      sitekey: TURNSTILE_SITE_KEY,
-      action,
-      theme: "dark",
-      callback: (token) => onTokenChange(token),
-      "expired-callback": () => onTokenChange(null),
-      "error-callback": () => onTokenChange(null),
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        action,
+        theme: "dark",
+        callback: (token) => onTokenChange(token),
+        "expired-callback": () => onTokenChange(null),
+        "error-callback": () => onTokenChange(null),
+      });
+      onWidgetIdChange?.(widgetIdRef.current);
     });
-    onWidgetIdChange?.(widgetIdRef.current);
 
     return () => {
       cancelled = true;

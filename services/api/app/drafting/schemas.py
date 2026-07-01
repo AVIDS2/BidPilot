@@ -2,11 +2,14 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+ReasoningEffort = Literal["low", "medium", "high", "ultra", "max"]
+
 
 class DraftSectionRequest(BaseModel):
     project_id: str
     section_key: str
     provider_config_id: str | None = None
+    reasoning_effort: ReasoningEffort | None = None
 
 
 class RedraftSectionRequest(BaseModel):
@@ -14,6 +17,7 @@ class RedraftSectionRequest(BaseModel):
     section_key: str
     review_feedback: str | None = None
     provider_config_id: str | None = None
+    reasoning_effort: ReasoningEffort | None = None
 
 
 class DraftSectionResponse(BaseModel):

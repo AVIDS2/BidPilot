@@ -30,6 +30,21 @@ _SYSTEM_PROMPT = """你是 BidPilot 平台的 AI 助手。你帮助用户管理�
 - 如果用户用口语化表达，理解其意图并映射到正确的工具
 """
 
+_REASONING_GUIDANCE = {
+    "low": "当前推理强度：低。优先快速、直接地完成任务，避免不必要的展开。",
+    "medium": "当前推理强度：中。保持速度与准确性的平衡，检查关键前提后再行动。",
+    "high": "当前推理强度：高。执行前更仔细地核对上下文、工具选择和潜在风险。",
+    "ultra": "当前推理强度：超高。先梳理目标、约束和可执行步骤，再谨慎调用工具。",
+    "max": "当前推理强度：Max。以最高审慎度处理任务，完整核对上下文、边界、风险和最终输出。",
+}
+
+
+def _build_system_prompt(reasoning_effort: str | None) -> str:
+    guidance = _REASONING_GUIDANCE.get(reasoning_effort or "")
+    if not guidance:
+        return _SYSTEM_PROMPT
+    return f"{_SYSTEM_PROMPT}\n{guidance}\n"
+
 # ── Checkpointer singleton ────────────────────────────────────────────────────
 
 _checkpointer = None
@@ -94,16 +109,24 @@ def build_agent(
     api_key: str | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    provider_config_id: str | None = None,
+    reasoning_effort: str | None = None,
 ):
     """Build a ReAct agent with tools bound to the current db session and user."""
-    llm = get_agent_llm(provider_type=provider_type, api_key=api_key, base_url=base_url, model=model)
-    tools = create_tools(db, user)
+    llm = get_agent_llm(
+        provider_type=provider_type,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        reasoning_effort=reasoning_effort,
+    )
+    tools = create_tools(db, user, provider_config_id=provider_config_id, reasoning_effort=reasoning_effort)
     checkpointer = get_checkpointer()
 
     agent = create_react_agent(
         llm,
         tools,
-        prompt=SystemMessage(content=_SYSTEM_PROMPT),
+        prompt=SystemMessage(content=_build_system_prompt(reasoning_effort)),
         checkpointer=checkpointer,
     )
     return agent

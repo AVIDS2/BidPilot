@@ -53,6 +53,7 @@ def _draft_with_retry(
     system_prompt: str | None,
     provider_config_dict: dict | None,
     provider_type: str,
+    reasoning_effort: str | None,
 ) -> DraftResult:
     """Call the appropriate LLM adapter with tenacity retry.
 
@@ -67,6 +68,7 @@ def _draft_with_retry(
             review_feedback=review_feedback,
             system_prompt=system_prompt,
             provider_config=provider_config_dict,
+            reasoning_effort=reasoning_effort,
         )
     return draft_section_openai(
         section_key,
@@ -75,6 +77,7 @@ def _draft_with_retry(
         review_feedback=review_feedback,
         system_prompt=system_prompt,
         provider_config=provider_config_dict,
+        reasoning_effort=reasoning_effort,
     )
 
 
@@ -134,6 +137,7 @@ def section_drafter_node(state: BidPilotState) -> dict:
     section_key: str = state["section_key"]
     project_id: str = state["project_id"]
     provider_config_id: str | None = state.get("provider_config_id")
+    reasoning_effort: str | None = state.get("reasoning_effort")
     # Use human_feedback (from HITL) if available, otherwise input_review_feedback
     review_feedback: str | None = state.get("human_feedback") or state.get("input_review_feedback")
     evidence_chunks = state.get("evidence_chunks", [])
@@ -153,6 +157,7 @@ def section_drafter_node(state: BidPilotState) -> dict:
             system_prompt=system_prompt,
             provider_config_dict=provider_config_dict,
             provider_type=provider_type,
+            reasoning_effort=reasoning_effort,
         )
         duration_ms = int((time.monotonic() - start) * 1000)
         logger.info(

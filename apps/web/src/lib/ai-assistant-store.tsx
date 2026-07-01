@@ -12,11 +12,12 @@ import {
   listChatConversations,
   type ChatConversationRead,
 } from "@/lib/api";
-import { getStoredValue } from "@/lib/browser-storage";
+import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser-storage";
 
 /* ─── Types ─── */
 
 export type AssistantMode = "panel" | "command" | "inline";
+export type AssistantReasoningEffort = "low" | "medium" | "high" | "ultra" | "max";
 export type AssistantStatus =
   | "idle"
   | "thinking"
@@ -61,6 +62,8 @@ interface SendAssistantOptions {
   displayContent?: string;
   attachments?: ChatMessageAttachment[];
   requestAttachments?: AssistantRequestAttachment[];
+  providerConfigId?: string | null;
+  reasoningEffort?: AssistantReasoningEffort;
 }
 
 export interface AssistantConfirmationRequest {
@@ -137,10 +140,13 @@ export interface AIAssistantState {
   conversations: ChatConversationRead[];
   messages: ChatMessage[];
   activeAssistantMessageId: string | null;
+  assistantContentBuffers: Record<string, string>;
   status: AssistantStatus;
   executionItems: AssistantExecutionItem[];
   pendingConfirmation: AssistantConfirmationRequest | null;
   sessionError: string | null;
+  selectedProviderConfigId: string | null;
+  reasoningEffort: AssistantReasoningEffort;
   /* context */
   currentContext: PageContext;
   /* inline suggestions */
@@ -158,9 +164,11 @@ type Action =
   | { type: "SET_MODE"; mode: AssistantMode }
   | { type: "SET_CURRENT_CONVERSATION"; conversationId: string | null }
   | { type: "SET_CONVERSATIONS"; conversations: ChatConversationRead[] }
+  | { type: "UPDATE_CONVERSATION_TITLE"; conversationId: string; title: string }
   | { type: "ADD_MESSAGE"; message: ChatMessage }
   | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
   | { type: "UPDATE_LAST_ASSISTANT"; content: string }
+  | { type: "FLUSH_READY_ASSISTANT_CONTENT" }
   | { type: "SET_ACTIVE_ASSISTANT_MESSAGE"; messageId: string | null }
   | { type: "SET_STATUS"; status: AssistantStatus }
   | { type: "ADD_EXECUTION_ITEM"; item: AssistantExecutionItem }
@@ -168,6 +176,8 @@ type Action =
   | { type: "MERGE_WORKFLOW_NODE"; runId: string; node: WorkflowNodeProgress; currentNode?: string | null }
   | { type: "SET_SESSION_ERROR"; message: string; errorCode?: string }
   | { type: "SET_PENDING_CONFIRMATION"; confirmation: AssistantConfirmationRequest | null }
+  | { type: "SET_SELECTED_PROVIDER_CONFIG"; providerConfigId: string | null }
+  | { type: "SET_REASONING_EFFORT"; effort: AssistantReasoningEffort }
   | { type: "CLEAR_TRANSIENT_STATE" }
   | { type: "CLEAR_MESSAGES" }
   | { type: "SET_CONTEXT"; context: PageContext }
@@ -183,18 +193,85 @@ const initialState: AIAssistantState = {
   conversations: [],
   messages: [],
   activeAssistantMessageId: null,
+  assistantContentBuffers: {},
   status: "idle",
   executionItems: [],
   pendingConfirmation: null,
   sessionError: null,
+  selectedProviderConfigId: getStoredValue("assistantProviderConfigId"),
+  reasoningEffort: parseReasoningEffort(getStoredValue("assistantReasoningEffort")),
   currentContext: { page: "/" },
   suggestions: [],
   commands: [],
 };
 
+function parseReasoningEffort(value: string | null): AssistantReasoningEffort {
+  if (value === "low" || value === "medium" || value === "high" || value === "ultra" || value === "max") {
+    return value;
+  }
+  return "medium";
+}
+
 function createExecutionId(prefix: string, key?: string) {
   const safeKey = key ? `-${key.replace(/[^a-zA-Z0-9_-]/g, "")}` : "";
   return `${prefix}${safeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getLastAssistantMessageId(state: AIAssistantState) {
+  for (let i = state.messages.length - 1; i >= 0; i--) {
+    if (state.messages[i].role === "assistant") return state.messages[i].id;
+  }
+  return null;
+}
+
+function hasOpenActivity(state: AIAssistantState, messageId: string) {
+  return state.executionItems.some(
+    (item) => item.messageId === messageId && (item.status === "running" || item.status === "pending"),
+  );
+}
+
+function appendAssistantContent(state: AIAssistantState, messageId: string, content: string): AIAssistantState {
+  return {
+    ...state,
+    messages: state.messages.map((message) =>
+      message.id === messageId && message.role === "assistant"
+        ? { ...message, content: message.content + content }
+        : message,
+    ),
+  };
+}
+
+function appendOrBufferAssistantContent(state: AIAssistantState, content: string): AIAssistantState {
+  const messageId = state.activeAssistantMessageId ?? getLastAssistantMessageId(state);
+  if (!messageId) return state;
+  if (!hasOpenActivity(state, messageId)) {
+    return appendAssistantContent(state, messageId, content);
+  }
+  return {
+    ...state,
+    assistantContentBuffers: {
+      ...state.assistantContentBuffers,
+      [messageId]: `${state.assistantContentBuffers[messageId] ?? ""}${content}`,
+    },
+  };
+}
+
+function flushAssistantBuffer(state: AIAssistantState, messageId: string): AIAssistantState {
+  const buffered = state.assistantContentBuffers[messageId];
+  if (!buffered) return state;
+  const nextBuffers = { ...state.assistantContentBuffers };
+  delete nextBuffers[messageId];
+  return {
+    ...appendAssistantContent(state, messageId, buffered),
+    assistantContentBuffers: nextBuffers,
+  };
+}
+
+function flushReadyAssistantBuffers(state: AIAssistantState): AIAssistantState {
+  return Object.keys(state.assistantContentBuffers).reduce((nextState, messageId) => {
+    if (hasOpenActivity(nextState, messageId)) return nextState;
+    return flushAssistantBuffer(nextState, messageId);
+  }, state);
 }
 
 function reducer(state: AIAssistantState, action: Action): AIAssistantState {
@@ -222,6 +299,15 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       return { ...state, currentConversationId: action.conversationId };
     case "SET_CONVERSATIONS":
       return { ...state, conversations: action.conversations };
+    case "UPDATE_CONVERSATION_TITLE":
+      return {
+        ...state,
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === action.conversationId
+            ? { ...conversation, title: action.title }
+            : conversation,
+        ),
+      };
     case "ADD_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
     case "REPLACE_MESSAGES":
@@ -229,20 +315,16 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         ...state,
         messages: action.messages,
         activeAssistantMessageId: null,
+        assistantContentBuffers: {},
         executionItems: [],
         pendingConfirmation: null,
         sessionError: null,
       };
     case "UPDATE_LAST_ASSISTANT": {
-      const msgs = [...state.messages];
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].role === "assistant") {
-          msgs[i] = { ...msgs[i], content: msgs[i].content + action.content };
-          break;
-        }
-      }
-      return { ...state, messages: msgs };
+      return appendOrBufferAssistantContent(state, action.content);
     }
+    case "FLUSH_READY_ASSISTANT_CONTENT":
+      return flushReadyAssistantBuffers(state);
     case "SET_ACTIVE_ASSISTANT_MESSAGE":
       return { ...state, activeAssistantMessageId: action.messageId };
     case "SET_STATUS":
@@ -280,11 +362,13 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           ...action.patch,
         });
       }
-      return { ...state, executionItems };
+      return flushReadyAssistantBuffers({ ...state, executionItems });
     }
     case "MERGE_WORKFLOW_NODE": {
       const executionItems = state.executionItems.map((item) => {
         if (item.runId !== action.runId) return item;
+        const status: AssistantExecutionItem["status"] =
+          item.status === "failed" || item.status === "succeeded" ? item.status : "running";
         const nodes = item.nodes ?? [];
         const idx = nodes.findIndex((node) => node.name === action.node.name);
         const nextNodes = [...nodes];
@@ -297,11 +381,11 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           ...item,
           nodes: nextNodes,
           currentNode: action.currentNode,
-          status: item.status === "failed" || item.status === "succeeded" ? item.status : "running",
+          status,
           isRunning: true,
         };
       });
-      return { ...state, executionItems };
+      return flushReadyAssistantBuffers({ ...state, executionItems });
     }
     case "SET_PENDING_CONFIRMATION":
       return {
@@ -310,6 +394,10 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           ? { ...action.confirmation, messageId: action.confirmation.messageId ?? state.activeAssistantMessageId ?? undefined }
           : null,
       };
+    case "SET_SELECTED_PROVIDER_CONFIG":
+      return { ...state, selectedProviderConfigId: action.providerConfigId };
+    case "SET_REASONING_EFFORT":
+      return { ...state, reasoningEffort: action.effort };
     case "SET_SESSION_ERROR":
       return {
         ...state,
@@ -339,6 +427,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         ...state,
         messages: [],
         activeAssistantMessageId: null,
+        assistantContentBuffers: {},
         executionItems: [],
         pendingConfirmation: null,
         sessionError: null,
@@ -549,11 +638,14 @@ interface AIAssistantContextValue {
     content: string,
     options?: SendAssistantOptions,
   ) => Promise<void>;
+  setSelectedProviderConfig: (providerConfigId: string | null) => void;
+  setReasoningEffort: (effort: AssistantReasoningEffort) => void;
   confirmAssistantAction: (approved: boolean) => Promise<void>;
   executeCommand: (commandId: string) => void;
   refreshConversations: () => Promise<void>;
   loadConversation: (conversationId: string) => Promise<void>;
   startNewConversation: () => void;
+  updateConversationTitle: (conversationId: string, title: string) => void;
 }
 
 const AIAssistantContext = createContext<AIAssistantContextValue | null>(null);
@@ -715,10 +807,11 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   }, [state.currentContext.projectId]);
 
   const loadConversation = useCallback(async (conversationId: string) => {
+    dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
+    dispatch({ type: "CLEAR_MESSAGES" });
     dispatch({ type: "SET_STATUS", status: "thinking" });
     try {
       const history = await getChatConversationMessages(conversationId);
-      dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
       dispatch({
         type: "REPLACE_MESSAGES",
         messages: history.items.map((item, index) => ({
@@ -734,6 +827,24 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     } finally {
       dispatch({ type: "SET_STATUS", status: "idle" });
     }
+  }, []);
+
+  const updateConversationTitle = useCallback((conversationId: string, title: string) => {
+    dispatch({ type: "UPDATE_CONVERSATION_TITLE", conversationId, title });
+  }, []);
+
+  const setSelectedProviderConfig = useCallback((providerConfigId: string | null) => {
+    if (providerConfigId) {
+      setStoredValue("assistantProviderConfigId", providerConfigId);
+    } else {
+      removeStoredValue("assistantProviderConfigId");
+    }
+    dispatch({ type: "SET_SELECTED_PROVIDER_CONFIG", providerConfigId });
+  }, []);
+
+  const setReasoningEffort = useCallback((effort: AssistantReasoningEffort) => {
+    setStoredValue("assistantReasoningEffort", effort);
+    dispatch({ type: "SET_REASONING_EFFORT", effort });
   }, []);
 
   const startNewConversation = useCallback(() => {
@@ -794,6 +905,8 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
             message: content,
             project_id: state.currentContext.projectId,
             conversation_id: state.currentConversationId,
+            provider_config_id: options?.providerConfigId ?? state.selectedProviderConfigId,
+            reasoning_effort: options?.reasoningEffort ?? state.reasoningEffort,
             confirmation,
             attachments: options?.requestAttachments ?? [],
           }),
@@ -848,7 +961,14 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         void refreshConversations();
       }
     },
-    [refreshConversations, state.currentContext.projectId, state.currentConversationId, state.status],
+    [
+      refreshConversations,
+      state.currentContext.projectId,
+      state.currentConversationId,
+      state.reasoningEffort,
+      state.selectedProviderConfigId,
+      state.status,
+    ],
   );
 
   const sendMessage = useCallback(
@@ -892,11 +1012,14 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         close,
         toggle,
         sendMessage,
+        setSelectedProviderConfig,
+        setReasoningEffort,
         confirmAssistantAction,
         executeCommand,
         refreshConversations,
         loadConversation,
         startNewConversation,
+        updateConversationTitle,
       }}
     >
       {children}

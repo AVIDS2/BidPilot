@@ -101,6 +101,8 @@ async def stream_assistant_response(
     arguments = dict(intent.arguments)
     if payload.provider_config_id and intent.tool_name in {"start_draft_section", "start_redraft_section"}:
         arguments["provider_config_id"] = payload.provider_config_id
+    if payload.reasoning_effort and intent.tool_name in {"start_draft_section", "start_redraft_section"}:
+        arguments["reasoning_effort"] = payload.reasoning_effort
 
     if requires_confirmation(intent.tool_name):
         response = _confirmation_message(intent.tool_name, arguments)

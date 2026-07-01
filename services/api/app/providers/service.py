@@ -12,8 +12,16 @@ from app.security.secrets import (
     mask_secret,
 )
 
-from .endpoints import normalize_provider_endpoint
-from .schemas import ProviderConfigCreate, ProviderConfigUpdate, TestConnectionRequest, TestConnectionResponse
+from .endpoints import normalize_provider_base_url, normalize_provider_endpoint
+from .schemas import (
+    ProviderConfigCreate,
+    ProviderConfigUpdate,
+    ProviderModelInfo,
+    ProviderModelsRequest,
+    ProviderModelsResponse,
+    TestConnectionRequest,
+    TestConnectionResponse,
+)
 
 
 def _mask_api_key(key: str) -> str:
@@ -160,6 +168,89 @@ def test_connection(db: Session, user_id: str, config_id: str | None, payload: T
         return TestConnectionResponse(success=False, message="Secret encryption key is not configured")
     except Exception as exc:
         return TestConnectionResponse(success=False, message=str(exc)[:200])
+
+
+def list_provider_models(
+    db: Session,
+    user_id: str,
+    payload: ProviderModelsRequest,
+) -> ProviderModelsResponse:
+    """List models through the backend so provider keys never reach browser-side APIs."""
+    provider_type, api_key, api_url = _resolve_model_list_credentials(db, user_id, payload)
+    base_url = normalize_provider_base_url(provider_type, api_url)
+    if provider_type == "anthropic":
+        url = f"{base_url}/v1/models"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        }
+    else:
+        url = f"{base_url}/models"
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+    try:
+        resp = httpx.get(url, headers=headers, timeout=15.0)
+    except httpx.ConnectError as exc:
+        raise ValueError(f"Cannot connect to {url}") from exc
+    except httpx.TimeoutException as exc:
+        raise ValueError("Model list request timed out") from exc
+
+    if resp.status_code == 401:
+        raise ValueError("Authentication failed: invalid API key")
+    if resp.status_code >= 400:
+        raise ValueError(f"API error: {resp.status_code} {resp.text[:200]}")
+
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise ValueError("Provider returned invalid JSON") from exc
+
+    return ProviderModelsResponse(models=_parse_model_list(data))
+
+
+def _resolve_model_list_credentials(
+    db: Session,
+    user_id: str,
+    payload: ProviderModelsRequest,
+) -> tuple[str, str, str | None]:
+    if payload.config_id:
+        config = get_provider_config(db, payload.config_id, user_id)
+        if config is None:
+            raise ValueError("Provider config not found")
+        return config.provider_type, decrypt_secret(config.api_key), config.api_url
+
+    if not payload.provider_type or not payload.api_key:
+        raise ValueError("Provider type and API key are required")
+    return payload.provider_type, payload.api_key, payload.api_url
+
+
+def _parse_model_list(data: object) -> list[ProviderModelInfo]:
+    if isinstance(data, dict):
+        raw_items = data.get("data") or data.get("models") or []
+    elif isinstance(data, list):
+        raw_items = data
+    else:
+        raw_items = []
+
+    models: list[ProviderModelInfo] = []
+    for item in raw_items:
+        if isinstance(item, str):
+            models.append(ProviderModelInfo(id=item))
+            continue
+        if not isinstance(item, dict):
+            continue
+        model_id = item.get("id") or item.get("name")
+        if not model_id:
+            continue
+        display_name = item.get("display_name") or item.get("name")
+        models.append(
+            ProviderModelInfo(
+                id=str(model_id),
+                name=str(display_name) if display_name else None,
+                owned_by=str(item.get("owned_by")) if item.get("owned_by") else None,
+            )
+        )
+    return models
 
 
 def mask_read_config(config: ProviderConfig) -> dict:

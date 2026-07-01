@@ -11,6 +11,7 @@ import {
   Trash2Icon,
   MessageSquareIcon,
   ChevronDownIcon,
+  PencilIcon,
   FileIcon,
   FileTextIcon,
   FolderOpenIcon,
@@ -23,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import {
   createBundle,
   deleteChatConversation,
+  listProviderConfigs,
   listBundles,
   renameChatConversation,
   uploadAssistantAttachment,
@@ -30,6 +32,7 @@ import {
   type AssistantAttachmentUploadResponse,
   type BundleRead,
   type ChatConversationRead,
+  type ProviderConfig,
 } from "@/lib/api";
 import {
   isAssistantBusy,
@@ -37,6 +40,7 @@ import {
   type AssistantConfirmationRequest,
   type AssistantExecutionItem,
   type AssistantRequestAttachment,
+  type AssistantReasoningEffort,
   type ChatMessageAttachment,
   type ChatMessage,
 } from "@/lib/ai-assistant-store";
@@ -80,6 +84,7 @@ function groupConversations(conversations: ChatConversationRead[]) {
 
 type ComposerAttachmentKind = "file" | "image";
 type ComposerAttachmentStatus = "ready" | "uploading" | "uploaded" | "failed";
+type ConfigMenu = "model" | "reasoning" | null;
 
 interface ComposerAttachment {
   id: string;
@@ -100,7 +105,11 @@ interface QueuedPrompt {
   displayContent: string;
   attachments: ChatMessageAttachment[];
   requestAttachments: AssistantRequestAttachment[];
+  providerConfigId: string | null;
+  reasoningEffort: AssistantReasoningEffort;
 }
+
+const REASONING_OPTIONS: AssistantReasoningEffort[] = ["low", "medium", "high", "ultra", "max"];
 
 function createAttachmentId(file: File, index: number) {
   return `att-${Date.now()}-${index}-${file.name.replace(/[^a-zA-Z0-9]/g, "")}`;
@@ -292,7 +301,7 @@ function AttachmentPreviewCard({
     <div
       className={cn(
         "group relative flex h-16 max-w-[13.5rem] shrink-0 items-center gap-2 overflow-hidden rounded-2xl border px-2.5 text-xs shadow-[0_14px_40px_oklch(0_0_0/0.12)] backdrop-blur-xl transition hover:-translate-y-px",
-        isImage ? "w-20 justify-center p-1.5" : "w-[13.5rem]",
+        isImage ? "w-20 justify-center p-1.5" : "w-[min(13.5rem,72vw)]",
       )}
       style={{
         background: "color-mix(in oklch, var(--background) 92%, transparent)",
@@ -354,7 +363,7 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
     return (
       <div className="flex animate-fade-in flex-col items-end gap-2">
         {hasAttachments && (
-          <div className="flex max-w-[88%] flex-wrap justify-end gap-2">
+          <div className="flex max-w-[94%] flex-wrap justify-end gap-2 sm:max-w-[88%]">
             {msg.attachments?.map((attachment) => (
               <AttachmentPreviewCard
                 key={attachment.id}
@@ -369,7 +378,7 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
         )}
         {msg.content && (
           <div
-            className="max-w-[88%] rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 text-[14px] leading-7 shadow-[0_12px_32px_oklch(0_0_0/0.10)]"
+            className="max-w-[94%] rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 text-[14px] leading-7 shadow-[0_12px_32px_oklch(0_0_0/0.10)] sm:max-w-[88%]"
             style={{
               background: "color-mix(in oklch, var(--muted) 82%, var(--background) 18%)",
               color: "var(--foreground)",
@@ -385,7 +394,7 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
   return (
     <div className="flex flex-col items-start gap-2 animate-fade-in">
       <div
-        className="w-full max-w-[92%] px-1 py-1 text-[14px] leading-7 break-words"
+        className="w-full max-w-full px-1 py-1 text-[14px] leading-7 break-words sm:max-w-[92%]"
         style={{
           background: "transparent",
           color: "var(--foreground)",
@@ -446,7 +455,7 @@ function HistorySidebar({
   onCancelRename: () => void;
   renamingId: string | null;
   renameInputRef: RefObject<HTMLInputElement | null>;
-  t: (key: string) => string;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -465,7 +474,7 @@ function HistorySidebar({
   };
 
   return (
-    <div className="w-64 h-full shrink-0 flex flex-col border-r bg-card shadow-xl" style={{ borderColor: "var(--border)" }}>
+    <div className="flex h-full w-[min(20rem,calc(100vw-1.25rem))] shrink-0 flex-col border-r bg-card shadow-xl" style={{ borderColor: "var(--border)" }}>
       {/* Header */}
       <div className="p-3 flex items-center justify-between border-b shrink-0" style={{ borderColor: "var(--border)" }}>
         <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -482,7 +491,7 @@ function HistorySidebar({
       </div>
 
       {/* Search */}
-      <div className="px-3 pt-2 pb-1 shrink-0">
+      <div className="shrink-0 px-3 pb-1 pt-2">
         <div className="relative">
           <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <Input
@@ -496,7 +505,7 @@ function HistorySidebar({
 
       {/* Conversation list */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="p-2 space-y-3">
+        <div className="flex flex-col gap-3 p-2">
           {filtered.length === 0 ? (
             <div className="text-center py-8">
               <MessageSquareIcon className="size-8 mx-auto mb-2 text-muted-foreground/40" />
@@ -520,6 +529,7 @@ function HistorySidebar({
                       return (
                         <div
                           key={conversation.id}
+                          data-conversation-row
                           className={cn(
                             "group relative rounded-lg px-2.5 py-2 text-left transition-colors cursor-pointer",
                             active ? "bg-muted" : "hover:bg-muted/50",
@@ -553,7 +563,7 @@ function HistorySidebar({
                           ) : (
                             <>
                               <div
-                                className="text-xs font-medium truncate pr-6"
+                                className="text-xs font-medium truncate pr-12"
                                 onDoubleClick={(e) => {
                                   e.stopPropagation();
                                   onRename(conversation.id, conversation.title);
@@ -566,7 +576,19 @@ function HistorySidebar({
                                   ? new Date(conversation.created_at).toLocaleDateString()
                                   : ""}
                               </div>
-                              {/* Delete button on hover */}
+                              {isHovered && (
+                                <button
+                                  className="absolute right-7 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRename(conversation.id, conversation.title);
+                                  }}
+                                  title={t("panel.renameConversation")}
+                                  aria-label={t("panel.renameConversation")}
+                                >
+                                  <PencilIcon className="size-3" />
+                                </button>
+                              )}
                               {isHovered && !active && (
                                 <button
                                   className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
@@ -606,7 +628,10 @@ export function AIAssistantPanel() {
     loadConversation,
     refreshConversations,
     startNewConversation,
+    updateConversationTitle,
     confirmAssistantAction,
+    setSelectedProviderConfig,
+    setReasoningEffort,
   } = useAIAssistant();
   const { t } = useTranslation("ai-assistant");
   const [input, setInput] = useState("");
@@ -616,8 +641,10 @@ export function AIAssistantPanel() {
   const [editingTitle, setEditingTitle] = useState("");
   const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [configMenuOpen, setConfigMenuOpen] = useState<ConfigMenu>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([]);
+  const [providerConfigs, setProviderConfigs] = useState<ProviderConfig[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -630,6 +657,12 @@ export function AIAssistantPanel() {
   const isBusy = isAssistantBusy(state.status);
   const isUploadingAttachments = attachments.some((attachment) => attachment.status === "uploading");
   const canSend = Boolean(input.trim() || attachments.length > 0) && !isUploadingAttachments;
+  const selectedProvider = useMemo(
+    () => providerConfigs.find((provider) => provider.id === state.selectedProviderConfigId) ?? null,
+    [providerConfigs, state.selectedProviderConfigId],
+  );
+  const modelLabel = selectedProvider?.model ?? t("model.platformDefault", { defaultValue: "Platform default" });
+  const reasoningLabel = t(`reasoning.options.${state.reasoningEffort}`, { defaultValue: state.reasoningEffort });
   const executionItemsByMessageId = useMemo(() => {
     const grouped = new Map<string, AssistantExecutionItem[]>();
     for (const item of state.executionItems) {
@@ -684,9 +717,25 @@ export function AIAssistantPanel() {
   }, [state.isOpen, state.mode]);
 
   useEffect(() => {
+    if (!state.isOpen || state.mode !== "panel") return;
+    let cancelled = false;
+    void listProviderConfigs()
+      .then((result) => {
+        if (!cancelled) setProviderConfigs(result.data);
+      })
+      .catch((error) => {
+        console.error("Failed to load assistant model configs:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.isOpen, state.mode]);
+
+  useEffect(() => {
     if (!state.isOpen) {
       setHistoryOpen(false);
       setHistorySearch("");
+      setConfigMenuOpen(null);
     }
   }, [state.isOpen]);
 
@@ -772,6 +821,8 @@ export function AIAssistantPanel() {
       }) satisfies ComposerAttachment);
 
       setAttachmentMenuOpen(false);
+      setConfigMenuOpen(null);
+      setHistoryOpen(false);
       setAttachments((current) => [...current, ...records]);
       void uploadAttachmentRecords(records, projectId);
     },
@@ -784,6 +835,8 @@ export function AIAssistantPanel() {
 
   const handleAddFromProject = useCallback(() => {
     setAttachmentMenuOpen(false);
+    setConfigMenuOpen(null);
+    setHistoryOpen(false);
     setInput((current) => {
       const prompt = t("attachments.addFromProjectPrompt", {
         defaultValue: "请从当前项目资料库中检索并添加相关材料。",
@@ -806,6 +859,8 @@ export function AIAssistantPanel() {
       displayContent,
       attachments: messageAttachments,
       requestAttachments,
+      providerConfigId: state.selectedProviderConfigId,
+      reasoningEffort: state.reasoningEffort,
     };
 
     shouldAutoScrollRef.current = true;
@@ -822,8 +877,10 @@ export function AIAssistantPanel() {
       displayContent,
       attachments: messageAttachments,
       requestAttachments,
+      providerConfigId: state.selectedProviderConfigId,
+      reasoningEffort: state.reasoningEffort,
     });
-  }, [attachments, input, isBusy, isUploadingAttachments, sendMessage, t]);
+  }, [attachments, input, isBusy, isUploadingAttachments, sendMessage, state.reasoningEffort, state.selectedProviderConfigId, t]);
 
   useEffect(() => {
     if (queueDrainingRef.current || isAssistantBusy(state.status) || queuedPrompts.length === 0) return;
@@ -837,6 +894,8 @@ export function AIAssistantPanel() {
       displayContent: nextPrompt.displayContent,
       attachments: nextPrompt.attachments,
       requestAttachments: nextPrompt.requestAttachments,
+      providerConfigId: nextPrompt.providerConfigId,
+      reasoningEffort: nextPrompt.reasoningEffort,
     }).finally(() => {
       queueDrainingRef.current = false;
     });
@@ -865,16 +924,23 @@ export function AIAssistantPanel() {
             displayContent: text,
             attachments: [],
             requestAttachments: [],
+            providerConfigId: state.selectedProviderConfigId,
+            reasoningEffort: state.reasoningEffort,
           },
         ]);
         return;
       }
-      void sendMessage(text);
+      void sendMessage(text, {
+        providerConfigId: state.selectedProviderConfigId,
+        reasoningEffort: state.reasoningEffort,
+      });
     },
-    [isBusy, sendMessage],
+    [isBusy, sendMessage, state.reasoningEffort, state.selectedProviderConfigId],
   );
 
   const beginRenameConversation = useCallback((id: string, title: string | null) => {
+    setAttachmentMenuOpen(false);
+    setConfigMenuOpen(null);
     setEditingConversationId(id);
     setEditingTitle(title || "");
   }, []);
@@ -891,14 +957,15 @@ export function AIAssistantPanel() {
     try {
       setRenamingConversationId(editingConversationId);
       await renameChatConversation(editingConversationId, normalizedTitle);
-      await refreshConversations();
+      updateConversationTitle(editingConversationId, normalizedTitle);
+      void refreshConversations();
     } catch (error) {
       console.error("Failed to rename conversation:", error);
     } finally {
       setRenamingConversationId(null);
       cancelRenameConversation();
     }
-  }, [cancelRenameConversation, editingConversationId, editingTitle, refreshConversations]);
+  }, [cancelRenameConversation, editingConversationId, editingTitle, refreshConversations, updateConversationTitle]);
 
   const handleDeleteConversation = useCallback(async (id: string) => {
     try {
@@ -916,7 +983,7 @@ export function AIAssistantPanel() {
 
   return (
     <div
-      className="fixed top-0 right-0 z-40 flex h-full w-full flex-col animate-slide-in border-l sm:w-[390px] md:w-[500px] xl:w-[560px]"
+      className="fixed inset-0 z-40 flex h-[100dvh] w-full flex-col animate-slide-in border-l sm:left-auto sm:w-[390px] md:w-[500px] xl:w-[560px]"
       style={{
         background: "color-mix(in oklch, var(--background) 94%, transparent)",
         borderColor: "color-mix(in oklch, var(--border) 78%, transparent)",
@@ -926,18 +993,22 @@ export function AIAssistantPanel() {
     >
       {/* ─── Header ─── */}
       <div
-        className="flex h-14 shrink-0 items-center justify-between border-b px-3.5"
+        className="flex min-h-14 shrink-0 items-center justify-between gap-2 border-b px-3.5"
         style={{
           borderColor: "color-mix(in oklch, var(--border) 64%, transparent)",
           background: "linear-gradient(180deg, color-mix(in oklch, var(--background) 96%, white 4%), color-mix(in oklch, var(--background) 86%, transparent))",
         }}
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
           <Button
             variant="ghost"
             size="icon-sm"
             className={cn("text-muted-foreground", historyOpen && "bg-muted text-foreground")}
-            onClick={() => setHistoryOpen((v) => !v)}
+            onClick={() => {
+              setAttachmentMenuOpen(false);
+              setConfigMenuOpen(null);
+              setHistoryOpen((v) => !v);
+            }}
             title={t("panel.history")}
           >
             <HistoryIcon className="size-4" />
@@ -952,7 +1023,7 @@ export function AIAssistantPanel() {
           >
             <SparklesIcon className="size-4" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-semibold truncate text-foreground">
                 {state.currentConversationId
@@ -969,7 +1040,7 @@ export function AIAssistantPanel() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
           <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={startNewConversation} title={t("panel.newConversation")}>
             <PlusIcon className="size-4" />
           </Button>
@@ -997,7 +1068,7 @@ export function AIAssistantPanel() {
               className="absolute inset-0 z-10 bg-black/20 backdrop-blur-[1px]"
               onClick={() => setHistoryOpen(false)}
             />
-            <div className="absolute inset-y-0 left-0 z-20">
+            <div className="absolute inset-y-0 left-0 z-20 max-w-full">
               <HistorySidebar
                 conversations={Array.isArray(state.conversations) ? state.conversations : []}
                 currentId={state.currentConversationId}
@@ -1027,7 +1098,7 @@ export function AIAssistantPanel() {
           onScroll={handleMessagesScroll}
           className="h-full overflow-y-auto"
         >
-          <div className="flex flex-col gap-5 px-4 py-5">
+          <div className="flex flex-col gap-5 px-3 py-4 sm:px-4 sm:py-5">
             {state.messages.length === 0 ? (
               <div className="flex min-h-[55vh] flex-col items-center justify-center text-center">
                 <div
@@ -1096,7 +1167,7 @@ export function AIAssistantPanel() {
 
       {/* ─── Input ─── */}
       <div
-        className="shrink-0 px-3 pb-3 pt-2"
+        className="shrink-0 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-3"
         style={{
           background: "linear-gradient(180deg, transparent, color-mix(in oklch, var(--background) 96%, transparent) 28%)",
         }}
@@ -1117,7 +1188,7 @@ export function AIAssistantPanel() {
           onChange={(event) => handleAttachmentInputChange(event, "image")}
         />
         <div
-          className="rounded-[1.85rem] border px-2 py-2 shadow-[0_18px_55px_oklch(0_0_0/0.18),inset_0_1px_0_oklch(1_0_0/0.08)]"
+          className="rounded-[1.6rem] border px-2 py-2 shadow-[0_18px_55px_oklch(0_0_0/0.18),inset_0_1px_0_oklch(1_0_0/0.08)] sm:rounded-[1.85rem]"
           style={{
             background: "color-mix(in oklch, var(--card) 92%, transparent)",
             borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
@@ -1125,7 +1196,7 @@ export function AIAssistantPanel() {
           }}
         >
           {(attachments.length > 0 || queuedPrompts.length > 0) && (
-            <div className="mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pt-1 pb-2">
+            <div className="mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pb-2 pt-1">
               {attachments.map((attachment) => (
                 <AttachmentPreviewCard
                   key={attachment.id}
@@ -1140,7 +1211,7 @@ export function AIAssistantPanel() {
               {queuedPrompts.map((queued) => (
                 <div
                   key={queued.id}
-                  className="flex h-16 w-[13.5rem] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs"
+                  className="flex h-16 w-[min(13.5rem,72vw)] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs"
                   style={{
                     background: "color-mix(in oklch, var(--background) 88%, transparent)",
                     borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
@@ -1155,13 +1226,17 @@ export function AIAssistantPanel() {
               ))}
             </div>
           )}
-          <div className="flex min-h-12 items-end gap-1.5">
+          <div className="flex min-h-10 items-center gap-1.5">
             <div className="relative shrink-0">
               <button
                 type="button"
                 aria-label={t("attachments.add", { defaultValue: "Add attachment" })}
                 aria-expanded={attachmentMenuOpen}
-                onClick={() => setAttachmentMenuOpen((value) => !value)}
+                onClick={() => {
+                  setHistoryOpen(false);
+                  setConfigMenuOpen(null);
+                  setAttachmentMenuOpen((value) => !value);
+                }}
                 className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
               >
                 <PlusIcon className="h-4 w-4" />
@@ -1169,7 +1244,7 @@ export function AIAssistantPanel() {
               {attachmentMenuOpen && (
                 <div
                   role="menu"
-                  className="absolute bottom-11 left-0 z-30 w-60 overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
+                  className="absolute bottom-11 left-0 z-30 w-[min(15rem,calc(100vw-2.25rem))] overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
                   style={{
                     borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
                     color: "var(--popover-foreground)",
@@ -1215,7 +1290,7 @@ export function AIAssistantPanel() {
               onKeyDown={handleKeyDown}
               placeholder={t("inputPlaceholder")}
               rows={1}
-              className="min-h-8 max-h-28 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[14px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+              className="min-h-8 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-[14px]"
             />
             <button
               onClick={handleSend}
@@ -1232,14 +1307,131 @@ export function AIAssistantPanel() {
             </button>
           </div>
         </div>
-        <div className="mt-1 flex items-center justify-between px-1">
-          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+        <div className="mt-1 flex items-center justify-between gap-2 px-1">
+          <span className="hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex">
             <CornerDownLeftIcon className="w-3 h-3" /> {isBusy ? t("panel.enterToQueue", { defaultValue: "Enter queues" }) : t("panel.enterToSend")}
           </span>
-          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-            <PaperclipIcon className="h-3 w-3" />
-            {t("attachments.hint", { defaultValue: "Files stay server-side" })}
-          </span>
+          <div className="relative ml-auto flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
+            <button
+              type="button"
+              aria-label={t("model.select", { defaultValue: "Select model" })}
+              onClick={() => {
+                setAttachmentMenuOpen(false);
+                setHistoryOpen(false);
+                setConfigMenuOpen((value) => (value === "model" ? null : "model"));
+              }}
+              className="flex max-w-[7.25rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground min-[420px]:max-w-[9.5rem]"
+            >
+              <span className="truncate">{modelLabel}</span>
+              <ChevronDownIcon className="h-3 w-3 shrink-0" />
+            </button>
+            <button
+              type="button"
+              aria-label={t("reasoning.select", { defaultValue: "Select reasoning effort" })}
+              onClick={() => {
+                setAttachmentMenuOpen(false);
+                setHistoryOpen(false);
+                setConfigMenuOpen((value) => (value === "reasoning" ? null : "reasoning"));
+              }}
+              className="flex items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground"
+            >
+              <span>{reasoningLabel}</span>
+              <ChevronDownIcon className="h-3 w-3" />
+            </button>
+            {configMenuOpen && (
+              <div
+                role="menu"
+                className="absolute bottom-7 right-0 z-30 w-[min(16rem,calc(100vw-2.25rem))] overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
+                style={{
+                  borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
+                  color: "var(--popover-foreground)",
+                }}
+              >
+                {configMenuOpen === "model" ? (
+                  <>
+                    <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
+                      {t("model.menuTitle", { defaultValue: "Model" })}
+                    </div>
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={!state.selectedProviderConfigId}
+                      onClick={() => {
+                        setSelectedProviderConfig(null);
+                        setConfigMenuOpen(null);
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                        !state.selectedProviderConfigId && "bg-muted text-foreground",
+                      )}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">
+                          {t("model.platformDefault", { defaultValue: "Platform default" })}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {t("model.platformHint", { defaultValue: "Use BidPilot official model" })}
+                        </span>
+                      </span>
+                      {!state.selectedProviderConfigId && <span className="text-xs">✓</span>}
+                    </button>
+                    {providerConfigs.map((provider) => (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={state.selectedProviderConfigId === provider.id}
+                        onClick={() => {
+                          setSelectedProviderConfig(provider.id);
+                          setConfigMenuOpen(null);
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                          state.selectedProviderConfigId === provider.id && "bg-muted text-foreground",
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{provider.label}</span>
+                          <span className="block truncate text-xs text-muted-foreground">{provider.model}</span>
+                        </span>
+                        {state.selectedProviderConfigId === provider.id && <span className="text-xs">✓</span>}
+                      </button>
+                    ))}
+                    {providerConfigs.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        {t("model.empty", { defaultValue: "No custom providers yet" })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
+                      {t("reasoning.menuTitle", { defaultValue: "Reasoning" })}
+                    </div>
+                    {REASONING_OPTIONS.map((effort) => (
+                      <button
+                        key={effort}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={state.reasoningEffort === effort}
+                        onClick={() => {
+                          setReasoningEffort(effort);
+                          setConfigMenuOpen(null);
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                          state.reasoningEffort === effort && "bg-muted text-foreground",
+                        )}
+                      >
+                        <span>{t(`reasoning.options.${effort}`, { defaultValue: effort })}</span>
+                        {state.reasoningEffort === effort && <span className="text-xs">✓</span>}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
