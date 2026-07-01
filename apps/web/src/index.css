@@ -106,7 +106,7 @@
     --card-foreground: oklch(0.95 0.004 245);
     --popover: oklch(0.15 0.008 245);
     --popover-foreground: oklch(0.95 0.004 245);
-    --primary: oklch(0.71 0.105 238);
+    --primary: oklch(0.78 0.17 130);
     --primary-foreground: oklch(0.12 0.008 245);
     --secondary: oklch(0.21 0.008 245);
     --secondary-foreground: oklch(0.86 0.006 245);
@@ -117,20 +117,20 @@
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 12%);
-    --ring: oklch(0.71 0.105 238);
-    --chart-1: oklch(0.71 0.105 238);
+    --ring: oklch(0.78 0.17 130);
+    --chart-1: oklch(0.78 0.17 130);
     --chart-2: oklch(0.65 0.09 210);
     --chart-3: oklch(0.62 0.08 180);
     --chart-4: oklch(0.68 0.07 150);
     --chart-5: oklch(0.62 0.08 280);
     --sidebar: oklch(0.115 0.006 245);
     --sidebar-foreground: oklch(0.93 0.006 245);
-    --sidebar-primary: oklch(0.71 0.105 238);
+    --sidebar-primary: oklch(0.78 0.17 130);
     --sidebar-primary-foreground: oklch(0.12 0.008 245);
     --sidebar-accent: oklch(0.17 0.008 245);
     --sidebar-accent-foreground: oklch(0.90 0.006 245);
     --sidebar-border: oklch(1 0 0 / 6%);
-    --sidebar-ring: oklch(0.71 0.105 238);
+    --sidebar-ring: oklch(0.78 0.17 130);
 
     --shadow-xs: 0 1px 2px oklch(0 0 0 / 0.2);
     --shadow-sm: 0 1px 3px oklch(0 0 0 / 0.25), 0 1px 2px oklch(0 0 0 / 0.2);
@@ -497,15 +497,15 @@
   --landing-text-secondary: #a3a3a3;
   --landing-text-tertiary: #737373;
 
-  --landing-accent: #7dd3fc;
-  --landing-accent-hover: #38bdf8;
-  --landing-accent-light: #bae6fd;
+  --landing-accent: #84cc16;
+  --landing-accent-hover: #65a30d;
+  --landing-accent-light: #a3e635;
 
   --landing-hairline: rgba(163, 163, 163, 0.1);
-  --landing-border-inner: rgba(125, 211, 252, 0.2);
+  --landing-border-inner: rgba(132, 204, 22, 0.2);
 
-  --landing-warm: #7dd3fc;
-  --landing-warm-hover: #38bdf8;
+  --landing-warm: #84cc16;
+  --landing-warm-hover: #65a30d;
 }
 
 @keyframes landing-hero-orb {
@@ -584,16 +584,16 @@
 
 .landing-card-highlight {
   border-color: var(--landing-border-inner);
-  background: linear-gradient(145deg, rgba(125, 211, 252, 0.07), var(--landing-surface-1));
+  background: linear-gradient(145deg, rgba(132, 204, 22, 0.06), var(--landing-surface-1));
 }
 
 .landing-card-highlight::before {
   opacity: 1;
-  border-color: rgba(125, 211, 252, 0.38);
+  border-color: rgba(132, 204, 22, 0.4);
 }
 
 .landing-card-highlight:hover {
-  border-color: rgba(125, 211, 252, 0.48);
+  border-color: rgba(132, 204, 22, 0.5);
 }
 
 .double-border {

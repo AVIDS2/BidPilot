@@ -98,7 +98,7 @@ export function CinematicHero({
       <FieldGuide />
 
       {/* 层8: 内容 */}
-      <div className="relative z-20 flex flex-col justify-center h-full px-8 max-w-7xl mx-auto">
+      <div className="relative z-20 mx-auto flex min-h-[100dvh] w-full max-w-7xl flex-col justify-center px-5 py-28 sm:px-8 sm:py-32">
         {children}
       </div>
     </div>
@@ -109,16 +109,16 @@ export function CinematicHero({
 function FieldGuide() {
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
-      <span className="absolute top-6 left-6 text-[10px] text-white/30 font-mono">
+      <span className="absolute top-[5.5rem] left-5 text-[10px] text-white/30 font-mono sm:top-6 sm:left-6">
         BidPilot v1.0
       </span>
-      <span className="absolute top-6 right-6 text-[10px] text-white/30 font-mono">
+      <span className="absolute top-[5.5rem] right-5 text-[10px] text-white/30 font-mono sm:top-6 sm:right-6">
         [16:9]
       </span>
-      <span className="absolute bottom-6 left-6 text-[10px] text-white/30 font-mono">
+      <span className="absolute bottom-5 left-5 text-[10px] text-white/30 font-mono sm:bottom-6 sm:left-6">
         OVERSCAN: 1920 x 1080
       </span>
-      <span className="absolute bottom-6 right-6 text-[10px] text-white/30 font-mono">
+      <span className="absolute bottom-5 right-5 text-[10px] text-white/30 font-mono sm:bottom-6 sm:right-6">
         100%
       </span>
 
@@ -129,8 +129,8 @@ function FieldGuide() {
       </div>
 
       {/* 边框线 */}
-      <div className="absolute inset-8 border border-white/5" />
-      <div className="absolute inset-16 border border-white/3" />
+      <div className="absolute inset-x-5 inset-y-20 border border-white/5 sm:inset-8" />
+      <div className="absolute inset-x-10 inset-y-28 border border-white/3 sm:inset-16" />
     </div>
   );
 }

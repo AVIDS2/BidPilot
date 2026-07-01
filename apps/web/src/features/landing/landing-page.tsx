@@ -103,19 +103,19 @@ function HeroSection() {
       {/* 标题 - 使用逐字动画 */}
       <AnimatedTitle
         text={t("hero.title")}
-        className="mt-8 text-6xl md:text-8xl font-medium leading-[0.85] tracking-[-0.04em] text-white"
+        className="mt-7 max-w-[12ch] text-[clamp(3.15rem,16vw,5.25rem)] font-medium leading-[0.9] tracking-[-0.055em] text-white sm:mt-8 sm:max-w-[10ch] md:text-8xl md:leading-[0.85]"
       />
 
       {/* 副标题 */}
-      <p className="mt-6 text-xl md:text-2xl text-white/80 max-w-2xl">
+      <p className="mt-6 max-w-[20rem] text-lg leading-relaxed text-white/80 sm:max-w-2xl sm:text-xl md:text-2xl">
         {t("hero.description")}
       </p>
 
       {/* CTA 按钮 */}
-      <div className="mt-12 flex gap-6">
+      <div className="mt-10 grid w-full max-w-[22rem] grid-cols-2 gap-3 sm:mt-12 sm:flex sm:max-w-none sm:gap-6">
         <Link
           to="/signup"
-          className="inline-flex items-center gap-3 text-lg font-medium px-8 py-4 transition-all duration-300 hover:scale-[0.98]"
+          className="inline-flex min-h-24 items-center justify-between gap-3 px-6 py-5 text-xl font-medium leading-tight transition-all duration-300 hover:scale-[0.98] sm:min-h-0 sm:justify-start sm:px-8 sm:py-4 sm:text-lg"
           style={{
             background: "var(--landing-accent)",
             color: "var(--landing-canvas)",
@@ -126,7 +126,7 @@ function HeroSection() {
         </Link>
         <Link
           to="/pricing"
-          className="inline-flex items-center gap-3 text-lg font-medium text-white px-8 py-4 transition-all duration-300"
+          className="inline-flex min-h-24 items-center justify-center gap-3 px-5 py-5 text-center text-xl font-medium leading-tight text-white transition-all duration-300 sm:min-h-0 sm:px-8 sm:py-4 sm:text-lg"
           style={{
             border: "1px solid var(--landing-hairline)",
           }}
