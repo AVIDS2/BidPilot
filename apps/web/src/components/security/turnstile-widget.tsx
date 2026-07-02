@@ -13,7 +13,7 @@ type TurnstileRenderOptions = {
 };
 
 type TurnstileApi = {
-  ready: (callback: () => void) => void;
+  ready?: (callback: () => void) => void;
   render: (container: HTMLElement, options: TurnstileRenderOptions) => string;
   reset: (widgetId?: string) => void;
   remove: (widgetId: string) => void;
@@ -53,43 +53,46 @@ export function TurnstileWidget({ action, onTokenChange, onWidgetIdChange, class
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY) return;
 
+    const markScriptReady = () => {
+      setScriptReady(Boolean(window.turnstile));
+    };
+
+    if (window.turnstile) {
+      markScriptReady();
+      return;
+    }
+
     const existing = document.getElementById(TURNSTILE_SCRIPT_ID) as HTMLScriptElement | null;
     if (existing) {
-      if (window.turnstile) setScriptReady(true);
-      existing.addEventListener("load", () => setScriptReady(true), { once: true });
-      return;
+      existing.addEventListener("load", markScriptReady, { once: true });
+      return () => existing.removeEventListener("load", markScriptReady);
     }
 
     const script = document.createElement("script");
     script.id = TURNSTILE_SCRIPT_ID;
     script.src = TURNSTILE_SCRIPT_SRC;
     script.async = true;
-    script.addEventListener("load", () => setScriptReady(true), { once: true });
+    script.addEventListener("load", markScriptReady, { once: true });
     document.head.appendChild(script);
+
+    return () => script.removeEventListener("load", markScriptReady);
   }, []);
 
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY || !scriptReady || !window.turnstile || !containerRef.current) return;
     if (widgetIdRef.current) return;
 
-    let cancelled = false;
-
-    window.turnstile.ready(() => {
-      if (cancelled || widgetIdRef.current || !window.turnstile || !containerRef.current) return;
-
-      widgetIdRef.current = window.turnstile.render(containerRef.current, {
-        sitekey: TURNSTILE_SITE_KEY,
-        action,
-        theme: "dark",
-        callback: (token) => onTokenChange(token),
-        "expired-callback": () => onTokenChange(null),
-        "error-callback": () => onTokenChange(null),
-      });
-      onWidgetIdChange?.(widgetIdRef.current);
+    widgetIdRef.current = window.turnstile.render(containerRef.current, {
+      sitekey: TURNSTILE_SITE_KEY,
+      action,
+      theme: "dark",
+      callback: (token) => onTokenChange(token),
+      "expired-callback": () => onTokenChange(null),
+      "error-callback": () => onTokenChange(null),
     });
+    onWidgetIdChange?.(widgetIdRef.current);
 
     return () => {
-      cancelled = true;
       if (widgetIdRef.current && window.turnstile) {
         window.turnstile.remove(widgetIdRef.current);
         widgetIdRef.current = null;

@@ -30,9 +30,11 @@ describe("turnstile widget", () => {
     expect(document.querySelector('[id^="turnstile-"]')).toBeTruthy();
   });
 
-  it("waits for turnstile.ready before rendering the widget", async () => {
+  it("renders directly after the script API is available without calling turnstile.ready", async () => {
     vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
-    const ready = vi.fn((callback: () => void) => callback());
+    const ready = vi.fn(() => {
+      throw new Error("turnstile.ready should not be called");
+    });
     const renderWidget = vi.fn(() => "widget-id");
     const remove = vi.fn();
     const reset = vi.fn();
@@ -42,7 +44,7 @@ describe("turnstile widget", () => {
 
     render(<TurnstileWidget action="login" onTokenChange={() => {}} />);
 
-    await waitFor(() => expect(ready).toHaveBeenCalledTimes(1));
-    expect(renderWidget).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(renderWidget).toHaveBeenCalledTimes(1));
+    expect(ready).not.toHaveBeenCalled();
   });
 });
