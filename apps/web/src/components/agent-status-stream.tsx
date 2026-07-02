@@ -57,7 +57,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
     error: null,
   });
 
-  const esRef = useRef<EventSource | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryCountRef = useRef(0);
 
@@ -166,89 +166,73 @@ export function useAgentStream(runId: string | null): AgentStreamState {
 
     let cancelled = false;
 
-    function connect() {
+    function scheduleReconnect() {
+      const delay = Math.min(1000 * 2 ** retryCountRef.current, 30000);
+      retryCountRef.current += 1;
+      reconnectTimerRef.current = setTimeout(() => void connect(), delay);
+    }
+
+    async function connect() {
       if (cancelled) return;
 
       const token = getStoredValue("token");
       const url = `${API_BASE}/drafting/runs/${runId}/stream`;
-      const es = token ? new EventSource(url, { withCredentials: false }) : new EventSource(url);
-      esRef.current = es;
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-      es.onopen = () => {
+      try {
+        const response = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: controller.signal,
+        });
+
+        if (!response.ok || !response.body) {
+          throw new Error(`Workflow stream failed: ${response.status}`);
+        }
+
         retryCountRef.current = 0;
         if (!cancelled) {
           setState((prev) => ({ ...prev, error: null, isRunning: true }));
         }
-      };
 
-      es.addEventListener("node_start", (e) => {
-        if (!cancelled) processEvent("node_start", JSON.parse(e.data));
-      });
-      es.addEventListener("node_started", (e) => {
-        if (!cancelled) processEvent("node_started", JSON.parse(e.data));
-      });
-      es.addEventListener("node_complete", (e) => {
-        if (!cancelled) processEvent("node_complete", JSON.parse(e.data));
-      });
-      es.addEventListener("node_completed", (e) => {
-        if (!cancelled) processEvent("node_completed", JSON.parse(e.data));
-      });
-      es.addEventListener("node_error", (e) => {
-        if (!cancelled) processEvent("node_error", JSON.parse(e.data));
-      });
-      es.addEventListener("graph_error", (e) => {
-        if (!cancelled) processEvent("graph_error", JSON.parse(e.data));
-      });
-      es.addEventListener("review_result", (e) => {
-        if (!cancelled) processEvent("review_result", JSON.parse(e.data));
-      });
-      es.addEventListener("approval_required", (e) => {
-        if (!cancelled) processEvent("approval_required", JSON.parse(e.data));
-      });
-      es.addEventListener("human_approval_required", (e) => {
-        if (!cancelled) processEvent("human_approval_required", JSON.parse(e.data));
-      });
-      es.addEventListener("approval_granted", (e) => {
-        if (!cancelled) processEvent("approval_granted", JSON.parse(e.data));
-      });
-      es.addEventListener("run_complete", (e) => {
-        if (!cancelled) processEvent("run_complete", JSON.parse(e.data));
-      });
-      es.addEventListener("graph_completed", (e) => {
-        if (!cancelled) processEvent("graph_completed", JSON.parse(e.data));
-      });
-      es.addEventListener("run_error", (e) => {
-        if (!cancelled) processEvent("run_error", JSON.parse(e.data));
-      });
-      es.addEventListener("error", () => {
-        if (cancelled) return;
-        // The EventSource onerror fires on disconnect; attempt reconnect with backoff
-        es.close();
-        const delay = Math.min(1000 * 2 ** retryCountRef.current, 30000);
-        retryCountRef.current += 1;
-        reconnectTimerRef.current = setTimeout(() => connect(), delay);
-      });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-      // Fallback: generic message handler for events without a named listener
-      es.onmessage = (e) => {
-        if (cancelled) return;
-        try {
-          const parsed = JSON.parse(e.data);
-          if (parsed.event) {
-            processEvent(parsed.event, parsed);
+        while (!cancelled) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split(/\r?\n\r?\n/);
+          buffer = parts.pop() ?? "";
+
+          for (const part of parts) {
+            const parsed = parseSsePart(part);
+            if (parsed && !cancelled) {
+              processEvent(parsed.eventType, parsed.data);
+            }
           }
-        } catch {
-          // ignore non-JSON messages
         }
-      };
+
+        const trailing = parseSsePart(buffer);
+        if (trailing && !cancelled) {
+          processEvent(trailing.eventType, trailing.data);
+        }
+      } catch (error) {
+        if (cancelled || controller.signal.aborted) return;
+        const message = error instanceof Error ? error.message : "Workflow stream disconnected";
+        setState((prev) => ({ ...prev, error: message, isRunning: false }));
+        scheduleReconnect();
+      }
     }
 
-    connect();
+    void connect();
 
     return () => {
       cancelled = true;
-      esRef.current?.close();
-      esRef.current = null;
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
@@ -257,4 +241,26 @@ export function useAgentStream(runId: string | null): AgentStreamState {
   }, [runId, processEvent]);
 
   return state;
+}
+
+function parseSsePart(part: string): { eventType: string; data: Record<string, unknown> } | null {
+  const lines = part.split(/\r?\n/);
+  let eventType = "";
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      eventType = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+
+  if (!eventType || dataLines.length === 0) return null;
+
+  try {
+    return { eventType, data: JSON.parse(dataLines.join("\n")) as Record<string, unknown> };
+  } catch {
+    return null;
+  }
 }
