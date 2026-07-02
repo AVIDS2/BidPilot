@@ -70,4 +70,35 @@ describe("turnstile widget", () => {
       }),
     );
   });
+
+  it("does not throw when resetting a stale Cloudflare widget id", async () => {
+    vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
+    window.turnstile = {
+      render: vi.fn(() => "widget-id"),
+      remove: vi.fn(),
+      reset: vi.fn(() => {
+        throw new Error("Nothing to reset found for provided container.");
+      }),
+    };
+
+    const { resetTurnstile } = await import("./turnstile-widget");
+
+    expect(() => resetTurnstile("stale-widget-id")).not.toThrow();
+  });
+
+  it("does not throw when Cloudflare has already removed the widget before unmount", async () => {
+    vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
+    const renderWidget = vi.fn(() => "widget-id");
+    const remove = vi.fn(() => {
+      throw new Error("Nothing to remove found for provided container.");
+    });
+    const reset = vi.fn();
+    window.turnstile = { render: renderWidget, remove, reset };
+
+    const { TurnstileWidget } = await import("./turnstile-widget");
+    const view = render(<TurnstileWidget action="login" onTokenChange={() => {}} />);
+
+    await waitFor(() => expect(renderWidget).toHaveBeenCalledTimes(1));
+    expect(() => view.unmount()).not.toThrow();
+  });
 });

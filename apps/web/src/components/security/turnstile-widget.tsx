@@ -47,9 +47,17 @@ export function isTurnstileConfigured() {
   return Boolean(TURNSTILE_SITE_KEY);
 }
 
+function safelyCallTurnstile(action: () => void) {
+  try {
+    action();
+  } catch {
+    // Cloudflare can throw when a route transition already removed the widget.
+  }
+}
+
 export function resetTurnstile(widgetId: string | null) {
   if (widgetId && window.turnstile) {
-    window.turnstile.reset(widgetId);
+    safelyCallTurnstile(() => window.turnstile?.reset(widgetId));
   }
 }
 
@@ -72,18 +80,25 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
     }
   }, []);
 
+  const resolvePending = useCallback(
+    (token: string | null) => {
+      if (!pendingResolveRef.current) return;
+
+      const resolve = pendingResolveRef.current;
+      pendingResolveRef.current = null;
+      clearPendingTimeout();
+      resolve(token);
+    },
+    [clearPendingTimeout],
+  );
+
   const publishToken = useCallback(
     (token: string | null) => {
       currentTokenRef.current = token;
       onTokenChange(token);
-      if (pendingResolveRef.current) {
-        const resolve = pendingResolveRef.current;
-        pendingResolveRef.current = null;
-        clearPendingTimeout();
-        resolve(token);
-      }
+      resolvePending(token);
     },
-    [clearPendingTimeout, onTokenChange],
+    [onTokenChange, resolvePending],
   );
 
   const waitForWidget = useCallback(async () => {
@@ -111,7 +126,8 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
     if (currentTokenRef.current) return currentTokenRef.current;
 
     const isReady = await waitForWidget();
-    if (!isReady || !window.turnstile?.execute || !containerRef.current) return null;
+    const widgetId = widgetIdRef.current;
+    if (!isReady || !window.turnstile?.execute || !widgetId) return null;
 
     return new Promise<string | null>((resolve) => {
       pendingResolveRef.current = resolve;
@@ -121,14 +137,20 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
         pendingTimeoutRef.current = null;
         resolve(null);
       }, 60_000);
-      window.turnstile?.execute?.(containerRef.current);
+      try {
+        window.turnstile?.execute?.(widgetId);
+      } catch {
+        pendingResolveRef.current = null;
+        clearPendingTimeout();
+        resolve(null);
+      }
     });
   }, [clearPendingTimeout, waitForWidget]);
 
   const reset = useCallback(() => {
     currentTokenRef.current = null;
     if (widgetIdRef.current && window.turnstile) {
-      window.turnstile.reset(widgetIdRef.current);
+      safelyCallTurnstile(() => window.turnstile?.reset(widgetIdRef.current ?? undefined));
     }
     onTokenChange(null);
   }, [onTokenChange]);
@@ -167,31 +189,39 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
     if (!TURNSTILE_SITE_KEY || !scriptReady || !window.turnstile || !containerRef.current) return;
     if (widgetIdRef.current) return;
 
-    widgetIdRef.current = window.turnstile.render(containerRef.current, {
-      sitekey: TURNSTILE_SITE_KEY,
-      action,
-      appearance: "interaction-only",
-      execution: "execute",
-      refreshExpired: "auto",
-      theme: "auto",
-      callback: (token) => publishToken(token),
-      "expired-callback": () => publishToken(null),
-      "error-callback": () => publishToken(null),
-    });
-    onWidgetIdChange?.(widgetIdRef.current);
+    try {
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        action,
+        appearance: "interaction-only",
+        execution: "execute",
+        refreshExpired: "auto",
+        theme: "auto",
+        callback: (token) => publishToken(token),
+        "expired-callback": () => publishToken(null),
+        "error-callback": () => publishToken(null),
+      });
+      onWidgetIdChange?.(widgetIdRef.current);
+    } catch {
+      widgetIdRef.current = null;
+      onWidgetIdChange?.(null);
+      publishToken(null);
+      return;
+    }
 
     return () => {
-      if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.remove(widgetIdRef.current);
-        widgetIdRef.current = null;
+      const widgetId = widgetIdRef.current;
+      widgetIdRef.current = null;
+      currentTokenRef.current = null;
+
+      if (widgetId && window.turnstile) {
+        safelyCallTurnstile(() => window.turnstile?.remove(widgetId));
       }
       onWidgetIdChange?.(null);
       clearPendingTimeout();
-      pendingResolveRef.current?.(null);
-      pendingResolveRef.current = null;
-      publishToken(null);
+      resolvePending(null);
     };
-  }, [action, clearPendingTimeout, onWidgetIdChange, publishToken, scriptReady]);
+  }, [action, clearPendingTimeout, onWidgetIdChange, publishToken, resolvePending, scriptReady]);
 
   if (!TURNSTILE_SITE_KEY) {
     return null;
