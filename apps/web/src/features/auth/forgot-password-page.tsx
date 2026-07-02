@@ -1,10 +1,10 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { requestPasswordReset } from "@/lib/api"
 import { toast } from "sonner"
 import { Loader2Icon, MailIcon } from "lucide-react"
-import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget"
+import { TurnstileWidget, isTurnstileConfigured, resetTurnstile, type TurnstileWidgetHandle } from "@/components/security/turnstile-widget"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { BrandLogo } from "@/components/brand"
@@ -24,18 +24,22 @@ export function ForgotPasswordPage() {
   const [sent, setSent] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null)
   const navigate = useNavigate()
   const { t } = useTranslation("auth")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isTurnstileConfigured() && !turnstileToken) {
-      toast.error(t("turnstile.required"))
-      return
-    }
     setLoading(true)
     try {
-      await requestPasswordReset(email, turnstileToken)
+      const verificationToken = isTurnstileConfigured()
+        ? await turnstileRef.current?.execute()
+        : null
+      if (isTurnstileConfigured() && !verificationToken) {
+        toast.error(t("turnstile.required"))
+        return
+      }
+      await requestPasswordReset(email, verificationToken)
       setSent(true)
     } catch {
       toast.error(t("forgotPassword.error"))
@@ -103,6 +107,7 @@ export function ForgotPasswordPage() {
               />
             </div>
             <TurnstileWidget
+              ref={turnstileRef}
               action="password_reset"
               onTokenChange={setTurnstileToken}
               onWidgetIdChange={setTurnstileWidgetId}
@@ -110,7 +115,7 @@ export function ForgotPasswordPage() {
             />
             <Button
               type="submit"
-              disabled={loading || !email || (isTurnstileConfigured() && !turnstileToken)}
+              disabled={loading || !email}
               className="w-full h-10"
             >
               {loading && <Loader2Icon className="animate-spin" />}

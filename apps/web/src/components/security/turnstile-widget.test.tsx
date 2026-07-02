@@ -64,6 +64,7 @@ describe("turnstile widget", () => {
       expect.any(HTMLElement),
       expect.objectContaining({
         appearance: "interaction-only",
+        execution: "execute",
         refreshExpired: "auto",
         theme: "auto",
       }),

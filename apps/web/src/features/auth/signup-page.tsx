@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { EyeIcon, EyeOffIcon, Loader2Icon } from "lucide-react";
-import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget";
+import { TurnstileWidget, isTurnstileConfigured, resetTurnstile, type TurnstileWidgetHandle } from "@/components/security/turnstile-widget";
 import { isStrongPassword } from "@/lib/password";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ export function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
   const { register } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation("auth");
@@ -49,12 +50,15 @@ export function SignupPage() {
         return;
       }
     }
-    if (isTurnstileConfigured() && !turnstileToken) {
-      toast.error(t("turnstile.required"));
-      return;
-    }
     setLoading(true);
     try {
+      const verificationToken = isTurnstileConfigured()
+        ? await turnstileRef.current?.execute()
+        : null;
+      if (isTurnstileConfigured() && !verificationToken) {
+        toast.error(t("turnstile.required"));
+        return;
+      }
       await register(
         email,
         displayName,
@@ -62,7 +66,7 @@ export function SignupPage() {
         invitationToken || undefined,
         createOrg ? orgName || undefined : undefined,
         createOrg ? orgSlug || undefined : undefined,
-        turnstileToken,
+        verificationToken,
       );
       toast.success(t("toast.accountCreated"));
       navigate("/verify-email-prompt", { state: { email } });
@@ -317,6 +321,7 @@ export function SignupPage() {
             </p>
 
             <TurnstileWidget
+              ref={turnstileRef}
               action="signup"
               onTokenChange={setTurnstileToken}
               onWidgetIdChange={setTurnstileWidgetId}
@@ -326,7 +331,7 @@ export function SignupPage() {
             {/* 提交按钮 */}
             <Button
               type="submit"
-              disabled={loading || !email || !displayName || !password || (isTurnstileConfigured() && !turnstileToken)}
+              disabled={loading || !email || !displayName || !password}
               className="w-full h-10"
             >
               {loading && <Loader2Icon className="animate-spin" />}

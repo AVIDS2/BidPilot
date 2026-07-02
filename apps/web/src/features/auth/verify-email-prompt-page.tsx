@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { resendVerification } from "@/lib/api"
 import { MailCheckIcon, ArrowLeftIcon } from "lucide-react"
 import { toast } from "sonner"
-import { TurnstileWidget, isTurnstileConfigured, resetTurnstile } from "@/components/security/turnstile-widget"
+import { TurnstileWidget, isTurnstileConfigured, resetTurnstile, type TurnstileWidgetHandle } from "@/components/security/turnstile-widget"
 import { BrandLogo } from "@/components/brand"
 
 export function VerifyEmailPromptPage() {
@@ -17,17 +17,21 @@ export function VerifyEmailPromptPage() {
   const [resent, setResent] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null)
   const { t } = useTranslation("auth")
 
   const handleResend = async () => {
     if (!email) return
-    if (isTurnstileConfigured() && !turnstileToken) {
-      toast.error(t("turnstile.required"))
-      return
-    }
     setResending(true)
     try {
-      await resendVerification("", email, turnstileToken)
+      const verificationToken = isTurnstileConfigured()
+        ? await turnstileRef.current?.execute()
+        : null
+      if (isTurnstileConfigured() && !verificationToken) {
+        toast.error(t("turnstile.required"))
+        return
+      }
+      await resendVerification("", email, verificationToken)
       setResent(true)
       toast.success(t("verifyEmail.resentToast"))
     } catch {
@@ -73,6 +77,7 @@ export function VerifyEmailPromptPage() {
             </p>
             <p className="text-sm mb-6 text-muted-foreground/70">{t("verifyEmail.promptBody")}</p>
             <TurnstileWidget
+              ref={turnstileRef}
               action="resend_verification"
               onTokenChange={setTurnstileToken}
               onWidgetIdChange={setTurnstileWidgetId}
@@ -81,7 +86,7 @@ export function VerifyEmailPromptPage() {
             {email && !resent && (
               <button
                 onClick={handleResend}
-                disabled={resending || (isTurnstileConfigured() && !turnstileToken)}
+                disabled={resending}
                 className="w-full py-3 text-sm font-medium transition-all duration-300 hover:scale-[0.98] mb-3"
                 style={{ border: "1px solid var(--border)", color: "var(--muted-foreground)" }}
               >

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 
 const TURNSTILE_SCRIPT_ID = "cloudflare-turnstile-script";
 const TURNSTILE_SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -7,6 +7,7 @@ type TurnstileRenderOptions = {
   sitekey: string;
   action?: string;
   appearance?: "always" | "execute" | "interaction-only";
+  execution?: "render" | "execute";
   refreshExpired?: "auto" | "manual" | "never";
   theme?: "light" | "dark" | "auto";
   callback?: (token: string) => void;
@@ -17,6 +18,7 @@ type TurnstileRenderOptions = {
 type TurnstileApi = {
   ready?: (callback: () => void) => void;
   render: (container: HTMLElement, options: TurnstileRenderOptions) => string;
+  execute?: (container: HTMLElement | string, options?: Partial<TurnstileRenderOptions>) => void;
   reset: (widgetId?: string) => void;
   remove: (widgetId: string) => void;
 };
@@ -34,6 +36,11 @@ interface TurnstileWidgetProps {
   className?: string;
 }
 
+export interface TurnstileWidgetHandle {
+  execute: () => Promise<string | null>;
+  reset: () => void;
+}
+
 export const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
 
 export function isTurnstileConfigured() {
@@ -46,11 +53,87 @@ export function resetTurnstile(widgetId: string | null) {
   }
 }
 
-export function TurnstileWidget({ action, onTokenChange, onWidgetIdChange, className }: TurnstileWidgetProps) {
+export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(function TurnstileWidget(
+  { action, onTokenChange, onWidgetIdChange, className },
+  ref,
+) {
   const rawId = useId().replace(/:/g, "");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const currentTokenRef = useRef<string | null>(null);
+  const pendingResolveRef = useRef<((token: string | null) => void) | null>(null);
+  const pendingTimeoutRef = useRef<number | null>(null);
   const [scriptReady, setScriptReady] = useState(Boolean(window.turnstile));
+
+  const clearPendingTimeout = useCallback(() => {
+    if (pendingTimeoutRef.current) {
+      window.clearTimeout(pendingTimeoutRef.current);
+      pendingTimeoutRef.current = null;
+    }
+  }, []);
+
+  const publishToken = useCallback(
+    (token: string | null) => {
+      currentTokenRef.current = token;
+      onTokenChange(token);
+      if (pendingResolveRef.current) {
+        const resolve = pendingResolveRef.current;
+        pendingResolveRef.current = null;
+        clearPendingTimeout();
+        resolve(token);
+      }
+    },
+    [clearPendingTimeout, onTokenChange],
+  );
+
+  const waitForWidget = useCallback(async () => {
+    if (!TURNSTILE_SITE_KEY) return false;
+    if (window.turnstile && containerRef.current && widgetIdRef.current) return true;
+
+    return new Promise<boolean>((resolve) => {
+      const startedAt = Date.now();
+      const interval = window.setInterval(() => {
+        if (window.turnstile && containerRef.current && widgetIdRef.current) {
+          window.clearInterval(interval);
+          resolve(true);
+          return;
+        }
+        if (Date.now() - startedAt > 10_000) {
+          window.clearInterval(interval);
+          resolve(false);
+        }
+      }, 50);
+    });
+  }, []);
+
+  const execute = useCallback(async () => {
+    if (!TURNSTILE_SITE_KEY) return null;
+    if (currentTokenRef.current) return currentTokenRef.current;
+
+    const isReady = await waitForWidget();
+    if (!isReady || !window.turnstile?.execute || !containerRef.current) return null;
+
+    return new Promise<string | null>((resolve) => {
+      pendingResolveRef.current = resolve;
+      clearPendingTimeout();
+      pendingTimeoutRef.current = window.setTimeout(() => {
+        pendingResolveRef.current = null;
+        pendingTimeoutRef.current = null;
+        resolve(null);
+      }, 60_000);
+      window.turnstile?.execute?.(containerRef.current);
+    });
+  }, [clearPendingTimeout, waitForWidget]);
+
+  const reset = useCallback(() => {
+    currentTokenRef.current = null;
+    if (widgetIdRef.current && window.turnstile) {
+      window.turnstile.reset(widgetIdRef.current);
+    }
+    onTokenChange(null);
+  }, [onTokenChange]);
+
+  useImperativeHandle(ref, () => ({ execute, reset }), [execute, reset]);
 
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY) return;
@@ -88,11 +171,12 @@ export function TurnstileWidget({ action, onTokenChange, onWidgetIdChange, class
       sitekey: TURNSTILE_SITE_KEY,
       action,
       appearance: "interaction-only",
+      execution: "execute",
       refreshExpired: "auto",
       theme: "auto",
-      callback: (token) => onTokenChange(token),
-      "expired-callback": () => onTokenChange(null),
-      "error-callback": () => onTokenChange(null),
+      callback: (token) => publishToken(token),
+      "expired-callback": () => publishToken(null),
+      "error-callback": () => publishToken(null),
     });
     onWidgetIdChange?.(widgetIdRef.current);
 
@@ -102,9 +186,12 @@ export function TurnstileWidget({ action, onTokenChange, onWidgetIdChange, class
         widgetIdRef.current = null;
       }
       onWidgetIdChange?.(null);
-      onTokenChange(null);
+      clearPendingTimeout();
+      pendingResolveRef.current?.(null);
+      pendingResolveRef.current = null;
+      publishToken(null);
     };
-  }, [action, onTokenChange, onWidgetIdChange, scriptReady]);
+  }, [action, clearPendingTimeout, onWidgetIdChange, publishToken, scriptReady]);
 
   if (!TURNSTILE_SITE_KEY) {
     return null;
@@ -115,4 +202,4 @@ export function TurnstileWidget({ action, onTokenChange, onWidgetIdChange, class
       <div id={`turnstile-${rawId}-${action}`} ref={containerRef} />
     </div>
   );
-}
+});
