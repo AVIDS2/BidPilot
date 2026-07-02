@@ -73,7 +73,7 @@ export function DraftingTab({
                   <span>{t("drafting.version", { number: sectionVersions[0].version_number })}</span>
                   <span>{t("drafting.by", { actor: sectionVersions[0].created_by_actor })}</span>
                 </div>
-                <MessageContent markdown className="flex-1">
+                <MessageContent markdown variant="typora" className="flex-1">
                   {sectionVersions[0].content_markdown || ""}
                 </MessageContent>
                 <MessageActions>

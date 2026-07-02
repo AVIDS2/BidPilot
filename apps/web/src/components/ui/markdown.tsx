@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils"
 import "katex/dist/katex.min.css"
 import { marked } from "marked"
-import { memo, useId, useMemo } from "react"
+import { memo, useId, useMemo, type HTMLAttributes } from "react"
 import rehypeKatex from "rehype-katex"
 import ReactMarkdown, { Components } from "react-markdown"
 import remarkBreaks from "remark-breaks"
@@ -9,10 +9,11 @@ import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 import { CodeBlock, CodeBlockCode } from "./code-block"
 
-export type MarkdownProps = {
+export type MarkdownVariant = "default" | "typora" | "assistant"
+
+export type MarkdownProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: string
-  id?: string
-  className?: string
+  variant?: MarkdownVariant
   components?: Partial<Components>
 }
 
@@ -28,16 +29,16 @@ function extractLanguage(className?: string): string {
 }
 
 const INITIAL_COMPONENTS: Partial<Components> = {
-  code: function CodeComponent({ className, children, ...props }) {
+  code: function CodeComponent({ className, children, node, ...props }) {
     const isInline =
-      !props.node?.position?.start.line ||
-      props.node?.position?.start.line === props.node?.position?.end.line
+      !node?.position?.start.line ||
+      node?.position?.start.line === node?.position?.end.line
 
     if (isInline) {
       return (
         <span
           className={cn(
-            "bg-primary-foreground rounded-sm px-1 font-mono text-sm",
+            "rounded-md bg-[color-mix(in_oklch,var(--muted)_76%,transparent)] px-1.5 py-0.5 font-mono text-[0.92em] text-foreground",
             className
           )}
           {...props}
@@ -89,19 +90,35 @@ function MarkdownComponent({
   children,
   id,
   className,
+  variant = "default",
   components = INITIAL_COMPONENTS,
+  ...props
 }: MarkdownProps) {
   const generatedId = useId()
   const blockId = id ?? generatedId
   const blocks = useMemo(() => parseMarkdownIntoBlocks(children), [children])
+  const mergedComponents = useMemo(
+    () => ({ ...INITIAL_COMPONENTS, ...components }),
+    [components]
+  )
 
   return (
-    <div className={className}>
+    <div
+      id={id}
+      className={cn(
+        variant !== "default" && "prose-bidpilot",
+        variant === "typora" && "prose-bidpilot-typora",
+        variant === "assistant" && "prose-bidpilot-assistant",
+        className
+      )}
+      data-markdown-variant={variant}
+      {...props}
+    >
       {blocks.map((block, index) => (
         <MemoizedMarkdownBlock
           key={`${blockId}-block-${index}`}
           content={block}
-          components={components}
+          components={mergedComponents}
         />
       ))}
     </div>

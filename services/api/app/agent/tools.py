@@ -27,6 +27,8 @@ from app.projects.service import create_project_command
 from app.requirements.service import list_requirements_query
 from app.versions.service import list_versions_query
 
+from .policy import ApprovalMode, get_tool_policy, tool_requires_approval
+
 
 def _get_project_for_user(db: Session, user: CurrentUser, project_id: str) -> Project:
     project = db.get(Project, project_id)
@@ -42,8 +44,33 @@ def create_tools(
     user: CurrentUser,
     provider_config_id: str | None = None,
     reasoning_effort: str | None = None,
+    approval_mode: ApprovalMode = "risky_only",
 ) -> list:
     """Create tool list with injected db session and user context."""
+
+    def _confirmation_response(
+        tool_name: str,
+        arguments: dict,
+        message: str,
+        *,
+        expected_text: str | None = None,
+    ) -> str:
+        policy = get_tool_policy(tool_name)
+        payload = {
+            "requires_confirmation": True,
+            "tool_name": tool_name,
+            "arguments": arguments,
+            "message": message,
+            "requires_typed_confirmation": bool(policy and policy.requires_typed_confirmation),
+        }
+        if expected_text is not None:
+            payload["expected_text"] = expected_text
+        return json.dumps(payload, ensure_ascii=False)
+
+    def _approval_gate(tool_name: str, arguments: dict, message: str) -> str | None:
+        if not tool_requires_approval(tool_name, approval_mode):
+            return None
+        return _confirmation_response(tool_name, arguments, message)
 
     @tool
     def search_projects(query: str = "") -> str:
@@ -65,9 +92,13 @@ def create_tools(
         """创建一个新的投标项目。需要项目名称。创建前请向用户确认。"""
         if not name.strip():
             return json.dumps({"error": "项目名称不能为空"}, ensure_ascii=False)
+        arguments = {"name": name.strip(), "scenario_package": scenario_package}
+        gated = _approval_gate("create_project", arguments, f"需要你确认：我将创建项目「{name.strip()}」。")
+        if gated:
+            return gated
         check_plan_limit(db, user.id, "projects", delta=1, plan=user.plan)
         project = create_project_command(
-            db, ProjectCreate(name=name.strip(), scenario_package=scenario_package),
+            db, ProjectCreate(name=arguments["name"], scenario_package=scenario_package),
             user.org_id or "default",
         )
         return json.dumps(
@@ -199,6 +230,10 @@ def create_tools(
     def create_deliverable(project_id: str, title: str, type: str = "proposal") -> str:
         """在项目下创建一个新的交付物。创建前请向用户确认。"""
         project = _get_project_for_user(db, user, project_id)
+        arguments = {"project_id": project.id, "title": title.strip(), "type": type}
+        gated = _approval_gate("create_deliverable", arguments, f"需要你确认：我将在项目「{project.name}」下创建交付物「{title.strip()}」。")
+        if gated:
+            return gated
         deliverable = create_deliverable_command(
             db, DeliverableCreate(project_id=project.id, type=type, title=title.strip())
         )
@@ -211,6 +246,10 @@ def create_tools(
     def start_draft_section(project_id: str, section_key: str) -> str:
         """启动某个章节的 AI 起草工作流。需要项目 ID 和章节键（如 technical-approach、executive-summary）。启动前请向用户确认。"""
         _get_project_for_user(db, user, project_id)
+        arguments = {"project_id": project_id, "section_key": section_key}
+        gated = _approval_gate("start_draft_section", arguments, f"需要你确认：我将启动章节「{section_key}」的起草工作流。")
+        if gated:
+            return gated
         response = draft_section_command(
             db,
             DraftSectionRequest(
@@ -230,6 +269,10 @@ def create_tools(
     def start_redraft_section(project_id: str, section_key: str, review_feedback: str = "") -> str:
         """基于反馈重新起草某个章节。启动前请向用户确认。"""
         _get_project_for_user(db, user, project_id)
+        arguments = {"project_id": project_id, "section_key": section_key, "review_feedback": review_feedback}
+        gated = _approval_gate("start_redraft_section", arguments, f"需要你确认：我将启动章节「{section_key}」的重写工作流。")
+        if gated:
+            return gated
         response = redraft_section_command(
             db,
             RedraftSectionRequest(
@@ -263,6 +306,9 @@ def create_tools(
     @tool
     def retry_run(run_id: str) -> str:
         """重试一个失败的执行运行。重试前请向用户确认。"""
+        gated = _approval_gate("retry_run", {"run_id": run_id}, f"需要你确认：我将重试运行 {run_id[:8]}。")
+        if gated:
+            return gated
         run = retry_failed_run_command(db, run_id)
         return json.dumps(
             {"id": run.id, "type": run.run_type, "status": run.status},
@@ -272,6 +318,10 @@ def create_tools(
     @tool
     def export_deliverable(project_id: str, deliverable_id: str, format: str = "docx") -> str:
         """导出交付物为 DOCX 或 PDF。交付物必须已审批通过。"""
+        arguments = {"project_id": project_id, "deliverable_id": deliverable_id, "format": format}
+        gated = _approval_gate("export_deliverable", arguments, f"需要你确认：我将导出交付物为 {format.upper()}。")
+        if gated:
+            return gated
         deliverable = db.get(Deliverable, deliverable_id)
         if deliverable is None:
             return json.dumps({"error": "交付物不存在"}, ensure_ascii=False)
@@ -284,6 +334,17 @@ def create_tools(
             {"deliverable_id": deliverable_id, "format": format, "status": "ready",
              "message": f"请前往项目详情页的导出标签页下载 {format.upper()} 文件"},
             ensure_ascii=False,
+        )
+
+    @tool
+    def delete_project(project_id: str, confirmation_text: str = "") -> str:
+        """删除指定项目。危险操作：必须先向用户展示项目名称，并要求用户输入完整项目名称作为 confirmation_text。"""
+        project = _get_project_for_user(db, user, project_id)
+        return _confirmation_response(
+            "delete_project",
+            {"project_id": project.id},
+            f"需要你确认：删除项目「{project.name}」后，项目资料、章节和交付物将无法恢复。请输入完整项目名称后我再执行删除。",
+            expected_text=project.name,
         )
 
     @tool
@@ -313,5 +374,5 @@ def create_tools(
         get_section_versions, create_deliverable,
         start_draft_section, start_redraft_section,
         get_runtime_status, retry_run, export_deliverable,
-        semantic_search, open_page,
+        delete_project, semantic_search, open_page,
     ]

@@ -21,6 +21,8 @@ type WorkflowNodeData = {
   label: string;
   description: string;
   status: AgentNodeStatus;
+  statusLabel: string;
+  statusDescription: string;
   summary?: string;
   icon: typeof CircleDotIcon;
 };
@@ -94,6 +96,20 @@ const WORKFLOW_EDGES: Edge[] = [
   { id: "quality_reviewer-persist_result", source: "quality_reviewer", target: "persist_result", type: "smoothstep" },
 ];
 
+const STATUS_LABELS: Record<AgentNodeStatus, string> = {
+  pending: "等待中",
+  running: "运行中",
+  completed: "已完成",
+  failed: "失败",
+};
+
+const STATUS_DESCRIPTIONS: Record<AgentNodeStatus, string> = {
+  pending: "尚未执行",
+  running: "当前正在执行",
+  completed: "该步骤已完成",
+  failed: "该步骤执行失败",
+};
+
 function statusTone(status: AgentNodeStatus) {
   switch (status) {
     case "running":
@@ -108,11 +124,55 @@ function statusTone(status: AgentNodeStatus) {
   }
 }
 
+function statusLightTone(status: AgentNodeStatus) {
+  switch (status) {
+    case "running":
+      return "border-primary/30 bg-primary/10 text-primary";
+    case "completed":
+      return "border-primary/20 bg-primary/8 text-primary";
+    case "failed":
+      return "border-destructive/30 bg-destructive/10 text-destructive";
+    case "pending":
+    default:
+      return "border-border/80 bg-muted/55 text-muted-foreground";
+  }
+}
+
 function StatusIcon({ status }: { status: AgentNodeStatus }) {
   if (status === "completed") return <CheckCircle2Icon className="size-4 text-primary" />;
   if (status === "failed") return <XCircleIcon className="size-4 text-destructive" />;
   if (status === "running") return <CircleDotIcon className="size-4 animate-pulse text-primary" />;
   return <ClockIcon className="size-4 text-muted-foreground/60" />;
+}
+
+function StatusBeacon({ status, label, compact = false }: { status: AgentNodeStatus; label: string; compact?: boolean }) {
+  const isBreathing = status === "running";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border font-medium tabular-nums",
+        compact ? "px-2 py-1 text-[10px]" : "px-2.5 py-1 text-[11px]",
+        statusLightTone(status),
+      )}
+      aria-label={label}
+    >
+      <span className={cn("workflow-status-light", isBreathing && "workflow-status-light-breathing")}>
+        <span className="workflow-status-light-core" />
+      </span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function getStepStatusLabel(stepId: string, status: AgentNodeStatus, isWaitingApproval: boolean) {
+  if (isWaitingApproval && stepId === "human_approval" && status === "running") return "等待确认";
+  return STATUS_LABELS[status];
+}
+
+function getStepStatusDescription(stepId: string, status: AgentNodeStatus, isWaitingApproval: boolean) {
+  if (isWaitingApproval && stepId === "human_approval" && status === "running") return "需要你确认后继续执行";
+  return STATUS_DESCRIPTIONS[status];
 }
 
 function WorkflowNode({ data }: { data: WorkflowNodeData }) {
@@ -162,8 +222,10 @@ function WorkflowNode({ data }: { data: WorkflowNodeData }) {
   return (
     <div
       ref={nodeRef}
+      aria-label={`${data.label}：${data.statusLabel}`}
       className={cn(
         "relative w-60 overflow-hidden rounded-[1.15rem] border p-3 shadow-sm transition-[border-color,box-shadow,background-color]",
+        data.status === "running" && "workflow-node-running",
         statusTone(data.status),
       )}
     >
@@ -187,10 +249,14 @@ function WorkflowNode({ data }: { data: WorkflowNodeData }) {
           <div className="flex items-center justify-between gap-2">
             <div className="font-medium tracking-[-0.01em] text-foreground">{data.label}</div>
             <span className="workflow-node-status">
-              <StatusIcon status={data.status} />
+              <StatusBeacon status={data.status} label={data.statusLabel} compact />
             </span>
           </div>
           <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{data.description}</p>
+          <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <StatusIcon status={data.status} />
+            <span>{data.statusDescription}</span>
+          </p>
           {data.summary && <p className="mt-2 line-clamp-2 text-xs text-foreground/80">{data.summary}</p>}
         </div>
       </div>
@@ -203,25 +269,46 @@ const nodeTypes = {
   workflow: WorkflowNode,
 };
 
-function getNodeStatus(stepId: string, nodeMap: Map<string, AgentNode>, currentNode: string | null): AgentNodeStatus {
+function getNodeStatus(
+  stepId: string,
+  nodeMap: Map<string, AgentNode>,
+  currentNode: string | null,
+  isWaitingApproval: boolean,
+): AgentNodeStatus {
   const streamedStatus = nodeMap.get(stepId)?.status;
+  if (isWaitingApproval && stepId === "human_approval" && streamedStatus !== "failed") return "running";
   if (currentNode === stepId && streamedStatus !== "failed") return "running";
   return streamedStatus ?? "pending";
 }
 
-export function WorkflowCanvas({ nodes, currentNode }: { nodes: AgentNode[]; currentNode: string | null }) {
+export function WorkflowCanvas({
+  nodes,
+  currentNode,
+  isWaitingApproval = false,
+}: {
+  nodes: AgentNode[];
+  currentNode: string | null;
+  isWaitingApproval?: boolean;
+}) {
   const isMobile = useIsMobile();
   const stepStates = useMemo(() => {
     const nodeMap = new Map(nodes.map((node) => [node.name, node]));
     return WORKFLOW_STEPS.map((step) => {
       const runtimeNode = nodeMap.get(step.id);
+      const status = getNodeStatus(step.id, nodeMap, currentNode, isWaitingApproval);
       return {
         ...step,
-        status: getNodeStatus(step.id, nodeMap, currentNode),
+        status,
+        statusLabel: getStepStatusLabel(step.id, status, isWaitingApproval),
+        statusDescription: getStepStatusDescription(step.id, status, isWaitingApproval),
         summary: runtimeNode?.summary ?? runtimeNode?.error,
       };
     });
-  }, [currentNode, nodes]);
+  }, [currentNode, isWaitingApproval, nodes]);
+
+  const activeStep = stepStates.find((step) => step.status === "running");
+  const failedStep = stepStates.find((step) => step.status === "failed");
+  const statusHeadline = activeStep ?? failedStep;
 
   const flowNodes = useMemo<Node<WorkflowNodeData>[]>(() => {
     return stepStates.map((step) => {
@@ -234,6 +321,8 @@ export function WorkflowCanvas({ nodes, currentNode }: { nodes: AgentNode[]; cur
           description: step.description,
           icon: step.icon,
           status: step.status,
+          statusLabel: step.statusLabel,
+          statusDescription: step.statusDescription,
           summary: step.summary,
         },
         draggable: false,
@@ -273,6 +362,7 @@ export function WorkflowCanvas({ nodes, currentNode }: { nodes: AgentNode[]; cur
                 <div
                   className={cn(
                     "relative z-10 flex size-10 shrink-0 items-center justify-center rounded-2xl border bg-background",
+                    step.status === "running" && "workflow-node-running",
                     step.status === "running" && "border-primary/40 text-primary shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]",
                     step.status === "completed" && "border-primary/25 text-primary",
                     step.status === "failed" && "border-destructive/40 text-destructive",
@@ -290,9 +380,10 @@ export function WorkflowCanvas({ nodes, currentNode }: { nodes: AgentNode[]; cur
                 >
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="truncate text-sm font-medium text-foreground">{step.label}</div>
-                    <StatusIcon status={step.status} />
+                    <StatusBeacon status={step.status} label={step.statusLabel} compact />
                   </div>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">{step.description}</p>
+                  <p className="mt-2 text-[11px] text-muted-foreground">{step.statusDescription}</p>
                   {step.summary && <p className="mt-2 line-clamp-2 text-xs text-foreground/80">{step.summary}</p>}
                 </div>
               </div>
@@ -305,9 +396,17 @@ export function WorkflowCanvas({ nodes, currentNode }: { nodes: AgentNode[]; cur
 
   return (
     <div
-      className="h-[440px] overflow-hidden rounded-[1.35rem] border bg-[radial-gradient(circle_at_20%_10%,color-mix(in_oklch,var(--primary)_10%,transparent),transparent_34%),linear-gradient(180deg,color-mix(in_oklch,var(--card)_96%,var(--background)),color-mix(in_oklch,var(--muted)_55%,transparent))] shadow-sm"
+      className="relative h-[440px] overflow-hidden rounded-[1.35rem] border bg-[radial-gradient(circle_at_20%_10%,color-mix(in_oklch,var(--primary)_10%,transparent),transparent_34%),linear-gradient(180deg,color-mix(in_oklch,var(--card)_96%,var(--background)),color-mix(in_oklch,var(--muted)_55%,transparent))] shadow-sm"
       data-testid="bidpilot-workflow-canvas"
     >
+      {statusHeadline && (
+        <div className="pointer-events-none absolute left-4 top-4 z-10 flex max-w-[min(520px,calc(100%-2rem))] items-center gap-2 rounded-full border bg-card/90 px-3 py-2 text-xs shadow-sm backdrop-blur">
+          <StatusBeacon status={statusHeadline.status} label={statusHeadline.statusLabel} compact />
+          <span className="truncate text-muted-foreground">
+            当前节点：<span className="font-medium text-foreground">{statusHeadline.label}</span>
+          </span>
+        </div>
+      )}
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}

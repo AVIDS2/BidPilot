@@ -28,6 +28,7 @@ async def stream_agent_events(
 
     # Track token buffer for incremental message updates
     current_tool_name = None
+    awaiting_confirmation = False
 
     try:
         async for event in agent.astream_events(
@@ -82,6 +83,13 @@ async def stream_agent_events(
                 else:
                     summary = str(output)[:200] if output else ""
 
+                confirmation_payload = _extract_confirmation_request(tool_name, result)
+                if confirmation_payload is not None:
+                    awaiting_confirmation = True
+                    yield _sse("assistant.confirmation_requested", confirmation_payload)
+                    current_tool_name = None
+                    continue
+
                 yield _sse("assistant.tool_succeeded", {
                     "tool_name": tool_name,
                     "result": result,
@@ -99,8 +107,27 @@ async def stream_agent_events(
 
     yield _sse("assistant.end", {
         "conversation_id": conversation_id,
-        "state": "completed",
+        "state": "needs_confirmation" if awaiting_confirmation else "completed",
     })
+
+
+def _extract_confirmation_request(tool_name: str, result: dict) -> dict | None:
+    """Translate guarded tool output into the product confirmation event."""
+    if not result.get("requires_confirmation"):
+        return None
+    arguments = result.get("arguments")
+    if not isinstance(arguments, dict):
+        arguments = {}
+    payload = {
+        "tool_name": str(result.get("tool_name") or tool_name),
+        "arguments": arguments,
+        "message": str(result.get("message") or "需要你确认后我再执行这个操作。"),
+        "state": "needs_confirmation",
+        "requires_typed_confirmation": bool(result.get("requires_typed_confirmation")),
+    }
+    if "expected_text" in result:
+        payload["expected_text"] = str(result["expected_text"])
+    return payload
 
 
 def _extract_summary(tool_name: str, result: dict) -> str:
@@ -118,4 +145,6 @@ def _extract_summary(tool_name: str, result: dict) -> str:
         return "已准备好跳转页面。"
     if "run_id" in result:
         return f"已启动工作流，运行 ID：{result['run_id'][:8]}。"
+    if result.get("deleted") is True and "name" in result:
+        return f"项目「{result['name']}」已删除。"
     return "操作完成。"

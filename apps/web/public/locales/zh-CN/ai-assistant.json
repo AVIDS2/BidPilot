@@ -21,6 +21,22 @@
       "max": "Max"
     }
   },
+  "approval": {
+    "select": "选择审批模式",
+    "menuTitle": "审批权限",
+    "options": {
+      "request_approval": "请求批准",
+      "risky_only": "替我审批",
+      "full_access": "完全访问",
+      "custom": "自定义"
+    },
+    "hints": {
+      "request_approval": "变更前都询问你",
+      "risky_only": "只拦截风险操作",
+      "full_access": "尽量自动执行，删除仍确认",
+      "custom": "使用组织自定义策略"
+    }
+  },
   "status": {
     "ready": "准备就绪",
     "thinking": "正在理解请求",
@@ -35,6 +51,9 @@
     "confirmAction": "确认操作",
     "confirm": "确认",
     "cancel": "取消",
+    "typedConfirmationLabel": "输入完整名称以确认",
+    "typedConfirmationPlaceholder": "完整名称",
+    "typedConfirmationHint": "请输入：{{value}}",
     "workflowStarted": "工作流已启动",
     "workflowQueued": "正在等待工作流进度",
     "nodesCompleted": "已完成 {{completed}} / {{total}} 个步骤",

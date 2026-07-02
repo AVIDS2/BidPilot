@@ -6,7 +6,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { Markdown } from "./markdown"
+import { Markdown, type MarkdownProps } from "./markdown"
 
 export type MessageProps = {
   children: React.ReactNode
@@ -48,22 +48,32 @@ export type MessageContentProps = {
   children: React.ReactNode
   markdown?: boolean
   className?: string
-} & React.ComponentProps<typeof Markdown> &
-  React.HTMLProps<HTMLDivElement>
+  variant?: MarkdownProps["variant"]
+  components?: MarkdownProps["components"]
+} & Omit<React.HTMLProps<HTMLDivElement>, "children">
 
 const MessageContent = ({
   children,
   markdown = false,
   className,
+  variant,
+  components,
   ...props
 }: MessageContentProps) => {
-  const classNames = cn(
-    "rounded-lg p-2 text-foreground bg-secondary prose break-words whitespace-normal",
-    className
-  )
+  const classNames = markdown
+    ? cn("break-words whitespace-normal", className)
+    : cn(
+        "rounded-lg bg-secondary p-2 text-foreground break-words whitespace-normal",
+        className
+      )
 
   return markdown ? (
-    <Markdown className={classNames} {...props}>
+    <Markdown
+      className={classNames}
+      variant={variant}
+      components={components}
+      {...props}
+    >
       {children as string}
     </Markdown>
   ) : (

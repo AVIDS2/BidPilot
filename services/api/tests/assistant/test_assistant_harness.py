@@ -42,9 +42,10 @@ def _events(response_text: str) -> list[tuple[str, dict]]:
 
 def test_create_project_requires_confirmation(client, test_db, default_user_id: str) -> None:
     _ensure_task_state_table()
+    project_name = f"星河投标{uuid.uuid4().hex[:6]}"
     response = client.post(
         "/assistant/stream",
-        json={"message": "创建一个项目，名字叫 星河投标"},
+        json={"message": f"创建一个项目，名字叫 {project_name}"},
     )
 
     assert response.status_code == 200
@@ -54,8 +55,8 @@ def test_create_project_requires_confirmation(client, test_db, default_user_id: 
     confirmation_events = [payload for event, payload in events if event == "assistant.confirmation_requested"]
     assert confirmation_events
     assert confirmation_events[0]["tool_name"] == "create_project"
-    assert confirmation_events[0]["arguments"]["name"] == "星河投标"
-    assert test_db.query(Project).filter(Project.name == "星河投标").first() is None
+    assert confirmation_events[0]["arguments"]["name"] == project_name
+    assert test_db.query(Project).filter(Project.name == project_name).first() is None
 
 
 def test_create_project_missing_name_can_continue_with_followup(client, test_db, default_user_id: str) -> None:

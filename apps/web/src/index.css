@@ -404,6 +404,226 @@
   transform: translateY(-1px);
 }
 
+/* --- BidPilot Claude / Typora Reading Theme --- */
+.prose-bidpilot {
+  --prose-ink: color-mix(in oklch, var(--foreground) 92%, var(--muted-foreground));
+  --prose-soft: color-mix(in oklch, var(--muted-foreground) 86%, var(--foreground));
+  --prose-hairline: color-mix(in oklch, var(--border) 72%, transparent);
+  --prose-panel: color-mix(in oklch, var(--card) 88%, var(--background));
+  --prose-wash: color-mix(in oklch, var(--muted) 52%, transparent);
+  --prose-accent: var(--primary);
+  color: var(--prose-ink);
+  font-size: 0.95rem;
+  line-height: 1.78;
+  letter-spacing: -0.006em;
+  text-rendering: optimizeLegibility;
+}
+
+.prose-bidpilot-typora {
+  border: 1px solid var(--prose-hairline);
+  border-radius: 1.35rem;
+  background:
+    linear-gradient(180deg, color-mix(in oklch, var(--card) 96%, var(--background)), color-mix(in oklch, var(--muted) 38%, var(--background))),
+    var(--card);
+  box-shadow:
+    0 1px 0 color-mix(in oklch, white 35%, transparent) inset,
+    0 20px 60px -48px color-mix(in oklch, var(--foreground) 28%, transparent);
+  padding: clamp(1rem, 2.2vw, 1.75rem);
+}
+
+.prose-bidpilot-assistant {
+  max-width: 100%;
+  font-size: 0.91rem;
+  line-height: 1.76;
+}
+
+.prose-bidpilot > :first-child {
+  margin-top: 0;
+}
+
+.prose-bidpilot > :last-child {
+  margin-bottom: 0;
+}
+
+.prose-bidpilot :where(p) {
+  margin: 0.72rem 0;
+}
+
+.prose-bidpilot :where(h1, h2, h3, h4) {
+  color: var(--foreground);
+  font-weight: 680;
+  letter-spacing: -0.035em;
+  line-height: 1.18;
+  text-wrap: balance;
+}
+
+.prose-bidpilot :where(h1) {
+  margin: 0 0 1.2rem;
+  padding-bottom: 0.82rem;
+  border-bottom: 1px solid var(--prose-hairline);
+  font-size: clamp(1.6rem, 3vw, 2.35rem);
+}
+
+.prose-bidpilot :where(h2) {
+  margin: 1.75rem 0 0.7rem;
+  font-size: clamp(1.22rem, 2vw, 1.55rem);
+}
+
+.prose-bidpilot :where(h3) {
+  margin: 1.35rem 0 0.5rem;
+  font-size: 1.08rem;
+}
+
+.prose-bidpilot :where(h4) {
+  margin: 1.1rem 0 0.45rem;
+  font-size: 0.98rem;
+}
+
+.prose-bidpilot :where(strong) {
+  color: var(--foreground);
+  font-weight: 680;
+}
+
+.prose-bidpilot :where(a) {
+  color: var(--prose-accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklch, var(--prose-accent) 28%, transparent);
+}
+
+.prose-bidpilot :where(a:hover) {
+  border-bottom-color: var(--prose-accent);
+}
+
+.prose-bidpilot :where(ul, ol) {
+  margin: 0.82rem 0;
+  padding-left: 1.35rem;
+}
+
+.prose-bidpilot :where(li) {
+  margin: 0.34rem 0;
+  padding-left: 0.1rem;
+}
+
+.prose-bidpilot :where(li::marker) {
+  color: color-mix(in oklch, var(--prose-accent) 70%, var(--muted-foreground));
+}
+
+.prose-bidpilot :where(blockquote) {
+  margin: 1rem 0;
+  border-left: 3px solid color-mix(in oklch, var(--prose-accent) 58%, transparent);
+  border-radius: 0 1rem 1rem 0;
+  background: color-mix(in oklch, var(--prose-accent) 6%, var(--prose-panel));
+  color: var(--prose-soft);
+  padding: 0.82rem 1rem;
+}
+
+.prose-bidpilot :where(hr) {
+  margin: 1.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--prose-hairline);
+}
+
+.prose-bidpilot :where(code) {
+  border: 1px solid color-mix(in oklch, var(--border) 58%, transparent);
+  box-shadow: 0 1px 0 color-mix(in oklch, white 24%, transparent) inset;
+}
+
+.prose-bidpilot :where(.not-prose) {
+  margin: 1rem 0;
+  border-color: var(--prose-hairline);
+  background: color-mix(in oklch, var(--card) 92%, var(--background));
+  box-shadow: 0 16px 44px -38px color-mix(in oklch, var(--foreground) 36%, transparent);
+}
+
+.prose-bidpilot :where(.not-prose pre) {
+  margin: 0;
+  background: transparent !important;
+}
+
+.prose-bidpilot :where(table) {
+  display: block;
+  width: 100%;
+  margin: 1.1rem 0;
+  overflow-x: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--prose-hairline);
+  border-radius: 1rem;
+  background: color-mix(in oklch, var(--card) 88%, var(--background));
+}
+
+.prose-bidpilot :where(thead) {
+  background: color-mix(in oklch, var(--muted) 62%, transparent);
+}
+
+.prose-bidpilot :where(th, td) {
+  min-width: 7rem;
+  border-bottom: 1px solid var(--prose-hairline);
+  padding: 0.65rem 0.78rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose-bidpilot :where(th) {
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.prose-bidpilot :where(tr:last-child td) {
+  border-bottom: 0;
+}
+
+.prose-bidpilot :where(img) {
+  max-width: 100%;
+  border-radius: 1rem;
+  border: 1px solid var(--prose-hairline);
+}
+
+.prose-bidpilot :where(.katex-display) {
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--prose-hairline);
+  border-radius: 1rem;
+  background: var(--prose-wash);
+  padding: 0.9rem 1rem;
+}
+
+.prose-bidpilot-assistant :where(h1) {
+  font-size: 1.32rem;
+}
+
+.prose-bidpilot-assistant :where(h2) {
+  font-size: 1.12rem;
+}
+
+.prose-bidpilot-assistant :where(p) {
+  margin: 0.55rem 0;
+}
+
+.prose-bidpilot-assistant :where(ul, ol) {
+  margin: 0.58rem 0;
+}
+
+.dark .prose-bidpilot {
+  --prose-ink: color-mix(in oklch, var(--foreground) 90%, var(--muted-foreground));
+  --prose-soft: color-mix(in oklch, var(--muted-foreground) 88%, var(--foreground));
+  --prose-panel: color-mix(in oklch, var(--card) 76%, var(--background));
+  --prose-wash: color-mix(in oklch, var(--muted) 46%, transparent);
+}
+
+.dark .prose-bidpilot-typora {
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in oklch, var(--primary) 5%, transparent), transparent 26%),
+    linear-gradient(180deg, color-mix(in oklch, var(--card) 92%, var(--background)), color-mix(in oklch, var(--muted) 36%, var(--background))),
+    var(--card);
+  box-shadow:
+    0 1px 0 color-mix(in oklch, white 6%, transparent) inset,
+    0 26px 72px -52px color-mix(in oklch, black 70%, transparent);
+}
+
 /* --- Workflow Canvas Motion --- */
 .workflow-edge-active .react-flow__edge-path {
   stroke-dasharray: 8 10;
@@ -411,9 +631,71 @@
   filter: drop-shadow(0 0 8px color-mix(in oklch, var(--primary) 26%, transparent));
 }
 
+.workflow-node-running {
+  animation: workflow-node-breathe 2s ease-in-out infinite;
+}
+
+.workflow-status-light {
+  position: relative;
+  display: inline-flex;
+  width: 0.5rem;
+  height: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.workflow-status-light::before {
+  content: "";
+  position: absolute;
+  inset: -0.28rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: 0;
+  transform: scale(0.62);
+}
+
+.workflow-status-light-core {
+  display: block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 10px color-mix(in oklch, currentColor 42%, transparent);
+}
+
+.workflow-status-light-breathing::before {
+  animation: workflow-status-breathe 1.45s ease-out infinite;
+}
+
 @keyframes workflow-edge-flow {
   to {
     stroke-dashoffset: -18;
+  }
+}
+
+@keyframes workflow-status-breathe {
+  0% {
+    opacity: 0.45;
+    transform: scale(0.62);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.85);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.85);
+  }
+}
+
+@keyframes workflow-node-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in oklch, var(--primary) 10%, transparent);
   }
 }
 
@@ -463,6 +745,11 @@
   }
 
   .workflow-edge-active .react-flow__edge-path {
+    animation: none;
+  }
+
+  .workflow-node-running,
+  .workflow-status-light-breathing::before {
     animation: none;
   }
 

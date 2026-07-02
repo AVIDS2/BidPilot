@@ -41,6 +41,7 @@ import {
   type AssistantExecutionItem,
   type AssistantRequestAttachment,
   type AssistantReasoningEffort,
+  type AssistantApprovalMode,
   type ChatMessageAttachment,
   type ChatMessage,
 } from "@/lib/ai-assistant-store";
@@ -84,7 +85,7 @@ function groupConversations(conversations: ChatConversationRead[]) {
 
 type ComposerAttachmentKind = "file" | "image";
 type ComposerAttachmentStatus = "ready" | "uploading" | "uploaded" | "failed";
-type ConfigMenu = "model" | "reasoning" | null;
+type ConfigMenu = "model" | "reasoning" | "approval" | null;
 
 interface ComposerAttachment {
   id: string;
@@ -107,9 +108,11 @@ interface QueuedPrompt {
   requestAttachments: AssistantRequestAttachment[];
   providerConfigId: string | null;
   reasoningEffort: AssistantReasoningEffort;
+  approvalMode: AssistantApprovalMode;
 }
 
 const REASONING_OPTIONS: AssistantReasoningEffort[] = ["low", "medium", "high", "ultra", "max"];
+const APPROVAL_MODES: AssistantApprovalMode[] = ["request_approval", "risky_only", "full_access", "custom"];
 
 function createAttachmentId(file: File, index: number) {
   return `att-${Date.now()}-${index}-${file.name.replace(/[^a-zA-Z0-9]/g, "")}`;
@@ -403,7 +406,7 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
       >
         {activityItems.length > 0 && <AssistantActivityTimeline items={activityItems} />}
         {msg.content ? (
-          <Markdown className="[&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1 [&_pre]:my-2 [&_code]:break-words">
+          <Markdown variant="assistant" className="[&_code]:break-words">
             {normalizeAssistantMarkdown(msg.content)}
           </Markdown>
         ) : (
@@ -632,6 +635,7 @@ export function AIAssistantPanel() {
     confirmAssistantAction,
     setSelectedProviderConfig,
     setReasoningEffort,
+    setApprovalMode,
   } = useAIAssistant();
   const { t } = useTranslation("ai-assistant");
   const [input, setInput] = useState("");
@@ -663,6 +667,7 @@ export function AIAssistantPanel() {
   );
   const modelLabel = selectedProvider?.model ?? t("model.platformDefault", { defaultValue: "Platform default" });
   const reasoningLabel = t(`reasoning.options.${state.reasoningEffort}`, { defaultValue: state.reasoningEffort });
+  const approvalLabel = t(`approval.options.${state.approvalMode}`, { defaultValue: state.approvalMode });
   const executionItemsByMessageId = useMemo(() => {
     const grouped = new Map<string, AssistantExecutionItem[]>();
     for (const item of state.executionItems) {
@@ -861,6 +866,7 @@ export function AIAssistantPanel() {
       requestAttachments,
       providerConfigId: state.selectedProviderConfigId,
       reasoningEffort: state.reasoningEffort,
+      approvalMode: state.approvalMode,
     };
 
     shouldAutoScrollRef.current = true;
@@ -896,6 +902,7 @@ export function AIAssistantPanel() {
       requestAttachments: nextPrompt.requestAttachments,
       providerConfigId: nextPrompt.providerConfigId,
       reasoningEffort: nextPrompt.reasoningEffort,
+      approvalMode: nextPrompt.approvalMode,
     }).finally(() => {
       queueDrainingRef.current = false;
     });
@@ -926,6 +933,7 @@ export function AIAssistantPanel() {
             requestAttachments: [],
             providerConfigId: state.selectedProviderConfigId,
             reasoningEffort: state.reasoningEffort,
+            approvalMode: state.approvalMode,
           },
         ]);
         return;
@@ -933,9 +941,10 @@ export function AIAssistantPanel() {
       void sendMessage(text, {
         providerConfigId: state.selectedProviderConfigId,
         reasoningEffort: state.reasoningEffort,
+        approvalMode: state.approvalMode,
       });
     },
-    [isBusy, sendMessage, state.reasoningEffort, state.selectedProviderConfigId],
+    [isBusy, sendMessage, state.approvalMode, state.reasoningEffort, state.selectedProviderConfigId],
   );
 
   const beginRenameConversation = useCallback((id: string, title: string | null) => {
@@ -1126,7 +1135,7 @@ export function AIAssistantPanel() {
                       {msg.role === "assistant" && pendingConfirmation && (
                         <AssistantConfirmationCard
                           confirmation={pendingConfirmation}
-                          onConfirm={() => void confirmAssistantAction(true)}
+                          onConfirm={(confirmationText) => void confirmAssistantAction(true, confirmationText)}
                           onCancel={() => void confirmAssistantAction(false)}
                         />
                       )}
@@ -1138,7 +1147,7 @@ export function AIAssistantPanel() {
                 {state.pendingConfirmation && !state.pendingConfirmation.messageId && (
                   <AssistantConfirmationCard
                     confirmation={state.pendingConfirmation}
-                    onConfirm={() => void confirmAssistantAction(true)}
+                    onConfirm={(confirmationText) => void confirmAssistantAction(true, confirmationText)}
                     onCancel={() => void confirmAssistantAction(false)}
                   />
                 )}
@@ -1338,6 +1347,22 @@ export function AIAssistantPanel() {
               <span>{reasoningLabel}</span>
               <ChevronDownIcon className="h-3 w-3" />
             </button>
+            <button
+              type="button"
+              aria-label={t("approval.select", { defaultValue: "Select approval mode" })}
+              onClick={() => {
+                setAttachmentMenuOpen(false);
+                setHistoryOpen(false);
+                setConfigMenuOpen((value) => (value === "approval" ? null : "approval"));
+              }}
+              className={cn(
+                "flex max-w-[6.75rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground",
+                state.approvalMode === "full_access" && "text-amber-600 dark:text-amber-300",
+              )}
+            >
+              <span className="truncate">{approvalLabel}</span>
+              <ChevronDownIcon className="h-3 w-3 shrink-0" />
+            </button>
             {configMenuOpen && (
               <div
                 role="menu"
@@ -1403,7 +1428,7 @@ export function AIAssistantPanel() {
                       </div>
                     )}
                   </>
-                ) : (
+                ) : configMenuOpen === "reasoning" ? (
                   <>
                     <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
                       {t("reasoning.menuTitle", { defaultValue: "Reasoning" })}
@@ -1425,6 +1450,38 @@ export function AIAssistantPanel() {
                       >
                         <span>{t(`reasoning.options.${effort}`, { defaultValue: effort })}</span>
                         {state.reasoningEffort === effort && <span className="text-xs">✓</span>}
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
+                      {t("approval.menuTitle", { defaultValue: "Approval" })}
+                    </div>
+                    {APPROVAL_MODES.map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={state.approvalMode === mode}
+                        onClick={() => {
+                          setApprovalMode(mode);
+                          setConfigMenuOpen(null);
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                          state.approvalMode === mode && "bg-muted text-foreground",
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">
+                            {t(`approval.options.${mode}`, { defaultValue: mode })}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {t(`approval.hints.${mode}`, { defaultValue: "" })}
+                          </span>
+                        </span>
+                        {state.approvalMode === mode && <span className="text-xs">✓</span>}
                       </button>
                     ))}
                   </>

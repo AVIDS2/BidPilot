@@ -18,6 +18,7 @@ import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser
 
 export type AssistantMode = "panel" | "command" | "inline";
 export type AssistantReasoningEffort = "low" | "medium" | "high" | "ultra" | "max";
+export type AssistantApprovalMode = "request_approval" | "risky_only" | "full_access" | "custom";
 export type AssistantStatus =
   | "idle"
   | "thinking"
@@ -64,6 +65,7 @@ interface SendAssistantOptions {
   requestAttachments?: AssistantRequestAttachment[];
   providerConfigId?: string | null;
   reasoningEffort?: AssistantReasoningEffort;
+  approvalMode?: AssistantApprovalMode;
 }
 
 export interface AssistantConfirmationRequest {
@@ -71,6 +73,8 @@ export interface AssistantConfirmationRequest {
   toolName: string;
   arguments: Record<string, unknown>;
   message: string;
+  requiresTypedConfirmation?: boolean;
+  expectedText?: string;
 }
 
 export interface AssistantExecutionItem {
@@ -147,6 +151,7 @@ export interface AIAssistantState {
   sessionError: string | null;
   selectedProviderConfigId: string | null;
   reasoningEffort: AssistantReasoningEffort;
+  approvalMode: AssistantApprovalMode;
   /* context */
   currentContext: PageContext;
   /* inline suggestions */
@@ -178,6 +183,7 @@ type Action =
   | { type: "SET_PENDING_CONFIRMATION"; confirmation: AssistantConfirmationRequest | null }
   | { type: "SET_SELECTED_PROVIDER_CONFIG"; providerConfigId: string | null }
   | { type: "SET_REASONING_EFFORT"; effort: AssistantReasoningEffort }
+  | { type: "SET_APPROVAL_MODE"; mode: AssistantApprovalMode }
   | { type: "CLEAR_TRANSIENT_STATE" }
   | { type: "CLEAR_MESSAGES" }
   | { type: "SET_CONTEXT"; context: PageContext }
@@ -200,6 +206,7 @@ const initialState: AIAssistantState = {
   sessionError: null,
   selectedProviderConfigId: getStoredValue("assistantProviderConfigId"),
   reasoningEffort: parseReasoningEffort(getStoredValue("assistantReasoningEffort")),
+  approvalMode: parseApprovalMode(getStoredValue("assistantApprovalMode")),
   currentContext: { page: "/" },
   suggestions: [],
   commands: [],
@@ -210,6 +217,13 @@ function parseReasoningEffort(value: string | null): AssistantReasoningEffort {
     return value;
   }
   return "medium";
+}
+
+function parseApprovalMode(value: string | null): AssistantApprovalMode {
+  if (value === "request_approval" || value === "risky_only" || value === "full_access" || value === "custom") {
+    return value;
+  }
+  return "risky_only";
 }
 
 function createExecutionId(prefix: string, key?: string) {
@@ -398,6 +412,8 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       return { ...state, selectedProviderConfigId: action.providerConfigId };
     case "SET_REASONING_EFFORT":
       return { ...state, reasoningEffort: action.effort };
+    case "SET_APPROVAL_MODE":
+      return { ...state, approvalMode: action.mode };
     case "SET_SESSION_ERROR":
       return {
         ...state,
@@ -489,6 +505,8 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
         toolName,
         arguments: args,
         message: String(parsed.message ?? "Confirm this action"),
+        requiresTypedConfirmation: Boolean(parsed.requires_typed_confirmation),
+        expectedText: typeof parsed.expected_text === "string" ? parsed.expected_text : undefined,
       },
     });
     dispatch({
@@ -640,7 +658,8 @@ interface AIAssistantContextValue {
   ) => Promise<void>;
   setSelectedProviderConfig: (providerConfigId: string | null) => void;
   setReasoningEffort: (effort: AssistantReasoningEffort) => void;
-  confirmAssistantAction: (approved: boolean) => Promise<void>;
+  setApprovalMode: (mode: AssistantApprovalMode) => void;
+  confirmAssistantAction: (approved: boolean, confirmationText?: string) => Promise<void>;
   executeCommand: (commandId: string) => void;
   refreshConversations: () => Promise<void>;
   loadConversation: (conversationId: string) => Promise<void>;
@@ -847,6 +866,11 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_REASONING_EFFORT", effort });
   }, []);
 
+  const setApprovalMode = useCallback((mode: AssistantApprovalMode) => {
+    setStoredValue("assistantApprovalMode", mode);
+    dispatch({ type: "SET_APPROVAL_MODE", mode });
+  }, []);
+
   const startNewConversation = useCallback(() => {
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: null });
     dispatch({ type: "CLEAR_MESSAGES" });
@@ -907,6 +931,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
             conversation_id: state.currentConversationId,
             provider_config_id: options?.providerConfigId ?? state.selectedProviderConfigId,
             reasoning_effort: options?.reasoningEffort ?? state.reasoningEffort,
+            approval_mode: options?.approvalMode ?? state.approvalMode,
             confirmation,
             attachments: options?.requestAttachments ?? [],
           }),
@@ -966,6 +991,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       state.currentContext.projectId,
       state.currentConversationId,
       state.reasoningEffort,
+      state.approvalMode,
       state.selectedProviderConfigId,
       state.status,
     ],
@@ -979,14 +1005,18 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   );
 
   const confirmAssistantAction = useCallback(
-    async (approved: boolean) => {
+    async (approved: boolean, confirmationText?: string) => {
       const pending = state.pendingConfirmation;
       if (!pending) return;
       dispatch({ type: "SET_PENDING_CONFIRMATION", confirmation: null });
-      await sendAssistantRequest(pending.message, undefined, {
+      const confirmationArguments =
+        approved && pending.requiresTypedConfirmation
+          ? { ...pending.arguments, confirmation_text: confirmationText ?? "" }
+          : pending.arguments;
+      await sendAssistantRequest(approved ? "确认执行" : "取消操作", undefined, {
         approved,
         tool_name: pending.toolName,
-        arguments: pending.arguments,
+        arguments: confirmationArguments,
       });
     },
     [sendAssistantRequest, state.pendingConfirmation],
@@ -1014,6 +1044,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         sendMessage,
         setSelectedProviderConfig,
         setReasoningEffort,
+        setApprovalMode,
         confirmAssistantAction,
         executeCommand,
         refreshConversations,

@@ -388,11 +388,14 @@ def export_deliverable_tool(db: Session, user: CurrentUser, arguments: dict) -> 
 def delete_project_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     project = _get_project_for_user(db, user, arguments["project_id"])
     name = project.name
+    confirmation_text = str(arguments.get("confirmation_text") or "").strip()
+    if confirmation_text != name:
+        raise ValueError(f"删除项目需要输入完整项目名称「{name}」进行确认。")
     db.delete(project)
     db.commit()
     return AssistantToolResult(
         tool_name="delete_project",
-        result={"deleted": True, "project_id": arguments["project_id"]},
+        result={"deleted": True, "project_id": arguments["project_id"], "name": name},
         summary=f"项目「{name}」已删除。",
     )
 

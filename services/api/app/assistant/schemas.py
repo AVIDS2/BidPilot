@@ -11,6 +11,7 @@ AssistantMode = Literal["answer", "needs_input", "tool_action", "workflow_trigge
 AssistantAttachmentKind = Literal["file", "image"]
 AssistantAttachmentStatus = Literal["extracted", "empty", "unsupported", "failed"]
 AssistantReasoningEffort = Literal["low", "medium", "high", "ultra", "max"]
+AssistantApprovalMode = Literal["request_approval", "risky_only", "full_access", "custom"]
 AssistantState = Literal[
     "idle",
     "thinking",
@@ -58,6 +59,7 @@ class AssistantRequest(BaseModel):
     conversation_id: str | None = None
     provider_config_id: str | None = None
     reasoning_effort: AssistantReasoningEffort | None = None
+    approval_mode: AssistantApprovalMode = "risky_only"
     confirmation: AssistantConfirmation | None = None
     attachments: list[AssistantAttachmentPayload] = Field(default_factory=list)
 

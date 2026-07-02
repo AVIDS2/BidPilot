@@ -21,6 +21,22 @@
       "max": "Max"
     }
   },
+  "approval": {
+    "select": "Select approval mode",
+    "menuTitle": "Approval",
+    "options": {
+      "request_approval": "Request approval",
+      "risky_only": "Approve risky",
+      "full_access": "Full access",
+      "custom": "Custom"
+    },
+    "hints": {
+      "request_approval": "Ask before every change",
+      "risky_only": "Only stop risky actions",
+      "full_access": "Auto-run most actions; deletes still confirm",
+      "custom": "Use organization policy"
+    }
+  },
   "status": {
     "ready": "Ready",
     "thinking": "Understanding request",
@@ -35,6 +51,9 @@
     "confirmAction": "Confirm action",
     "confirm": "Confirm",
     "cancel": "Cancel",
+    "typedConfirmationLabel": "Type the full name to confirm",
+    "typedConfirmationPlaceholder": "Full name",
+    "typedConfirmationHint": "Type: {{value}}",
     "workflowStarted": "Workflow started",
     "workflowQueued": "Waiting for workflow progress",
     "nodesCompleted": "{{completed}} of {{total}} steps completed",

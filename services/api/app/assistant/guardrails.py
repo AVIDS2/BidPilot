@@ -2,15 +2,8 @@
 
 from __future__ import annotations
 
-CONFIRMATION_REQUIRED_TOOLS = {
-    "create_project",
-    "start_draft_section",
-    "start_redraft_section",
-    "create_deliverable",
-    "retry_run",
-    "delete_project",
-}
+from app.agent.policy import ApprovalMode, tool_requires_approval
 
 
-def requires_confirmation(tool_name: str) -> bool:
-    return tool_name in CONFIRMATION_REQUIRED_TOOLS
+def requires_confirmation(tool_name: str, approval_mode: ApprovalMode = "risky_only") -> bool:
+    return tool_requires_approval(tool_name, approval_mode)

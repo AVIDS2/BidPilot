@@ -79,6 +79,16 @@ async def assistant_stream(
                 "X-Accel-Buffering": "no",
             },
         )
+    if payload.confirmation is not None:
+        return StreamingResponse(
+            stream_assistant_response(db, user, payload),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     # Resolve or create conversation
     conversation_id = _ensure_conversation(db, user, payload)
@@ -106,6 +116,7 @@ async def assistant_stream(
         model=model,
         provider_config_id=payload.provider_config_id,
         reasoning_effort=payload.reasoning_effort,
+        approval_mode=payload.approval_mode,
     )
 
     config = {"configurable": {"thread_id": conversation_id}}

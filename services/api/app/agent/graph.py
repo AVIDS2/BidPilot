@@ -111,6 +111,7 @@ def build_agent(
     model: str | None = None,
     provider_config_id: str | None = None,
     reasoning_effort: str | None = None,
+    approval_mode: str = "risky_only",
 ):
     """Build a ReAct agent with tools bound to the current db session and user."""
     llm = get_agent_llm(
@@ -120,7 +121,13 @@ def build_agent(
         model=model,
         reasoning_effort=reasoning_effort,
     )
-    tools = create_tools(db, user, provider_config_id=provider_config_id, reasoning_effort=reasoning_effort)
+    tools = create_tools(
+        db,
+        user,
+        provider_config_id=provider_config_id,
+        reasoning_effort=reasoning_effort,
+        approval_mode=approval_mode,  # type: ignore[arg-type]
+    )
     checkpointer = get_checkpointer()
 
     agent = create_react_agent(

@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.agent.policy import get_tool_policy
 from app.auth.schemas import CurrentUser
 from app.chat.service import create_conversation, get_conversation, get_conversation_messages, save_message
 from app.models import ChatTaskState
@@ -104,15 +105,11 @@ async def stream_assistant_response(
     if payload.reasoning_effort and intent.tool_name in {"start_draft_section", "start_redraft_section"}:
         arguments["reasoning_effort"] = payload.reasoning_effort
 
-    if requires_confirmation(intent.tool_name):
+    if requires_confirmation(intent.tool_name, payload.approval_mode):
         response = _confirmation_message(intent.tool_name, arguments)
         yield _sse(
             "assistant.confirmation_requested",
-            {
-                "tool_name": intent.tool_name,
-                "arguments": arguments,
-                "message": response,
-            },
+            _confirmation_payload(intent.tool_name, arguments, response),
         )
         _set_task_state(
             db,
@@ -224,7 +221,24 @@ def _confirmation_message(tool_name: str, arguments: dict) -> str:
         return f"需要你确认：我将启动章节「{arguments.get('section_key')}」的起草工作流。"
     if tool_name == "start_redraft_section":
         return f"需要你确认：我将启动章节「{arguments.get('section_key')}」的重写工作流。"
+    if tool_name == "delete_project":
+        return "需要你确认：这是删除项目操作。请输入完整项目名称后我再执行删除。"
     return "需要你确认后我再执行这个操作。"
+
+
+def _confirmation_payload(tool_name: str, arguments: dict, message: str) -> dict:
+    policy = get_tool_policy(tool_name)
+    payload = {
+        "tool_name": tool_name,
+        "arguments": arguments,
+        "message": message,
+        "state": "needs_confirmation",
+        "requires_typed_confirmation": bool(policy and policy.requires_typed_confirmation),
+    }
+    expected_text = arguments.get("project_name") or arguments.get("name")
+    if policy and policy.requires_typed_confirmation and expected_text:
+        payload["expected_text"] = str(expected_text)
+    return payload
 
 
 def _tool_failed(tool_name: str, error_message: str) -> str:
