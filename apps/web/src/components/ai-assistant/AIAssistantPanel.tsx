@@ -2,7 +2,6 @@ import { useRef, useEffect, useCallback, useState, useMemo, type ChangeEvent, ty
 import {
   HistoryIcon,
   PlusIcon,
-  SparklesIcon,
   SendIcon,
   CommandIcon,
   PanelRightCloseIcon,
@@ -50,6 +49,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Markdown } from "@/components/ui/markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { AgentMark } from "@/components/brand";
 import { AssistantConfirmationCard } from "./assistant-confirmation-card";
 import { AssistantActivityTimeline } from "./assistant-activity-timeline";
 
@@ -1022,16 +1022,7 @@ export function AIAssistantPanel() {
           >
             <HistoryIcon className="size-4" />
           </Button>
-          <div
-            className="flex size-8 shrink-0 items-center justify-center rounded-2xl border shadow-sm"
-            style={{
-              background: "linear-gradient(145deg, color-mix(in oklch, var(--primary) 88%, white 12%), var(--primary))",
-              borderColor: "color-mix(in oklch, var(--primary) 55%, white 20%)",
-              color: "var(--primary-foreground)",
-            }}
-          >
-            <SparklesIcon className="size-4" />
-          </div>
+          <AgentMark decorative className="size-8" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-semibold truncate text-foreground">
@@ -1110,15 +1101,7 @@ export function AIAssistantPanel() {
           <div className="flex flex-col gap-5 px-3 py-4 sm:px-4 sm:py-5">
             {state.messages.length === 0 ? (
               <div className="flex min-h-[55vh] flex-col items-center justify-center text-center">
-                <div
-                  className="mx-auto mb-4 flex size-14 items-center justify-center rounded-[1.4rem] border shadow-[0_18px_50px_oklch(0_0_0/0.16)]"
-                  style={{
-                    background: "linear-gradient(145deg, color-mix(in oklch, var(--primary) 86%, white 14%), var(--primary))",
-                    borderColor: "color-mix(in oklch, var(--primary) 56%, white 20%)",
-                  }}
-                >
-                  <SparklesIcon className="size-7 text-primary-foreground" />
-                </div>
+                <AgentMark decorative className="mx-auto mb-4 size-14 drop-shadow-[0_18px_50px_oklch(0_0_0/0.16)]" />
                 <h3 className="text-base font-semibold mb-1 text-foreground">{t("welcome.title")}</h3>
                 <p className="mb-6 max-w-[28ch] text-sm leading-6 text-muted-foreground">{t("welcome.description")}</p>
                 <QuickActions onSelect={handleQuickAction} />

@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  SparklesIcon,
   MessageCircleIcon,
   CommandIcon,
   PanelRightOpenIcon,
@@ -8,6 +7,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { isAssistantBusy, useAIAssistant } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
+import { AgentMark } from "@/components/brand";
 
 /**
  * Floating assistant ball.
@@ -109,22 +109,17 @@ export function FloatingAssistant() {
         onPointerLeave={handlePointerUp}
         aria-label={t("floating.ariaLabel")}
         className={cn(
-          "relative flex size-11 items-center justify-center rounded-full sm:size-12",
+          "relative flex size-11 items-center justify-center rounded-[1.25rem] p-0 sm:size-12",
           "transition-all duration-300",
           "hover:scale-110 active:scale-95",
           "shadow-lg hover:shadow-xl",
           "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         )}
-        style={{
-          background: isProcessing
-            ? "conic-gradient(var(--primary), oklch(from var(--primary) calc(l + 0.1) c h), var(--primary))"
-            : "linear-gradient(135deg, var(--primary), oklch(from var(--primary) calc(l + 0.08) c h))",
-        }}
       >
         {/* Spinning ring when processing */}
         {isProcessing && (
           <span
-            className="absolute inset-0 rounded-full animate-spin"
+            className="absolute -inset-1 rounded-[1.45rem] animate-spin"
             style={{
               background:
                 "conic-gradient(from 0deg, transparent 0%, var(--primary) 30%, transparent 60%)",
@@ -133,7 +128,7 @@ export function FloatingAssistant() {
             }}
           />
         )}
-        <SparklesIcon className="w-5 h-5 text-white relative z-10" />
+        <AgentMark decorative className="relative z-10 size-full" />
       </button>
     </div>
   );
