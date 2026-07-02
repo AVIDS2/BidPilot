@@ -47,4 +47,26 @@ describe("turnstile widget", () => {
     await waitFor(() => expect(renderWidget).toHaveBeenCalledTimes(1));
     expect(ready).not.toHaveBeenCalled();
   });
+
+  it("uses interaction-only appearance so trusted visitors are not interrupted", async () => {
+    vi.stubEnv("VITE_TURNSTILE_SITE_KEY", "site-key");
+    const renderWidget = vi.fn(() => "widget-id");
+    const remove = vi.fn();
+    const reset = vi.fn();
+    window.turnstile = { render: renderWidget, remove, reset };
+
+    const { TurnstileWidget } = await import("./turnstile-widget");
+
+    render(<TurnstileWidget action="signup" onTokenChange={() => {}} />);
+
+    await waitFor(() => expect(renderWidget).toHaveBeenCalledTimes(1));
+    expect(renderWidget).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({
+        appearance: "interaction-only",
+        refreshExpired: "auto",
+        theme: "auto",
+      }),
+    );
+  });
 });

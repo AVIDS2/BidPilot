@@ -6,6 +6,8 @@ const TURNSTILE_SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api
 type TurnstileRenderOptions = {
   sitekey: string;
   action?: string;
+  appearance?: "always" | "execute" | "interaction-only";
+  refreshExpired?: "auto" | "manual" | "never";
   theme?: "light" | "dark" | "auto";
   callback?: (token: string) => void;
   "expired-callback"?: () => void;
@@ -85,7 +87,9 @@ export function TurnstileWidget({ action, onTokenChange, onWidgetIdChange, class
     widgetIdRef.current = window.turnstile.render(containerRef.current, {
       sitekey: TURNSTILE_SITE_KEY,
       action,
-      theme: "dark",
+      appearance: "interaction-only",
+      refreshExpired: "auto",
+      theme: "auto",
       callback: (token) => onTokenChange(token),
       "expired-callback": () => onTokenChange(null),
       "error-callback": () => onTokenChange(null),
