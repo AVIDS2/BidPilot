@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
+import ShinyText from "@/components/ShinyText";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
 import { getAssistantToolIcon, getAssistantToolLabel } from "./assistant-tool-metadata";
@@ -314,7 +315,20 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
             <CircleDashedIcon className="h-3.5 w-3.5" />
           )}
         </span>
-        <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">{label}</span>
+        <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">
+          {tone === "running" && !prefersReducedMotion ? (
+            <ShinyText
+              text={label}
+              speed={2.6}
+              color="var(--muted-foreground)"
+              shineColor="#a3e635"
+              spread={105}
+              className="max-w-full truncate align-bottom"
+            />
+          ) : (
+            label
+          )}
+        </span>
         <span className="shrink-0 text-[11px] text-muted-foreground/80">{statusLabel}</span>
         <ChevronDownIcon className={cn("h-3.5 w-3.5 shrink-0 transition-transform opacity-70 group-hover:opacity-100", expanded && "rotate-180")} />
       </button>

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useMemo, type ChangeEvent, type RefObject } from "react";
+import { useRef, useEffect, useCallback, useState, useMemo, type ChangeEvent, type ReactNode, type RefObject } from "react";
 import {
   HistoryIcon,
   PlusIcon,
@@ -50,6 +50,11 @@ import { Input } from "@/components/ui/input";
 import { Markdown } from "@/components/ui/markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AgentMark } from "@/components/brand";
+import ClickSpark from "@/components/ClickSpark";
+import ElectricBorder from "@/components/ElectricBorder";
+import FadeContent from "@/components/FadeContent";
+import ShinyText from "@/components/ShinyText";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { AssistantConfirmationCard } from "./assistant-confirmation-card";
 import { AssistantActivityTimeline } from "./assistant-activity-timeline";
 
@@ -218,6 +223,37 @@ function toRequestAttachments(attachments: ComposerAttachment[]): AssistantReque
   }));
 }
 
+function ReactBitsComposerFrame({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) {
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const activeMotion = active && !prefersReducedMotion;
+
+  return (
+    <ClickSpark
+      sparkColor="#a3e635"
+      sparkSize={8}
+      sparkRadius={18}
+      sparkCount={7}
+      duration={360}
+      easing="ease-out"
+    >
+      <ElectricBorder
+        color="#a3e635"
+        speed={activeMotion ? 0.65 : 0.18}
+        chaos={activeMotion ? 0.045 : 0}
+        borderRadius={30}
+      >
+        {children}
+      </ElectricBorder>
+    </ClickSpark>
+  );
+}
+
 /* ─── Quick action chips shown in empty state ─── */
 
 function QuickActions({ onSelect }: { onSelect: (text: string) => void }) {
@@ -364,7 +400,7 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
   if (isUser) {
     const hasAttachments = Boolean(msg.attachments && msg.attachments.length > 0);
     return (
-      <div className="flex animate-fade-in flex-col items-end gap-2">
+      <FadeContent duration={260} threshold={0.02} className="flex animate-fade-in flex-col items-end gap-2">
         {hasAttachments && (
           <div className="flex max-w-[94%] flex-wrap justify-end gap-2 sm:max-w-[88%]">
             {msg.attachments?.map((attachment) => (
@@ -391,11 +427,11 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
             <div className="whitespace-pre-wrap break-words">{msg.content}</div>
           </div>
         )}
-      </div>
+      </FadeContent>
     );
   }
   return (
-    <div className="flex flex-col items-start gap-2 animate-fade-in">
+    <FadeContent duration={280} threshold={0.02} className="flex flex-col items-start gap-2 animate-fade-in">
       <div
         className="w-full max-w-full px-1 py-1 text-[14px] leading-7 break-words sm:max-w-[92%]"
         style={{
@@ -417,7 +453,7 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
           </span>
         )}
       </div>
-    </div>
+    </FadeContent>
   );
 }
 
@@ -477,7 +513,13 @@ function HistorySidebar({
   };
 
   return (
-    <div className="flex h-full w-[min(20rem,calc(100vw-1.25rem))] shrink-0 flex-col border-r bg-card shadow-xl" style={{ borderColor: "var(--border)" }}>
+    <FadeContent
+      blur
+      duration={240}
+      threshold={0.02}
+      className="flex h-full w-[min(20rem,calc(100vw-1.25rem))] shrink-0 flex-col border-r bg-card shadow-xl"
+      style={{ borderColor: "var(--border)" }}
+    >
       {/* Header */}
       <div className="p-3 flex items-center justify-between border-b shrink-0" style={{ borderColor: "var(--border)" }}>
         <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -622,7 +664,7 @@ function HistorySidebar({
           )}
         </div>
       </ScrollArea>
-    </div>
+    </FadeContent>
   );
 }
 
@@ -1113,12 +1155,20 @@ export function AIAssistantPanel() {
         >
           <div className="flex flex-col gap-5 px-3 py-4 sm:px-4 sm:py-5">
             {state.messages.length === 0 ? (
-              <div className="flex min-h-[55vh] flex-col items-center justify-center text-center">
+              <FadeContent blur duration={420} threshold={0.02} className="flex min-h-[55vh] flex-col items-center justify-center text-center">
                 <AgentMark decorative className="mx-auto mb-4 size-14 drop-shadow-[0_18px_50px_oklch(0_0_0/0.16)]" />
-                <h3 className="text-base font-semibold mb-1 text-foreground">{t("welcome.title")}</h3>
+                <h3 className="mb-1 text-base font-semibold text-foreground">
+                  <ShinyText
+                    text={t("welcome.title")}
+                    speed={3.4}
+                    color="var(--foreground)"
+                    shineColor="#a3e635"
+                    spread={105}
+                  />
+                </h3>
                 <p className="mb-6 max-w-[28ch] text-sm leading-6 text-muted-foreground">{t("welcome.description")}</p>
                 <QuickActions onSelect={handleQuickAction} />
-              </div>
+              </FadeContent>
             ) : (
               <>
                 {state.messages.map((msg) => {
@@ -1192,14 +1242,15 @@ export function AIAssistantPanel() {
           className="hidden"
           onChange={(event) => handleAttachmentInputChange(event, "image")}
         />
-        <div
-          className="rounded-[1.6rem] border px-2 py-2 shadow-[0_18px_55px_oklch(0_0_0/0.18),inset_0_1px_0_oklch(1_0_0/0.08)] sm:rounded-[1.85rem]"
-          style={{
-            background: "color-mix(in oklch, var(--card) 92%, transparent)",
-            borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
-            backdropFilter: "blur(18px) saturate(1.08)",
-          }}
-        >
+        <ReactBitsComposerFrame active={isBusy || isUploadingAttachments || queuedPrompts.length > 0}>
+          <div
+            className="rounded-[1.6rem] border px-2 py-2 shadow-[0_18px_55px_oklch(0_0_0/0.18),inset_0_1px_0_oklch(1_0_0/0.08)] sm:rounded-[1.85rem]"
+            style={{
+              background: "color-mix(in oklch, var(--card) 92%, transparent)",
+              borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
+              backdropFilter: "blur(18px) saturate(1.08)",
+            }}
+          >
           {(attachments.length > 0 || queuedPrompts.length > 0) && (
             <div className="mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pb-2 pt-1">
               {attachments.map((attachment) => (
@@ -1311,7 +1362,8 @@ export function AIAssistantPanel() {
               {isUploadingAttachments ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
             </button>
           </div>
-        </div>
+          </div>
+        </ReactBitsComposerFrame>
         <div className="mt-1 flex items-center justify-between gap-2 px-1">
           <span className="hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex">
             <CornerDownLeftIcon className="w-3 h-3" /> {isBusy ? t("panel.enterToQueue", { defaultValue: "Enter queues" }) : t("panel.enterToSend")}
