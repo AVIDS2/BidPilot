@@ -726,7 +726,14 @@ export function AIAssistantPanel() {
     let cancelled = false;
     void listProviderConfigs()
       .then((result) => {
-        if (!cancelled) setProviderConfigs(result.data);
+        if (cancelled) return;
+        setProviderConfigs(result.data);
+        if (
+          state.selectedProviderConfigId &&
+          !result.data.some((provider) => provider.id === state.selectedProviderConfigId)
+        ) {
+          setSelectedProviderConfig(null);
+        }
       })
       .catch((error) => {
         console.error("Failed to load assistant model configs:", error);
@@ -734,7 +741,7 @@ export function AIAssistantPanel() {
     return () => {
       cancelled = true;
     };
-  }, [state.isOpen, state.mode]);
+  }, [setSelectedProviderConfig, state.isOpen, state.mode, state.selectedProviderConfigId]);
 
   useEffect(() => {
     if (!state.isOpen) {

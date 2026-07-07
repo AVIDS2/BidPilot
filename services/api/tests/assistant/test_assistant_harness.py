@@ -412,6 +412,23 @@ def test_open_page_executes_without_confirmation(client, default_user_id: str) -
     assert succeeded[0]["result"]["route"] == "/projects"
 
 
+def test_stale_provider_config_falls_back_to_official_model(client, default_user_id: str) -> None:
+    _ensure_task_state_table()
+    response = client.post(
+        "/assistant/stream",
+        json={
+            "message": "打开项目页面",
+            "provider_config_id": "deleted-provider-config",
+        },
+    )
+
+    assert response.status_code == 200
+    events = _events(response.text)
+    succeeded = [payload for event, payload in events if event == "assistant.tool_succeeded"]
+    assert succeeded
+    assert succeeded[0]["tool_name"] == "open_page"
+
+
 def test_assistant_conversation_auto_generates_title(client, test_db, default_user_id: str, monkeypatch) -> None:
     _ensure_task_state_table()
     monkeypatch.setattr(

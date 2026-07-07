@@ -77,7 +77,8 @@ async def assistant_stream(
     - ``assistant.tool_failed``: tool execution failed
     - ``assistant.end``: agent finished
     """
-    provider_source, provider_type, api_key, base_url, model = _resolve_request_provider(db, user, payload)
+    provider_source, provider_type, api_key, base_url, model, provider_config_id = _resolve_request_provider(db, user, payload)
+    payload = payload.model_copy(update={"provider_config_id": provider_config_id})
     try:
         _record_assistant_usage(db, user, payload, provider_source)
     except UsageLimitExceeded as exc:
@@ -166,13 +167,13 @@ def _resolve_request_provider(
     db: Session,
     user: CurrentUser,
     payload: AssistantRequest,
-) -> tuple[ProviderSource, str, str | None, str | None, str | None]:
+) -> tuple[ProviderSource, str, str | None, str | None, str | None, str | None]:
     if not payload.provider_config_id:
-        return ProviderSource.OFFICIAL, "openai", None, None, None
+        return ProviderSource.OFFICIAL, "openai", None, None, None, None
 
     config = _resolve_provider_config(db, user.id, payload.provider_config_id)
     if config is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider config not found")
+        return ProviderSource.OFFICIAL, "openai", None, None, None, None
 
     return (
         ProviderSource.BYOK,
@@ -180,6 +181,7 @@ def _resolve_request_provider(
         decrypt_secret(config.api_key),
         config.api_url,
         config.model,
+        config.id,
     )
 
 
