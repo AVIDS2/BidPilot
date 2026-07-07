@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,11 +8,12 @@ import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, PackageIcon } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { ChevronLeft, ChevronRight, PackageIcon, UploadIcon, FileIcon, Loader2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
 import {
   createBundle,
-  reingestBundle,
   listDocuments,
   uploadDocument,
   getDocumentDownloadUrl,
@@ -25,6 +26,117 @@ interface BundlesTabProps {
   bundles: BundleRead[];
   onReingest: (bundleId: string) => void;
   onConfirm: (action: { title: string; description: string; onConfirm: () => void }) => void;
+}
+
+// Drag-and-drop upload zone component
+function DragDropUpload({
+  bundleId,
+  onUploadComplete,
+  t,
+}: {
+  bundleId: string;
+  onUploadComplete: () => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = useCallback(
+    async (file: File) => {
+      setUploading(true);
+      try {
+        await uploadDocument(bundleId, file);
+        toast.success(t("bundles.uploaded", { filename: file.name }));
+        onUploadComplete();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Upload failed";
+        toast.error(t("bundles.uploadFailed", { message: msg }));
+      } finally {
+        setUploading(false);
+      }
+    },
+    [bundleId, onUploadComplete, t]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const file = e.dataTransfer.files?.[0];
+      if (file) handleUpload(file);
+    },
+    [handleUpload]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) handleUpload(file);
+    },
+    [handleUpload]
+  );
+
+  return (
+    <div
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onClick={() => fileInputRef.current?.click()}
+      className={cn(
+        "relative flex flex-col items-center justify-center gap-2 p-6 rounded-lg border-2 border-dashed cursor-pointer transition-all duration-200",
+        isDragging
+          ? "border-primary bg-primary/5 scale-[1.01]"
+          : "border-muted-foreground/20 hover:border-primary/40 hover:bg-muted/30",
+        uploading && "pointer-events-none opacity-60"
+      )}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+      {uploading ? (
+        <Loader2Icon className="size-6 text-muted-foreground animate-spin" />
+      ) : (
+        <UploadIcon className={cn("size-6 transition-colors", isDragging ? "text-primary" : "text-muted-foreground")} />
+      )}
+      <p className="text-sm text-muted-foreground">
+        {uploading ? t("bundles.uploading") : isDragging ? t("bundles.dropHere", { defaultValue: "释放文件开始上传" }) : t("bundles.dragOrClick", { defaultValue: "拖拽文件到此处，或点击选择" })}
+      </p>
+    </div>
+  );
+}
+
+// Document list item with animated entry
+function DocumentItem({ doc, index }: { doc: { id: string; original_filename: string; parse_status: string }; index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.04, ease: [0.32, 0.72, 0, 1] }}
+      className="flex items-center gap-2 text-xs"
+    >
+      <FileIcon className="size-3 text-muted-foreground shrink-0" />
+      <a href={getDocumentDownloadUrl(doc.id)} className="text-primary hover:underline truncate">
+        {doc.original_filename}
+      </a>
+      <Badge variant="outline" className="shrink-0 text-[10px]">
+        {doc.parse_status}
+      </Badge>
+    </motion.div>
+  );
 }
 
 export function BundlesTab({ projectId, bundles, onReingest, onConfirm }: BundlesTabProps) {
@@ -56,6 +168,10 @@ export function BundlesTab({ projectId, bundles, onReingest, onConfirm }: Bundle
       })
       .catch(() => toast.error(t("bundles.registerFailed")));
   };
+
+  const invalidateDocuments = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["documents", selectedBundleId] });
+  }, [queryClient, selectedBundleId]);
 
   return (
     <Card>
@@ -122,41 +238,20 @@ export function BundlesTab({ projectId, bundles, onReingest, onConfirm }: Bundle
                 </div>
               </AccordionTrigger>
               <AccordionContent>
-                <div className="flex flex-col gap-2">
-                  <Field>
-                    <FieldLabel htmlFor={`file-upload-${b.id}`} className="text-xs">
-                      {t("bundles.uploadDocument")}
-                    </FieldLabel>
-                    <Input
-                      id={`file-upload-${b.id}`}
-                      type="file"
-                      className="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          uploadDocument(b.id, file)
-                            .then(() => {
-                              toast.success(t("bundles.uploaded", { filename: file.name }));
-                              queryClient.invalidateQueries({ queryKey: ["documents", b.id] });
-                            })
-                            .catch((err) => {
-                              const msg = err instanceof Error ? err.message : "Upload failed";
-                              toast.error(t("bundles.uploadFailed", { message: msg }));
-                            });
-                        }
-                      }}
-                    />
-                  </Field>
-                  {documents?.items.map((d) => (
-                    <div key={d.id} className="flex items-center gap-2 text-xs ml-2">
-                      <a href={getDocumentDownloadUrl(d.id)} className="text-primary hover:underline">
-                        {d.original_filename}
-                      </a>
-                      <Badge variant="outline">
-                        {t(`statusValues.${d.parse_status}`, { defaultValue: d.parse_status })}
-                      </Badge>
-                    </div>
-                  ))}
+                <div className="flex flex-col gap-3">
+                  {/* Drag-and-drop upload zone */}
+                  <DragDropUpload
+                    bundleId={b.id}
+                    onUploadComplete={invalidateDocuments}
+                    t={t}
+                  />
+
+                  {/* Document list */}
+                  <AnimatePresence>
+                    {documents?.items.map((d, i) => (
+                      <DocumentItem key={d.id} doc={d} index={i} />
+                    ))}
+                  </AnimatePresence>
                   {documents?.items.length === 0 && (
                     <p className="text-xs text-muted-foreground ml-2">{t("bundles.noDocuments")}</p>
                   )}

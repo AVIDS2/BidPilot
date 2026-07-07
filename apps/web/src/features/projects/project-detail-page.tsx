@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { motion, AnimatePresence } from "motion/react";
+import CountUp from "@/components/CountUp";
 import {
   getProject, listBundles, createDeliverable, reingestBundle, listDeliverables,
   listDeliverableSections, listExecutionRuns, retryExecutionRun, listEvidence,
@@ -24,8 +26,8 @@ import {
   type SectionVersionRead, type RequirementItemRead, type ReviewThreadRead,
   type ReviewCommentRead, type AuditEventRead, type KnowledgeChunkRead,
 } from "@/lib/api";
-import { BotIcon, MoreHorizontalIcon, RefreshCwIcon } from "lucide-react";
-import { useState } from "react";
+import { BotIcon, MoreHorizontalIcon, RefreshCwIcon, PackageIcon, PenToolIcon, SearchIcon, MessageSquareIcon, DownloadIcon, CheckCircle2Icon } from "lucide-react";
+import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 import { canViewGovernance } from "@/lib/permissions";
@@ -44,6 +46,99 @@ import { AuditTab } from "./tabs/audit-tab";
 import { ExportTab } from "./tabs/export-tab";
 import { OpsTab } from "./tabs/ops-tab";
 
+// Workflow step configuration
+const WORKFLOW_STEPS = [
+  { key: "prepare", labelKey: "steps.prepare", icon: PackageIcon },
+  { key: "generate", labelKey: "steps.generate", icon: PenToolIcon },
+  { key: "verify", labelKey: "steps.verify", icon: SearchIcon },
+  { key: "review", labelKey: "steps.review", icon: MessageSquareIcon },
+  { key: "export", labelKey: "steps.export", icon: DownloadIcon },
+] as const;
+
+type WorkflowStep = typeof WORKFLOW_STEPS[number]["key"];
+
+// Tab group definitions
+const TAB_GROUPS: Record<WorkflowStep, string[]> = {
+  prepare: ["bundles", "deliverables", "requirements"],
+  generate: ["drafting", "agent", "evidence", "search"],
+  verify: ["runs"],
+  review: ["review"],
+  export: ["export"],
+};
+
+function WorkflowStepper({
+  currentStep,
+  onStepClick,
+  progress,
+  t,
+}: {
+  currentStep: WorkflowStep;
+  onStepClick: (step: WorkflowStep) => void;
+  progress: Record<string, boolean>;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  return (
+    <div className="flex items-center gap-1 w-full">
+      {WORKFLOW_STEPS.map((step, i) => {
+        const isActive = step.key === currentStep;
+        const isDone = progress[step.key];
+        const Icon = step.icon;
+
+        return (
+          <div key={step.key} className="flex items-center flex-1 last:flex-none">
+            <button
+              onClick={() => onStepClick(step.key)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                isActive
+                  ? "bg-primary/10 text-primary border border-primary/20"
+                  : isDone
+                  ? "text-emerald-600 dark:text-emerald-400 hover:bg-muted/50"
+                  : "text-muted-foreground hover:bg-muted/50"
+              }`}
+            >
+              <span className="relative flex size-5 items-center justify-center">
+                {isDone && !isActive ? (
+                  <CheckCircle2Icon className="size-4" />
+                ) : (
+                  <Icon className="size-4" />
+                )}
+              </span>
+              <span className="hidden sm:inline">{t(step.labelKey)}</span>
+            </button>
+            {i < WORKFLOW_STEPS.length - 1 && (
+              <div className="flex-1 mx-1">
+                <div className={`h-px w-full ${isDone ? "bg-emerald-500/40" : "bg-border"}`} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Animated tab content wrapper
+function AnimatedTabContent({ value, children, currentValue }: { value: string; children: React.ReactNode; currentValue: string }) {
+  const isActive = value === currentValue;
+  return (
+    <TabsContent value={value} className="mt-0">
+      <AnimatePresence mode="wait">
+        {isActive && (
+          <motion.div
+            key={value}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </TabsContent>
+  );
+}
+
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -53,10 +148,11 @@ export function ProjectDetailPage() {
 
   // Shared state
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
-  const [selectedDeliverableId, setSelectedDeliverableId] = useState<string | null>(null);
+  const [selectedDeliverableId] = useState<string | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; onConfirm: () => void } | null>(null);
+  const [activeTab, setActiveTab] = useState("bundles");
 
   const showConfirm = (action: { title: string; description: string; onConfirm: () => void }) => {
     setConfirmAction(action);
@@ -89,6 +185,23 @@ export function ProjectDetailPage() {
   const addCommentMut = useMutation({ mutationFn: createReviewComment, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["review-comments", selectedThreadId] }); toast.success(t("review.commentAdded")); }, onError: () => toast.error(t("review.commentFailed")) });
   const submitDecisionMut = useMutation({ mutationFn: submitReviewDecision, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["review-threads", selectedSectionId] }); toast.success(t("review.decisionSubmitted")); }, onError: () => toast.error(t("review.decisionFailed")) });
 
+  // Workflow progress calculation
+  const workflowProgress = useMemo(() => ({
+    prepare: !!(bundles?.length && deliverables?.length && requirements?.length),
+    generate: !!(runs?.length || sections?.length),
+    verify: !!(runs?.some((r) => r.status === "succeeded")),
+    review: !!(sections?.some((s) => s.status === "approved")),
+    export: !!(deliverables?.some((d) => d.export_status === "exported")),
+  }), [bundles, deliverables, requirements, runs, sections]);
+
+  // Current workflow step based on active tab
+  const currentStep = useMemo(() => {
+    for (const [step, tabs] of Object.entries(TAB_GROUPS)) {
+      if (tabs.includes(activeTab)) return step as WorkflowStep;
+    }
+    return "prepare" as WorkflowStep;
+  }, [activeTab]);
+
   if (!project) return <div className="flex flex-col gap-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-40" /><Skeleton className="h-40" /></div>;
 
   return (
@@ -101,7 +214,13 @@ export function ProjectDetailPage() {
         </BreadcrumbList>
       </Breadcrumb>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      {/* Header with animated entry */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
+        className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+      >
         <div className="min-w-0">
           <h1 className="break-words text-2xl font-bold sm:truncate">{project.name}</h1>
           <p className="text-muted-foreground">
@@ -120,82 +239,130 @@ export function ProjectDetailPage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+      </motion.div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards - staggered animation */}
       <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-        <Card className="@container/card"><CardHeader><CardDescription>{t("summary.bundles")}</CardDescription><CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">{bundles?.length ?? 0}</CardTitle><CardAction><Badge variant="outline">{t("summary.ingested", { count: bundles?.filter((b) => b.ingest_status === "ingested").length ?? 0 })}</Badge></CardAction></CardHeader><CardFooter className="text-sm text-muted-foreground">{t("summary.bundlesDesc")}</CardFooter></Card>
-        <Card className="@container/card"><CardHeader><CardDescription>{t("summary.deliverables")}</CardDescription><CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">{deliverables?.length ?? 0}</CardTitle><CardAction><Badge variant="outline">{t("summary.sections", { count: sections?.length ?? 0 })}</Badge></CardAction></CardHeader><CardFooter className="text-sm text-muted-foreground">{t("summary.deliverablesDesc")}</CardFooter></Card>
-        <Card className="@container/card"><CardHeader><CardDescription>{t("summary.evidence")}</CardDescription><CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">{evidence?.length ?? 0}</CardTitle><CardAction><Badge variant="outline">{t("summary.confirmed", { count: requirements?.filter((r) => r.status === "confirmed").length ?? 0 })}</Badge></CardAction></CardHeader><CardFooter className="text-sm text-muted-foreground">{t("summary.evidenceDesc")}</CardFooter></Card>
-        <Card className="@container/card"><CardHeader><CardDescription>{t("summary.runs")}</CardDescription><CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">{runs?.length ?? 0}</CardTitle><CardAction><Badge variant={runs?.some((r) => r.status === "failed") ? "destructive" : "outline"}>{t("summary.succeeded", { count: runs?.filter((r) => r.status === "succeeded").length ?? 0 })}</Badge></CardAction></CardHeader><CardFooter className="text-sm text-muted-foreground">{t("summary.runsDesc")}</CardFooter></Card>
+        {[
+          { label: t("summary.bundles"), value: bundles?.length ?? 0, badge: t("summary.ingested", { count: bundles?.filter((b) => b.ingest_status === "ingested").length ?? 0 }), desc: t("summary.bundlesDesc") },
+          { label: t("summary.deliverables"), value: deliverables?.length ?? 0, badge: t("summary.sections", { count: sections?.length ?? 0 }), desc: t("summary.deliverablesDesc") },
+          { label: t("summary.evidence"), value: evidence?.length ?? 0, badge: t("summary.confirmed", { count: requirements?.filter((r) => r.status === "confirmed").length ?? 0 }), desc: t("summary.evidenceDesc") },
+          { label: t("summary.runs"), value: runs?.length ?? 0, badge: t("summary.succeeded", { count: runs?.filter((r) => r.status === "succeeded").length ?? 0 }), desc: t("summary.runsDesc"), warn: runs?.some((r) => r.status === "failed") },
+        ].map((card, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: i * 0.07, ease: [0.32, 0.72, 0, 1] }}
+          >
+            <Card className="@container/card h-full">
+              <CardHeader>
+                <CardDescription>{card.label}</CardDescription>
+                <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+                  <CountUp to={card.value} duration={1.2} delay={i * 0.08} />
+                </CardTitle>
+                <CardAction>
+                  <Badge variant={card.warn ? "destructive" : "outline"}>{card.badge}</Badge>
+                </CardAction>
+              </CardHeader>
+              <CardFooter className="text-sm text-muted-foreground">{card.desc}</CardFooter>
+            </Card>
+          </motion.div>
+        ))}
       </div>
 
-      {/* Workflow Hint Banner */}
-      <Card className="border-[rgba(132,204,22,0.2)] bg-gradient-to-r from-[rgba(132,204,22,0.04)] to-transparent">
-        <CardContent className="flex flex-wrap items-center gap-2 py-3 text-xs">
-          <span className="font-medium text-muted-foreground">{t("detail.workflow")}</span>
-          <Badge variant={bundles?.length ? "default" : "outline"} className="font-normal">{t("detail.wfBundles", { count: bundles?.length ?? 0 })}</Badge>
-          <span className="text-muted-foreground">&rarr;</span>
-          <Badge variant={deliverables?.length ? "default" : "outline"} className="font-normal">{t("detail.wfDeliverables", { count: deliverables?.length ?? 0 })}</Badge>
-          <span className="text-muted-foreground">&rarr;</span>
-          <Badge variant={requirements?.length ? "default" : "outline"} className="font-normal">{t("detail.wfRequirements", { count: requirements?.length ?? 0 })}</Badge>
-          <span className="text-muted-foreground">&rarr;</span>
-          <Badge variant={runs?.length ? "default" : "outline"} className="font-normal">{t("detail.wfDrafting", { count: runs?.length ?? 0 })}</Badge>
-          <span className="text-muted-foreground">&rarr;</span>
-          <Badge variant={sections?.some((s) => s.status === "approved") ? "default" : "outline"} className="font-normal">{t("detail.wfReview", { count: sections?.filter((s) => s.status === "approved").length ?? 0 })}</Badge>
-          <span className="text-muted-foreground">&rarr;</span>
-          <Badge variant={deliverables?.some((d) => d.export_status === "exported") ? "default" : "outline"} className="font-normal">{t("detail.wfExport")}</Badge>
-        </CardContent>
-      </Card>
+      {/* Workflow Stepper */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.3, ease: [0.32, 0.72, 0, 1] }}
+      >
+        <Card className="border-primary/10 bg-gradient-to-r from-primary/[0.03] to-transparent">
+          <CardContent className="py-4">
+            <WorkflowStepper
+              currentStep={currentStep}
+              onStepClick={(step) => {
+                const firstTab = TAB_GROUPS[step][0];
+                if (firstTab) setActiveTab(firstTab);
+              }}
+              progress={workflowProgress}
+              t={t}
+            />
+          </CardContent>
+        </Card>
+      </motion.div>
 
-      <Tabs defaultValue="bundles" className="min-w-0">
+      {/* Tabs - grouped with separators */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
         <ScrollArea className="w-full">
           <TabsList className="w-max min-w-full justify-start">
+            {/* Prepare group */}
             <TabsTrigger value="bundles">{t("tabs.bundles")}</TabsTrigger>
             <TabsTrigger value="deliverables">{t("tabs.deliverables")}</TabsTrigger>
             <TabsTrigger value="requirements">{t("tabs.requirements")}</TabsTrigger>
+            {/* Separator */}
+            <div className="mx-1 self-stretch w-px bg-border" aria-hidden />
+            {/* Generate group */}
             <TabsTrigger value="drafting">{t("tabs.drafting")}</TabsTrigger>
             <TabsTrigger value="agent"><span className="flex items-center gap-1.5"><BotIcon className="size-3.5" />{t("tabs.agent")}</span></TabsTrigger>
             <TabsTrigger value="evidence">{t("tabs.evidence")}</TabsTrigger>
             <TabsTrigger value="search">{t("tabs.search")}</TabsTrigger>
+            {/* Separator */}
+            <div className="mx-1 self-stretch w-px bg-border" aria-hidden />
+            {/* Verify group */}
             <TabsTrigger value="runs">{t("tabs.runs")}</TabsTrigger>
             <TabsTrigger value="review">{t("tabs.review")}</TabsTrigger>
-            {showGovernance && <TabsTrigger value="audit">{t("tabs.audit")}</TabsTrigger>}
+            {/* Separator */}
+            <div className="mx-1 self-stretch w-px bg-border" aria-hidden />
+            {/* Output */}
             <TabsTrigger value="export">{t("tabs.export")}</TabsTrigger>
+            {/* Governance */}
+            {showGovernance && <div className="mx-1 self-stretch w-px bg-border" aria-hidden />}
+            {showGovernance && <TabsTrigger value="audit">{t("tabs.audit")}</TabsTrigger>}
             {showGovernance && <TabsTrigger value="ops">{t("tabs.system")}</TabsTrigger>}
           </TabsList>
         </ScrollArea>
 
-        <TabsContent value="bundles">
+        <AnimatedTabContent value="bundles" currentValue={activeTab}>
           <BundlesTab projectId={id!} bundles={bundles ?? []} onReingest={(bid) => reingestMut.mutate(bid)} onConfirm={showConfirm} />
-        </TabsContent>
-        <TabsContent value="deliverables">
+        </AnimatedTabContent>
+        <AnimatedTabContent value="deliverables" currentValue={activeTab}>
           <DeliverablesTab projectId={id!} deliverables={deliverables ?? []} sections={sections} selectedSectionId={selectedSectionId} onSelectSection={setSelectedSectionId} onCreateDeliverable={(title) => createDeliverableMut.mutate({ project_id: id!, type: "proposal", title })} />
-        </TabsContent>
-        <TabsContent value="requirements">
+        </AnimatedTabContent>
+        <AnimatedTabContent value="requirements" currentValue={activeTab}>
           <RequirementsTab requirements={requirements ?? []} onCreateRequirement={(data) => createReqMut.mutate({ project_id: id!, ...data })} onUpdateRequirement={(rid, data) => updateReqMut.mutate({ id: rid, data })} />
-        </TabsContent>
-        <TabsContent value="drafting">
+        </AnimatedTabContent>
+        <AnimatedTabContent value="drafting" currentValue={activeTab}>
           <DraftingTab projectId={id!} sectionVersions={sectionVersions} sections={sections} selectedSectionId={selectedSectionId} evidence={evidence} onDraft={(sk) => draftMut.mutate({ project_id: id!, section_key: sk })} onRedraft={(sk) => redraftMut.mutate({ project_id: id!, section_key: sk, review_feedback: "Revise based on review" })} draftPending={draftMut.isPending} redraftPending={redraftMut.isPending} />
-        </TabsContent>
-        <TabsContent value="agent">
+        </AnimatedTabContent>
+        <AnimatedTabContent value="agent" currentValue={activeTab}>
           <AgentTab runs={runs ?? []} />
-        </TabsContent>
-        <TabsContent value="evidence">
+        </AnimatedTabContent>
+        <AnimatedTabContent value="evidence" currentValue={activeTab}>
           <EvidenceTab evidence={evidence ?? []} knowledgeChunks={knowledgeChunks ?? []} />
-        </TabsContent>
-        <TabsContent value="search">
+        </AnimatedTabContent>
+        <AnimatedTabContent value="search" currentValue={activeTab}>
           <SearchTab projectId={id!} />
-        </TabsContent>
-        <TabsContent value="runs">
+        </AnimatedTabContent>
+        <AnimatedTabContent value="runs" currentValue={activeTab}>
           <RunsTab runs={runs ?? []} onRetry={(rid) => retryMut.mutate(rid)} retrying={retryMut.isPending} onConfirm={showConfirm} t={(k, o) => t(k, o as Record<string, unknown>)} />
-        </TabsContent>
-        <TabsContent value="review">
+        </AnimatedTabContent>
+        <AnimatedTabContent value="review" currentValue={activeTab}>
           <ReviewTab sections={sections} reviewThreads={reviewThreads} reviewComments={reviewComments} selectedSectionId={selectedSectionId} selectedThreadId={selectedThreadId} onSelectSection={setSelectedSectionId} onSelectThread={setSelectedThreadId} onAddComment={(tid, body) => addCommentMut.mutate({ thread_id: tid, body })} onSubmitDecision={(sid, dec, cmt) => submitDecisionMut.mutate({ section_id: sid, decision: dec as "approved" | "rejected", comment: cmt })} addCommentPending={addCommentMut.isPending} submitDecisionPending={submitDecisionMut.isPending} />
-        </TabsContent>
-        {showGovernance && <TabsContent value="audit"><AuditTab auditEvents={auditEvents ?? []} /></TabsContent>}
-        <TabsContent value="export"><ExportTab deliverables={deliverables ?? []} /></TabsContent>
-        {showGovernance && <TabsContent value="ops"><OpsTab runs={runs ?? []} ops={ops} /></TabsContent>}
+        </AnimatedTabContent>
+        <AnimatedTabContent value="export" currentValue={activeTab}>
+          <ExportTab deliverables={deliverables ?? []} />
+        </AnimatedTabContent>
+        {showGovernance && (
+          <AnimatedTabContent value="audit" currentValue={activeTab}>
+            <AuditTab auditEvents={auditEvents ?? []} />
+          </AnimatedTabContent>
+        )}
+        {showGovernance && (
+          <AnimatedTabContent value="ops" currentValue={activeTab}>
+            <OpsTab runs={runs ?? []} ops={ops} />
+          </AnimatedTabContent>
+        )}
       </Tabs>
 
       <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
