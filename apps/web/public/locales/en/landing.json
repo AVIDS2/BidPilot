@@ -9,7 +9,13 @@
   },
   "socialProof": {
     "label": "Trusted by procurement teams worldwide",
-    "logos": ["Contour Design", "Harbor Group", "Northway Systems", "Atria Capital", "Vantage Partners"]
+    "logos": ["Contour Design", "Harbor Group", "Northway Systems", "Atria Capital", "Vantage Partners"],
+    "stats": [
+      { "value": "500+", "label": "Proposals generated" },
+      { "value": "98%", "label": "Compliance rate" },
+      { "value": "3d→30m", "label": "Avg. drafting time" },
+      { "value": "12+", "label": "Industry scenarios" }
+    ]
   },
   "howItWorks": {
     "heading": "How It Works",

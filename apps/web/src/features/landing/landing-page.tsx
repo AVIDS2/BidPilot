@@ -7,10 +7,14 @@ import AnimatedContent from "@/components/AnimatedContent";
 import StarBorder from "@/components/StarBorder";
 import GlareHover from "@/components/GlareHover";
 import DecryptedText from "@/components/DecryptedText";
+import CountUp from "@/components/CountUp";
+import { useAuth } from "@/lib/auth";
 
 // Hero区域 - 使用CinematicHero + BlurText逐字动画
 function HeroSection() {
   const { t } = useTranslation("landing");
+  const { isAuthenticated } = useAuth();
+  const ctaHref = isAuthenticated ? "/dashboard" : "/signup";
 
   return (
     <CinematicHero variant="mixed">
@@ -25,7 +29,7 @@ function HeroSection() {
         style={{ color: "var(--landing-accent)" }}
       />
 
-      {/* 标题 - BlurText逐词blur入场 */}
+      {/* 标题 - BlurText逐词blur入场，绝对视觉焦点 */}
       <BlurText
         text={t("hero.title")}
         delay={150}
@@ -33,32 +37,32 @@ function HeroSection() {
         direction="bottom"
         threshold={0}
         stepDuration={0.6}
-        className="mt-7 max-w-[12ch] text-[clamp(3.15rem,16vw,5.25rem)] font-medium leading-[0.9] tracking-[-0.055em] text-white sm:mt-8 sm:max-w-[10ch] md:text-8xl md:leading-[0.85]"
+        className="mt-7 max-w-[12ch] text-[clamp(3.15rem,16vw,5.25rem)] font-medium leading-[0.9] tracking-[-0.055em] text-white drop-shadow-[0_4px_32px_rgba(132,204,22,0.15)] sm:mt-8 sm:max-w-[10ch] md:text-8xl md:leading-[0.85]"
       />
 
       {/* 副标题 */}
-      <p className="mt-6 max-w-[20rem] text-lg leading-relaxed text-white/80 sm:max-w-2xl sm:text-xl md:text-2xl">
+      <p className="mt-6 max-w-[20rem] text-lg leading-relaxed text-white/80 drop-shadow-sm sm:max-w-2xl sm:text-xl md:text-2xl">
         {t("hero.description")}
       </p>
 
-      {/* CTA 按钮 - StarBorder包裹主CTA */}
+      {/* CTA 按钮 - StarBorder包裹主CTA，加半透明底板提升可读性 */}
       <div className="mt-10 grid w-full max-w-[22rem] grid-cols-2 gap-3 sm:mt-12 sm:flex sm:max-w-none sm:gap-6">
         <StarBorder
           as="a"
-          color="rgba(132, 204, 22, 0.8)"
+          color="rgba(132, 204, 22, 0.9)"
           speed="5s"
           thickness={1}
           className="inline-flex min-h-24 w-full sm:min-h-0"
-          href="/signup"
+          href={ctaHref}
         >
-          <span className="flex w-full items-center justify-between gap-3 px-6 py-5 text-xl font-medium leading-tight sm:justify-start sm:px-8 sm:py-4 sm:text-lg">
+          <span className="flex w-full items-center justify-between gap-3 px-6 py-5 text-xl font-medium leading-tight backdrop-blur-sm sm:justify-start sm:px-8 sm:py-4 sm:text-lg">
             {t("hero.getStarted")}
             <span className="text-sm">→</span>
           </span>
         </StarBorder>
         <Link
           to="/pricing"
-          className="inline-flex min-h-24 items-center justify-center gap-3 px-5 py-5 text-center text-xl font-medium leading-tight text-white transition-all duration-300 hover:border-white/20 sm:min-h-0 sm:px-8 sm:py-4 sm:text-lg"
+          className="inline-flex min-h-24 items-center justify-center gap-3 px-5 py-5 text-center text-xl font-medium leading-tight text-white backdrop-blur-sm transition-all duration-300 hover:border-white/30 hover:bg-white/5 sm:min-h-0 sm:px-8 sm:py-4 sm:text-lg"
           style={{
             border: "1px solid var(--landing-hairline)",
           }}
@@ -78,14 +82,24 @@ function HeroSection() {
   );
 }
 
-// 社会证明区域
+// 社会证明区域 — 统计数字 + logos
 function SocialProofSection() {
   const { t } = useTranslation("landing");
   const logos = t("socialProof.logos", { returnObjects: true }) as string[];
+  const stats = t("socialProof.stats", { returnObjects: true }) as Array<{ value: string; label: string }>;
+
+  // 从统计值中提取数字部分给CountUp
+  const parseStatValue = (val: string): { num: number; prefix: string; suffix: string; isNumeric: boolean } => {
+    const match = val.match(/^([^\d]*)(\d+)(.*)$/);
+    if (match) {
+      return { prefix: match[1], num: parseInt(match[2]), suffix: match[3], isNumeric: true };
+    }
+    return { prefix: "", num: 0, suffix: val, isNumeric: false };
+  };
 
   return (
     <section
-      className="py-16"
+      className="py-20"
       style={{
         background: "var(--landing-canvas)",
         borderTop: "1px solid var(--landing-hairline)",
@@ -93,14 +107,51 @@ function SocialProofSection() {
       }}
     >
       <div className="max-w-7xl mx-auto px-8">
-        <AnimatedContent distance={30} duration={0.6}>
-          <p className="text-sm font-medium tracking-widest uppercase text-center mb-8" style={{ color: "var(--landing-text-tertiary)" }}>
+        {/* 统计数字 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16">
+          {stats.map((stat, index) => {
+            const { prefix, num, suffix, isNumeric } = parseStatValue(stat.value);
+            return (
+              <AnimatedContent key={index} delay={index * 0.1} distance={30} duration={0.6}>
+                <div className="text-center">
+                  <p
+                    className="text-4xl md:text-5xl font-medium tracking-tight mb-2"
+                    style={{ color: "var(--landing-text-primary)" }}
+                  >
+                    {isNumeric ? (
+                      <>
+                        {prefix}
+                        <CountUp to={num} duration={2} delay={index * 0.15} />
+                        {suffix}
+                      </>
+                    ) : (
+                      stat.value
+                    )}
+                  </p>
+                  <p
+                    className="text-sm tracking-wide"
+                    style={{ color: "var(--landing-text-tertiary)" }}
+                  >
+                    {stat.label}
+                  </p>
+                </div>
+              </AnimatedContent>
+            );
+          })}
+        </div>
+
+        {/* logos */}
+        <AnimatedContent distance={20} duration={0.5}>
+          <p
+            className="text-sm font-medium tracking-widest uppercase text-center mb-8"
+            style={{ color: "var(--landing-text-tertiary)" }}
+          >
             {t("socialProof.label")}
           </p>
         </AnimatedContent>
         <div className="flex flex-wrap items-center justify-center gap-x-16 gap-y-6">
           {logos.map((name, index) => (
-            <AnimatedContent key={name} delay={index * 0.08} distance={20} duration={0.5}>
+            <AnimatedContent key={name} delay={index * 0.06} distance={15} duration={0.4}>
               <span
                 className="text-sm font-medium tracking-wider uppercase transition-colors duration-300 hover:text-white"
                 style={{ color: "var(--landing-text-tertiary)" }}
@@ -338,18 +389,32 @@ function PricingSection() {
                     ))}
                   </ul>
 
-                  {/* CTA */}
-                  <Link
-                    to="/signup"
-                    className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
-                    style={{
-                      background: highlighted ? "var(--landing-accent)" : "transparent",
-                      color: highlighted ? "var(--landing-canvas)" : "var(--landing-text-primary)",
-                      border: highlighted ? "none" : "1px solid var(--landing-hairline)",
-                    }}
-                  >
-                    {t(`pricing.tiers.${tier}.cta`)}
-                  </Link>
+                  {/* CTA — Enterprise用mailto，其他跳signup */}
+                  {tier === "enterprise" ? (
+                    <a
+                      href="mailto:sales@bidpilot.ai?subject=BidPilot%20Enterprise%20Inquiry"
+                      className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
+                      style={{
+                        background: "transparent",
+                        color: "var(--landing-text-primary)",
+                        border: "1px solid var(--landing-hairline)",
+                      }}
+                    >
+                      {t(`pricing.tiers.${tier}.cta`)}
+                    </a>
+                  ) : (
+                    <Link
+                      to="/signup"
+                      className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
+                      style={{
+                        background: highlighted ? "var(--landing-accent)" : "transparent",
+                        color: highlighted ? "var(--landing-canvas)" : "var(--landing-text-primary)",
+                        border: highlighted ? "none" : "1px solid var(--landing-hairline)",
+                      }}
+                    >
+                      {t(`pricing.tiers.${tier}.cta`)}
+                    </Link>
+                  )}
                 </div>
               </AnimatedContent>
             );

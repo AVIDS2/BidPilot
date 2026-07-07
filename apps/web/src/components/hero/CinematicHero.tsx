@@ -94,8 +94,8 @@ export function CinematicHero({
         }}
       />
 
-      {/* 层7: 影视画框标注 */}
-      <FieldGuide />
+      {/* 层7: 极简角标（仅保留品牌标识，去掉技术参数） */}
+      <MinimalGuide />
 
       {/* 层8: 内容 */}
       <div className="relative z-20 mx-auto flex min-h-[100dvh] w-full max-w-7xl flex-col justify-center px-5 py-28 sm:px-8 sm:py-32">
@@ -105,32 +105,22 @@ export function CinematicHero({
   );
 }
 
-// 影视画框叠加组件
-function FieldGuide() {
+// 极简角标 — 只保留品牌定位，去掉开发者技术参数
+function MinimalGuide() {
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
-      <span className="absolute top-[5.5rem] left-5 text-[10px] text-white/30 font-mono sm:top-6 sm:left-6">
-        BidPilot v1.0
-      </span>
-      <span className="absolute top-[5.5rem] right-5 text-[10px] text-white/30 font-mono sm:top-6 sm:right-6">
-        [16:9]
-      </span>
-      <span className="absolute bottom-5 left-5 text-[10px] text-white/30 font-mono sm:bottom-6 sm:left-6">
-        OVERSCAN: 1920 x 1080
-      </span>
-      <span className="absolute bottom-5 right-5 text-[10px] text-white/30 font-mono sm:bottom-6 sm:right-6">
-        100%
+      {/* 左上角：品牌标识 */}
+      <span className="absolute top-5 left-5 text-[10px] text-white/20 font-mono tracking-widest uppercase sm:top-6 sm:left-6">
+        BidPilot
       </span>
 
-      {/* 十字准星 */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-        <div className="w-8 h-px bg-white/20" />
-        <div className="w-px h-8 bg-white/20 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-      </div>
+      {/* 右上角：行业定位 */}
+      <span className="absolute top-5 right-5 text-[10px] text-white/20 font-mono tracking-widest uppercase sm:top-6 sm:right-6">
+        Bid Intelligence
+      </span>
 
-      {/* 边框线 */}
-      <div className="absolute inset-x-5 inset-y-20 border border-white/5 sm:inset-8" />
-      <div className="absolute inset-x-10 inset-y-28 border border-white/3 sm:inset-16" />
+      {/* 极淡的边框线 — 仅在大屏显示，增加电影感 */}
+      <div className="hidden sm:block absolute inset-x-8 inset-y-20 border border-white/[0.03]" />
     </div>
   );
 }

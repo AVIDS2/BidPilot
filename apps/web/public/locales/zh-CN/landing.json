@@ -9,7 +9,13 @@
   },
   "socialProof": {
     "label": "全球采购团队的信赖之选",
-    "logos": ["Contour Design", "Harbor Group", "Northway Systems", "Atria Capital", "Vantage Partners"]
+    "logos": ["Contour Design", "Harbor Group", "Northway Systems", "Atria Capital", "Vantage Partners"],
+    "stats": [
+      { "value": "500+", "label": "投标方案生成" },
+      { "value": "98%", "label": "合规率提升" },
+      { "value": "3天→30分钟", "label": "平均起草耗时" },
+      { "value": "12+", "label": "行业场景覆盖" }
+    ]
   },
   "howItWorks": {
     "heading": "工作原理",
