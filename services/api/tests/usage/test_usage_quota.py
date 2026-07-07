@@ -3,8 +3,9 @@ from datetime import UTC, datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from app.db import Base
 from app.auth.service import _hash_password
-from app.models import Base, Organization, Project, Subscription, User, UsageEvent
+from app.models import Organization, Project, Subscription, User, UsageEvent
 from app.usage.schemas import ProviderSource
 from app.usage.service import count_official_workflow_starts, get_usage_quota, record_usage_event
 
@@ -68,6 +69,12 @@ def test_monthly_quota_counts_current_month_only():
         assert quota.monthly_workflow_limit == 3
         assert quota.monthly_workflow_used == 1
         assert quota.monthly_workflow_remaining == 2
+        assert quota.monthly_assistant_limit == 100
+        assert quota.monthly_assistant_used == 0
+        assert quota.monthly_assistant_remaining == 100
+        assert quota.monthly_indexing_limit == 5
+        assert quota.monthly_indexing_used == 0
+        assert quota.monthly_indexing_remaining == 5
         assert quota.trial_window_start.startswith(datetime.now(UTC).strftime("%Y-%m-01"))
     finally:
         db.close()
@@ -93,6 +100,10 @@ def test_monthly_quota_unlimited_for_professional():
         assert quota.monthly_workflow_limit == -1
         assert quota.monthly_workflow_used == 4
         assert quota.monthly_workflow_remaining is None
+        assert quota.monthly_assistant_limit == -1
+        assert quota.monthly_assistant_remaining is None
+        assert quota.monthly_indexing_limit == -1
+        assert quota.monthly_indexing_remaining is None
     finally:
         db.close()
 

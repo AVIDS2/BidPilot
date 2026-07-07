@@ -48,6 +48,15 @@
     "planUpdated": "Plan updated to {{plan}}",
     "planUpdateFailed": "Failed to update plan"
   },
+  "usage": {
+    "title": "Usage this month",
+    "window": "Window starts {{date}}",
+    "workflow": "AI drafting workflows",
+    "assistant": "Assistant messages",
+    "indexing": "Document indexing jobs",
+    "remaining": "{{count}} remaining",
+    "unlimited": "Unlimited with fair-use controls"
+  },
   "security": {
     "title": "Security",
     "description": "Manage your password and authentication settings.",

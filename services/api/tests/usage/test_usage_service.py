@@ -1,12 +1,18 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db import Base
 from app.auth.service import _hash_password
-from app.models import Base, Organization, Project, Subscription, User, UsageEvent
+from app.models import Organization, Project, Subscription, User, UsageEvent
 from app.usage.schemas import ProviderSource
 from app.usage.service import (
+    ASSISTANT_MESSAGE_STARTED,
+    EMBEDDING_INDEX_STARTED,
     UsageLimitExceeded,
+    check_assistant_quota,
+    check_indexing_quota,
     check_workflow_quota,
+    current_period_key,
     record_usage_event,
 )
 
@@ -137,6 +143,79 @@ def test_byok_does_not_consume_official_workflow_quota():
         db.close()
 
 
+def test_starter_official_assistant_quota_blocks_after_limit():
+    db = _make_db()
+    try:
+        user, project = _make_user_project(db, "starter")
+
+        for _ in range(100):
+            record_usage_event(
+                db,
+                user_id=user.id,
+                org_id=user.org_id,
+                project_id=project.id,
+                event_type=ASSISTANT_MESSAGE_STARTED,
+                provider_source=ProviderSource.OFFICIAL,
+            )
+        db.commit()
+
+        try:
+            check_assistant_quota(db, user.id, user.org_id, ProviderSource.OFFICIAL)
+        except UsageLimitExceeded as exc:
+            assert "starter assistant limit" in str(exc)
+        else:
+            raise AssertionError("Expected UsageLimitExceeded")
+    finally:
+        db.close()
+
+
+def test_byok_assistant_does_not_consume_official_assistant_quota():
+    db = _make_db()
+    try:
+        user, project = _make_user_project(db, "starter")
+
+        for _ in range(120):
+            record_usage_event(
+                db,
+                user_id=user.id,
+                org_id=user.org_id,
+                project_id=project.id,
+                event_type=ASSISTANT_MESSAGE_STARTED,
+                provider_source=ProviderSource.BYOK,
+            )
+        db.commit()
+
+        check_assistant_quota(db, user.id, user.org_id, ProviderSource.OFFICIAL)
+    finally:
+        db.close()
+
+
+def test_starter_official_indexing_quota_blocks_after_limit():
+    db = _make_db()
+    try:
+        user, project = _make_user_project(db, "starter")
+
+        for _ in range(5):
+            record_usage_event(
+                db,
+                user_id=user.id,
+                org_id=user.org_id,
+                project_id=project.id,
+                event_type=EMBEDDING_INDEX_STARTED,
+                provider_source=ProviderSource.OFFICIAL,
+            )
+        db.commit()
+
+        try:
+            check_indexing_quota(db, user.id, user.org_id, ProviderSource.OFFICIAL)
+        except UsageLimitExceeded as exc:
+            assert "starter indexing limit" in str(exc)
+        else:
+            raise AssertionError("Expected UsageLimitExceeded")
+    finally:
+        db.close()
+
+
 def test_record_usage_event_persists():
     db = _make_db()
     try:
@@ -157,6 +236,6 @@ def test_record_usage_event_persists():
         assert loaded is not None
         assert loaded.provider_source == ProviderSource.OFFICIAL.value
         assert loaded.metadata_json == {"source": "test"}
-        assert loaded.period_key == "2026-06"
+        assert loaded.period_key == current_period_key()
     finally:
         db.close()

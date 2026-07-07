@@ -15,6 +15,16 @@ from app.chat.service import create_conversation, get_conversation, get_conversa
 from app.models import ChatTaskState
 
 from .guardrails import requires_confirmation
+from .audit import (
+    begin_confirmed_action,
+    cancel_pending_action,
+    record_action_failed,
+    record_action_started,
+    record_action_succeeded,
+    record_pending_approval,
+    redact_arguments,
+    redact_text,
+)
 from .runtime import AssistantRuntime
 from .schemas import AssistantConfirmation, AssistantIntent, AssistantRequest, AssistantToolResult
 from .tools import execute_tool
@@ -107,9 +117,21 @@ async def stream_assistant_response(
 
     if requires_confirmation(intent.tool_name, payload.approval_mode):
         response = _confirmation_message(intent.tool_name, arguments)
+        confirmation_payload = _confirmation_payload(intent.tool_name, arguments, response)
+        approval = record_pending_approval(
+            db,
+            user,
+            conversation_id=conversation_id,
+            tool_name=intent.tool_name,
+            arguments=arguments,
+            approval_mode=payload.approval_mode,
+            payload=confirmation_payload,
+        )
+        confirmation_payload["approval_id"] = approval.id
+        confirmation_payload["conversation_id"] = conversation_id
         yield _sse(
             "assistant.confirmation_requested",
-            _confirmation_payload(intent.tool_name, arguments, response),
+            confirmation_payload,
         )
         _set_task_state(
             db,
@@ -122,13 +144,24 @@ async def stream_assistant_response(
         yield _message_and_end(db, conversation_id, response)
         return
 
+    audit = record_action_started(
+        db,
+        user,
+        conversation_id=conversation_id,
+        tool_name=intent.tool_name,
+        arguments=arguments,
+        approval_mode=payload.approval_mode,
+    )
     try:
         result = execute_tool(db, user, intent.tool_name, arguments)
     except Exception as exc:
-        yield _tool_failed(intent.tool_name, str(exc))
-        yield _message_and_end(db, conversation_id, f"执行失败：{exc}")
+        safe_error = redact_text(str(exc))
+        record_action_failed(db, audit, safe_error)
+        yield _tool_failed(intent.tool_name, safe_error)
+        yield _message_and_end(db, conversation_id, f"执行失败：{safe_error}")
         return
 
+    record_action_succeeded(db, audit, result.summary)
     async for event in _emit_tool_result(db, conversation_id, result, arguments):
         yield event
 
@@ -141,6 +174,13 @@ async def _handle_confirmation(
 ) -> AsyncGenerator[str, None]:
     if not confirmation.approved:
         message = "已取消这次操作。"
+        cancel_pending_action(
+            db,
+            user,
+            conversation_id=conversation_id,
+            tool_name=confirmation.tool_name,
+            approval_id=confirmation.approval_id,
+        )
         save_message(db, conversation_id, "assistant", message)
         _clear_task_state(db, conversation_id)
         yield _sse(
@@ -149,6 +189,20 @@ async def _handle_confirmation(
         )
         return
 
+    try:
+        audit = begin_confirmed_action(
+            db,
+            user,
+            conversation_id=conversation_id,
+            tool_name=confirmation.tool_name,
+            arguments=confirmation.arguments,
+            approval_id=confirmation.approval_id,
+        )
+    except Exception as exc:
+        safe_error = redact_text(str(exc))
+        yield _tool_failed(confirmation.tool_name, safe_error)
+        yield _message_and_end(db, conversation_id, f"执行失败：{safe_error}")
+        return
     yield _sse(
         "assistant.tool_started",
         {
@@ -160,9 +214,12 @@ async def _handle_confirmation(
     try:
         result = execute_tool(db, user, confirmation.tool_name, confirmation.arguments)
     except Exception as exc:
-        yield _tool_failed(confirmation.tool_name, str(exc))
+        safe_error = redact_text(str(exc))
+        record_action_failed(db, audit, safe_error)
+        yield _tool_failed(confirmation.tool_name, safe_error)
         return
 
+    record_action_succeeded(db, audit, result.summary)
     _clear_task_state(db, conversation_id)
     async for event in _emit_tool_result(db, conversation_id, result, confirmation.arguments):
         yield event
@@ -174,13 +231,15 @@ async def _emit_tool_result(
     result: AssistantToolResult,
     arguments: dict,
 ) -> AsyncGenerator[str, None]:
+    summary = redact_text(result.summary)
+    transport_result = redact_arguments(result.result)
     if result.workflow:
         yield _sse(
             "assistant.workflow_started",
             {
                 "tool_name": result.tool_name,
                 "arguments": arguments,
-                "result": result.result,
+                "result": transport_result,
                 "state": "running_workflow",
             },
         )
@@ -189,18 +248,18 @@ async def _emit_tool_result(
         "assistant.tool_succeeded",
         {
             "tool_name": result.tool_name,
-            "result": result.result,
-            "summary": result.summary,
+            "result": transport_result,
+            "summary": summary,
             "state": "completed",
         },
     )
-    yield _sse("assistant.message", {"content": result.summary, "state": "completed"})
+    yield _sse("assistant.message", {"content": summary, "state": "completed"})
     if conversation_id:
-        save_message(db, conversation_id, "assistant", result.summary)
+        save_message(db, conversation_id, "assistant", summary)
     yield _sse(
         "assistant.end",
         {
-            "full_response": result.summary,
+            "full_response": summary,
             "timestamp": datetime.now(UTC).isoformat(),
         },
     )
@@ -242,11 +301,12 @@ def _confirmation_payload(tool_name: str, arguments: dict, message: str) -> dict
 
 
 def _tool_failed(tool_name: str, error_message: str) -> str:
+    safe_error = redact_text(error_message)
     return _sse(
         "assistant.tool_failed",
         {
             "tool_name": tool_name,
-            "error_message": error_message,
+            "error_message": safe_error,
             "state": "failed",
         },
     )

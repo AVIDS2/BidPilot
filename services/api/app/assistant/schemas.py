@@ -28,6 +28,7 @@ class AssistantConfirmation(BaseModel):
     approved: bool
     tool_name: str
     arguments: dict[str, Any] = Field(default_factory=dict)
+    approval_id: str | None = None
 
 
 class AssistantAttachmentPayload(BaseModel):

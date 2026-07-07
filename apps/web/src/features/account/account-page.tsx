@@ -98,6 +98,20 @@ function getPlanSelectLabel(plan: string, t: (key: string) => string): string {
   }
 }
 
+function quotaText(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  limit: number,
+  remaining: number | null,
+): string {
+  if (limit < 0 || remaining === null) {
+    return t("usage.unlimited", { defaultValue: "Unlimited with fair-use controls" });
+  }
+  return t("usage.remaining", {
+    defaultValue: "{{count}} remaining",
+    count: remaining,
+  });
+}
+
 export function AccountPage() {
   const { user, logout, setUser } = useAuth()
   const navigate = useNavigate()
@@ -265,23 +279,40 @@ export function AccountPage() {
                         </Badge>
                       </div>
                     </CardHeader>
-                    <CardContent className="flex items-center justify-between gap-4 pt-0">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {billingSummary.data.monthly_workflow_used}
-                          {billingSummary.data.monthly_workflow_limit > 0
-                            ? ` / ${billingSummary.data.monthly_workflow_limit}`
-                            : ""}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {billingSummary.data.monthly_workflow_remaining === null
-                            ? t("usage.unlimited", { defaultValue: "Unlimited official workflow runs" })
-                            : t("usage.remaining", {
-                                defaultValue: "{{count}} official workflow runs remaining",
-                                count: billingSummary.data.monthly_workflow_remaining,
-                              })}
-                        </p>
-                      </div>
+                    <CardContent className="space-y-3 pt-0">
+                      {[
+                        {
+                          label: t("usage.workflow", { defaultValue: "AI drafting workflows" }),
+                          used: billingSummary.data.monthly_workflow_used,
+                          limit: billingSummary.data.monthly_workflow_limit,
+                          remaining: billingSummary.data.monthly_workflow_remaining,
+                        },
+                        {
+                          label: t("usage.assistant", { defaultValue: "Assistant messages" }),
+                          used: billingSummary.data.monthly_assistant_used,
+                          limit: billingSummary.data.monthly_assistant_limit,
+                          remaining: billingSummary.data.monthly_assistant_remaining,
+                        },
+                        {
+                          label: t("usage.indexing", { defaultValue: "Document indexing jobs" }),
+                          used: billingSummary.data.monthly_indexing_used,
+                          limit: billingSummary.data.monthly_indexing_limit,
+                          remaining: billingSummary.data.monthly_indexing_remaining,
+                        },
+                      ].map((item) => (
+                        <div key={item.label} className="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-2">
+                          <div>
+                            <p className="text-sm font-medium">{item.label}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {quotaText(t, item.limit, item.remaining)}
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold tabular-nums">
+                            {item.used}
+                            {item.limit > 0 ? ` / ${item.limit}` : ""}
+                          </p>
+                        </div>
+                      ))}
                       <Link to="/pricing">
                         <Button variant="outline" size="sm">
                           {t("upgrade.viewPlans")}

@@ -77,6 +77,30 @@ def test_delete_project_tool_summary_is_user_facing() -> None:
     assert summary == "项目「待删除演示项目」已删除。"
 
 
+def test_assistant_audit_redacts_sensitive_arguments_without_masking_section_key() -> None:
+    from app.assistant.audit import redact_arguments, redact_text
+
+    redacted = redact_arguments(
+        {
+            "api_key": "real-secret",
+            "section_key": "technical-approach",
+            "nested": {"token": "bearer-secret", "name": "公开项目名"},
+        }
+    )
+
+    assert redacted == {
+        "api_key": "***redacted***",
+        "section_key": "technical-approach",
+        "nested": {"token": "***redacted***", "name": "公开项目名"},
+    }
+
+    error = redact_text("provider failed: api_key=sk-live-secret-value Authorization: Bearer abc.def")
+
+    assert "sk-live-secret-value" not in error
+    assert "abc.def" not in error
+    assert "***redacted***" in error
+
+
 def test_delete_project_requires_typed_confirmation(
     test_db,
     default_org_id: str,

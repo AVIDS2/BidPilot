@@ -1,21 +1,40 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.auth.schemas import CurrentUser
 from app.audit.service import record_audit_event
 from app.celery_client import celery
 from app.models import Bundle
+from app.usage.schemas import ProviderSource
+from app.usage.service import EMBEDDING_INDEX_STARTED, check_indexing_quota, record_usage_event
 
 from .repository import create_bundle, get_bundle, list_bundles_by_project
 from .schemas import BundleCreate, BundleRead
 
 
-def register_bundle_command(db: Session, payload: BundleCreate) -> BundleRead:
+def register_bundle_command(
+    db: Session,
+    payload: BundleCreate,
+    current_user: CurrentUser | None = None,
+) -> BundleRead:
+    if current_user is not None:
+        check_indexing_quota(db, current_user.id, current_user.org_id, ProviderSource.OFFICIAL)
     bundle = Bundle(
         project_id=payload.project_id,
         label=payload.label,
         source_type=payload.source_type,
     )
     bundle = create_bundle(db, bundle)
+    if current_user is not None:
+        record_usage_event(
+            db,
+            user_id=current_user.id,
+            org_id=current_user.org_id,
+            project_id=payload.project_id,
+            event_type=EMBEDDING_INDEX_STARTED,
+            provider_source=ProviderSource.OFFICIAL,
+            metadata_json={"bundle_id": bundle.id, "action": "register_bundle"},
+        )
     # Dispatch async ingest task
     celery.send_task("worker.ingest_bundle", args=[bundle.id])
     # Record audit event
@@ -30,14 +49,30 @@ def register_bundle_command(db: Session, payload: BundleCreate) -> BundleRead:
     )
 
 
-def reingest_bundle_command(db: Session, bundle_id: str) -> BundleRead:
+def reingest_bundle_command(
+    db: Session,
+    bundle_id: str,
+    current_user: CurrentUser | None = None,
+) -> BundleRead:
     bundle = get_bundle(db, bundle_id)
     if bundle is None:
         raise HTTPException(status_code=404, detail="Bundle not found")
+    if current_user is not None:
+        check_indexing_quota(db, current_user.id, current_user.org_id, ProviderSource.OFFICIAL)
     # Reset status and re-dispatch
     bundle.ingest_status = "queued"
     db.commit()
     db.refresh(bundle)
+    if current_user is not None:
+        record_usage_event(
+            db,
+            user_id=current_user.id,
+            org_id=current_user.org_id,
+            project_id=bundle.project_id,
+            event_type=EMBEDDING_INDEX_STARTED,
+            provider_source=ProviderSource.OFFICIAL,
+            metadata_json={"bundle_id": bundle.id, "action": "reingest_bundle"},
+        )
     celery.send_task("worker.ingest_bundle", args=[bundle.id])
     record_audit_event(db, project_id=bundle.project_id, event_type="bundle.reingest", payload={"bundle_id": bundle.id})
     db.commit()

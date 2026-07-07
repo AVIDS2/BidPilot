@@ -20,6 +20,12 @@ def get_billing_summary(db: Session, user_id: str) -> BillingSummaryRead:
             monthly_workflow_limit=quota.monthly_workflow_limit,
             monthly_workflow_used=quota.monthly_workflow_used,
             monthly_workflow_remaining=quota.monthly_workflow_remaining,
+            monthly_assistant_limit=quota.monthly_assistant_limit,
+            monthly_assistant_used=quota.monthly_assistant_used,
+            monthly_assistant_remaining=quota.monthly_assistant_remaining,
+            monthly_indexing_limit=quota.monthly_indexing_limit,
+            monthly_indexing_used=quota.monthly_indexing_used,
+            monthly_indexing_remaining=quota.monthly_indexing_remaining,
             trial_window_start=quota.trial_window_start,
         )
     return BillingSummaryRead(
@@ -29,5 +35,11 @@ def get_billing_summary(db: Session, user_id: str) -> BillingSummaryRead:
         monthly_workflow_limit=quota.monthly_workflow_limit,
         monthly_workflow_used=quota.monthly_workflow_used,
         monthly_workflow_remaining=quota.monthly_workflow_remaining,
+        monthly_assistant_limit=quota.monthly_assistant_limit,
+        monthly_assistant_used=quota.monthly_assistant_used,
+        monthly_assistant_remaining=quota.monthly_assistant_remaining,
+        monthly_indexing_limit=quota.monthly_indexing_limit,
+        monthly_indexing_used=quota.monthly_indexing_used,
+        monthly_indexing_remaining=quota.monthly_indexing_remaining,
         trial_window_start=quota.trial_window_start,
     )

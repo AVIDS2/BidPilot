@@ -14,6 +14,12 @@ vi.mock("@/lib/api", () => ({
       monthly_workflow_limit: 3,
       monthly_workflow_used: 1,
       monthly_workflow_remaining: 2,
+      monthly_assistant_limit: 100,
+      monthly_assistant_used: 4,
+      monthly_assistant_remaining: 96,
+      monthly_indexing_limit: 5,
+      monthly_indexing_used: 1,
+      monthly_indexing_remaining: 4,
       trial_window_start: "2026-06-01T00:00:00Z",
     },
   }),
@@ -55,5 +61,7 @@ describe("AccountPage", () => {
 
     expect(await screen.findByText("Billing status")).not.toBeNull();
     expect(await screen.findByText("Usage this month")).not.toBeNull();
+    expect(await screen.findByText("Assistant messages")).not.toBeNull();
+    expect(await screen.findByText("Document indexing jobs")).not.toBeNull();
   });
 });

@@ -22,7 +22,7 @@ def test_create_and_list_requirements() -> None:
     data = resp.json()
     assert data["requirement_text"] == "Must support cloud deployment"
     assert data["priority"] == "high"
-    assert data["status"] == "open"
+    assert data["status"] == "draft"
 
     resp = client.get("/requirements", params={"project_id": project_id})
     assert resp.status_code == 200

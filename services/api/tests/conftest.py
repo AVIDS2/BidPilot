@@ -60,6 +60,35 @@ def client():
     return TestClient(app)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def ensure_recent_tables():
+    """Keep route-level tests independent from local migration state."""
+    from app.db import engine
+    from app.models import Notification, UsageEvent
+
+    Notification.__table__.create(bind=engine, checkfirst=True)
+    UsageEvent.__table__.create(bind=engine, checkfirst=True)
+
+
+@pytest.fixture(autouse=True)
+def reset_usage_events():
+    """Prevent shared dev-user quota counters from leaking across tests."""
+    from sqlalchemy import delete
+
+    from app.db import SessionLocal
+    from app.models import UsageEvent
+
+    db = SessionLocal()
+    try:
+        db.execute(delete(UsageEvent))
+        db.commit()
+        yield
+    finally:
+        db.execute(delete(UsageEvent))
+        db.commit()
+        db.close()
+
+
 @pytest.fixture
 def test_db():
     """Provide a SQLAlchemy session for direct service-layer tests."""

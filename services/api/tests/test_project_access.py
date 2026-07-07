@@ -7,9 +7,9 @@ from sqlalchemy.pool import StaticPool
 
 from app.auth.schemas import CurrentUser
 from app.auth.service import _hash_password
-from app.db import get_db
+from app.db import Base, get_db
 from app.main import app
-from app.models import Base, Organization, Project, User
+from app.models import Organization, Project, User
 
 
 def _make_org_user_and_project(db: Session, slug: str):

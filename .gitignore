@@ -10,3 +10,10 @@ coverage/
 *.db
 playwright-report/
 test-results/
+.playwright-cli/
+.playwright-mcp/
+.claude/plugins/cache/
+.claude/launch.json
+tmp/
+output/
+packages/contracts/*.egg-info/

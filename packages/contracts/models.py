@@ -363,6 +363,42 @@ class UsageEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class AssistantActionAudit(Base):
+    __tablename__ = "assistant_action_audit"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    conversation_id: Mapped[str] = mapped_column(String(36), ForeignKey("chat_conversation.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id"), nullable=False)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organization.id"), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(30), nullable=False)
+    approval_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="risky_only")
+    arguments_json: Mapped[dict | None] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="running")
+    result_summary: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class AssistantApproval(Base):
+    __tablename__ = "assistant_approval"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    conversation_id: Mapped[str] = mapped_column(String(36), ForeignKey("chat_conversation.id", ondelete="CASCADE"), nullable=False)
+    action_audit_id: Mapped[str] = mapped_column(String(36), ForeignKey("assistant_action_audit.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id"), nullable=False)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organization.id"), nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(30), nullable=False)
+    payload_json: Mapped[dict | None] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 # ── Provider Config ──────────────────────────────────────────────────────────
 
 

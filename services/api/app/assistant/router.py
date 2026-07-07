@@ -5,15 +5,23 @@ from __future__ import annotations
 import os
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
-from app.chat.service import create_conversation, get_conversation, save_message
+from app.chat.service import _resolve_provider_config, create_conversation, get_conversation, save_message
 from app.db import get_db
+from app.security.secrets import decrypt_secret
+from app.usage.schemas import ProviderSource
+from app.usage.service import (
+    ASSISTANT_MESSAGE_STARTED,
+    UsageLimitExceeded,
+    check_assistant_quota,
+    record_usage_event,
+)
 
 from .attachments import (
     MAX_ATTACHMENT_BYTES,
@@ -69,6 +77,12 @@ async def assistant_stream(
     - ``assistant.tool_failed``: tool execution failed
     - ``assistant.end``: agent finished
     """
+    provider_source, provider_type, api_key, base_url, model = _resolve_request_provider(db, user, payload)
+    try:
+        _record_assistant_usage(db, user, payload, provider_source)
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
     if os.getenv("DOCPILOT_ASSISTANT_ENGINE", "langgraph").lower() == "deterministic":
         return StreamingResponse(
             stream_assistant_response(db, user, payload),
@@ -94,18 +108,6 @@ async def assistant_stream(
     conversation_id = _ensure_conversation(db, user, payload)
     save_message(db, conversation_id, "user", payload.message)
 
-    # Resolve user's BYOK provider if specified
-    provider_type, api_key, base_url, model = "openai", None, None, None
-    if payload.provider_config_id:
-        from app.chat.service import _resolve_provider_config
-        from app.security.secrets import decrypt_secret
-        config = _resolve_provider_config(db, user.id, payload.provider_config_id)
-        if config:
-            provider_type = config.provider_type
-            api_key = decrypt_secret(config.api_key)
-            base_url = config.api_url
-            model = config.model
-
     # Build agent with fresh db session and user context
     agent = build_agent(
         db,
@@ -125,7 +127,15 @@ async def assistant_stream(
 
     async def generate():
         full_response = ""
-        async for sse_chunk in stream_agent_events(agent, messages, config, conversation_id):
+        async for sse_chunk in stream_agent_events(
+            agent,
+            messages,
+            config,
+            conversation_id,
+            db=db,
+            user=user,
+            approval_mode=payload.approval_mode,
+        ):
             # Capture the final message content for persistence
             if "assistant.message" in sse_chunk:
                 import json
@@ -150,6 +160,53 @@ async def assistant_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+def _resolve_request_provider(
+    db: Session,
+    user: CurrentUser,
+    payload: AssistantRequest,
+) -> tuple[ProviderSource, str, str | None, str | None, str | None]:
+    if not payload.provider_config_id:
+        return ProviderSource.OFFICIAL, "openai", None, None, None
+
+    config = _resolve_provider_config(db, user.id, payload.provider_config_id)
+    if config is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider config not found")
+
+    return (
+        ProviderSource.BYOK,
+        config.provider_type,
+        decrypt_secret(config.api_key),
+        config.api_url,
+        config.model,
+    )
+
+
+def _record_assistant_usage(
+    db: Session,
+    user: CurrentUser,
+    payload: AssistantRequest,
+    provider_source: ProviderSource,
+) -> None:
+    if payload.confirmation is not None:
+        return
+
+    check_assistant_quota(db, user.id, user.org_id, provider_source)
+    record_usage_event(
+        db,
+        user_id=user.id,
+        org_id=user.org_id,
+        project_id=payload.project_id,
+        event_type=ASSISTANT_MESSAGE_STARTED,
+        provider_source=provider_source,
+        metadata_json={
+            "conversation_id": payload.conversation_id,
+            "reasoning_effort": payload.reasoning_effort,
+            "attachment_count": len(payload.attachments),
+        },
+    )
+    db.commit()
 
 
 def _ensure_conversation(db: Session, user: CurrentUser, payload: AssistantRequest) -> str:

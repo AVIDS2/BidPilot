@@ -10,8 +10,15 @@ from app.models import Subscription, UsageEvent
 from .schemas import ProviderSource, UsageQuotaRead
 
 
-STARTER_OFFICIAL_WORKFLOW_LIMIT = 3
 WORKFLOW_DRAFT_STARTED = "workflow_draft_started"
+ASSISTANT_MESSAGE_STARTED = "assistant_message_started"
+EMBEDDING_INDEX_STARTED = "embedding_index_started"
+
+STARTER_OFFICIAL_WORKFLOW_LIMIT = 3
+STARTER_OFFICIAL_ASSISTANT_LIMIT = 100
+STARTER_OFFICIAL_INDEXING_LIMIT = 5
+
+UNLIMITED_PLANS = {"professional", "enterprise"}
 
 
 class UsageLimitExceeded(ValueError):
@@ -38,29 +45,83 @@ def current_period_key(now: datetime | None = None) -> str:
     return current.strftime("%Y-%m")
 
 
-def count_official_workflow_starts(db: Session, user_id: str, now: datetime | None = None) -> int:
+def _sum_usage_units(
+    db: Session,
+    user_id: str,
+    *,
+    event_type: str,
+    provider_source: ProviderSource,
+    now: datetime | None = None,
+) -> int:
     period_key = current_period_key(now)
     stmt = select(func.coalesce(func.sum(UsageEvent.units), 0)).where(
         UsageEvent.user_id == user_id,
-        UsageEvent.event_type == WORKFLOW_DRAFT_STARTED,
-        UsageEvent.provider_source == ProviderSource.OFFICIAL.value,
+        UsageEvent.event_type == event_type,
+        UsageEvent.provider_source == provider_source.value,
         UsageEvent.period_key == period_key,
     )
     return int(db.scalar(stmt) or 0)
+
+
+def _remaining(limit: int, used: int) -> int | None:
+    return None if limit < 0 else max(limit - used, 0)
+
+
+def _plan_limit(plan: str, starter_limit: int) -> int:
+    return -1 if plan in UNLIMITED_PLANS else starter_limit
+
+
+def count_official_workflow_starts(db: Session, user_id: str, now: datetime | None = None) -> int:
+    return _sum_usage_units(
+        db,
+        user_id,
+        event_type=WORKFLOW_DRAFT_STARTED,
+        provider_source=ProviderSource.OFFICIAL,
+        now=now,
+    )
+
+
+def count_official_assistant_messages(db: Session, user_id: str, now: datetime | None = None) -> int:
+    return _sum_usage_units(
+        db,
+        user_id,
+        event_type=ASSISTANT_MESSAGE_STARTED,
+        provider_source=ProviderSource.OFFICIAL,
+        now=now,
+    )
+
+
+def count_official_indexing_starts(db: Session, user_id: str, now: datetime | None = None) -> int:
+    return _sum_usage_units(
+        db,
+        user_id,
+        event_type=EMBEDDING_INDEX_STARTED,
+        provider_source=ProviderSource.OFFICIAL,
+        now=now,
+    )
 
 
 def get_usage_quota(db: Session, user_id: str) -> UsageQuotaRead:
     now = datetime.now(UTC)
     month_start, _ = _month_bounds(now)
     plan = get_user_plan(db, user_id)
-    used = count_official_workflow_starts(db, user_id, now)
-    limit = STARTER_OFFICIAL_WORKFLOW_LIMIT if plan not in {"professional", "enterprise"} else -1
-    remaining = None if limit < 0 else max(limit - used, 0)
+    workflow_used = count_official_workflow_starts(db, user_id, now)
+    assistant_used = count_official_assistant_messages(db, user_id, now)
+    indexing_used = count_official_indexing_starts(db, user_id, now)
+    workflow_limit = _plan_limit(plan, STARTER_OFFICIAL_WORKFLOW_LIMIT)
+    assistant_limit = _plan_limit(plan, STARTER_OFFICIAL_ASSISTANT_LIMIT)
+    indexing_limit = _plan_limit(plan, STARTER_OFFICIAL_INDEXING_LIMIT)
     return UsageQuotaRead(
         plan=plan,
-        monthly_workflow_limit=limit,
-        monthly_workflow_used=used,
-        monthly_workflow_remaining=remaining,
+        monthly_workflow_limit=workflow_limit,
+        monthly_workflow_used=workflow_used,
+        monthly_workflow_remaining=_remaining(workflow_limit, workflow_used),
+        monthly_assistant_limit=assistant_limit,
+        monthly_assistant_used=assistant_used,
+        monthly_assistant_remaining=_remaining(assistant_limit, assistant_used),
+        monthly_indexing_limit=indexing_limit,
+        monthly_indexing_used=indexing_used,
+        monthly_indexing_remaining=_remaining(indexing_limit, indexing_used),
         trial_window_start=month_start.isoformat(),
     )
 
@@ -105,12 +166,48 @@ def check_workflow_quota(
     if provider_source != ProviderSource.OFFICIAL:
         return
     plan = get_user_plan(db, user_id)
-    if plan in {"professional", "enterprise"}:
+    if plan in UNLIMITED_PLANS:
         return
     used = count_official_workflow_starts(db, user_id)
     if used >= STARTER_OFFICIAL_WORKFLOW_LIMIT:
         raise UsageLimitExceeded(
             f"starter workflow trial limit of {STARTER_OFFICIAL_WORKFLOW_LIMIT} official runs has been reached"
+        )
+
+
+def check_assistant_quota(
+    db: Session,
+    user_id: str,
+    org_id: str,
+    provider_source: ProviderSource,
+) -> None:
+    if provider_source != ProviderSource.OFFICIAL:
+        return
+    plan = get_user_plan(db, user_id)
+    if plan in UNLIMITED_PLANS:
+        return
+    used = count_official_assistant_messages(db, user_id)
+    if used >= STARTER_OFFICIAL_ASSISTANT_LIMIT:
+        raise UsageLimitExceeded(
+            f"starter assistant limit of {STARTER_OFFICIAL_ASSISTANT_LIMIT} official messages has been reached"
+        )
+
+
+def check_indexing_quota(
+    db: Session,
+    user_id: str,
+    org_id: str,
+    provider_source: ProviderSource,
+) -> None:
+    if provider_source != ProviderSource.OFFICIAL:
+        return
+    plan = get_user_plan(db, user_id)
+    if plan in UNLIMITED_PLANS:
+        return
+    used = count_official_indexing_starts(db, user_id)
+    if used >= STARTER_OFFICIAL_INDEXING_LIMIT:
+        raise UsageLimitExceeded(
+            f"starter indexing limit of {STARTER_OFFICIAL_INDEXING_LIMIT} official indexing jobs has been reached"
         )
 
 

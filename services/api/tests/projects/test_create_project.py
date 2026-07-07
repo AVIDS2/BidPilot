@@ -8,9 +8,9 @@ from sqlalchemy.pool import StaticPool
 
 from app.auth.schemas import CurrentUser
 from app.auth.service import _hash_password
-from app.db import get_db
+from app.db import Base, get_db
 from app.main import app
-from app.models import Base, Organization, User
+from app.models import Organization, User
 
 
 @pytest.fixture()

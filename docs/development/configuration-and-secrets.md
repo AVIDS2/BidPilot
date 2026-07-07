@@ -129,11 +129,13 @@ Official platform provider keys must stay server-side. In local development the 
 Initial product policy:
 
 - Anonymous users: no workflow generation runs.
-- Logged-in starter users: 3 official-provider workflow draft runs as a free trial.
-- Assistant chat: free on the official assistant provider, but backend rate-limited to prevent abuse.
+- Logged-in starter users: 3 official-provider workflow draft runs per month as a free trial.
+- Logged-in starter users: 100 official-provider assistant messages per month.
+- Logged-in starter users: 5 official-provider document indexing jobs per month.
+- Professional and enterprise plans are unlimited in-product, but still subject to fair-use, abuse, storage, and infrastructure controls.
 - BYOK users: user provider keys are encrypted with `DOCPILOT_SECRETS_KEY`; provider token cost is not charged to the platform, but abuse/rate limits still apply.
 
-Quota must be enforced in the backend before starting a workflow or calling a paid provider. UI-only blocking is not sufficient.
+Quota must be enforced in the backend before starting a workflow, creating an indexing job, or calling a paid provider. UI-only blocking is not sufficient.
 
 ### Staging
 

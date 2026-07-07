@@ -561,6 +561,12 @@ export interface UsageQuotaRead {
   monthly_workflow_limit: number;
   monthly_workflow_used: number;
   monthly_workflow_remaining: number | null;
+  monthly_assistant_limit: number;
+  monthly_assistant_used: number;
+  monthly_assistant_remaining: number | null;
+  monthly_indexing_limit: number;
+  monthly_indexing_used: number;
+  monthly_indexing_remaining: number | null;
   trial_window_start: string;
 }
 
@@ -575,6 +581,12 @@ export interface BillingSummaryRead {
   monthly_workflow_limit: number;
   monthly_workflow_used: number;
   monthly_workflow_remaining: number | null;
+  monthly_assistant_limit: number;
+  monthly_assistant_used: number;
+  monthly_assistant_remaining: number | null;
+  monthly_indexing_limit: number;
+  monthly_indexing_used: number;
+  monthly_indexing_remaining: number | null;
   trial_window_start: string;
 }
 

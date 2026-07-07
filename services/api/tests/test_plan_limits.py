@@ -2,7 +2,8 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models import Base, User, Subscription, Project, Organization
+from app.db import Base
+from app.models import User, Subscription, Project, Organization
 from app.auth.service import _hash_password, check_plan_limit, PLAN_LIMITS
 
 ORG_ID = "00000000-0000-0000-0000-000000000001"

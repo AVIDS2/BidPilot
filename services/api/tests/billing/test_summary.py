@@ -2,7 +2,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.service import _hash_password
-from app.models import Base, Organization, Project, Subscription, User
+from app.db import Base
+from app.models import Organization, Project, Subscription, User
 from app.billing.service import get_billing_summary
 from app.usage.service import record_usage_event
 from app.usage.schemas import ProviderSource

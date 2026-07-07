@@ -48,6 +48,15 @@
     "planUpdated": "方案已更新为 {{plan}}",
     "planUpdateFailed": "更新方案失败"
   },
+  "usage": {
+    "title": "本月用量",
+    "window": "额度窗口开始于 {{date}}",
+    "workflow": "AI 起草工作流",
+    "assistant": "助手对话消息",
+    "indexing": "资料索引任务",
+    "remaining": "剩余 {{count}} 次",
+    "unlimited": "不限量，受公平使用和风控限制"
+  },
   "security": {
     "title": "安全设置",
     "description": "管理您的密码和认证设置。",

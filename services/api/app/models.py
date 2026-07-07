@@ -6,6 +6,8 @@ imports like `from app.models import Project`.
 """
 
 from contracts.models import (
+    AssistantActionAudit,
+    AssistantApproval,
     AuditEvent,
     Bundle,
     ChatConversation,
@@ -36,6 +38,8 @@ from contracts.models import (
 )
 
 __all__ = [
+    "AssistantActionAudit",
+    "AssistantApproval",
     "AuditEvent",
     "Bundle",
     "ChatConversation",
