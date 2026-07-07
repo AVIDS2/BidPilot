@@ -71,7 +71,16 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         throw error;
       }
 
-      return res.json();
+      if (res.status === 204) {
+        return undefined as T;
+      }
+
+      const text = await res.text();
+      if (!text) {
+        return undefined as T;
+      }
+
+      return JSON.parse(text) as T;
     } catch (error) {
       lastError = error;
 

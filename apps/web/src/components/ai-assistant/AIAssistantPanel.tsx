@@ -529,6 +529,9 @@ function HistorySidebar({
                       const active = conversation.id === currentId;
                       const isEditing = editingId === conversation.id;
                       const isHovered = hoveredId === conversation.id;
+                      const actionVisibility = isHovered
+                        ? "opacity-100"
+                        : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100";
                       return (
                         <div
                           key={conversation.id}
@@ -579,31 +582,34 @@ function HistorySidebar({
                                   ? new Date(conversation.created_at).toLocaleDateString()
                                   : ""}
                               </div>
-                              {isHovered && (
-                                <button
-                                  className="absolute right-7 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onRename(conversation.id, conversation.title);
-                                  }}
-                                  title={t("panel.renameConversation")}
-                                  aria-label={t("panel.renameConversation")}
-                                >
-                                  <PencilIcon className="size-3" />
-                                </button>
-                              )}
-                              {isHovered && !active && (
-                                <button
-                                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDelete(conversation.id);
-                                  }}
-                                  title={t("history.delete")}
-                                >
-                                  <Trash2Icon className="size-3" />
-                                </button>
-                              )}
+                              <button
+                                className={cn(
+                                  "absolute right-7 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground/50 transition-all hover:bg-muted hover:text-foreground",
+                                  actionVisibility,
+                                )}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRename(conversation.id, conversation.title);
+                                }}
+                                title={t("panel.renameConversation")}
+                                aria-label={t("panel.renameConversation")}
+                              >
+                                <PencilIcon className="size-3" />
+                              </button>
+                              <button
+                                className={cn(
+                                  "absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground/40 transition-all hover:bg-destructive/10 hover:text-destructive",
+                                  actionVisibility,
+                                )}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDelete(conversation.id);
+                                }}
+                                title={t("history.delete")}
+                                aria-label={t("history.delete")}
+                              >
+                                <Trash2Icon className="size-3" />
+                              </button>
                             </>
                           )}
                         </div>

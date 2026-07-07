@@ -604,6 +604,37 @@ describe("AIAssistantPanel", () => {
     });
   });
 
+  it("deletes a history conversation and refreshes the list", async () => {
+    const { deleteChatConversation, listChatConversations } = await import("@/lib/api");
+    vi.mocked(listChatConversations)
+      .mockResolvedValueOnce([
+        {
+          id: "c-delete",
+          project_id: null,
+          title: "Delete me",
+          created_at: new Date().toISOString(),
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    vi.mocked(deleteChatConversation).mockResolvedValue(undefined);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.click(screen.getByTitle("Conversation history"));
+
+    await screen.findByText("Delete me");
+    const row = screen.getByText("Delete me").closest("[data-conversation-row]");
+    expect(row).not.toBeNull();
+    fireEvent.mouseEnter(row as HTMLElement);
+    fireEvent.click(screen.getByTitle("Delete conversation"));
+
+    await waitFor(() => {
+      expect(deleteChatConversation).toHaveBeenCalledWith("c-delete");
+      expect(listChatConversations).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByText("Delete me")).not.toBeInTheDocument();
+  });
+
   it("switches the active conversation immediately while messages load", async () => {
     const { getChatConversationMessages, listChatConversations } = await import("@/lib/api");
     vi.mocked(listChatConversations).mockResolvedValue([
