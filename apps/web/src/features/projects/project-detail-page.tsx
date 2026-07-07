@@ -348,7 +348,7 @@ export function ProjectDetailPage() {
           <RunsTab runs={runs ?? []} onRetry={(rid) => retryMut.mutate(rid)} retrying={retryMut.isPending} onConfirm={showConfirm} t={(k, o) => t(k, o as Record<string, unknown>)} />
         </AnimatedTabContent>
         <AnimatedTabContent value="review" currentValue={activeTab}>
-          <ReviewTab sections={sections} reviewThreads={reviewThreads} reviewComments={reviewComments} selectedSectionId={selectedSectionId} selectedThreadId={selectedThreadId} onSelectSection={setSelectedSectionId} onSelectThread={setSelectedThreadId} onAddComment={(tid, body) => addCommentMut.mutate({ thread_id: tid, body })} onSubmitDecision={(sid, dec, cmt) => submitDecisionMut.mutate({ section_id: sid, decision: dec as "approved" | "rejected", comment: cmt })} addCommentPending={addCommentMut.isPending} submitDecisionPending={submitDecisionMut.isPending} />
+          <ReviewTab sections={sections} sectionVersions={sectionVersions} reviewThreads={reviewThreads} reviewComments={reviewComments} selectedSectionId={selectedSectionId} selectedThreadId={selectedThreadId} onSelectSection={setSelectedSectionId} onSelectThread={setSelectedThreadId} onAddComment={(tid, body) => addCommentMut.mutate({ thread_id: tid, body })} onSubmitDecision={(sid, dec, cmt) => submitDecisionMut.mutate({ section_id: sid, decision: dec as "approved" | "rejected", comment: cmt })} addCommentPending={addCommentMut.isPending} submitDecisionPending={submitDecisionMut.isPending} />
         </AnimatedTabContent>
         <AnimatedTabContent value="export" currentValue={activeTab}>
           <ExportTab deliverables={deliverables ?? []} />

@@ -58,6 +58,80 @@
   "button": {
     "currentPlan": "Current Plan"
   },
+  "comparison": {
+    "label": "Plan comparison",
+    "title": "A clear path from trial to governed enterprise use.",
+    "description": "Starter validates the scenario, Professional supports frequent bid teams, and Enterprise adds identity, deployment, and governance controls.",
+    "columns": {
+      "feature": "Capability"
+    },
+    "rows": [
+      {
+        "feature": "Projects and bundles",
+        "starter": "3 projects",
+        "professional": "Unlimited projects",
+        "enterprise": "Unlimited projects plus org policies"
+      },
+      {
+        "feature": "AI workflow quota",
+        "starter": "Basic free trial quota",
+        "professional": "Team monthly quota",
+        "enterprise": "Negotiated quota and dedicated models"
+      },
+      {
+        "feature": "Review and audit",
+        "starter": "Basic audit trail",
+        "professional": "Full version and review history",
+        "enterprise": "Audit export, SLA, and compliance support"
+      },
+      {
+        "feature": "Identity and security",
+        "starter": "Email login",
+        "professional": "Team member management",
+        "enterprise": "SSO, SCIM, and private deployment options"
+      }
+    ]
+  },
+  "testimonials": {
+    "items": [
+      {
+        "quote": "The biggest value is not speed alone. It is that every response can point back to evidence.",
+        "author": "Proposal manager",
+        "role": "Large systems integration"
+      },
+      {
+        "quote": "Presales can comment, reject, and rerun around one draft instead of losing decisions in chat threads.",
+        "author": "Solution lead",
+        "role": "Enterprise software proposals"
+      },
+      {
+        "quote": "The audit trail makes AI-generated material explainable enough to enter formal delivery workflows.",
+        "author": "Delivery lead",
+        "role": "Project delivery and acceptance"
+      }
+    ]
+  },
+  "faq": {
+    "title": "FAQ",
+    "items": [
+      {
+        "question": "Can Starter run real AI workflows?",
+        "answer": "Yes. Starter is designed for scenario validation with limits on projects, workflow runs, and indexing to prevent abuse."
+      },
+      {
+        "question": "Can I use my own model API key?",
+        "answer": "Yes. Bring-your-own keys are encrypted on the backend. The frontend never stores provider secrets in plaintext."
+      },
+      {
+        "question": "Does Enterprise support private deployment?",
+        "answer": "Yes. Enterprise can be tailored around data residency, network boundaries, model providers, backup, and restore requirements."
+      },
+      {
+        "question": "What if online payment is not enabled yet?",
+        "answer": "Contact an admin or sales contact for now. The same plan model will carry forward when checkout is enabled."
+      }
+    ]
+  },
   "toast": {
     "notAvailable": "Online payments are not yet available. Contact your admin to upgrade.",
     "checkoutFailed": "Could not start checkout. Please try again."

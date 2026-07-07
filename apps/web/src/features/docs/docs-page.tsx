@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useTranslation } from "react-i18next";
@@ -26,6 +26,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import AnimatedContent from "@/components/AnimatedContent";
 
 // ---------- ScrollReveal (老师风格) ----------
 function ScrollReveal({
@@ -39,52 +40,18 @@ function ScrollReveal({
   delay?: number;
   direction?: "up" | "down" | "left" | "right";
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setTimeout(() => setIsVisible(true), delay);
-          observer.unobserve(entry.target);
-        }
-      },
-      { threshold: 0.08 }
-    );
-    observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, [delay]);
-
-  const getTransform = () => {
-    switch (direction) {
-      case "up":
-        return "translateY(40px)";
-      case "down":
-        return "translateY(-40px)";
-      case "left":
-        return "translateX(40px)";
-      case "right":
-        return "translateX(-40px)";
-      default:
-        return "translateY(40px)";
-    }
-  };
-
   return (
-    <div
-      ref={ref}
+    <AnimatedContent
       className={className}
-      style={{
-        opacity: isVisible ? 1 : 0,
-        transform: isVisible ? "none" : getTransform(),
-        filter: isVisible ? "blur(0px)" : "blur(4px)",
-        transition: `all 0.8s cubic-bezier(0.32, 0.72, 0, 1) ${delay}ms`,
-      }}
+      distance={40}
+      direction={direction === "left" || direction === "right" ? "horizontal" : "vertical"}
+      reverse={direction === "down" || direction === "right"}
+      duration={0.8}
+      delay={delay / 1000}
+      threshold={0.08}
     >
       {children}
-    </div>
+    </AnimatedContent>
   );
 }
 

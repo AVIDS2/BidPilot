@@ -110,6 +110,16 @@
     "reingestStarted": "重新解析已启动",
     "reingestFailed": "启动重新解析失败",
     "uploaded": "已上传 {{filename}}",
+    "uploadedMany": "已上传 {{count}} 个文件",
+    "uploadPartialFailed": "部分文件上传失败，请检查后重试。",
+    "uploading": "正在上传...",
+    "dropHere": "释放文件开始上传",
+    "dragOrClick": "拖拽文件到此处，或点击选择",
+    "uploadHint": "支持 PDF、DOCX、XLSX、PNG 和 JPG。",
+    "uploadStatus": {
+      "done": "已完成",
+      "failed": "失败"
+    },
     "uploadFailed": "上传失败：{{message}}"
   },
   "deliverables": {
@@ -156,6 +166,9 @@
     "vs": "对比",
     "selectTwo": "选择两个版本",
     "noDifferences": "无差异",
+    "compareVersions": "对比版本",
+    "versionCompare": "版本对比",
+    "missingEvidence": "未关联证据，部分声明可能无法验证。",
     "draftRequested": "草稿生成请求已提交",
     "draftFailed": "草稿生成请求失败",
     "redraftRequested": "重新生成请求已提交",
@@ -215,7 +228,19 @@
     "commentAdded": "评论已添加",
     "commentFailed": "添加评论失败",
     "decisionSubmitted": "审核决定已提交",
-    "decisionFailed": "提交审核决定失败"
+    "decisionFailed": "提交审核决定失败",
+    "draftPreview": "草稿预览",
+    "draftPreviewDesc": "边看最新草稿边处理评论与审核决定。",
+    "commentsDesc": "集中查看线程、评论和批准记录。",
+    "noSectionSelected": "未选择章节",
+    "noSectionDesc": "先选择一个章节，左侧会显示最新草稿版本。",
+    "assignee": "负责人",
+    "threadsCount": "{{count}} 个线程",
+    "generatedBy": "由 {{actor}} 生成",
+    "noDraftYet": "暂无草稿",
+    "noDraftDesc": "先在草稿页生成章节内容，再回到这里审核。",
+    "resizePane": "调整审核分屏宽度",
+    "selectedThread": "正在查看线程 {{id}}，状态：{{status}}"
   },
   "audit": {
     "title": "审计追踪",

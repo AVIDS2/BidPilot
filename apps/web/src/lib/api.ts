@@ -210,16 +210,44 @@ export function listDocuments(bundleId: string, page?: number, pageSize?: number
   return request<DocumentsPaginatedResponse>(`/documents?${params.toString()}`);
 }
 
-export async function uploadDocument(bundleId: string, file: File): Promise<SourceDocumentRead> {
+export async function uploadDocument(
+  bundleId: string,
+  file: File,
+  onProgress?: (progress: number) => void,
+): Promise<SourceDocumentRead> {
   const formData = new FormData();
   formData.append("file", file);
-  const resp = await fetch(`${API_BASE}/documents/upload?bundle_id=${bundleId}`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: formData,
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/documents/upload?bundle_id=${encodeURIComponent(bundleId)}`);
+
+    for (const [key, value] of Object.entries(getAuthHeaders())) {
+      xhr.setRequestHeader(key, value);
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      onProgress?.(Math.round((event.loaded / event.total) * 100));
+    };
+
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`Upload failed: ${xhr.status}`));
+        return;
+      }
+      onProgress?.(100);
+      try {
+        resolve(JSON.parse(xhr.responseText) as SourceDocumentRead);
+      } catch {
+        reject(new Error("Upload failed: invalid response"));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Upload failed: network error"));
+    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.send(formData);
   });
-  if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);
-  return resp.json();
 }
 
 export function getDocumentDownloadUrl(documentId: string) {

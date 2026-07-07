@@ -58,6 +58,80 @@
   "button": {
     "currentPlan": "当前方案"
   },
+  "comparison": {
+    "label": "套餐对比",
+    "title": "从试用到企业治理，一条路径走到底。",
+    "description": "免费版适合验证场景，专业版适合高频投标团队，企业版覆盖身份、部署和治理要求。",
+    "columns": {
+      "feature": "能力"
+    },
+    "rows": [
+      {
+        "feature": "项目与素材包",
+        "starter": "3 个项目",
+        "professional": "不限制项目",
+        "enterprise": "不限制项目 + 组织级策略"
+      },
+      {
+        "feature": "AI 工作流额度",
+        "starter": "基础免费体验",
+        "professional": "团队月度额度",
+        "enterprise": "可协商额度与专属模型"
+      },
+      {
+        "feature": "审核与审计",
+        "starter": "基础审计记录",
+        "professional": "完整版本与审核记录",
+        "enterprise": "审计导出、SLA 与合规协助"
+      },
+      {
+        "feature": "身份与安全",
+        "starter": "邮箱登录",
+        "professional": "团队成员管理",
+        "enterprise": "SSO、SCIM、私有部署选项"
+      }
+    ]
+  },
+  "testimonials": {
+    "items": [
+      {
+        "quote": "最有价值的不是生成速度，而是每段回复都能回到证据来源。",
+        "author": "投标经理",
+        "role": "大型集成项目"
+      },
+      {
+        "quote": "售前团队可以围绕同一份草稿评论、驳回和重跑，不再散落在聊天记录里。",
+        "author": "解决方案负责人",
+        "role": "企业软件方案"
+      },
+      {
+        "quote": "审计记录让 AI 生成内容变得可解释，也更容易进入正式交付流程。",
+        "author": "交付负责人",
+        "role": "项目交付与验收"
+      }
+    ]
+  },
+  "faq": {
+    "title": "常见问题",
+    "items": [
+      {
+        "question": "免费版可以直接体验 AI 工作流吗？",
+        "answer": "可以。免费版面向场景验证，会受项目数、工作流次数和索引额度限制，避免资源被滥用。"
+      },
+      {
+        "question": "我可以使用自己的模型 API Key 吗？",
+        "answer": "可以。用户自定义 Key 只在后端加密保存，前端不会持有明文。"
+      },
+      {
+        "question": "企业版是否支持私有部署？",
+        "answer": "支持。企业版可以按数据驻留、网络边界、模型供应商和备份恢复要求定制。"
+      },
+      {
+        "question": "支付暂时不可用怎么办？",
+        "answer": "当前可以先联系管理员或销售开通。在线支付接入后会保持同一套餐模型。"
+      }
+    ]
+  },
   "toast": {
     "notAvailable": "在线支付暂不可用。请联系管理员升级。",
     "checkoutFailed": "无法启动支付。请重试。"

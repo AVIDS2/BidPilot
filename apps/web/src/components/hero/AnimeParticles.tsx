@@ -19,8 +19,13 @@ export function AnimeParticles({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) return;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    const effectiveCount = Math.min(count, window.innerWidth < 768 ? 12 : count);
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -64,7 +69,7 @@ export function AnimeParticles({
       });
     };
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < effectiveCount; i++) {
       createParticle();
     }
 
@@ -101,8 +106,11 @@ export function AnimeParticles({
       ctx.restore();
     };
 
-    let animId: number;
+    let animId = 0;
+    let isRunning = false;
+
     const animate = () => {
+      isRunning = true;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       for (let i = particles.length - 1; i >= 0; i--) {
@@ -150,11 +158,31 @@ export function AnimeParticles({
       animId = requestAnimationFrame(animate);
     };
 
-    animate();
+    const start = () => {
+      if (!isRunning) animate();
+    };
+
+    const stop = () => {
+      if (animId) cancelAnimationFrame(animId);
+      animId = 0;
+      isRunning = false;
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        stop();
+      } else {
+        start();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    start();
 
     return () => {
       window.removeEventListener("resize", resize);
-      cancelAnimationFrame(animId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      stop();
     };
   }, [color, count, speed, size]);
 

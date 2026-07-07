@@ -9,6 +9,7 @@ import { TurnstileWidget, isTurnstileConfigured, resetTurnstile, type TurnstileW
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand";
+import { AuthTrustRail } from "./auth-trust-rail";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -113,7 +114,8 @@ export function LoginPage() {
         }}
       />
 
-      <div className="relative z-20 w-full max-w-md">
+      <div className="relative z-20 grid w-full max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,28rem)_minmax(22rem,1fr)]">
+      <div className="w-full max-w-md justify-self-center lg:justify-self-end">
         {/* Logo */}
         <div className="text-center mb-10">
           <Link
@@ -258,6 +260,8 @@ export function LoginPage() {
           </a>
           .
         </p>
+      </div>
+      <AuthTrustRail />
       </div>
     </div>
   );

@@ -9,7 +9,16 @@ import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
-import { ChevronLeft, ChevronRight, PackageIcon, UploadIcon, FileIcon, Loader2Icon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  ChevronLeft,
+  ChevronRight,
+  FileIcon,
+  Loader2Icon,
+  PackageIcon,
+  UploadCloudIcon,
+  XCircleIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -35,38 +44,78 @@ function DragDropUpload({
   t,
 }: {
   bundleId: string;
-  onUploadComplete: () => void;
+  onUploadComplete: (bundleId: string) => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const [isDragging, setIsDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadItems, setUploadItems] = useState<
+    Array<{ id: string; name: string; progress: number; status: "uploading" | "done" | "failed"; error?: string }>
+  >([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = useCallback(
-    async (file: File) => {
-      setUploading(true);
-      try {
-        await uploadDocument(bundleId, file);
-        toast.success(t("bundles.uploaded", { filename: file.name }));
-        onUploadComplete();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Upload failed";
-        toast.error(t("bundles.uploadFailed", { message: msg }));
-      } finally {
-        setUploading(false);
+  const uploading = uploadItems.some((item) => item.status === "uploading");
+
+  const handleUploadFiles = useCallback(
+    async (fileList: FileList | File[]) => {
+      const files = Array.from(fileList);
+      if (files.length === 0 || uploading) return;
+
+      const items = files.map((file) => ({
+        id: `${file.name}-${file.lastModified}-${file.size}`,
+        name: file.name,
+        progress: 0,
+        status: "uploading" as const,
+      }));
+      setUploadItems(items);
+
+      const results = await Promise.allSettled(
+        files.map((file, index) =>
+          uploadDocument(bundleId, file, (progress) => {
+            setUploadItems((current) =>
+              current.map((item, i) => (i === index ? { ...item, progress } : item)),
+            );
+          }),
+        ),
+      );
+
+      let successCount = 0;
+      setUploadItems((current) =>
+        current.map((item, index) => {
+          const result = results[index];
+          if (result.status === "fulfilled") {
+            successCount += 1;
+            return { ...item, progress: 100, status: "done" };
+          }
+          return {
+            ...item,
+            status: "failed",
+            error: result.reason instanceof Error ? result.reason.message : "Upload failed",
+          };
+        }),
+      );
+
+      if (successCount > 0) {
+        toast.success(t("bundles.uploadedMany", { count: successCount, defaultValue: `Uploaded ${successCount} file(s)` }));
+        onUploadComplete(bundleId);
       }
+      if (successCount < files.length) {
+        toast.error(t("bundles.uploadPartialFailed", { defaultValue: "Some files failed to upload." }));
+      }
+
+      window.setTimeout(() => {
+        setUploadItems((current) => current.filter((item) => item.status === "failed"));
+      }, 1800);
     },
-    [bundleId, onUploadComplete, t]
+    [bundleId, onUploadComplete, t, uploading],
   );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      const file = e.dataTransfer.files?.[0];
-      if (file) handleUpload(file);
+      if (e.dataTransfer.files?.length) handleUploadFiles(e.dataTransfer.files);
     },
-    [handleUpload]
+    [handleUploadFiles],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -75,46 +124,103 @@ function DragDropUpload({
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
+      e.preventDefault();
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+        setIsDragging(false);
+      }
+    }, []);
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleUpload(file);
+      if (e.target.files?.length) handleUploadFiles(e.target.files);
+      e.target.value = "";
     },
-    [handleUpload]
+    [handleUploadFiles],
   );
 
   return (
-    <div
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onClick={() => fileInputRef.current?.click()}
-      className={cn(
-        "relative flex flex-col items-center justify-center gap-2 p-6 rounded-lg border-2 border-dashed cursor-pointer transition-all duration-200",
-        isDragging
-          ? "border-primary bg-primary/5 scale-[1.01]"
-          : "border-muted-foreground/20 hover:border-primary/40 hover:bg-muted/30",
-        uploading && "pointer-events-none opacity-60"
-      )}
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-      {uploading ? (
-        <Loader2Icon className="size-6 text-muted-foreground animate-spin" />
-      ) : (
-        <UploadIcon className={cn("size-6 transition-colors", isDragging ? "text-primary" : "text-muted-foreground")} />
-      )}
-      <p className="text-sm text-muted-foreground">
-        {uploading ? t("bundles.uploading") : isDragging ? t("bundles.dropHere", { defaultValue: "释放文件开始上传" }) : t("bundles.dragOrClick", { defaultValue: "拖拽文件到此处，或点击选择" })}
-      </p>
+    <div className="space-y-3">
+      <motion.div
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        animate={isDragging ? { scale: 1.01 } : { scale: 1 }}
+        transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+        className={cn(
+          "relative flex min-h-32 cursor-pointer flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border border-dashed p-6 text-center transition-colors duration-200",
+          isDragging
+            ? "border-primary bg-primary/10 shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_26%,transparent)]"
+            : "border-muted-foreground/25 bg-muted/20 hover:border-primary/45 hover:bg-muted/35",
+          uploading && "cursor-wait",
+        )}
+      >
+        <div
+          className={cn(
+            "absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent,rgba(255,255,255,.13),transparent)] transition-transform duration-700",
+            isDragging && "translate-x-full",
+          )}
+        />
+        <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
+        <div className="relative flex size-12 items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
+          {uploading ? (
+            <Loader2Icon className="size-5 animate-spin text-primary" />
+          ) : (
+            <UploadCloudIcon className={cn("size-5 transition-colors", isDragging ? "text-primary" : "text-muted-foreground")} />
+          )}
+        </div>
+        <div className="relative space-y-1">
+          <p className="text-sm font-medium text-foreground">
+            {uploading
+              ? t("bundles.uploading", { defaultValue: "Uploading..." })
+              : isDragging
+                ? t("bundles.dropHere", { defaultValue: "Drop files to upload" })
+                : t("bundles.dragOrClick", { defaultValue: "Drag files here, or click to browse" })}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t("bundles.uploadHint", { defaultValue: "PDF, DOCX, XLSX, PNG and JPG are supported." })}
+          </p>
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {uploadItems.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="space-y-2 rounded-xl border bg-card/70 p-3"
+          >
+            {uploadItems.map((item) => (
+              <motion.div
+                key={item.id}
+                layout
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                className="space-y-2"
+              >
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="min-w-0 truncate font-medium">{item.name}</span>
+                  <span className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                    {item.status === "done" && <CheckCircle2Icon className="size-3.5 text-primary" />}
+                    {item.status === "failed" && <XCircleIcon className="size-3.5 text-destructive" />}
+                    {item.status === "uploading" ? `${item.progress}%` : t(`bundles.uploadStatus.${item.status}`, { defaultValue: item.status })}
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <motion.div
+                    className={cn("h-full rounded-full", item.status === "failed" ? "bg-destructive" : "bg-primary")}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${item.status === "failed" ? 100 : item.progress}%` }}
+                    transition={{ duration: 0.25 }}
+                  />
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -169,9 +275,10 @@ export function BundlesTab({ projectId, bundles, onReingest, onConfirm }: Bundle
       .catch(() => toast.error(t("bundles.registerFailed")));
   };
 
-  const invalidateDocuments = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["documents", selectedBundleId] });
-  }, [queryClient, selectedBundleId]);
+  const invalidateDocuments = useCallback((bundleId: string) => {
+    queryClient.invalidateQueries({ queryKey: ["documents", bundleId] });
+    queryClient.invalidateQueries({ queryKey: ["bundles", projectId] });
+  }, [projectId, queryClient]);
 
   return (
     <Card>
@@ -240,11 +347,7 @@ export function BundlesTab({ projectId, bundles, onReingest, onConfirm }: Bundle
               <AccordionContent>
                 <div className="flex flex-col gap-3">
                   {/* Drag-and-drop upload zone */}
-                  <DragDropUpload
-                    bundleId={b.id}
-                    onUploadComplete={invalidateDocuments}
-                    t={t}
-                  />
+                  <DragDropUpload bundleId={b.id} onUploadComplete={invalidateDocuments} t={t} />
 
                   {/* Document list */}
                   <AnimatePresence>

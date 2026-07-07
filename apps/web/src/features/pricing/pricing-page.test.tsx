@@ -21,9 +21,9 @@ describe("PricingPage", () => {
   it("renders the three pricing tiers", () => {
     renderWithRouter(<PricingPage />);
 
-    expect(screen.getByText("Starter")).not.toBeNull();
-    expect(screen.getByText("Professional")).not.toBeNull();
-    expect(screen.getByText("Enterprise")).not.toBeNull();
+    expect(screen.getAllByText("Starter").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Professional").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Enterprise").length).toBeGreaterThanOrEqual(1);
   });
 
   it("marks the Professional tier as recommended", () => {
@@ -37,7 +37,7 @@ describe("PricingPage", () => {
     renderWithRouter(<PricingPage />);
 
     expect(screen.getByText(/Up to 3 projects/i)).not.toBeNull();
-    expect(screen.getByText(/Unlimited projects/i)).not.toBeNull();
+    expect(screen.getAllByText(/Unlimited projects/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Custom deployment/i)).not.toBeNull();
   });
 });

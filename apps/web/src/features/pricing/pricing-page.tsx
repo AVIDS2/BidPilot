@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeftIcon, CheckIcon, FileTextIcon } from "lucide-react";
+import { ArrowLeftIcon, CheckIcon, FileTextIcon, HelpCircleIcon, QuoteIcon, ShieldCheckIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Link, useNavigate } from "react-router-dom";
 import { createCheckout } from "@/lib/api";
@@ -7,6 +7,7 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
+import AnimatedContent from "@/components/AnimatedContent";
 
 interface PricingTier {
   name: string;
@@ -16,6 +17,24 @@ interface PricingTier {
   recommended?: boolean;
   features: string[];
   cta: string;
+}
+
+interface ComparisonRow {
+  feature: string;
+  starter: string;
+  professional: string;
+  enterprise: string;
+}
+
+interface Testimonial {
+  quote: string;
+  author: string;
+  role: string;
+}
+
+interface FaqItem {
+  question: string;
+  answer: string;
 }
 
 function TierCard({
@@ -196,6 +215,21 @@ export function PricingPage() {
     [t],
   );
 
+  const comparisonRows = useMemo(
+    () => t("comparison.rows", { returnObjects: true }) as unknown as ComparisonRow[],
+    [t],
+  );
+
+  const testimonials = useMemo(
+    () => t("testimonials.items", { returnObjects: true }) as unknown as Testimonial[],
+    [t],
+  );
+
+  const faqItems = useMemo(
+    () => t("faq.items", { returnObjects: true }) as unknown as FaqItem[],
+    [t],
+  );
+
   const checkoutMut = useMutation({
     mutationFn: createCheckout,
     onSuccess: (data) => {
@@ -295,6 +329,101 @@ export function PricingPage() {
             />
           ))}
         </div>
+
+        <AnimatedContent distance={24} duration={0.55} className="mt-16">
+          <section
+            className="overflow-hidden rounded-3xl border"
+            style={{
+              background: inPlatform ? "var(--card)" : "var(--landing-surface-1)",
+              borderColor: inPlatform ? "var(--border)" : "var(--landing-hairline)",
+            }}
+          >
+            <div className="flex flex-col gap-3 border-b p-6 md:flex-row md:items-center md:justify-between" style={{ borderColor: inPlatform ? "var(--border)" : "var(--landing-hairline)" }}>
+              <div>
+                <div className="flex items-center gap-2 text-sm font-medium" style={{ color: inPlatform ? "var(--primary)" : "var(--landing-accent)" }}>
+                  <ShieldCheckIcon className="size-4" />
+                  {t("comparison.label")}
+                </div>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>
+                  {t("comparison.title")}
+                </h2>
+              </div>
+              <p className="max-w-md text-sm leading-6" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)" }}>
+                {t("comparison.description")}
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-sm">
+                <thead>
+                  <tr style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)" }}>
+                    <th className="w-[34%] px-6 py-4 text-left font-medium">{t("comparison.columns.feature")}</th>
+                    <th className="px-6 py-4 text-left font-medium">{t("tiers.starter.name")}</th>
+                    <th className="px-6 py-4 text-left font-medium">{t("tiers.professional.name")}</th>
+                    <th className="px-6 py-4 text-left font-medium">{t("tiers.enterprise.name")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonRows.map((row) => (
+                    <tr key={row.feature} className="border-t" style={{ borderColor: inPlatform ? "var(--border)" : "var(--landing-hairline)" }}>
+                      <td className="px-6 py-4 font-medium" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>{row.feature}</td>
+                      <td className="px-6 py-4" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-secondary)" }}>{row.starter}</td>
+                      <td className="px-6 py-4" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-secondary)" }}>{row.professional}</td>
+                      <td className="px-6 py-4" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-secondary)" }}>{row.enterprise}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </AnimatedContent>
+
+        <section className="mt-12 grid gap-6 md:grid-cols-3">
+          {testimonials.map((item, index) => (
+            <AnimatedContent key={item.author} delay={index * 0.06} distance={24} duration={0.5}>
+              <article
+                className="h-full rounded-3xl border p-6"
+                style={{
+                  background: inPlatform ? "var(--card)" : "var(--landing-surface-1)",
+                  borderColor: inPlatform ? "var(--border)" : "var(--landing-hairline)",
+                }}
+              >
+                <QuoteIcon className="size-5" style={{ color: inPlatform ? "var(--primary)" : "var(--landing-accent)" }} />
+                <p className="mt-4 text-sm leading-6" style={{ color: inPlatform ? "var(--foreground)" : "var(--landing-text-primary)" }}>
+                  {item.quote}
+                </p>
+                <div className="mt-6">
+                  <p className="text-sm font-semibold" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>{item.author}</p>
+                  <p className="text-xs" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)" }}>{item.role}</p>
+                </div>
+              </article>
+            </AnimatedContent>
+          ))}
+        </section>
+
+        <AnimatedContent distance={24} duration={0.55} className="mt-12 pb-16">
+          <section
+            className="rounded-3xl border p-6 md:p-8"
+            style={{
+              background: inPlatform ? "var(--card)" : "var(--landing-surface-1)",
+              borderColor: inPlatform ? "var(--border)" : "var(--landing-hairline)",
+            }}
+          >
+            <div className="mb-6 flex items-center gap-2">
+              <HelpCircleIcon className="size-5" style={{ color: inPlatform ? "var(--primary)" : "var(--landing-accent)" }} />
+              <h2 className="text-2xl font-semibold tracking-tight" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>
+                {t("faq.title")}
+              </h2>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {faqItems.map((item) => (
+                <div key={item.question} className="rounded-2xl border p-4" style={{ borderColor: inPlatform ? "var(--border)" : "var(--landing-hairline)" }}>
+                  <h3 className="text-sm font-semibold" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>{item.question}</h3>
+                  <p className="mt-2 text-sm leading-6" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)" }}>{item.answer}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </AnimatedContent>
       </div>
     </div>
   );

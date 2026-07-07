@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimeParticles } from "./AnimeParticles";
 import { TechGrid } from "./TechGrid";
 
@@ -16,9 +16,27 @@ export function CinematicHero({
   children,
 }: CinematicHeroProps) {
   const [videoReady, setVideoReady] = useState(false);
+  const [effectsReady, setEffectsReady] = useState(false);
 
   const showParticles = variant === "particles" || variant === "mixed";
   const showGrid = variant === "grid" || variant === "mixed";
+
+  useEffect(() => {
+    const win = window as Window & {
+      requestIdleCallback?: (callback: () => void) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const id = win.requestIdleCallback
+      ? win.requestIdleCallback(() => setEffectsReady(true))
+      : window.setTimeout(() => setEffectsReady(true), 180);
+    return () => {
+      if (win.cancelIdleCallback) {
+        win.cancelIdleCallback(id);
+      } else {
+        window.clearTimeout(id);
+      }
+    };
+  }, []);
 
   return (
     <div className="relative min-h-[100dvh] overflow-hidden">
@@ -71,14 +89,14 @@ export function CinematicHero({
       )}
 
       {/* 层5: 粒子（screen 混合） */}
-      {showParticles && (
+      {showParticles && effectsReady && (
         <div
           className="absolute inset-0"
           style={{ mixBlendMode: "screen", zIndex: 4 }}
         >
           <AnimeParticles
             color="#84cc16"
-            count={variant === "mixed" ? 25 : 40}
+            count={variant === "mixed" ? 18 : 28}
             speed={variant === "mixed" ? 0.6 : 0.8}
             size={variant === "mixed" ? 2 : 3}
           />

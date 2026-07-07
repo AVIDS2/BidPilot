@@ -9,6 +9,7 @@ import { isStrongPassword } from "@/lib/password";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand";
+import { AuthTrustRail } from "./auth-trust-rail";
 
 export function SignupPage() {
   const [searchParams] = useSearchParams();
@@ -115,7 +116,8 @@ export function SignupPage() {
         }}
       />
 
-      <div className="relative z-20 w-full max-w-lg">
+      <div className="relative z-20 grid w-full max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,34rem)_minmax(22rem,1fr)]">
+      <div className="w-full max-w-lg justify-self-center lg:justify-self-end">
         {/* Logo */}
         <div className="text-center mb-10">
           <Link
@@ -371,6 +373,8 @@ export function SignupPage() {
           </a>
           .
         </p>
+      </div>
+      <AuthTrustRail />
       </div>
     </div>
   );
