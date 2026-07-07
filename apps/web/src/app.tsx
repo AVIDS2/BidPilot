@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { DashboardPage } from "./features/dashboard/dashboard-page";
 import { ProjectListPage } from "./features/projects/project-list-page";
@@ -32,7 +32,6 @@ import { BrandMark } from "@/components/brand";
 import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
 import { AIAssistantPanel, CommandPalette, FloatingAssistant, InlineSuggestionBar } from "@/components/ai-assistant";
 import { useAIAssistantHotkeys } from "@/hooks/use-ai-assistant-hotkeys";
-import { AnimatePresence, motion } from "motion/react";
 
 const queryClient = new QueryClient();
 
@@ -138,48 +137,36 @@ function MarketingOrPlatformLayout() {
 }
 
 function AppRoutes() {
-  const location = useLocation();
-
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={location.pathname}
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -4 }}
-        transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
-      >
-        <Routes location={location}>
-          {/* Public pages - Nav navigation */}
-          <Route element={<PublicLayout />}>
-            <Route path="/" element={<RootRedirect />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/verify-email-prompt" element={<VerifyEmailPromptPage />} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
-          </Route>
+    <Routes>
+      {/* Public pages - Nav navigation */}
+      <Route element={<PublicLayout />}>
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email-prompt" element={<VerifyEmailPromptPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+      </Route>
 
-          <Route element={<MarketingOrPlatformLayout />}>
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/docs" element={<DocsPage />} />
-          </Route>
+      <Route element={<MarketingOrPlatformLayout />}>
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/docs" element={<DocsPage />} />
+      </Route>
 
-          {/* Platform pages - Sidebar navigation */}
-          <Route element={<AppLayout />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/projects" element={<ProjectListPage />} />
-            <Route path="/projects/:id" element={<ProjectDetailPage />} />
-            <Route path="/account" element={<AccountPage />} />
-            <Route path="/admin/users" element={<UserManagementPage />} />
-            <Route path="/admin/teams" element={<TeamManagementPage />} />
-            <Route path="/admin/invitations" element={<InvitationManagementPage />} />
-            <Route path="/settings/providers" element={<ProviderSettingsPage />} />
-          </Route>
-        </Routes>
-      </motion.div>
-    </AnimatePresence>
+      {/* Platform pages - Sidebar navigation */}
+      <Route element={<AppLayout />}>
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/projects" element={<ProjectListPage />} />
+        <Route path="/projects/:id" element={<ProjectDetailPage />} />
+        <Route path="/account" element={<AccountPage />} />
+        <Route path="/admin/users" element={<UserManagementPage />} />
+        <Route path="/admin/teams" element={<TeamManagementPage />} />
+        <Route path="/admin/invitations" element={<InvitationManagementPage />} />
+        <Route path="/settings/providers" element={<ProviderSettingsPage />} />
+      </Route>
+    </Routes>
   );
 }
 
