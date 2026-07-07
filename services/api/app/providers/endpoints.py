@@ -10,6 +10,7 @@ keep two shapes explicit:
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
@@ -17,6 +18,16 @@ ProviderProtocol = Literal["openai", "anthropic"]
 
 _DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 _DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+_OPENAI_ENDPOINT_SUFFIXES = (
+    "/chat/completions",
+    "/responses",
+    "/models",
+    "/completions",
+    "/embeddings",
+)
+_BARE_OPENAI_COMPATIBLE_HOSTS_WITHOUT_VERSION = {
+    "api.deepseek.com",
+}
 
 
 def normalize_provider_endpoint(provider_type: str, api_url: str | None) -> str:
@@ -45,16 +56,31 @@ def _normalize_protocol(provider_type: str) -> ProviderProtocol:
 
 
 def _normalize_openai_base_url(url: str) -> str:
-    url = _strip_known_suffix(url, "/chat/completions")
+    url = _strip_known_suffixes(url, _OPENAI_ENDPOINT_SUFFIXES)
+    if _has_no_path(url):
+        hostname = urlsplit(url).hostname or ""
+        if hostname.lower() in _BARE_OPENAI_COMPATIBLE_HOSTS_WITHOUT_VERSION:
+            return url
+        return _append_path(url, "/v1")
     if _path_ends_with(url, "/v1"):
+        return url
+    if _path_ends_with_version_segment(url):
         return url
     return f"{url}/v1"
 
 
 def _normalize_anthropic_base_url(url: str) -> str:
+    url = _strip_known_suffix(url, "/models")
     url = _strip_known_suffix(url, "/messages")
     url = _strip_known_suffix(url, "/v1")
     return url
+
+
+def _strip_known_suffixes(url: str, suffixes: tuple[str, ...]) -> str:
+    normalized = url
+    for suffix in suffixes:
+        normalized = _strip_known_suffix(normalized, suffix)
+    return normalized
 
 
 def _strip_known_suffix(url: str, suffix: str) -> str:
@@ -67,6 +93,21 @@ def _strip_known_suffix(url: str, suffix: str) -> str:
 
 def _path_ends_with(url: str, suffix: str) -> bool:
     return urlsplit(url).path.rstrip("/").endswith(suffix)
+
+
+def _path_ends_with_version_segment(url: str) -> bool:
+    path = urlsplit(url).path.rstrip("/")
+    return bool(re.search(r"(^|/)v\d+$", path))
+
+
+def _has_no_path(url: str) -> bool:
+    return urlsplit(url).path.rstrip("/") == ""
+
+
+def _append_path(url: str, suffix: str) -> str:
+    parts = urlsplit(url)
+    path = f"{parts.path.rstrip('/')}{suffix}"
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment)).rstrip("/")
 
 
 def _strip_trailing_slashes(url: str) -> str:

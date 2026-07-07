@@ -125,7 +125,7 @@ def test_list_models_openai_compatible_payload(client, default_org_id, default_u
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert [model["id"] for model in data["models"]] == ["deepseek-chat", "deepseek-reasoner"]
-    assert captured["url"] == "https://api.deepseek.com/v1/models"
+    assert captured["url"] == "https://api.deepseek.com/models"
     assert captured["headers"]["Authorization"] == "Bearer sk-runtime-only"
 
 

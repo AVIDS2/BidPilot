@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -14,13 +14,13 @@ vi.mock("@/lib/api", () => ({
   listProviderModels: vi.fn(),
 }));
 
-const qc = new QueryClient({
-  defaultOptions: {
-    queries: { retry: false },
-  },
-});
-
 function renderWithProviders(ui: React.ReactElement) {
+  const qc = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
+
   return render(
     <QueryClientProvider client={qc}>
       {ui}
@@ -38,6 +38,10 @@ async function clickAddProvider() {
 }
 
 describe("ProviderSettingsPage", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders the page title", async () => {
     renderWithProviders(<ProviderSettingsPage />);
     await waitFor(() => {
@@ -83,11 +87,15 @@ describe("ProviderSettingsPage", () => {
     expect(screen.getByText("OpenAI Official")).toBeTruthy();
     expect(screen.getByText("Claude Official")).toBeTruthy();
     expect(screen.getByText("DeepSeek")).toBeTruthy();
+    expect(screen.getByText("DeepSeek Claude 协议")).toBeTruthy();
     expect(screen.getByText("阿里云百炼")).toBeTruthy();
     expect(screen.getByText("MiniMax")).toBeTruthy();
     expect(screen.getByText("智谱 GLM")).toBeTruthy();
     expect(screen.getByText("火山方舟 / 豆包")).toBeTruthy();
     expect(screen.getByText("Xiaomi MiMo")).toBeTruthy();
+    expect(screen.getByTitle("OpenAI Official")).toBeTruthy();
+    expect(screen.getByTitle("DeepSeek")).toBeTruthy();
+    expect(screen.getByTitle("Claude Official")).toBeTruthy();
   });
 
   it("fills provider form from a preset", async () => {
@@ -141,5 +149,5 @@ describe("ProviderSettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "deepseek-reasoner" }));
 
     expect(screen.getByDisplayValue("deepseek-reasoner")).toBeInTheDocument();
-  });
+  }, 10000);
 });

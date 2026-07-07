@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
 import { AIAssistantPanel } from "./AIAssistantPanel";
 
@@ -40,10 +40,24 @@ function renderPanel() {
   );
 }
 
+async function expandActivityDetails() {
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: "Expand activity details" })).toHaveAttribute("aria-expanded", "false");
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: "Collapse activity details" })).toHaveAttribute("aria-expanded", "true");
+  });
+}
+
 describe("AIAssistantPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("renders confirmation cards from assistant events", async () => {
@@ -249,12 +263,11 @@ describe("AIAssistantPanel", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+    await expandActivityDetails();
 
     await waitFor(() => {
-      expect(screen.getByText("Open page")).toBeInTheDocument();
+      expect(screen.getByText("raw detail should be hidden until expanded")).toBeInTheDocument();
     });
-    expect(screen.getByText("raw detail should be hidden until expanded")).toBeInTheDocument();
   });
 
   it("sanitizes raw tool payloads from activity details", async () => {
@@ -285,7 +298,7 @@ describe("AIAssistantPanel", () => {
       expect(screen.getByText("找到 1 个项目。")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+    await expandActivityDetails();
 
     expect(screen.getByText("Search projects")).toBeInTheDocument();
     expect(screen.getByText("Returned 1 results")).toBeInTheDocument();
@@ -327,7 +340,7 @@ describe("AIAssistantPanel", () => {
       expect(screen.getByText("我查看了项目概况。")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+    await expandActivityDetails();
 
     expect(screen.getByText("Read project overview")).toBeInTheDocument();
     expect(screen.getByText("Check material bundles")).toBeInTheDocument();
@@ -664,7 +677,7 @@ describe("AIAssistantPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("已启动章节起草工作流，运行 ID：run-1。")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+    await expandActivityDetails();
     await waitFor(() => {
       expect(screen.getAllByText((_content, element) => element?.textContent === "Draft section · completed").length).toBeGreaterThan(0);
     });

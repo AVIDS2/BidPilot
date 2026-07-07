@@ -6,7 +6,7 @@ from app.providers.endpoints import normalize_provider_base_url, normalize_provi
 def test_normalize_openai_endpoint_accepts_base_url() -> None:
     assert (
         normalize_provider_endpoint("openai", "https://api.deepseek.com")
-        == "https://api.deepseek.com/v1/chat/completions"
+        == "https://api.deepseek.com/chat/completions"
     )
     assert (
         normalize_provider_endpoint("openai", "https://api.deepseek.com/v1")
@@ -16,11 +16,23 @@ def test_normalize_openai_endpoint_accepts_base_url() -> None:
         normalize_provider_endpoint("openai", "https://dashscope.aliyuncs.com/compatible-mode/v1")
         == "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     )
+    assert (
+        normalize_provider_endpoint("openai", "https://ark.cn-beijing.volces.com/api/v3")
+        == "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+    )
+    assert (
+        normalize_provider_endpoint("openai", "https://open.bigmodel.cn/api/paas/v4")
+        == "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    )
 
 
 def test_normalize_openai_endpoint_keeps_full_endpoint() -> None:
     assert (
         normalize_provider_endpoint("openai", "https://openrouter.ai/api/v1/chat/completions")
+        == "https://openrouter.ai/api/v1/chat/completions"
+    )
+    assert (
+        normalize_provider_endpoint("openai", "https://openrouter.ai/api/v1/models")
         == "https://openrouter.ai/api/v1/chat/completions"
     )
 
@@ -44,10 +56,19 @@ def test_normalize_anthropic_endpoint_keeps_full_endpoint() -> None:
 
 
 def test_normalize_langchain_base_urls() -> None:
-    assert normalize_provider_base_url("openai", "https://api.deepseek.com") == "https://api.deepseek.com/v1"
+    assert normalize_provider_base_url("openai", "https://api.openai.com") == "https://api.openai.com/v1"
+    assert normalize_provider_base_url("openai", "https://api.deepseek.com") == "https://api.deepseek.com"
     assert (
         normalize_provider_base_url("openai", "https://api.deepseek.com/v1/chat/completions")
         == "https://api.deepseek.com/v1"
+    )
+    assert (
+        normalize_provider_base_url("openai", "https://ark.cn-beijing.volces.com/api/v3")
+        == "https://ark.cn-beijing.volces.com/api/v3"
+    )
+    assert (
+        normalize_provider_base_url("openai", "https://open.bigmodel.cn/api/paas/v4")
+        == "https://open.bigmodel.cn/api/paas/v4"
     )
     assert normalize_provider_base_url("anthropic", "https://api.anthropic.com/v1") == "https://api.anthropic.com"
     assert (

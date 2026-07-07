@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { ProviderBrandMark, type ProviderBrandId } from "./provider-brand-mark";
 import {
   Plus,
   Search,
@@ -72,12 +73,10 @@ type ProviderPreset = {
   apiUrl: string;
   model: string;
   description: string;
-  logoText: string;
-  logoUrl?: string;
-  logoBackground: string;
-  logoColor: string;
+  brand: ProviderBrandId;
   recommended?: boolean;
   modelHint?: string;
+  docsUrl?: string;
 };
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -88,9 +87,7 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "",
     model: "gpt-4o",
     description: "接入任何 OpenAI 兼容服务、企业网关或你自己的代理地址。",
-    logoText: "AI",
-    logoBackground: "#0f172a",
-    logoColor: "#ffffff",
+    brand: "custom-openai",
     modelHint: "按供应商模型名填写",
   },
   {
@@ -100,10 +97,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "https://api.openai.com/v1",
     model: "gpt-4o",
     description: "ChatGPT 背后的 OpenAI 官方 API，适合 GPT 系列模型。",
-    logoText: "OA",
-    logoUrl: "https://openai.com/favicon.ico",
-    logoBackground: "#111827",
-    logoColor: "#ffffff",
+    brand: "openai",
+    docsUrl: "https://platform.openai.com/docs/api-reference/chat/create",
     recommended: true,
   },
   {
@@ -112,11 +107,20 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     providerType: "openai",
     apiUrl: "https://api.deepseek.com",
     model: "deepseek-v4-flash",
-    description: "深度求索官方 API，适合 DeepSeek V4 Flash 与推理模型。",
-    logoText: "DS",
-    logoUrl: "https://www.deepseek.com/favicon.ico",
-    logoBackground: "#2563eb",
-    logoColor: "#ffffff",
+    description: "DeepSeek 官方 OpenAI 兼容 API，支持 V4 Flash、V4 Pro 与推理模型。",
+    brand: "deepseek",
+    docsUrl: "https://api-docs.deepseek.com/",
+    recommended: true,
+  },
+  {
+    id: "deepseek-anthropic",
+    label: "DeepSeek Claude 协议",
+    providerType: "anthropic",
+    apiUrl: "https://api.deepseek.com/anthropic",
+    model: "deepseek-v4-flash",
+    description: "DeepSeek 官方 Anthropic Messages 兼容端点，适合 Claude 协议客户端。",
+    brand: "deepseek",
+    docsUrl: "https://api-docs.deepseek.com/guides/anthropic_api",
     recommended: true,
   },
   {
@@ -126,10 +130,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     model: "qwen-plus",
     description: "阿里云百炼 Model Studio，适合通义千问 Qwen 系列模型。",
-    logoText: "百",
-    logoUrl: "https://www.alibabacloud.com/favicon.ico",
-    logoBackground: "#ff6a00",
-    logoColor: "#ffffff",
+    brand: "dashscope",
+    docsUrl: "https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope",
     recommended: true,
   },
   {
@@ -139,10 +141,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "https://ark.cn-beijing.volces.com/api/v3",
     model: "ep-xxxxxxxx",
     description: "火山方舟承载豆包模型，模型栏通常填写你的 Endpoint ID。",
-    logoText: "豆",
-    logoUrl: "https://www.volcengine.com/favicon.ico",
-    logoBackground: "#1d4ed8",
-    logoColor: "#ffffff",
+    brand: "doubao",
+    docsUrl: "https://www.volcengine.com/docs/82379",
     recommended: true,
   },
   {
@@ -152,10 +152,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "https://api.anthropic.com",
     model: "claude-sonnet-4-20250514",
     description: "Anthropic 官方 Claude API，适合 Claude Sonnet 与 Opus。",
-    logoText: "A",
-    logoUrl: "https://www.anthropic.com/favicon.ico",
-    logoBackground: "#111827",
-    logoColor: "#ffffff",
+    brand: "anthropic",
+    docsUrl: "https://docs.anthropic.com/en/api/messages",
     recommended: true,
   },
   {
@@ -165,10 +163,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "https://open.bigmodel.cn/api/paas/v4",
     model: "glm-4-flash",
     description: "智谱 AI 开放平台，适合 GLM 系列模型。",
-    logoText: "GLM",
-    logoUrl: "https://www.bigmodel.cn/favicon.ico",
-    logoBackground: "#2563eb",
-    logoColor: "#ffffff",
+    brand: "zhipu",
+    docsUrl: "https://docs.bigmodel.cn/",
   },
   {
     id: "minimax",
@@ -177,10 +173,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "https://api.minimax.io/v1",
     model: "MiniMax-M3",
     description: "MiniMax 官方模型接口，适合 M 系列长上下文与 Agent 任务。",
-    logoText: "MM",
-    logoUrl: "https://www.minimax.io/favicon.ico",
-    logoBackground: "#ff4778",
-    logoColor: "#ffffff",
+    brand: "minimax",
+    docsUrl: "https://platform.minimaxi.com/document/",
   },
   {
     id: "siliconflow",
@@ -189,10 +183,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "https://api.siliconflow.cn/v1",
     model: "deepseek-ai/DeepSeek-V3",
     description: "硅基流动模型云，适合 DeepSeek、Qwen 等开源模型。",
-    logoText: "SF",
-    logoUrl: "https://siliconflow.cn/favicon.ico",
-    logoBackground: "#6d28d9",
-    logoColor: "#ffffff",
+    brand: "siliconflow",
+    docsUrl: "https://docs.siliconflow.cn/api-reference/chat-completions/chat-completions",
   },
   {
     id: "openrouter",
@@ -201,10 +193,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "https://openrouter.ai/api/v1",
     model: "openai/gpt-4o-mini",
     description: "统一接入多家模型市场，适合快速切换模型。",
-    logoText: "OR",
-    logoUrl: "https://openrouter.ai/favicon.ico",
-    logoBackground: "#3b0764",
-    logoColor: "#ffffff",
+    brand: "openrouter",
+    docsUrl: "https://openrouter.ai/docs/api-reference/overview",
   },
   {
     id: "mimo",
@@ -213,10 +203,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "https://api.xiaomimimo.com/v1",
     model: "mimo-v2.5-pro",
     description: "小米 MiMo API 开放平台，支持 OpenAI 兼容格式。",
-    logoText: "Mi",
-    logoUrl: "https://mimo.mi.com/favicon.ico",
-    logoBackground: "#ff6900",
-    logoColor: "#ffffff",
+    brand: "mimo",
+    docsUrl: "https://mimo.mi.com/",
   },
   {
     id: "custom-anthropic",
@@ -225,42 +213,13 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     apiUrl: "",
     model: "claude-sonnet-4-20250514",
     description: "接入 Anthropic Messages 兼容网关，适合 Claude 代理或企业网关。",
-    logoText: "C",
-    logoBackground: "#1f2937",
-    logoColor: "#ffffff",
+    brand: "custom-anthropic",
   },
 ];
 
 function maskApiKey(key: string): string {
   if (key.length <= 8) return "****";
   return key.slice(0, 3) + "****" + key.slice(-4);
-}
-
-function ProviderLogo({ preset }: { preset: ProviderPreset }) {
-  const [logoFailed, setLogoFailed] = useState(false);
-
-  return (
-    <span
-      className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl text-xs font-bold shadow-sm ring-1 ring-black/5"
-      style={{
-        background: preset.logoBackground,
-        color: preset.logoColor,
-      }}
-      aria-hidden="true"
-    >
-      {preset.logoUrl && !logoFailed ? (
-        <img
-          src={preset.logoUrl}
-          alt=""
-          className="size-6 rounded-sm object-contain"
-          loading="lazy"
-          onError={() => setLogoFailed(true)}
-        />
-      ) : (
-        preset.logoText
-      )}
-    </span>
-  );
 }
 
 function ProviderSettingsSkeleton() {
@@ -730,7 +689,7 @@ export function ProviderSettingsPage() {
                       </span>
                     )}
                     <div className="flex items-start gap-3 pr-5">
-                      <ProviderLogo preset={preset} />
+                      <ProviderBrandMark brand={preset.brand} label={preset.label} />
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-foreground">
                           {preset.label}
