@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand";
 import { AuthTrustRail } from "./auth-trust-rail";
+import { getRegistrationErrorKey } from "./registration-errors";
 
 export function SignupPage() {
   const [searchParams] = useSearchParams();
@@ -72,17 +73,7 @@ export function SignupPage() {
       toast.success(t("toast.accountCreated"));
       navigate("/verify-email-prompt", { state: { email } });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("Email already registered")) {
-        toast.error(t("toast.emailExists"));
-      } else if (
-        msg.includes("Failed to fetch") ||
-        msg.includes("NetworkError")
-      ) {
-        toast.error(t("toast.registrationNetworkError"));
-      } else {
-        toast.error(t("toast.registrationGenericError"));
-      }
+      toast.error(t(getRegistrationErrorKey(err)));
     } finally {
       resetTurnstile(turnstileWidgetId);
       setTurnstileToken(null);
