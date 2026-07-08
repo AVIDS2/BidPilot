@@ -3,10 +3,9 @@ import ElectricBorder from "@/components/ElectricBorder";
 import FadeContent from "@/components/FadeContent";
 import GlareHover from "@/components/GlareHover";
 import ShinyText from "@/components/ShinyText";
+import { REACTBITS_AURORA } from "@/components/reactbits-theme";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
-
-const REACTBITS_ACCENT = "#a3e635";
 
 export function ProductReveal({
   children,
@@ -54,7 +53,7 @@ export function ProductGlareCard({
       background="transparent"
       borderColor="transparent"
       borderRadius="1rem"
-      glareColor={REACTBITS_ACCENT}
+      glareColor={REACTBITS_AURORA.accentAlt}
       glareOpacity={intense ? 0.22 : 0.13}
       glareSize={180}
       transitionDuration={720}
@@ -83,7 +82,13 @@ export function ProductElectricFrame({
   }
 
   return (
-    <ElectricBorder color={REACTBITS_ACCENT} speed={0.45} chaos={0.035} borderRadius={radius} className={className}>
+    <ElectricBorder
+      color={REACTBITS_AURORA.accent}
+      speed={0.52}
+      chaos={0.035}
+      borderRadius={radius}
+      className={cn("reactbits-aurora-breathe", className)}
+    >
       {children}
     </ElectricBorder>
   );
@@ -106,7 +111,7 @@ export function ProductShinyText({
       disabled={prefersReducedMotion}
       speed={3.1}
       color={muted ? "var(--muted-foreground)" : "var(--foreground)"}
-      shineColor={REACTBITS_ACCENT}
+      shineColor={REACTBITS_AURORA.accentAlt}
       spread={105}
       className={className}
     />

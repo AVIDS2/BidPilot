@@ -54,6 +54,7 @@ import ClickSpark from "@/components/ClickSpark";
 import ElectricBorder from "@/components/ElectricBorder";
 import FadeContent from "@/components/FadeContent";
 import ShinyText from "@/components/ShinyText";
+import { REACTBITS_AURORA } from "@/components/reactbits-theme";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { AssistantConfirmationCard } from "./assistant-confirmation-card";
 import { AssistantActivityTimeline } from "./assistant-activity-timeline";
@@ -235,7 +236,7 @@ function ReactBitsComposerFrame({
 
   return (
     <ClickSpark
-      sparkColor="#a3e635"
+      sparkColor={REACTBITS_AURORA.accentAlt}
       sparkSize={8}
       sparkRadius={18}
       sparkCount={7}
@@ -243,7 +244,7 @@ function ReactBitsComposerFrame({
       easing="ease-out"
     >
       <ElectricBorder
-        color="#a3e635"
+        color={REACTBITS_AURORA.accent}
         speed={activeMotion ? 0.65 : 0.18}
         chaos={activeMotion ? 0.045 : 0}
         borderRadius={30}
@@ -1163,7 +1164,7 @@ export function AIAssistantPanel() {
                     text={t("welcome.title")}
                     speed={3.4}
                     color="var(--foreground)"
-                    shineColor="#a3e635"
+                    shineColor={REACTBITS_AURORA.accentAlt}
                     spread={105}
                   />
                 </h3>

@@ -37,7 +37,7 @@ function HeroSection() {
         direction="bottom"
         threshold={0}
         stepDuration={0.6}
-        className="mt-7 max-w-[12ch] text-[clamp(3.15rem,16vw,5.25rem)] font-medium leading-[0.9] tracking-[-0.055em] text-white drop-shadow-[0_4px_32px_rgba(132,204,22,0.15)] sm:mt-8 sm:max-w-[10ch] md:text-8xl md:leading-[0.85]"
+        className="mt-7 max-w-[12ch] text-[clamp(3.15rem,16vw,5.25rem)] font-medium leading-[0.9] tracking-[-0.055em] text-white drop-shadow-[0_4px_32px_rgba(99,102,241,0.2)] sm:mt-8 sm:max-w-[10ch] md:text-8xl md:leading-[0.85]"
       />
 
       {/* 副标题 */}
@@ -49,7 +49,7 @@ function HeroSection() {
       <div className="mt-10 grid w-full max-w-[22rem] grid-cols-2 gap-3 sm:mt-12 sm:flex sm:max-w-none sm:gap-6">
         <StarBorder
           as="a"
-          color="rgba(132, 204, 22, 0.9)"
+          color="rgba(139, 92, 246, 0.92)"
           speed="5s"
           thickness={1}
           className="inline-flex min-h-24 w-full sm:min-h-0"
@@ -266,7 +266,7 @@ function FeaturesSection() {
                 background="var(--landing-surface-1)"
                 borderRadius="0px"
                 borderColor="var(--landing-hairline)"
-                glareColor="#84cc16"
+                glareColor="#38BDF8"
                 glareOpacity={0.15}
                 glareSize={300}
                 transitionDuration={700}
@@ -277,7 +277,7 @@ function FeaturesSection() {
                   <div
                     className="w-12 h-12 flex items-center justify-center mb-6"
                     style={{
-                      background: "rgba(132, 204, 22, 0.1)",
+                      background: "var(--landing-accent-soft)",
                       border: "1px solid var(--landing-border-inner)",
                     }}
                   >
@@ -350,7 +350,7 @@ function PricingSection() {
                   <span
                     className="inline-block px-3 py-1 text-xs font-medium tracking-widest uppercase mb-6"
                     style={{
-                      background: highlighted ? "rgba(132, 204, 22, 0.1)" : "var(--landing-hairline)",
+                      background: highlighted ? "var(--landing-accent-soft)" : "var(--landing-hairline)",
                       color: highlighted ? "var(--landing-accent)" : "var(--landing-text-secondary)",
                       border: highlighted
                         ? "1px solid var(--landing-border-inner)"
@@ -446,7 +446,7 @@ function FinalCtaSection() {
         <AnimatedContent delay={0.2} distance={30} duration={0.6}>
           <StarBorder
             as="a"
-            color="rgba(132, 204, 22, 0.8)"
+            color="rgba(56, 189, 248, 0.88)"
             speed="5s"
             thickness={1}
             className="inline-block"

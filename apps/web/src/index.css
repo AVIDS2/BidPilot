@@ -854,15 +854,39 @@
   --landing-text-secondary: #a3a3a3;
   --landing-text-tertiary: #737373;
 
-  --landing-accent: #84cc16;
-  --landing-accent-hover: #65a30d;
-  --landing-accent-light: #a3e635;
+  --landing-accent: #8b5cf6;
+  --landing-accent-hover: #7c3aed;
+  --landing-accent-light: #38bdf8;
+  --landing-accent-hot: #d946ef;
+  --landing-accent-soft: rgba(99, 102, 241, 0.12);
+  --landing-accent-gradient: linear-gradient(135deg, #38bdf8 0%, #6366f1 48%, #d946ef 100%);
 
   --landing-hairline: rgba(163, 163, 163, 0.1);
-  --landing-border-inner: rgba(132, 204, 22, 0.2);
+  --landing-border-inner: rgba(139, 92, 246, 0.28);
 
-  --landing-warm: #84cc16;
-  --landing-warm-hover: #65a30d;
+  --landing-warm: #38bdf8;
+  --landing-warm-hover: #8b5cf6;
+}
+
+@keyframes reactbits-aurora-breathe {
+  0%, 100% {
+    filter: saturate(1) brightness(1);
+    opacity: 0.9;
+  }
+  50% {
+    filter: saturate(1.18) brightness(1.12);
+    opacity: 1;
+  }
+}
+
+.reactbits-aurora-breathe {
+  animation: reactbits-aurora-breathe 5.5s cubic-bezier(0.32, 0.72, 0, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reactbits-aurora-breathe {
+    animation: none;
+  }
 }
 
 @keyframes landing-hero-orb {
@@ -941,16 +965,16 @@
 
 .landing-card-highlight {
   border-color: var(--landing-border-inner);
-  background: linear-gradient(145deg, rgba(132, 204, 22, 0.06), var(--landing-surface-1));
+  background: linear-gradient(145deg, rgba(99, 102, 241, 0.1), var(--landing-surface-1));
 }
 
 .landing-card-highlight::before {
   opacity: 1;
-  border-color: rgba(132, 204, 22, 0.4);
+  border-color: rgba(56, 189, 248, 0.34);
 }
 
 .landing-card-highlight:hover {
-  border-color: rgba(132, 204, 22, 0.5);
+  border-color: rgba(139, 92, 246, 0.5);
 }
 
 .double-border {

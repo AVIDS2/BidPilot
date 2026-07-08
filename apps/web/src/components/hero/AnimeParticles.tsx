@@ -8,7 +8,7 @@ interface AnimeParticlesProps {
 }
 
 export function AnimeParticles({
-  color = "#84cc16",
+  color = "#8B5CF6",
   count = 50,
   speed = 1,
   size = 3,

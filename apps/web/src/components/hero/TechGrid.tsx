@@ -8,7 +8,7 @@ interface TechGridProps {
 }
 
 export function TechGrid({
-  color = "#84cc16",
+  color = "#38BDF8",
   opacity = 0.1,
   cellSize = 50,
   animated = true,

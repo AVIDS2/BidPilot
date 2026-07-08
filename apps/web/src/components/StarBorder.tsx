@@ -43,7 +43,7 @@ const StarBorder = <T extends React.ElementType = 'button'>({
           animationDuration: speed
         }}
       ></div>
-      <div className="relative z-1 border text-center text-[16px] py-[16px] px-[26px] rounded-[20px]" style={{ background: 'var(--landing-surface-1, #171717)', borderColor: 'var(--landing-border-inner, rgba(132,204,22,0.2))', color: 'var(--landing-text-primary, #fff)' }}>
+      <div className="relative z-1 border text-center text-[16px] py-[16px] px-[26px] rounded-[20px]" style={{ background: 'var(--landing-surface-1, #171717)', borderColor: 'var(--landing-border-inner, rgba(139,92,246,0.28))', color: 'var(--landing-text-primary, #fff)' }}>
         {children}
       </div>
     </Component>

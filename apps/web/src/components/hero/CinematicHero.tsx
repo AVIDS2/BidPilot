@@ -80,7 +80,7 @@ export function CinematicHero({
           style={{ mixBlendMode: "screen", zIndex: 3 }}
         >
           <TechGrid
-            color="#84cc16"
+            color="#38BDF8"
             opacity={variant === "mixed" ? 0.06 : 0.08}
             cellSize={variant === "mixed" ? 80 : 60}
             animated={false}
@@ -95,7 +95,7 @@ export function CinematicHero({
           style={{ mixBlendMode: "screen", zIndex: 4 }}
         >
           <AnimeParticles
-            color="#84cc16"
+            color="#8B5CF6"
             count={variant === "mixed" ? 18 : 28}
             speed={variant === "mixed" ? 0.6 : 0.8}
             size={variant === "mixed" ? 2 : 3}

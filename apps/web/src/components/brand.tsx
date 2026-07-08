@@ -37,19 +37,19 @@ export function BrandMark({
           <stop offset="1" stopColor="#0C1D14" />
         </linearGradient>
         <linearGradient id={compassGradient} x1="19" y1="47" x2="51" y2="17" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#A3E635" />
-          <stop offset="0.48" stopColor="#5BE878" />
-          <stop offset="1" stopColor="#2DD4BF" />
+          <stop offset="0" stopColor="#38BDF8" />
+          <stop offset="0.5" stopColor="#8B5CF6" />
+          <stop offset="1" stopColor="#D946EF" />
         </linearGradient>
         <linearGradient id={routeGradient} x1="17" y1="45" x2="49" y2="18" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#A3E635" />
-          <stop offset="0.52" stopColor="#7DD3FC" />
-          <stop offset="1" stopColor="#2DD4BF" />
+          <stop offset="0" stopColor="#38BDF8" />
+          <stop offset="0.52" stopColor="#6366F1" />
+          <stop offset="1" stopColor="#D946EF" />
         </linearGradient>
         <radialGradient id={targetGradient} cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(47.5 18.5) rotate(94.2) scale(13.5)">
           <stop offset="0" stopColor="#F8FAFC" />
-          <stop offset="0.42" stopColor="#A3E635" />
-          <stop offset="1" stopColor="#2DD4BF" stopOpacity="0" />
+          <stop offset="0.42" stopColor="#7DD3FC" />
+          <stop offset="1" stopColor="#8B5CF6" stopOpacity="0" />
         </radialGradient>
       </defs>
 
@@ -78,7 +78,7 @@ export function BrandMark({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="20.5" cy="46.2" r="2.6" fill="#05070A" stroke="#A3E635" strokeWidth="1.8" />
+      <circle cx="20.5" cy="46.2" r="2.6" fill="#05070A" stroke="#38BDF8" strokeWidth="1.8" />
       <circle cx="34.2" cy="30.4" r="2.6" fill="#05070A" stroke="#7DD3FC" strokeWidth="1.8" />
     </svg>
   );
@@ -114,14 +114,14 @@ export function AgentMark({
           <stop offset="1" stopColor="#0B2017" />
         </linearGradient>
         <linearGradient id={needleGradient} x1="18" y1="47" x2="48" y2="15" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#A3E635" />
-          <stop offset="0.5" stopColor="#5BE878" />
-          <stop offset="1" stopColor="#38BDF8" />
+          <stop offset="0" stopColor="#38BDF8" />
+          <stop offset="0.5" stopColor="#8B5CF6" />
+          <stop offset="1" stopColor="#D946EF" />
         </linearGradient>
         <linearGradient id={ringGradient} x1="14" y1="45" x2="50" y2="18" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#A3E635" />
-          <stop offset="0.42" stopColor="#2DD4BF" />
-          <stop offset="1" stopColor="#7DD3FC" />
+          <stop offset="0" stopColor="#38BDF8" />
+          <stop offset="0.42" stopColor="#6366F1" />
+          <stop offset="1" stopColor="#D946EF" />
         </linearGradient>
       </defs>
 
@@ -148,7 +148,7 @@ export function AgentMark({
       />
       <path d="M31.6 36.6L29.9 18.1M31.6 36.6L38.7 30.5M38.7 30.5L41.4 48.4" stroke="#04130D" strokeOpacity="0.42" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="31.8" cy="36.4" r="3.6" fill="#061018" stroke="#F8FAFC" strokeOpacity="0.84" strokeWidth="1.6" />
-      <circle cx="31.8" cy="36.4" r="1.35" fill="#A3E635" />
+      <circle cx="31.8" cy="36.4" r="1.35" fill="#38BDF8" />
     </svg>
   );
 }
