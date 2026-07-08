@@ -266,7 +266,7 @@ function FeaturesSection() {
                 background="var(--landing-surface-1)"
                 borderRadius="0px"
                 borderColor="var(--landing-hairline)"
-                glareColor="132, 204, 22"
+                glareColor="#84cc16"
                 glareOpacity={0.15}
                 glareSize={300}
                 transitionDuration={700}

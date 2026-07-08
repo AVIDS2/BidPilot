@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
 import AnimatedContent from "@/components/AnimatedContent";
+import { ProductGlareCard, ProductShinyText } from "@/components/reactbits-product";
 
 interface PricingTier {
   name: string;
@@ -53,17 +54,18 @@ function TierCard({
   const highlighted = tier.recommended && !current;
 
   return (
-    <div
-      className="relative flex flex-col p-8 transition-all duration-300 hover:-translate-y-1"
-      style={{
-        background: inPlatform ? "var(--card)" : "var(--landing-surface-1)",
-        border: highlighted
-          ? `1px solid ${inPlatform ? "var(--primary)" : "var(--landing-border-inner)"}`
-          : current
-            ? `1px solid ${inPlatform ? "var(--primary)" : "rgba(132, 204, 22, 0.6)"}`
-            : `1px solid ${inPlatform ? "var(--border)" : "var(--landing-hairline)"}`,
-      }}
-    >
+    <ProductGlareCard intense={highlighted}>
+      <div
+        className="relative flex w-full flex-col p-8 transition-all duration-300 hover:-translate-y-1"
+        style={{
+          background: inPlatform ? "var(--card)" : "var(--landing-surface-1)",
+          border: highlighted
+            ? `1px solid ${inPlatform ? "var(--primary)" : "var(--landing-border-inner)"}`
+            : current
+              ? `1px solid ${inPlatform ? "var(--primary)" : "rgba(132, 204, 22, 0.6)"}`
+              : `1px solid ${inPlatform ? "var(--border)" : "var(--landing-hairline)"}`,
+        }}
+      >
       {/* 推荐标签 */}
       {highlighted && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -167,7 +169,8 @@ function TierCard({
       >
         {current ? t("button.currentPlan") : tier.cta}
       </Link>
-    </div>
+      </div>
+    </ProductGlareCard>
   );
 }
 
@@ -301,7 +304,7 @@ export function PricingPage() {
             {inPlatform ? t("title") : "/ Pricing"}
           </span>
           <h1 className="mt-4 text-4xl font-bold tracking-tight" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>
-            {t("title")}
+            <ProductShinyText text={t("title")} />
           </h1>
           <p
             className="mt-3 leading-relaxed max-w-[65ch] mx-auto"
@@ -380,22 +383,24 @@ export function PricingPage() {
         <section className="mt-12 grid gap-6 md:grid-cols-3">
           {testimonials.map((item, index) => (
             <AnimatedContent key={item.author} delay={index * 0.06} distance={24} duration={0.5}>
-              <article
-                className="h-full rounded-3xl border p-6"
-                style={{
-                  background: inPlatform ? "var(--card)" : "var(--landing-surface-1)",
-                  borderColor: inPlatform ? "var(--border)" : "var(--landing-hairline)",
-                }}
-              >
-                <QuoteIcon className="size-5" style={{ color: inPlatform ? "var(--primary)" : "var(--landing-accent)" }} />
-                <p className="mt-4 text-sm leading-6" style={{ color: inPlatform ? "var(--foreground)" : "var(--landing-text-primary)" }}>
-                  {item.quote}
-                </p>
-                <div className="mt-6">
-                  <p className="text-sm font-semibold" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>{item.author}</p>
-                  <p className="text-xs" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)" }}>{item.role}</p>
-                </div>
-              </article>
+              <ProductGlareCard>
+                <article
+                  className="h-full w-full rounded-3xl border p-6"
+                  style={{
+                    background: inPlatform ? "var(--card)" : "var(--landing-surface-1)",
+                    borderColor: inPlatform ? "var(--border)" : "var(--landing-hairline)",
+                  }}
+                >
+                  <QuoteIcon className="size-5" style={{ color: inPlatform ? "var(--primary)" : "var(--landing-accent)" }} />
+                  <p className="mt-4 text-sm leading-6" style={{ color: inPlatform ? "var(--foreground)" : "var(--landing-text-primary)" }}>
+                    {item.quote}
+                  </p>
+                  <div className="mt-6">
+                    <p className="text-sm font-semibold" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>{item.author}</p>
+                    <p className="text-xs" style={{ color: inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)" }}>{item.role}</p>
+                  </div>
+                </article>
+              </ProductGlareCard>
             </AnimatedContent>
           ))}
         </section>

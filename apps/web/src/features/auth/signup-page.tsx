@@ -9,6 +9,7 @@ import { isStrongPassword } from "@/lib/password";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand";
+import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
 import { AuthTrustRail } from "./auth-trust-rail";
 import { getRegistrationErrorKey } from "./registration-errors";
 
@@ -110,7 +111,7 @@ export function SignupPage() {
       <div className="relative z-20 grid w-full max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,34rem)_minmax(22rem,1fr)]">
       <div className="w-full max-w-lg justify-self-center lg:justify-self-end">
         {/* Logo */}
-        <div className="text-center mb-10">
+        <ProductReveal blur={false} className="text-center mb-10">
           <Link
             to="/"
             className="inline-flex transition-colors duration-300 hover:text-primary"
@@ -118,13 +119,14 @@ export function SignupPage() {
             <BrandLogo markClassName="size-10" textClassName="text-3xl" />
           </Link>
           <p className="mt-3 text-sm text-muted-foreground">
-            AI-Powered Bid Execution
+            <ProductShinyText text="AI-Powered Bid Execution" muted />
           </p>
-        </div>
+        </ProductReveal>
 
         {/* 表单卡片 */}
-        <div className="p-8 rounded-xl bg-card border border-border shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <ProductGlareCard intense>
+          <div className="w-full p-8 rounded-xl bg-card border border-border shadow-sm">
+            <form onSubmit={handleSubmit} className="space-y-5">
             {/* 显示名称 */}
             <div className="space-y-2">
               <label
@@ -322,16 +324,19 @@ export function SignupPage() {
             />
 
             {/* 提交按钮 */}
-            <Button
-              type="submit"
-              disabled={loading || !email || !displayName || !password}
-              className="w-full h-10"
-            >
-              {loading && <Loader2Icon className="animate-spin" />}
-              {t("signup.submit")}
-            </Button>
-          </form>
-        </div>
+            <ProductElectricFrame active={loading} radius={10} className="w-full">
+              <Button
+                type="submit"
+                disabled={loading || !email || !displayName || !password}
+                className="w-full h-10"
+              >
+                {loading && <Loader2Icon className="animate-spin" />}
+                {t("signup.submit")}
+              </Button>
+            </ProductElectricFrame>
+            </form>
+          </div>
+        </ProductGlareCard>
 
         {/* 底部链接 */}
         <div className="mt-6 text-center">

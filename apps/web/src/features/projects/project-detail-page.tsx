@@ -15,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import CountUp from "@/components/CountUp";
+import { ProductElectricFrame, ProductGlareCard, ProductShinyText } from "@/components/reactbits-product";
 import {
   getProject, listBundles, createDeliverable, reingestBundle, listDeliverables,
   listDeliverableSections, listExecutionRuns, retryExecutionRun, listEvidence,
@@ -86,25 +87,27 @@ function WorkflowStepper({
 
         return (
           <div key={step.key} className="flex items-center flex-1 last:flex-none">
-            <button
-              onClick={() => onStepClick(step.key)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap ${
-                isActive
-                  ? "bg-primary/10 text-primary border border-primary/20"
-                  : isDone
-                  ? "text-emerald-600 dark:text-emerald-400 hover:bg-muted/50"
-                  : "text-muted-foreground hover:bg-muted/50"
-              }`}
-            >
-              <span className="relative flex size-5 items-center justify-center">
-                {isDone && !isActive ? (
-                  <CheckCircle2Icon className="size-4" />
-                ) : (
-                  <Icon className="size-4" />
-                )}
-              </span>
-              <span className="hidden sm:inline">{t(step.labelKey)}</span>
-            </button>
+            <ProductElectricFrame active={isActive} radius={12}>
+              <button
+                onClick={() => onStepClick(step.key)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                  isActive
+                    ? "bg-primary/10 text-primary border border-primary/20"
+                    : isDone
+                    ? "text-emerald-600 dark:text-emerald-400 hover:bg-muted/50"
+                    : "text-muted-foreground hover:bg-muted/50"
+                }`}
+              >
+                <span className="relative flex size-5 items-center justify-center">
+                  {isDone && !isActive ? (
+                    <CheckCircle2Icon className="size-4" />
+                  ) : (
+                    <Icon className="size-4" />
+                  )}
+                </span>
+                <span className="hidden sm:inline">{t(step.labelKey)}</span>
+              </button>
+            </ProductElectricFrame>
             {i < WORKFLOW_STEPS.length - 1 && (
               <div className="flex-1 mx-1">
                 <div className={`h-px w-full ${isDone ? "bg-emerald-500/40" : "bg-border"}`} />
@@ -222,7 +225,9 @@ export function ProjectDetailPage() {
         className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
       >
         <div className="min-w-0">
-          <h1 className="break-words text-2xl font-bold sm:truncate">{project.name}</h1>
+          <h1 className="break-words text-2xl font-bold sm:truncate">
+            <ProductShinyText text={project.name} />
+          </h1>
           <p className="text-muted-foreground">
             {project.scenario_package} &middot; <Badge>{t(`statusValues.${project.status}`, { defaultValue: project.status })}</Badge>
           </p>
@@ -255,18 +260,20 @@ export function ProjectDetailPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: i * 0.07, ease: [0.32, 0.72, 0, 1] }}
           >
-            <Card className="@container/card h-full">
-              <CardHeader>
-                <CardDescription>{card.label}</CardDescription>
-                <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                  <CountUp to={card.value} duration={1.2} delay={i * 0.08} />
-                </CardTitle>
-                <CardAction>
-                  <Badge variant={card.warn ? "destructive" : "outline"}>{card.badge}</Badge>
-                </CardAction>
-              </CardHeader>
-              <CardFooter className="text-sm text-muted-foreground">{card.desc}</CardFooter>
-            </Card>
+            <ProductGlareCard>
+              <Card className="@container/card h-full w-full">
+                <CardHeader>
+                  <CardDescription>{card.label}</CardDescription>
+                  <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+                    <CountUp to={card.value} duration={1.2} delay={i * 0.08} />
+                  </CardTitle>
+                  <CardAction>
+                    <Badge variant={card.warn ? "destructive" : "outline"}>{card.badge}</Badge>
+                  </CardAction>
+                </CardHeader>
+                <CardFooter className="text-sm text-muted-foreground">{card.desc}</CardFooter>
+              </Card>
+            </ProductGlareCard>
           </motion.div>
         ))}
       </div>

@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AnimatedContent from "@/components/AnimatedContent";
+import { ProductGlareCard, ProductShinyText } from "@/components/reactbits-product";
 
 // ---------- ScrollReveal (老师风格) ----------
 function ScrollReveal({
@@ -74,55 +75,57 @@ function CodeBlock({
   }, [children]);
 
   return (
-    <div
-      className="relative group my-6 overflow-hidden"
-      style={{
-        background: "var(--card)",
-        border: "1px solid var(--border)",
-      }}
-    >
-      {/* 标题栏 */}
+    <ProductGlareCard>
       <div
-        className="flex items-center justify-between px-4 py-2.5"
+        className="relative group my-6 w-full overflow-hidden"
         style={{
-          borderBottom: "1px solid var(--border)",
-          background: "var(--background)",
+          background: "var(--card)",
+          border: "1px solid var(--border)",
         }}
       >
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
+        {/* 标题栏 */}
+        <div
+          className="flex items-center justify-between px-4 py-2.5"
+          style={{
+            borderBottom: "1px solid var(--border)",
+            background: "var(--background)",
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
+              <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
+              <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--muted-foreground)" }} />
+            </div>
+            {filename && (
+              <span className="text-xs font-mono" style={{ color: "var(--muted-foreground)" }}>
+                {filename}
+              </span>
+            )}
           </div>
-          {filename && (
-            <span className="text-xs font-mono" style={{ color: "var(--muted-foreground)" }}>
-              {filename}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono tracking-wider uppercase" style={{ color: "var(--muted-foreground)" }}>
+              {language}
             </span>
-          )}
+            <button
+              onClick={handleCopy}
+              className="p-1.5 transition-all duration-200 hover:scale-110"
+              style={{
+                color: copied ? "var(--primary)" : "var(--muted-foreground)",
+              }}
+              title="Copy code"
+            >
+              {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono tracking-wider uppercase" style={{ color: "var(--muted-foreground)" }}>
-            {language}
-          </span>
-          <button
-            onClick={handleCopy}
-            className="p-1.5 transition-all duration-200 hover:scale-110"
-            style={{
-              color: copied ? "var(--primary)" : "var(--muted-foreground)",
-            }}
-            title="Copy code"
-          >
-            {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-          </button>
-        </div>
-      </div>
 
-      {/* 代码内容 */}
-      <pre className="p-5 overflow-x-auto text-sm leading-relaxed font-mono" style={{ color: "var(--muted-foreground)" }}>
-        <code>{children.trim()}</code>
-      </pre>
-    </div>
+        {/* 代码内容 */}
+        <pre className="p-5 overflow-x-auto text-sm leading-relaxed font-mono" style={{ color: "var(--muted-foreground)" }}>
+          <code>{children.trim()}</code>
+        </pre>
+      </div>
+    </ProductGlareCard>
   );
 }
 
@@ -140,35 +143,31 @@ function FeatureCard({
 }) {
   return (
     <ScrollReveal delay={index * 100}>
-      <div
-        className="group p-7 transition-all duration-300 hover:-translate-y-1"
-        style={{
-          background: "var(--card)",
-          border: "1px solid var(--border)",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = "var(--border)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = "var(--border)";
-        }}
-      >
+      <ProductGlareCard>
         <div
-          className="w-10 h-10 flex items-center justify-center mb-5"
+          className="group w-full p-7 transition-all duration-300 hover:-translate-y-1"
           style={{
-            background: "rgba(132, 204, 22, 0.1)",
             border: "1px solid var(--border)",
+            background: "var(--card)",
           }}
         >
-          <Icon className="w-5 h-5" style={{ color: "var(--primary)" }} />
+          <div
+            className="w-10 h-10 flex items-center justify-center mb-5"
+            style={{
+              background: "rgba(132, 204, 22, 0.1)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <Icon className="w-5 h-5" style={{ color: "var(--primary)" }} />
+          </div>
+          <h3 className="text-lg font-medium mb-2" style={{ color: "var(--foreground)" }}>
+            {title}
+          </h3>
+          <p className="text-sm leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+            {description}
+          </p>
         </div>
-        <h3 className="text-lg font-medium mb-2" style={{ color: "var(--foreground)" }}>
-          {title}
-        </h3>
-        <p className="text-sm leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
-          {description}
-        </p>
-      </div>
+      </ProductGlareCard>
     </ScrollReveal>
   );
 }
@@ -195,7 +194,7 @@ function SectionHeading({
         className="text-3xl md:text-4xl font-medium leading-tight tracking-tight mb-4"
         style={{ color: "var(--foreground)" }}
       >
-        {title}
+        <ProductShinyText text={title} />
       </h2>
       <p className="text-lg max-w-2xl mb-14" style={{ color: "var(--muted-foreground)" }}>
         {description}

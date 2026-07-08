@@ -9,6 +9,7 @@ import { TurnstileWidget, isTurnstileConfigured, resetTurnstile, type TurnstileW
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand";
+import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
 import { AuthTrustRail } from "./auth-trust-rail";
 
 export function LoginPage() {
@@ -117,7 +118,7 @@ export function LoginPage() {
       <div className="relative z-20 grid w-full max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,28rem)_minmax(22rem,1fr)]">
       <div className="w-full max-w-md justify-self-center lg:justify-self-end">
         {/* Logo */}
-        <div className="text-center mb-10">
+        <ProductReveal blur={false} className="text-center mb-10">
           <Link
             to="/"
             className="inline-flex transition-colors duration-300 hover:text-primary"
@@ -125,13 +126,14 @@ export function LoginPage() {
             <BrandLogo markClassName="size-10" textClassName="text-3xl" />
           </Link>
           <p className="mt-3 text-sm text-muted-foreground">
-            AI-Powered Bid Execution
+            <ProductShinyText text="AI-Powered Bid Execution" muted />
           </p>
-        </div>
+        </ProductReveal>
 
         {/* 表单卡片 */}
-        <div className="p-8 rounded-xl bg-card border border-border shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <ProductGlareCard intense>
+          <div className="w-full p-8 rounded-xl bg-card border border-border shadow-sm">
+            <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <label
                 htmlFor="email"
@@ -197,14 +199,16 @@ export function LoginPage() {
               className="min-h-[65px]"
             />
 
-            <Button
-              type="submit"
-              disabled={loading || !email || !password}
-              className="w-full h-10"
-            >
-              {loading && <Loader2Icon className="animate-spin" />}
-              {t("login.submit")}
-            </Button>
+            <ProductElectricFrame active={loading} radius={10} className="w-full">
+              <Button
+                type="submit"
+                disabled={loading || !email || !password}
+                className="w-full h-10"
+              >
+                {loading && <Loader2Icon className="animate-spin" />}
+                {t("login.submit")}
+              </Button>
+            </ProductElectricFrame>
 
             {/* 未验证邮箱提示 */}
             {unverifiedEmail && (
@@ -226,8 +230,9 @@ export function LoginPage() {
                 </button>
               </div>
             )}
-          </form>
-        </div>
+            </form>
+          </div>
+        </ProductGlareCard>
 
         {/* 底部链接 */}
         <div className="mt-6 text-center">

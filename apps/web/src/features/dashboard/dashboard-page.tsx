@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
 import { useAuth } from "@/lib/auth";
 import CountUp from "@/components/CountUp";
+import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
 import {
   listProjects, listExecutionRuns, listProviderConfigs,
   type ProjectRead, type ExecutionRunRead,
@@ -193,14 +194,12 @@ export function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Welcome header - 入场动画 */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
-      >
-        <h1 className="text-2xl font-bold tracking-tight">{greeting}</h1>
+      <ProductReveal blur={false}>
+        <h1 className="text-2xl font-bold tracking-tight">
+          <ProductShinyText text={greeting} />
+        </h1>
         <p className="text-muted-foreground">{t("dashboard:subtitle")}</p>
-      </motion.div>
+      </ProductReveal>
 
       {/* Stats cards - stagger入场 + CountUp数字动画 */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -213,22 +212,24 @@ export function DashboardPage() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.5, delay: i * 0.08, ease: [0.32, 0.72, 0, 1] }}
             >
-              <Card className="transition-shadow hover:shadow-md h-full">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardDescription>{stat.label}</CardDescription>
-                    <div className={`flex size-8 items-center justify-center rounded-lg ${bg}`}>
-                      <Icon className={`size-4 ${color}`} />
+              <ProductGlareCard>
+                <Card className="h-full w-full transition-shadow hover:shadow-md">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardDescription>{stat.label}</CardDescription>
+                      <div className={`flex size-8 items-center justify-center rounded-lg ${bg}`}>
+                        <Icon className={`size-4 ${color}`} />
+                      </div>
                     </div>
-                  </div>
-                  <CardTitle className="text-3xl font-bold tabular-nums">
-                    <CountUp to={stat.value} duration={1.4} delay={i * 0.1} />
-                  </CardTitle>
-                </CardHeader>
-                <CardFooter className="pt-0">
-                  <span className="text-xs text-muted-foreground">{stat.sub}</span>
-                </CardFooter>
-              </Card>
+                    <CardTitle className="text-3xl font-bold tabular-nums">
+                      <CountUp to={stat.value} duration={1.4} delay={i * 0.1} />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardFooter className="pt-0">
+                    <span className="text-xs text-muted-foreground">{stat.sub}</span>
+                  </CardFooter>
+                </Card>
+              </ProductGlareCard>
             </motion.div>
           );
         })}
@@ -241,27 +242,29 @@ export function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.35, ease: [0.32, 0.72, 0, 1] }}
         >
-          <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
-            <CardContent className="py-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">{t("dashboard:usage.planUsage", { defaultValue: "Project usage" })}</span>
-                <span className="text-sm text-muted-foreground">{statusCounts.total} / {planLimit}</span>
-              </div>
-              <motion.div
-                initial={{ scaleX: 0 }}
-                animate={{ scaleX: 1 }}
-                transition={{ duration: 0.8, delay: 0.5, ease: [0.32, 0.72, 0, 1] }}
-                style={{ transformOrigin: "left" }}
-              >
-                <Progress value={projectUsagePct} />
-              </motion.div>
-              {projectUsagePct >= 80 && (
-                <p className="text-xs text-amber-500 mt-2">
-                  {t("dashboard:usage.nearLimit", { defaultValue: "You're approaching your plan limit. Consider upgrading." })}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <ProductElectricFrame radius={16}>
+            <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">{t("dashboard:usage.planUsage", { defaultValue: "Project usage" })}</span>
+                  <span className="text-sm text-muted-foreground">{statusCounts.total} / {planLimit}</span>
+                </div>
+                <motion.div
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: 1 }}
+                  transition={{ duration: 0.8, delay: 0.5, ease: [0.32, 0.72, 0, 1] }}
+                  style={{ transformOrigin: "left" }}
+                >
+                  <Progress value={projectUsagePct} />
+                </motion.div>
+                {projectUsagePct >= 80 && (
+                  <p className="text-xs text-amber-500 mt-2">
+                    {t("dashboard:usage.nearLimit", { defaultValue: "You're approaching your plan limit. Consider upgrading." })}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </ProductElectricFrame>
         </motion.div>
       )}
 
@@ -274,39 +277,41 @@ export function DashboardPage() {
           transition={{ duration: 0.5, delay: 0.4, ease: [0.32, 0.72, 0, 1] }}
           className="lg:col-span-2"
         >
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="text-base">{t("dashboard:recentActivity.title")}</CardTitle>
-              <CardDescription>{t("dashboard:recentActivity.description")}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {recentActivity.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  {t("dashboard:recentActivity.empty")}
-                </p>
-              ) : (
-                <div className="relative">
-                  {recentActivity.map((event, i) => (
-                    <RecentActivityItem key={i} event={event} index={i} />
-                  ))}
-                </div>
-              )}
-              {allRuns && allRuns.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-border">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">
-                    {t("dashboard:recentActivity.recentRuns")}
+          <ProductGlareCard>
+            <Card className="h-full w-full">
+              <CardHeader>
+                <CardTitle className="text-base">{t("dashboard:recentActivity.title")}</CardTitle>
+                <CardDescription>{t("dashboard:recentActivity.description")}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {recentActivity.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    {t("dashboard:recentActivity.empty")}
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {allRuns.slice(0, 5).map((run) => (
-                      <Badge key={run.id} variant="secondary" className="text-xs">
-                        {run.run_type} &middot; {run.status}
-                      </Badge>
+                ) : (
+                  <div className="relative">
+                    {recentActivity.map((event, i) => (
+                      <RecentActivityItem key={i} event={event} index={i} />
                     ))}
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                )}
+                {allRuns && allRuns.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                      {t("dashboard:recentActivity.recentRuns")}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {allRuns.slice(0, 5).map((run) => (
+                        <Badge key={run.id} variant="secondary" className="text-xs">
+                          {run.run_type} &middot; {run.status}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </ProductGlareCard>
         </motion.div>
 
         {/* Right column: Quick Actions + AI Usage */}
@@ -316,25 +321,27 @@ export function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.45, ease: [0.32, 0.72, 0, 1] }}
           >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">{t("dashboard:quickActions.title")}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                <Button className="w-full justify-between group" onClick={() => navigate("/projects")}>
-                  <span className="flex items-center gap-2"><PlusIcon className="size-4" />{t("dashboard:quickActions.newProject")}</span>
-                  <ArrowRightIcon className="size-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
-                </Button>
-                <Button variant="outline" className="w-full justify-between group" onClick={() => navigate("/projects")}>
-                  <span className="flex items-center gap-2"><EyeIcon className="size-4" />{t("dashboard:quickActions.viewPendingReviews")}</span>
-                  <ArrowRightIcon className="size-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
-                </Button>
-                <Button variant="outline" className="w-full justify-between group" onClick={() => navigate("/projects")}>
-                  <span className="flex items-center gap-2"><DownloadIcon className="size-4" />{t("dashboard:quickActions.exportLatest")}</span>
-                  <ArrowRightIcon className="size-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
-                </Button>
-              </CardContent>
-            </Card>
+            <ProductGlareCard intense>
+              <Card className="w-full">
+                <CardHeader>
+                  <CardTitle className="text-base">{t("dashboard:quickActions.title")}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  <Button className="w-full justify-between group" onClick={() => navigate("/projects")}>
+                    <span className="flex items-center gap-2"><PlusIcon className="size-4" />{t("dashboard:quickActions.newProject")}</span>
+                    <ArrowRightIcon className="size-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
+                  </Button>
+                  <Button variant="outline" className="w-full justify-between group" onClick={() => navigate("/projects")}>
+                    <span className="flex items-center gap-2"><EyeIcon className="size-4" />{t("dashboard:quickActions.viewPendingReviews")}</span>
+                    <ArrowRightIcon className="size-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
+                  </Button>
+                  <Button variant="outline" className="w-full justify-between group" onClick={() => navigate("/projects")}>
+                    <span className="flex items-center gap-2"><DownloadIcon className="size-4" />{t("dashboard:quickActions.exportLatest")}</span>
+                    <ArrowRightIcon className="size-4 opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
+                  </Button>
+                </CardContent>
+              </Card>
+            </ProductGlareCard>
           </motion.div>
 
           {/* AI Usage Summary */}
@@ -343,43 +350,45 @@ export function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.5, ease: [0.32, 0.72, 0, 1] }}
           >
-            <Card className="h-full">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
-                    <SparklesIcon className="size-3.5 text-primary" />
+            <ProductGlareCard>
+              <Card className="h-full w-full">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
+                      <SparklesIcon className="size-3.5 text-primary" />
+                    </div>
+                    <CardTitle className="text-base">{t("dashboard:aiUsage.title")}</CardTitle>
                   </div>
-                  <CardTitle className="text-base">{t("dashboard:aiUsage.title")}</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-muted/50 p-3 text-center">
-                    <p className="text-2xl font-bold tabular-nums">
-                      <CountUp to={activeProviders} duration={1.2} />
-                    </p>
-                    <p className="text-xs text-muted-foreground">{t("dashboard:aiUsage.activeProviders")}</p>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-muted/50 p-3 text-center">
+                      <p className="text-2xl font-bold tabular-nums">
+                        <CountUp to={activeProviders} duration={1.2} />
+                      </p>
+                      <p className="text-xs text-muted-foreground">{t("dashboard:aiUsage.activeProviders")}</p>
+                    </div>
+                    <div className="rounded-lg bg-muted/50 p-3 text-center">
+                      <p className="text-2xl font-bold tabular-nums">
+                        <CountUp to={totalDrafts} duration={1.2} />
+                      </p>
+                      <p className="text-xs text-muted-foreground">{t("dashboard:aiUsage.totalDrafts")}</p>
+                    </div>
                   </div>
-                  <div className="rounded-lg bg-muted/50 p-3 text-center">
-                    <p className="text-2xl font-bold tabular-nums">
-                      <CountUp to={totalDrafts} duration={1.2} />
-                    </p>
-                    <p className="text-xs text-muted-foreground">{t("dashboard:aiUsage.totalDrafts")}</p>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{t("dashboard:aiUsage.totalRuns")}</span>
+                    <span className="font-medium tabular-nums">{allRuns?.length ?? 0}</span>
                   </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">{t("dashboard:aiUsage.totalRuns")}</span>
-                  <span className="font-medium tabular-nums">{allRuns?.length ?? 0}</span>
-                </div>
-                {totalProviders === 0 && (
-                  <Link to="/settings/providers">
-                    <Button variant="link" size="sm" className="px-0 text-xs">
-                      {t("dashboard:aiUsage.configureProviders")}
-                    </Button>
-                  </Link>
-                )}
-              </CardContent>
-            </Card>
+                  {totalProviders === 0 && (
+                    <Link to="/settings/providers">
+                      <Button variant="link" size="sm" className="px-0 text-xs">
+                        {t("dashboard:aiUsage.configureProviders")}
+                      </Button>
+                    </Link>
+                  )}
+                </CardContent>
+              </Card>
+            </ProductGlareCard>
           </motion.div>
         </div>
       </div>

@@ -39,6 +39,8 @@ import {
 import { toast } from "sonner";
 import { SearchIcon, PlusIcon, TrashIcon, ArchiveIcon, CheckCircleIcon, BookOpenIcon, XIcon, FileUpIcon, FileTextIcon, CheckIcon, DownloadIcon, MoreHorizontalIcon } from "lucide-react";
 import { OnboardingWizard } from "@/features/onboarding/onboarding-wizard";
+import CountUp from "@/components/CountUp";
+import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -170,8 +172,10 @@ export function ProjectListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t("list.title")}</h1>
+      <ProductReveal blur={false} className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">
+          <ProductShinyText text={t("list.title")} />
+        </h1>
         <div className="flex items-center gap-2">
           {!showGuide && (
             <Button variant="outline" size="sm" onClick={() => { removeStoredValue("guideDismissed"); setShowGuide(true); }}>
@@ -179,37 +183,43 @@ export function ProjectListPage() {
               {t("list.showGuide")}
             </Button>
           )}
-          <Button onClick={() => setShowForm(!showForm)}>
-            <PlusIcon className="size-4" />
-            {t("list.newProject")}
-          </Button>
+          <ProductElectricFrame active={showForm} radius={12}>
+            <Button onClick={() => setShowForm(!showForm)}>
+              <PlusIcon className="size-4" />
+              {t("list.newProject")}
+            </Button>
+          </ProductElectricFrame>
         </div>
-      </div>
+      </ProductReveal>
 
       {showForm && (
-        <Card>
-          <CardContent className="pt-6">
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="name">{t("create.projectName")}</FieldLabel>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={t("create.projectNamePlaceholder")}
-                />
-              </Field>
-              <ScenarioSelector value={scenario} onChange={setScenario} />
-              <Button
-                onClick={() => createMut.mutate({ name, scenario_package: scenario })}
-                disabled={!name || createMut.isPending}
-              >
-                {createMut.isPending && <Spinner data-icon="inline-start" />}
-                {t("create.create")}
-              </Button>
-            </FieldGroup>
-          </CardContent>
-        </Card>
+        <ProductReveal>
+          <ProductGlareCard intense>
+            <Card className="w-full">
+              <CardContent className="pt-6">
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="name">{t("create.projectName")}</FieldLabel>
+                    <Input
+                      id="name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={t("create.projectNamePlaceholder")}
+                    />
+                  </Field>
+                  <ScenarioSelector value={scenario} onChange={setScenario} />
+                  <Button
+                    onClick={() => createMut.mutate({ name, scenario_package: scenario })}
+                    disabled={!name || createMut.isPending}
+                  >
+                    {createMut.isPending && <Spinner data-icon="inline-start" />}
+                    {t("create.create")}
+                  </Button>
+                </FieldGroup>
+              </CardContent>
+            </Card>
+          </ProductGlareCard>
+        </ProductReveal>
       )}
 
       {/* Onboarding wizard for first-time users with no projects */}
@@ -223,119 +233,87 @@ export function ProjectListPage() {
 
       {/* Quick Start Guide */}
       {showGuide && (
-        <Card className="border-[rgba(132,204,22,0.2)] bg-gradient-to-br from-[rgba(132,204,22,0.04)] to-transparent">
-          <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-            <div className="flex items-center gap-2">
-              <BookOpenIcon className="size-5 text-primary" />
-              <CardTitle className="text-lg">{t("guide.title")}</CardTitle>
-            </div>
-            <Button variant="ghost" size="icon" onClick={dismissGuide} className="-mt-1 -mr-2 size-7" aria-label={t("guide.dismiss")}>
-              <XIcon className="size-4" />
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">
-              {t("guide.welcome")}
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="flex items-start gap-3 rounded-md border bg-background p-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <PlusIcon className="size-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{t("guide.step1Title")}</p>
-                  <p className="text-xs text-muted-foreground">{t("guide.step1Desc")}</p>
-                </div>
+        <ProductGlareCard intense>
+          <Card className="w-full border-[rgba(132,204,22,0.2)] bg-gradient-to-br from-[rgba(132,204,22,0.04)] to-transparent">
+            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+              <div className="flex items-center gap-2">
+                <BookOpenIcon className="size-5 text-primary" />
+                <CardTitle className="text-lg">{t("guide.title")}</CardTitle>
               </div>
-              <div className="flex items-start gap-3 rounded-md border bg-background p-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <FileUpIcon className="size-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{t("guide.step2Title")}</p>
-                  <p className="text-xs text-muted-foreground">{t("guide.step2Desc")}</p>
-                </div>
+              <Button variant="ghost" size="icon" onClick={dismissGuide} className="-mt-1 -mr-2 size-7" aria-label={t("guide.dismiss")}>
+                <XIcon className="size-4" />
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t("guide.welcome")}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { Icon: PlusIcon, title: t("guide.step1Title"), desc: t("guide.step1Desc") },
+                  { Icon: FileUpIcon, title: t("guide.step2Title"), desc: t("guide.step2Desc") },
+                  { Icon: FileTextIcon, title: t("guide.step3Title"), desc: t("guide.step3Desc") },
+                  { Icon: CheckIcon, title: t("guide.step4Title"), desc: t("guide.step4Desc") },
+                  { Icon: DownloadIcon, title: t("guide.step5Title"), desc: t("guide.step5Desc") },
+                  { Icon: BookOpenIcon, title: t("guide.step6Title"), desc: t("guide.step6Desc") },
+                ].map(({ Icon, title, desc }) => (
+                  <ProductReveal key={title} blur={false} className="h-full">
+                    <div className="flex h-full items-start gap-3 rounded-md border bg-background p-3">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
+                        <Icon className="size-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{title}</p>
+                        <p className="text-xs text-muted-foreground">{desc}</p>
+                      </div>
+                    </div>
+                  </ProductReveal>
+                ))}
               </div>
-              <div className="flex items-start gap-3 rounded-md border bg-background p-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <FileTextIcon className="size-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{t("guide.step3Title")}</p>
-                  <p className="text-xs text-muted-foreground">{t("guide.step3Desc")}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-md border bg-background p-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <CheckIcon className="size-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{t("guide.step4Title")}</p>
-                  <p className="text-xs text-muted-foreground">{t("guide.step4Desc")}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-md border bg-background p-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <DownloadIcon className="size-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{t("guide.step5Title")}</p>
-                  <p className="text-xs text-muted-foreground">{t("guide.step5Desc")}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-md border bg-background p-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md" style={{ background: "rgba(132, 204, 22, 0.1)" }}>
-                  <BookOpenIcon className="size-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{t("guide.step6Title")}</p>
-                  <p className="text-xs text-muted-foreground">{t("guide.step6Desc")}</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </ProductGlareCard>
       )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
-            <CardDescription>{t("list.totalProjects")}</CardDescription>
-            <CardTitle className="text-2xl">{projects?.length ?? 0}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>{t("list.active")}</CardDescription>
-            <CardTitle className="text-2xl">{statusCounts["active"] ?? 0}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>{t("list.completed")}</CardDescription>
-            <CardTitle className="text-2xl">{statusCounts["completed"] ?? 0}</CardTitle>
-          </CardHeader>
-        </Card>
+        {[
+          { label: t("list.totalProjects"), value: projects?.length ?? 0 },
+          { label: t("list.active"), value: statusCounts["active"] ?? 0 },
+          { label: t("list.completed"), value: statusCounts["completed"] ?? 0 },
+        ].map((item, index) => (
+          <ProductGlareCard key={item.label}>
+            <Card className="w-full">
+              <CardHeader>
+                <CardDescription>{item.label}</CardDescription>
+                <CardTitle className="text-2xl tabular-nums">
+                  <CountUp to={item.value} duration={1.1} delay={index * 0.08} />
+                </CardTitle>
+              </CardHeader>
+            </Card>
+          </ProductGlareCard>
+        ))}
       </div>
 
       {/* Plan quota hint for starter users */}
       {user?.plan === "starter" && (
-        <Card className="border-[rgba(132,204,22,0.2)] bg-gradient-to-br from-[rgba(132,204,22,0.04)] to-transparent">
-          <CardContent className="flex items-center justify-between pt-6">
-            <div>
-              <p className="text-sm font-medium">
-                {(projects?.length ?? 0) >= 3
-                  ? t("list.projectLimitReached")
-                  : t("list.projectsRemaining", { count: 3 - (projects?.length ?? 0) })}
-              </p>
-              <p className="text-xs text-muted-foreground">{t("list.upgradeHint")}</p>
-            </div>
-            <Link to="/pricing">
-              <Button variant="outline" size="sm">{t("list.upgrade")}</Button>
-            </Link>
-          </CardContent>
-        </Card>
+        <ProductElectricFrame radius={16}>
+          <Card className="border-[rgba(132,204,22,0.2)] bg-gradient-to-br from-[rgba(132,204,22,0.04)] to-transparent">
+            <CardContent className="flex items-center justify-between pt-6">
+              <div>
+                <p className="text-sm font-medium">
+                  {(projects?.length ?? 0) >= 3
+                    ? t("list.projectLimitReached")
+                    : t("list.projectsRemaining", { count: 3 - (projects?.length ?? 0) })}
+                </p>
+                <p className="text-xs text-muted-foreground">{t("list.upgradeHint")}</p>
+              </div>
+              <Link to="/pricing">
+                <Button variant="outline" size="sm">{t("list.upgrade")}</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </ProductElectricFrame>
       )}
 
       {/* Search + filter bar */}

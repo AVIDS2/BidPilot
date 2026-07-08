@@ -38,6 +38,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { ProviderBrandMark, type ProviderBrandId } from "./provider-brand-mark";
+import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
 import {
   Plus,
   Search,
@@ -489,12 +490,14 @@ export function ProviderSettingsPage() {
 
   return (
     <div className="min-w-0 space-y-6">
-      <div className="min-w-0">
-        <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">{t("title")}</h1>
+      <ProductReveal blur={false} className="min-w-0">
+        <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">
+          <ProductShinyText text={t("title")} />
+        </h1>
         <p style={{ color: "var(--muted-foreground)" }}>
           {t("description")}
         </p>
-      </div>
+      </ProductReveal>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
@@ -503,124 +506,130 @@ export function ProviderSettingsPage() {
             {t("providersCount", { count: providers.length })}
           </span>
         </div>
-        <Button onClick={handleAddProvider} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">
-          <Plus className="size-4" />
-          {t("addProvider")}
-        </Button>
+        <ProductElectricFrame radius={12}>
+          <Button onClick={handleAddProvider} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">
+            <Plus className="size-4" />
+            {t("addProvider")}
+          </Button>
+        </ProductElectricFrame>
       </div>
 
       {providers.length === 0 ? (
-        <div className="rounded-xl py-12 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-          <Settings2 className="mx-auto size-10 mb-3 opacity-40" style={{ color: "var(--text-tertiary)" }} />
-          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>{t("noProvidersTitle")}</p>
-          <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
-            {t("noProvidersDesc")}
-          </p>
-          <Button
-            onClick={handleAddProvider}
-            className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus className="size-4" />
-            {t("addFirstProvider")}
-          </Button>
-        </div>
+        <ProductGlareCard intense>
+          <div className="w-full rounded-xl py-12 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+            <Settings2 className="mx-auto size-10 mb-3 opacity-40" style={{ color: "var(--text-tertiary)" }} />
+            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>{t("noProvidersTitle")}</p>
+            <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
+              {t("noProvidersDesc")}
+            </p>
+            <Button
+              onClick={handleAddProvider}
+              className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="size-4" />
+              {t("addFirstProvider")}
+            </Button>
+          </div>
+        </ProductGlareCard>
       ) : (
         <div className="grid min-w-0 gap-4 md:grid-cols-2">
           {providers.map((provider) => (
-            <Card key={provider.id} className="relative">
-              <CardHeader className="pb-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <Badge
-                      variant="outline"
-                      className="capitalize gap-1 px-2 py-1"
-                    >
-                      <Cpu className="size-3" />
-                      {PROTOCOL_LABELS[provider.provider_type]}
-                    </Badge>
-                    {provider.is_active && (
-                      <span className="text-xs px-2 py-0.5 rounded flex items-center gap-1" style={{ background: "rgba(132, 204, 22, 0.15)", color: "var(--primary)" }}>
-                        <CheckCircle2 className="size-3" />
-                        {t("activeBadge")}
+            <ProductGlareCard key={provider.id}>
+              <Card className="relative w-full">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className="capitalize gap-1 px-2 py-1"
+                      >
+                        <Cpu className="size-3" />
+                        {PROTOCOL_LABELS[provider.provider_type]}
+                      </Badge>
+                      {provider.is_active && (
+                        <span className="text-xs px-2 py-0.5 rounded flex items-center gap-1" style={{ background: "rgba(132, 204, 22, 0.15)", color: "var(--primary)" }}>
+                          <CheckCircle2 className="size-3" />
+                          {t("activeBadge")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleTestConnection(provider)}
+                        disabled={testingId === provider.id}
+                        title="Test Connection"
+                      >
+                        {testingId === provider.id ? (
+                          <Spinner className="size-3.5" />
+                        ) : (
+                          <Wifi className="size-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleEditProvider(provider)}
+                        title="Edit"
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleDeleteProvider(provider)}
+                        title="Delete"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="truncate font-medium">{provider.label}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {t("modelLabel")}{" "}
+                        <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                          {provider.model}
+                        </code>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <KeyRound className="size-3.5" />
+                      <span className="font-mono text-xs">
+                        {maskApiKey(provider.api_key)}
                       </span>
+                    </div>
+                    {provider.api_url && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        URL: {provider.api_url}
+                      </p>
                     )}
                   </div>
-                  <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleTestConnection(provider)}
-                      disabled={testingId === provider.id}
-                      title="Test Connection"
-                    >
-                      {testingId === provider.id ? (
-                        <Spinner className="size-3.5" />
-                      ) : (
-                        <Wifi className="size-4" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleEditProvider(provider)}
-                      title="Edit"
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleDeleteProvider(provider)}
-                      title="Delete"
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div>
-                    <p className="truncate font-medium">{provider.label}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t("modelLabel")}{" "}
-                      <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                        {provider.model}
-                      </code>
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <KeyRound className="size-3.5" />
-                    <span className="font-mono text-xs">
-                      {maskApiKey(provider.api_key)}
-                    </span>
-                  </div>
-                  {provider.api_url && (
-                    <p className="text-xs text-muted-foreground truncate">
-                      URL: {provider.api_url}
-                    </p>
+                  {!provider.is_active && (
+                    <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setActiveMut.mutate(provider.id)}
+                        disabled={setActiveMut.isPending}
+                        className="gap-1.5 border-[rgba(132,204,22,0.3)] text-primary hover:bg-[rgba(132,204,22,0.1)]"
+                      >
+                        {setActiveMut.isPending ? (
+                          <Spinner className="size-3.5" />
+                        ) : (
+                          <Circle className="size-3.5" />
+                        )}
+                        {t("setActive")}
+                      </Button>
+                    </div>
                   )}
-                </div>
-                {!provider.is_active && (
-                  <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setActiveMut.mutate(provider.id)}
-                      disabled={setActiveMut.isPending}
-                      className="gap-1.5 border-[rgba(132,204,22,0.3)] text-primary hover:bg-[rgba(132,204,22,0.1)]"
-                    >
-                      {setActiveMut.isPending ? (
-                        <Spinner className="size-3.5" />
-                      ) : (
-                        <Circle className="size-3.5" />
-                      )}
-                      {t("setActive")}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </ProductGlareCard>
           ))}
         </div>
       )}
@@ -672,51 +681,52 @@ export function ProviderSettingsPage() {
               </div>
               <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {visibleProviderPresets.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => applyPreset(preset.id)}
-                    className={cn(
-                      "group relative min-h-[132px] min-w-0 overflow-hidden rounded-2xl border bg-card p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-[0_18px_50px_rgba(15,23,42,0.10)]",
-                      selectedPresetId === preset.id &&
-                        "border-primary bg-primary/10 shadow-[0_18px_50px_rgba(132,204,22,0.12)] ring-1 ring-primary/30",
-                    )}
-                    aria-pressed={selectedPresetId === preset.id}
-                  >
-                    {preset.recommended && (
-                      <span className="absolute right-3 top-3 inline-flex size-5 items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm">
-                        <Star className="size-3 fill-current" aria-hidden="true" />
-                      </span>
-                    )}
-                    <div className="flex items-start gap-3 pr-5">
-                      <ProviderBrandMark brand={preset.brand} label={preset.label} />
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-foreground">
-                          {preset.label}
-                        </div>
-                        <div className="mt-1">
-                          <Badge variant="outline" className="rounded-full px-2 py-0 text-[10px] font-medium">
-                            {PROTOCOL_LABELS[preset.providerType]}
-                          </Badge>
+                  <ProductGlareCard key={preset.id} intense={preset.recommended}>
+                    <button
+                      type="button"
+                      onClick={() => applyPreset(preset.id)}
+                      className={cn(
+                        "group relative min-h-[132px] w-full min-w-0 overflow-hidden rounded-2xl border bg-card p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-[0_18px_50px_rgba(15,23,42,0.10)]",
+                        selectedPresetId === preset.id &&
+                          "border-primary bg-primary/10 shadow-[0_18px_50px_rgba(132,204,22,0.12)] ring-1 ring-primary/30",
+                      )}
+                      aria-pressed={selectedPresetId === preset.id}
+                    >
+                      {preset.recommended && (
+                        <span className="absolute right-3 top-3 inline-flex size-5 items-center justify-center rounded-full bg-amber-400 text-amber-950 shadow-sm">
+                          <Star className="size-3 fill-current" aria-hidden="true" />
+                        </span>
+                      )}
+                      <div className="flex items-start gap-3 pr-5">
+                        <ProviderBrandMark brand={preset.brand} label={preset.label} />
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-foreground">
+                            {preset.label}
+                          </div>
+                          <div className="mt-1">
+                            <Badge variant="outline" className="rounded-full px-2 py-0 text-[10px] font-medium">
+                              {PROTOCOL_LABELS[preset.providerType]}
+                            </Badge>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                      {preset.description}
-                    </p>
-                    <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                      <span className="truncate rounded-full bg-muted px-2 py-1 font-mono">
-                        {preset.modelHint ?? preset.model}
-                      </span>
-                      {preset.apiUrl ? (
-                        <span className="max-w-[42%] truncate text-right">
-                          {new URL(preset.apiUrl).hostname}
+                      <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                        {preset.description}
+                      </p>
+                      <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                        <span className="truncate rounded-full bg-muted px-2 py-1 font-mono">
+                          {preset.modelHint ?? preset.model}
                         </span>
-                      ) : (
-                        <span className="text-right">自定义地址</span>
-                      )}
-                    </div>
-                  </button>
+                        {preset.apiUrl ? (
+                          <span className="max-w-[42%] truncate text-right">
+                            {new URL(preset.apiUrl).hostname}
+                          </span>
+                        ) : (
+                          <span className="text-right">自定义地址</span>
+                        )}
+                      </div>
+                    </button>
+                  </ProductGlareCard>
                 ))}
                 {visibleProviderPresets.length === 0 && (
                   <div className="rounded-2xl border border-dashed p-5 text-sm text-muted-foreground sm:col-span-2 lg:col-span-3">
