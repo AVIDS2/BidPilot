@@ -35,8 +35,7 @@
       "risky_only": "只拦截风险操作",
       "full_access": "尽量自动执行，删除仍确认",
       "custom": "使用组织自定义策略"
-    },
-    "activeHint": "Sandbox: {{mode}} · {{hint}}"
+    }
   },
   "status": {
     "ready": "准备就绪",

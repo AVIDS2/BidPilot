@@ -37,7 +37,7 @@ describe("auth pages with Turnstile", () => {
     renderAuthPage(<LoginPage />);
 
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "user@example.com" } });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "ZHANGtao788@" } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: "StrongPass123" } });
 
     expect(screen.getByRole("button", { name: /login/i })).not.toBeDisabled();
   });
@@ -49,8 +49,8 @@ describe("auth pages with Turnstile", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "user@example.com" } });
     fireEvent.change(screen.getByLabelText(/organization name/i), { target: { value: "Test Org" } });
     fireEvent.change(screen.getByLabelText(/organization slug/i), { target: { value: "test-org" } });
-    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "ZHANGtao788@" } });
-    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "ZHANGtao788@" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "StrongPass123" } });
+    fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: "StrongPass123" } });
 
     expect(screen.getByRole("button", { name: /create account/i })).not.toBeDisabled();
   });

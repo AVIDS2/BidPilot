@@ -1539,15 +1539,6 @@ export function AIAssistantPanel() {
               )}
             </div>
           </div>
-          <div className="mt-1.5 flex min-h-4 items-center px-1 text-[10px] leading-4 text-muted-foreground">
-            <span className="truncate">
-              {t("approval.activeHint", {
-                mode: approvalLabel,
-                hint: approvalHint,
-                defaultValue: `Sandbox: ${approvalLabel} · ${approvalHint}`,
-              })}
-            </span>
-          </div>
           </div>
         </ReactBitsComposerFrame>
       </div>

@@ -202,9 +202,15 @@ export function DashboardPage() {
           </div>
         </ProductReveal>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-          <Card className="h-full overflow-hidden border-primary/20 bg-gradient-to-br from-sky-500/10 via-indigo-500/5 to-background shadow-[0_24px_90px_rgba(79,70,229,0.12)]">
-              <CardContent className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 22rem), 1fr))" }}
+        >
+          <Card className="h-full min-w-0 overflow-hidden border-primary/20 bg-gradient-to-br from-sky-500/10 via-indigo-500/5 to-background shadow-[0_24px_90px_rgba(79,70,229,0.12)]">
+              <CardContent
+                className="grid gap-6 p-5 sm:p-6"
+                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))" }}
+              >
                 <div className="min-w-0">
                   <Badge variant="secondary" className="mb-4 w-fit">
                     <SparklesIcon className="mr-1 size-3" />
@@ -227,7 +233,7 @@ export function DashboardPage() {
                     </Button>
                   </div>
                 </div>
-                <div className="grid gap-3 rounded-2xl border bg-background/60 p-3 shadow-inner" style={{ borderColor: "var(--border)" }}>
+                <div className="grid min-w-0 gap-3 rounded-2xl border bg-background/60 p-3 shadow-inner" style={{ borderColor: "var(--border)" }}>
                   <div className="flex items-center gap-2 rounded-xl bg-muted/50 p-3">
                     <BotIcon className="size-4 text-primary" />
                     <div className="min-w-0">
@@ -247,11 +253,11 @@ export function DashboardPage() {
               </CardContent>
             </Card>
 
-          <div className="grid gap-4">
-              <Card className="h-full">
+          <div className="grid min-w-0 gap-4">
+              <Card className="h-full min-w-0 overflow-hidden">
                 <CardHeader>
                   <CardTitle className="text-base">{t("dashboard:empty.next.title", { defaultValue: "Recommended first run" })}</CardTitle>
-                  <CardDescription>{t("dashboard:empty.next.description", { defaultValue: "Use a small tender bundle first, then expand to a full proposal package." })}</CardDescription>
+                  <CardDescription className="break-words">{t("dashboard:empty.next.description", { defaultValue: "Use a small tender bundle first, then expand to a full proposal package." })}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
                   <Button variant="outline" className="justify-between" onClick={() => navigate("/projects")}>
