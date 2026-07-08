@@ -234,7 +234,10 @@ function ProviderSettingsSkeleton() {
       <div className="flex justify-between items-center">
         <Skeleton className="h-10 w-32" />
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+      >
         {Array.from({ length: 2 }).map((_, i) => (
           <Card key={i}>
             <CardHeader>
@@ -532,7 +535,10 @@ export function ProviderSettingsPage() {
           </div>
         </ProductGlareCard>
       ) : (
-        <div className="grid min-w-0 gap-4 md:grid-cols-2">
+        <div
+          className="grid min-w-0 gap-4"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+        >
           {providers.map((provider) => (
             <ProductGlareCard key={provider.id}>
               <Card className="relative w-full">
@@ -679,7 +685,10 @@ export function ProviderSettingsPage() {
                   />
                 </div>
               </div>
-              <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div
+                className="grid min-w-0 gap-3"
+                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))" }}
+              >
                 {visibleProviderPresets.map((preset) => (
                   <ProductGlareCard key={preset.id} intense={preset.recommended}>
                     <button

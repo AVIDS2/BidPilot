@@ -44,13 +44,13 @@ export function ProductGlareCard({
   const prefersReducedMotion = usePrefersReducedMotion();
 
   if (prefersReducedMotion) {
-    return <div className={className}>{children}</div>;
+    return <div className={cn("min-w-0", className)}>{children}</div>;
   }
 
   return (
     <GlareHover
       width="100%"
-      height="auto"
+      height="100%"
       background="transparent"
       borderColor="transparent"
       borderRadius="1rem"
@@ -58,7 +58,7 @@ export function ProductGlareCard({
       glareOpacity={intense ? 0.22 : 0.13}
       glareSize={180}
       transitionDuration={720}
-      className={cn("!block cursor-default border-0 bg-transparent", className)}
+      className={cn("!block !overflow-visible h-full min-w-0 cursor-default border-0 bg-transparent", className)}
     >
       {children}
     </GlareHover>

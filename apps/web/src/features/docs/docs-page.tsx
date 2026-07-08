@@ -253,7 +253,10 @@ function OverviewSection() {
       </ScrollReveal>
 
       {/* 概述卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-16">
+      <div
+        className="mb-16 grid gap-5"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))" }}
+      >
         {[
           {
             icon: BrainCircuitIcon,
@@ -495,7 +498,10 @@ function CoreFeaturesSection() {
         title={t("features.title")}
         description={t("features.description")}
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div
+        className="grid gap-5"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+      >
         {features.map((f, i) => (
           <FeatureCard key={f.title} icon={f.icon} title={f.title} description={f.desc} index={i} />
         ))}
@@ -717,7 +723,10 @@ function TechStackSection() {
               >
                 {stack.category}
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))" }}
+              >
                 {stack.items.map((item) => (
                   <div
                     key={item.name}
@@ -814,7 +823,10 @@ function DeploymentSection() {
           <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
             {t("deployment.healthTitle")}
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div
+            className="grid gap-4"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+          >
             {[
               { endpoint: "/health", desc: t("deployment.liveness") },
               { endpoint: "/health/db", desc: t("deployment.dbConnectivity") },

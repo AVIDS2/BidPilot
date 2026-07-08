@@ -320,7 +320,10 @@ export function PricingPage() {
         </div>
 
         {/* 定价卡片 */}
-        <div className="grid gap-8 md:grid-cols-3 items-stretch">
+        <div
+          className="grid items-stretch gap-8"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+        >
           {TIERS.map((tier) => (
             <TierCard
               key={tier.name}
@@ -380,7 +383,10 @@ export function PricingPage() {
           </section>
         </AnimatedContent>
 
-        <section className="mt-12 grid gap-6 md:grid-cols-3">
+        <section
+          className="mt-12 grid gap-6"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))" }}
+        >
           {testimonials.map((item, index) => (
             <AnimatedContent key={item.author} delay={index * 0.06} distance={24} duration={0.5}>
               <ProductGlareCard>
@@ -419,7 +425,10 @@ export function PricingPage() {
                 {t("faq.title")}
               </h2>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div
+              className="grid gap-4"
+              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+            >
               {faqItems.map((item) => (
                 <div key={item.question} className="rounded-2xl border p-4" style={{ borderColor: inPlatform ? "var(--border)" : "var(--landing-hairline)" }}>
                   <h3 className="text-sm font-semibold" style={{ color: inPlatform ? "var(--foreground)" : "white" }}>{item.question}</h3>

@@ -32,6 +32,7 @@ import { BrandMark } from "@/components/brand";
 import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
 import { AIAssistantPanel, CommandPalette, FloatingAssistant, InlineSuggestionBar } from "@/components/ai-assistant";
 import { useAIAssistantHotkeys } from "@/hooks/use-ai-assistant-hotkeys";
+import { cn } from "@/lib/utils";
 
 const queryClient = new QueryClient();
 
@@ -80,6 +81,7 @@ function PlatformShell() {
   const visibleNavItems = navItems.filter(
     (item) => !adminOnlyUrls.includes(item.url) || isAdmin
   );
+  const assistantPanelOpen = state.isOpen && state.mode === "panel";
 
   const sidebarUser = {
     name: user?.display_name || t("user.fallbackName"),
@@ -100,7 +102,12 @@ function PlatformShell() {
         teams={teams}
         user={sidebarUser}
       />
-      <SidebarInset className="min-w-0 overflow-x-hidden">
+      <SidebarInset
+        className={cn(
+          "min-w-0 overflow-x-hidden transition-[margin] duration-200 ease-out",
+          assistantPanelOpen && "xl:mr-[560px]",
+        )}
+      >
         <SiteHeader />
         <InlineSuggestionBar />
         <div className="flex min-w-0 flex-1 flex-col">

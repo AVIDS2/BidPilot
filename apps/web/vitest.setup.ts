@@ -19,6 +19,15 @@ if (!Element.prototype.getAnimations) {
   Element.prototype.getAnimations = () => [];
 }
 
+if (!globalThis.requestAnimationFrame) {
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) =>
+    setTimeout(() => callback(performance.now()), 16)) as typeof requestAnimationFrame;
+}
+
+if (!globalThis.cancelAnimationFrame) {
+  globalThis.cancelAnimationFrame = ((handle: number) => clearTimeout(handle)) as typeof cancelAnimationFrame;
+}
+
 if (!window.matchMedia) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: false,

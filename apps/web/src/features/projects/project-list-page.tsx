@@ -59,7 +59,10 @@ function ProjectListSkeleton() {
         <Skeleton className="h-9 w-48" />
         <Skeleton className="h-9 w-32" />
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+      >
         {Array.from({ length: 6 }).map((_, i) => (
           <Card key={i}>
             <CardHeader>
@@ -248,7 +251,10 @@ export function ProjectListPage() {
               <p className="text-sm text-muted-foreground mb-4">
                 {t("guide.welcome")}
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div
+                className="grid gap-3"
+                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 11rem), 1fr))" }}
+              >
                 {[
                   { Icon: PlusIcon, title: t("guide.step1Title"), desc: t("guide.step1Desc") },
                   { Icon: FileUpIcon, title: t("guide.step2Title"), desc: t("guide.step2Desc") },
@@ -276,7 +282,10 @@ export function ProjectListPage() {
       )}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 10rem), 1fr))" }}
+      >
         {[
           { label: t("list.totalProjects"), value: projects?.length ?? 0 },
           { label: t("list.active"), value: statusCounts["active"] ?? 0 },

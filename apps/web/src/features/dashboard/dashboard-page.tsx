@@ -27,12 +27,18 @@ function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       <Skeleton className="h-8 w-64" />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 12rem), 1fr))" }}
+      >
         {Array.from({ length: 4 }).map((_, i) => (
           <Card key={i}><CardHeader><Skeleton className="h-4 w-24" /><Skeleton className="h-7 w-16 mt-1" /></CardHeader></Card>
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+      >
         <Card className="lg:col-span-2"><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent>{Array.from({ length: 4 }).map((_, i) => (<Skeleton key={i} className="h-10 w-full mb-2" />))}</CardContent></Card>
         <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent>{Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-10 w-full mb-2" />))}</CardContent></Card>
       </div>
@@ -202,7 +208,10 @@ export function DashboardPage() {
       </ProductReveal>
 
       {/* Stats cards - stagger入场 + CountUp数字动画 */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 12rem), 1fr))" }}
+      >
         {statCards.map((stat, i) => {
           const { Icon, bg, color } = STAT_ICONS[i];
           return (
@@ -269,7 +278,10 @@ export function DashboardPage() {
       )}
 
       {/* Main content: activity + quick actions */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+      >
         {/* Recent Activity with timeline */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
