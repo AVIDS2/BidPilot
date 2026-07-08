@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth";
 import CountUp from "@/components/CountUp";
-import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
+import { ProductReveal, ProductShinyText } from "@/components/reactbits-product";
 import {
   listProjects, listExecutionRuns, listProviderConfigs,
   type ProjectRead, type ExecutionRunRead,
@@ -203,8 +203,7 @@ export function DashboardPage() {
         </ProductReveal>
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
-          <ProductElectricFrame radius={24}>
-            <Card className="h-full overflow-hidden border-primary/20 bg-gradient-to-br from-primary/8 via-background to-background">
+          <Card className="h-full overflow-hidden border-primary/20 bg-gradient-to-br from-sky-500/10 via-indigo-500/5 to-background shadow-[0_24px_90px_rgba(79,70,229,0.12)]">
               <CardContent className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
                 <div className="min-w-0">
                   <Badge variant="secondary" className="mb-4 w-fit">
@@ -247,10 +246,8 @@ export function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-          </ProductElectricFrame>
 
           <div className="grid gap-4">
-            <ProductGlareCard>
               <Card className="h-full">
                 <CardHeader>
                   <CardTitle className="text-base">{t("dashboard:empty.next.title", { defaultValue: "Recommended first run" })}</CardTitle>
@@ -267,7 +264,6 @@ export function DashboardPage() {
                   </Button>
                 </CardContent>
               </Card>
-            </ProductGlareCard>
           </div>
         </div>
 
@@ -281,8 +277,7 @@ export function DashboardPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, delay: index * 0.08, ease: [0.32, 0.72, 0, 1] }}
               >
-                <ProductGlareCard>
-                  <Card className="h-full">
+                  <Card className="h-full transition-shadow hover:shadow-[0_18px_55px_rgba(79,70,229,0.10)]">
                     <CardHeader>
                       <div className="mb-2 flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
                         <Icon className="size-4" />
@@ -291,7 +286,6 @@ export function DashboardPage() {
                       <CardDescription className="leading-6">{step.description}</CardDescription>
                     </CardHeader>
                   </Card>
-                </ProductGlareCard>
               </motion.div>
             );
           })}
@@ -331,7 +325,6 @@ export function DashboardPage() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.5, delay: i * 0.08, ease: [0.32, 0.72, 0, 1] }}
             >
-              <ProductGlareCard>
                 <Card className="h-full w-full transition-shadow hover:shadow-md">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
@@ -348,7 +341,6 @@ export function DashboardPage() {
                     <span className="text-xs text-muted-foreground">{stat.sub}</span>
                   </CardFooter>
                 </Card>
-              </ProductGlareCard>
             </motion.div>
           );
         })}
@@ -361,7 +353,6 @@ export function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.35, ease: [0.32, 0.72, 0, 1] }}
         >
-          <ProductElectricFrame radius={16}>
             <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
               <CardContent className="py-4">
                 <div className="flex items-center justify-between mb-2">
@@ -383,7 +374,6 @@ export function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-          </ProductElectricFrame>
         </motion.div>
       )}
 
@@ -399,7 +389,6 @@ export function DashboardPage() {
           transition={{ duration: 0.5, delay: 0.4, ease: [0.32, 0.72, 0, 1] }}
           className="lg:col-span-2"
         >
-          <ProductGlareCard>
             <Card className="h-full w-full">
               <CardHeader>
                 <CardTitle className="text-base">{t("dashboard:recentActivity.title")}</CardTitle>
@@ -433,7 +422,6 @@ export function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-          </ProductGlareCard>
         </motion.div>
 
         {/* Right column: Quick Actions + AI Usage */}
@@ -443,7 +431,6 @@ export function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.45, ease: [0.32, 0.72, 0, 1] }}
           >
-            <ProductGlareCard intense>
               <Card className="w-full">
                 <CardHeader>
                   <CardTitle className="text-base">{t("dashboard:quickActions.title")}</CardTitle>
@@ -463,7 +450,6 @@ export function DashboardPage() {
                   </Button>
                 </CardContent>
               </Card>
-            </ProductGlareCard>
           </motion.div>
 
           {/* AI Usage Summary */}
@@ -472,7 +458,6 @@ export function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.5, ease: [0.32, 0.72, 0, 1] }}
           >
-            <ProductGlareCard>
               <Card className="h-full w-full">
                 <CardHeader>
                   <div className="flex items-center gap-2">
@@ -510,7 +495,6 @@ export function DashboardPage() {
                   )}
                 </CardContent>
               </Card>
-            </ProductGlareCard>
           </motion.div>
         </div>
       </div>
