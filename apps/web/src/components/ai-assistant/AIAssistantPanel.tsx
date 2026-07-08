@@ -1222,7 +1222,7 @@ export function AIAssistantPanel() {
 
       {/* ─── Input ─── */}
       <div
-        className="shrink-0 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-3"
+        className="shrink-0 px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 sm:px-3"
         style={{
           background: "linear-gradient(180deg, transparent, color-mix(in oklch, var(--background) 96%, transparent) 28%)",
         }}
@@ -1362,182 +1362,182 @@ export function AIAssistantPanel() {
               {isUploadingAttachments ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
             </button>
           </div>
-          </div>
-        </ReactBitsComposerFrame>
-        <div className="mt-1 flex items-center justify-between gap-2 px-1">
-          <span className="hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex">
-            <CornerDownLeftIcon className="w-3 h-3" /> {isBusy ? t("panel.enterToQueue", { defaultValue: "Enter queues" }) : t("panel.enterToSend")}
-          </span>
-          <div className="relative ml-auto flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
-            <button
-              type="button"
-              aria-label={t("model.select", { defaultValue: "Select model" })}
-              onClick={() => {
-                setAttachmentMenuOpen(false);
-                setHistoryOpen(false);
-                setConfigMenuOpen((value) => (value === "model" ? null : "model"));
-              }}
-              className="flex max-w-[7.25rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground min-[420px]:max-w-[9.5rem]"
-            >
-              <span className="truncate">{modelLabel}</span>
-              <ChevronDownIcon className="h-3 w-3 shrink-0" />
-            </button>
-            <button
-              type="button"
-              aria-label={t("reasoning.select", { defaultValue: "Select reasoning effort" })}
-              onClick={() => {
-                setAttachmentMenuOpen(false);
-                setHistoryOpen(false);
-                setConfigMenuOpen((value) => (value === "reasoning" ? null : "reasoning"));
-              }}
-              className="flex items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground"
-            >
-              <span>{reasoningLabel}</span>
-              <ChevronDownIcon className="h-3 w-3" />
-            </button>
-            <button
-              type="button"
-              aria-label={t("approval.select", { defaultValue: "Select approval mode" })}
-              onClick={() => {
-                setAttachmentMenuOpen(false);
-                setHistoryOpen(false);
-                setConfigMenuOpen((value) => (value === "approval" ? null : "approval"));
-              }}
-              className={cn(
-                "flex max-w-[6.75rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground",
-                state.approvalMode === "full_access" && "text-amber-600 dark:text-amber-300",
-              )}
-            >
-              <span className="truncate">{approvalLabel}</span>
-              <ChevronDownIcon className="h-3 w-3 shrink-0" />
-            </button>
-            {configMenuOpen && (
-              <div
-                role="menu"
-                className="absolute bottom-7 right-0 z-30 w-[min(16rem,calc(100vw-2.25rem))] overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
-                style={{
-                  borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
-                  color: "var(--popover-foreground)",
+          <div className="mt-1.5 flex min-h-5 items-center justify-between gap-2 px-1">
+            <span className="hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex">
+              <CornerDownLeftIcon className="w-3 h-3" /> {isBusy ? t("panel.enterToQueue", { defaultValue: "Enter queues" }) : t("panel.enterToSend")}
+            </span>
+            <div className="relative ml-auto flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
+              <button
+                type="button"
+                aria-label={t("model.select", { defaultValue: "Select model" })}
+                onClick={() => {
+                  setAttachmentMenuOpen(false);
+                  setHistoryOpen(false);
+                  setConfigMenuOpen((value) => (value === "model" ? null : "model"));
                 }}
+                className="flex max-w-[7.25rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground min-[420px]:max-w-[9.5rem]"
               >
-                {configMenuOpen === "model" ? (
-                  <>
-                    <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
-                      {t("model.menuTitle", { defaultValue: "Model" })}
-                    </div>
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={!state.selectedProviderConfigId}
-                      onClick={() => {
-                        setSelectedProviderConfig(null);
-                        setConfigMenuOpen(null);
-                      }}
-                      className={cn(
-                        "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                        !state.selectedProviderConfigId && "bg-muted text-foreground",
-                      )}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">
-                          {t("model.platformDefault", { defaultValue: "Platform default" })}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {t("model.platformHint", { defaultValue: "Use BidPilot official model" })}
-                        </span>
-                      </span>
-                      {!state.selectedProviderConfigId && <span className="text-xs">✓</span>}
-                    </button>
-                    {providerConfigs.map((provider) => (
-                      <button
-                        key={provider.id}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={state.selectedProviderConfigId === provider.id}
-                        onClick={() => {
-                          setSelectedProviderConfig(provider.id);
-                          setConfigMenuOpen(null);
-                        }}
-                        className={cn(
-                          "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                          state.selectedProviderConfigId === provider.id && "bg-muted text-foreground",
-                        )}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">{provider.label}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{provider.model}</span>
-                        </span>
-                        {state.selectedProviderConfigId === provider.id && <span className="text-xs">✓</span>}
-                      </button>
-                    ))}
-                    {providerConfigs.length === 0 && (
-                      <div className="px-3 py-2 text-xs text-muted-foreground">
-                        {t("model.empty", { defaultValue: "No custom providers yet" })}
+                <span className="truncate">{modelLabel}</span>
+                <ChevronDownIcon className="h-3 w-3 shrink-0" />
+              </button>
+              <button
+                type="button"
+                aria-label={t("reasoning.select", { defaultValue: "Select reasoning effort" })}
+                onClick={() => {
+                  setAttachmentMenuOpen(false);
+                  setHistoryOpen(false);
+                  setConfigMenuOpen((value) => (value === "reasoning" ? null : "reasoning"));
+                }}
+                className="flex items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground"
+              >
+                <span>{reasoningLabel}</span>
+                <ChevronDownIcon className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                aria-label={t("approval.select", { defaultValue: "Select approval mode" })}
+                onClick={() => {
+                  setAttachmentMenuOpen(false);
+                  setHistoryOpen(false);
+                  setConfigMenuOpen((value) => (value === "approval" ? null : "approval"));
+                }}
+                className={cn(
+                  "flex max-w-[6.75rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground",
+                  state.approvalMode === "full_access" && "text-amber-600 dark:text-amber-300",
+                )}
+              >
+                <span className="truncate">{approvalLabel}</span>
+                <ChevronDownIcon className="h-3 w-3 shrink-0" />
+              </button>
+              {configMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute bottom-7 right-0 z-30 w-[min(16rem,calc(100vw-2.25rem))] overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
+                  style={{
+                    borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
+                    color: "var(--popover-foreground)",
+                  }}
+                >
+                  {configMenuOpen === "model" ? (
+                    <>
+                      <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
+                        {t("model.menuTitle", { defaultValue: "Model" })}
                       </div>
-                    )}
-                  </>
-                ) : configMenuOpen === "reasoning" ? (
-                  <>
-                    <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
-                      {t("reasoning.menuTitle", { defaultValue: "Reasoning" })}
-                    </div>
-                    {REASONING_OPTIONS.map((effort) => (
                       <button
-                        key={effort}
                         type="button"
                         role="menuitemradio"
-                        aria-checked={state.reasoningEffort === effort}
+                        aria-checked={!state.selectedProviderConfigId}
                         onClick={() => {
-                          setReasoningEffort(effort);
-                          setConfigMenuOpen(null);
-                        }}
-                        className={cn(
-                          "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                          state.reasoningEffort === effort && "bg-muted text-foreground",
-                        )}
-                      >
-                        <span>{t(`reasoning.options.${effort}`, { defaultValue: effort })}</span>
-                        {state.reasoningEffort === effort && <span className="text-xs">✓</span>}
-                      </button>
-                    ))}
-                  </>
-                ) : (
-                  <>
-                    <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
-                      {t("approval.menuTitle", { defaultValue: "Approval" })}
-                    </div>
-                    {APPROVAL_MODES.map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={state.approvalMode === mode}
-                        onClick={() => {
-                          setApprovalMode(mode);
+                          setSelectedProviderConfig(null);
                           setConfigMenuOpen(null);
                         }}
                         className={cn(
                           "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                          state.approvalMode === mode && "bg-muted text-foreground",
+                          !state.selectedProviderConfigId && "bg-muted text-foreground",
                         )}
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-medium">
-                            {t(`approval.options.${mode}`, { defaultValue: mode })}
+                            {t("model.platformDefault", { defaultValue: "Platform default" })}
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
-                            {t(`approval.hints.${mode}`, { defaultValue: "" })}
+                            {t("model.platformHint", { defaultValue: "Use BidPilot official model" })}
                           </span>
                         </span>
-                        {state.approvalMode === mode && <span className="text-xs">✓</span>}
+                        {!state.selectedProviderConfigId && <span className="text-xs">✓</span>}
                       </button>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
+                      {providerConfigs.map((provider) => (
+                        <button
+                          key={provider.id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={state.selectedProviderConfigId === provider.id}
+                          onClick={() => {
+                            setSelectedProviderConfig(provider.id);
+                            setConfigMenuOpen(null);
+                          }}
+                          className={cn(
+                            "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                            state.selectedProviderConfigId === provider.id && "bg-muted text-foreground",
+                          )}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">{provider.label}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{provider.model}</span>
+                          </span>
+                          {state.selectedProviderConfigId === provider.id && <span className="text-xs">✓</span>}
+                        </button>
+                      ))}
+                      {providerConfigs.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          {t("model.empty", { defaultValue: "No custom providers yet" })}
+                        </div>
+                      )}
+                    </>
+                  ) : configMenuOpen === "reasoning" ? (
+                    <>
+                      <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
+                        {t("reasoning.menuTitle", { defaultValue: "Reasoning" })}
+                      </div>
+                      {REASONING_OPTIONS.map((effort) => (
+                        <button
+                          key={effort}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={state.reasoningEffort === effort}
+                          onClick={() => {
+                            setReasoningEffort(effort);
+                            setConfigMenuOpen(null);
+                          }}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                            state.reasoningEffort === effort && "bg-muted text-foreground",
+                          )}
+                        >
+                          <span>{t(`reasoning.options.${effort}`, { defaultValue: effort })}</span>
+                          {state.reasoningEffort === effort && <span className="text-xs">✓</span>}
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
+                        {t("approval.menuTitle", { defaultValue: "Approval" })}
+                      </div>
+                      {APPROVAL_MODES.map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={state.approvalMode === mode}
+                          onClick={() => {
+                            setApprovalMode(mode);
+                            setConfigMenuOpen(null);
+                          }}
+                          className={cn(
+                            "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                            state.approvalMode === mode && "bg-muted text-foreground",
+                          )}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">
+                              {t(`approval.options.${mode}`, { defaultValue: mode })}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {t(`approval.hints.${mode}`, { defaultValue: "" })}
+                            </span>
+                          </span>
+                          {state.approvalMode === mode && <span className="text-xs">✓</span>}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+          </div>
+        </ReactBitsComposerFrame>
       </div>
     </div>
   );
