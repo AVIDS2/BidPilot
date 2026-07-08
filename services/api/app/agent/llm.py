@@ -21,12 +21,13 @@ from langchain_openai import ChatOpenAI
 
 from app.providers.endpoints import normalize_provider_base_url
 
-ReasoningEffort = Literal["low", "medium", "high", "ultra", "max"]
+ReasoningEffort = Literal["low", "medium", "high", "extra", "max", "ultra"]
 
 _OPENAI_REASONING_EFFORT: dict[str, str] = {
     "low": "low",
     "medium": "medium",
     "high": "high",
+    "extra": "high",
     "ultra": "high",
     "max": "high",
 }
@@ -35,6 +36,7 @@ _ANTHROPIC_REASONING_EFFORT: dict[str, str] = {
     "low": "low",
     "medium": "medium",
     "high": "high",
+    "extra": "xhigh",
     "ultra": "xhigh",
     "max": "max",
 }

@@ -39,14 +39,14 @@ export function AppSidebar({
       {...props}
     >
       <SidebarHeader
-        className="p-4"
+        className="p-4 transition-[padding] duration-200 group-data-[collapsible=icon]:p-2"
         style={{
           borderBottom: "1px solid var(--border)",
         }}
       >
         <TeamSwitcher teams={teams} />
       </SidebarHeader>
-      <SidebarContent className="px-2 py-3">
+      <SidebarContent className="px-2 py-3 transition-[padding] duration-200 group-data-[collapsible=icon]:px-2">
         <SidebarGroup>
           <SidebarGroupLabel
             className="text-xs font-medium tracking-widest uppercase mb-2 px-2"
@@ -60,7 +60,7 @@ export function AppSidebar({
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter
-        className="p-3"
+        className="p-3 transition-[padding] duration-200 group-data-[collapsible=icon]:p-2"
         style={{
           borderTop: "1px solid var(--border)",
         }}

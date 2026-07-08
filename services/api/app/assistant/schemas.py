@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 AssistantMode = Literal["answer", "needs_input", "tool_action", "workflow_trigger"]
 AssistantAttachmentKind = Literal["file", "image"]
 AssistantAttachmentStatus = Literal["extracted", "empty", "unsupported", "failed"]
-AssistantReasoningEffort = Literal["low", "medium", "high", "ultra", "max"]
+AssistantReasoningEffort = Literal["low", "medium", "high", "extra", "max", "ultra"]
 AssistantApprovalMode = Literal["request_approval", "risky_only", "full_access", "custom"]
 AssistantState = Literal[
     "idle",

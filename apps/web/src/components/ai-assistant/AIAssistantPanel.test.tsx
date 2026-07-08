@@ -190,7 +190,9 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Select model" }));
     fireEvent.click(await screen.findByText("GPT-5.5"));
     fireEvent.click(screen.getByRole("button", { name: "Select reasoning effort" }));
-    fireEvent.click(screen.getByText("Ultra"));
+    fireEvent.click(screen.getByText("extra"));
+    fireEvent.click(screen.getByRole("button", { name: "Select approval mode" }));
+    fireEvent.click(screen.getByText("Request approval"));
 
     fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
       target: { value: "Use my selected model" },
@@ -202,7 +204,8 @@ describe("AIAssistantPanel", () => {
     });
     const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(requestBody.provider_config_id).toBe("provider-1");
-    expect(requestBody.reasoning_effort).toBe("ultra");
+    expect(requestBody.reasoning_effort).toBe("extra");
+    expect(requestBody.approval_mode).toBe("request_approval");
   });
 
   it("closes history before opening the attachment menu", async () => {

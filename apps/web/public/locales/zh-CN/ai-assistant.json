@@ -14,11 +14,11 @@
     "select": "选择推理强度",
     "menuTitle": "推理",
     "options": {
-      "low": "低",
-      "medium": "中",
-      "high": "高",
-      "ultra": "超高",
-      "max": "Max"
+      "low": "low",
+      "medium": "medium",
+      "high": "high",
+      "extra": "extra",
+      "max": "max"
     }
   },
   "approval": {
@@ -35,7 +35,8 @@
       "risky_only": "只拦截风险操作",
       "full_access": "尽量自动执行，删除仍确认",
       "custom": "使用组织自定义策略"
-    }
+    },
+    "activeHint": "Sandbox: {{mode}} · {{hint}}"
   },
   "status": {
     "ready": "准备就绪",

@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-ReasoningEffort = Literal["low", "medium", "high", "ultra", "max"]
+ReasoningEffort = Literal["low", "medium", "high", "extra", "max", "ultra"]
 
 
 class DraftSectionRequest(BaseModel):

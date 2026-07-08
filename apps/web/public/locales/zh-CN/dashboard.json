@@ -2,6 +2,36 @@
   "greeting": "欢迎回来，{{name}}",
   "greetingDefault": "欢迎回来",
   "subtitle": "以下是您的项目和活动概览。",
+  "empty": {
+    "subtitle": "创建第一个投标工作区，让智能体接管重复执行部分。",
+    "badge": "BidPilot 启动路径",
+    "title": "创建投标项目，然后让智能体建立工作集。",
+    "description": "BidPilot 围绕真实投标工作组织：项目、资料包、工作流运行、审核、审计、导出。",
+    "primaryCta": "创建工作区",
+    "providerCta": "检查 AI 提供商",
+    "agentReady": "Agent 已就绪",
+    "agentHint": "可以让它创建项目、上传文件或启动起草。",
+    "next": {
+      "title": "推荐第一次运行",
+      "description": "先用一小份招标资料包验证流程，再扩展到完整投标包。",
+      "create": "创建项目",
+      "provider": "确认模型提供商"
+    },
+    "steps": {
+      "upload": {
+        "title": "上传招标资料包",
+        "description": "把 RFP、需求说明和参考材料集中到同一个工作区。"
+      },
+      "workflow": {
+        "title": "运行 Workflow Agent",
+        "description": "抽取需求、检索证据，并生成可追踪的章节草稿。"
+      },
+      "review": {
+        "title": "审核并导出",
+        "description": "审批章节、检查审计记录，并准备最终交付物。"
+      }
+    }
+  },
   "stats": {
     "totalProjects": "项目总数",
     "activeDrafts": "活跃草稿",

@@ -2,6 +2,36 @@
   "greeting": "Welcome back, {{name}}",
   "greetingDefault": "Welcome back",
   "subtitle": "Here's an overview of your projects and activity.",
+  "empty": {
+    "subtitle": "Set up your first bid workspace and let the agent take over the repetitive parts.",
+    "badge": "BidPilot launch path",
+    "title": "Create a bid project, then let the agent build the working set.",
+    "description": "BidPilot is organized around real proposal work: project, source bundle, workflow run, review, audit, export.",
+    "primaryCta": "Create workspace",
+    "providerCta": "Check AI provider",
+    "agentReady": "Agent ready",
+    "agentHint": "Ask it to create projects, upload files, or start drafting.",
+    "next": {
+      "title": "Recommended first run",
+      "description": "Use a small tender bundle first, then expand to a full proposal package.",
+      "create": "Create project",
+      "provider": "Confirm model provider"
+    },
+    "steps": {
+      "upload": {
+        "title": "Upload a tender bundle",
+        "description": "Collect RFP files, requirements, and reference materials in one workspace."
+      },
+      "workflow": {
+        "title": "Run the workflow agent",
+        "description": "Extract requirements, retrieve evidence, and draft sections with traceable runs."
+      },
+      "review": {
+        "title": "Review and export",
+        "description": "Approve sections, inspect audit trails, and prepare final deliverables."
+      }
+    }
+  },
   "stats": {
     "totalProjects": "Total Projects",
     "activeDrafts": "Active Drafts",

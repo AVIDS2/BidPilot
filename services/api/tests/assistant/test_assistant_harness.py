@@ -412,6 +412,25 @@ def test_open_page_executes_without_confirmation(client, default_user_id: str) -
     assert succeeded[0]["result"]["route"] == "/projects"
 
 
+def test_full_access_allows_low_risk_project_creation_without_confirmation(client, test_db, default_user_id: str) -> None:
+    _ensure_task_state_table()
+    project_name = f"Full Access Project {uuid.uuid4().hex[:6]}"
+
+    response = client.post(
+        "/assistant/stream",
+        json={
+            "message": f"创建一个项目，名字叫 {project_name}",
+            "approval_mode": "full_access",
+        },
+    )
+
+    assert response.status_code == 200
+    events = _events(response.text)
+    assert not [payload for event, payload in events if event == "assistant.confirmation_requested"]
+    assert [payload for event, payload in events if event == "assistant.tool_succeeded"]
+    assert test_db.query(Project).filter(Project.name == project_name).first() is not None
+
+
 def test_stale_provider_config_falls_back_to_official_model(client, default_user_id: str) -> None:
     _ensure_task_state_table()
     response = client.post(

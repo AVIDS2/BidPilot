@@ -15,12 +15,13 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_URL = "https://api.anthropic.com/v1/messages"
 _DEFAULT_MODEL = "claude-sonnet-4-20250514"
-ReasoningEffort = Literal["low", "medium", "high", "ultra", "max"]
+ReasoningEffort = Literal["low", "medium", "high", "extra", "max", "ultra"]
 
 _REASONING_INSTRUCTIONS: dict[str, str] = {
     "low": "Use concise reasoning. Prefer a fast, direct answer.",
     "medium": "Use balanced reasoning. Check key assumptions before writing.",
     "high": "Use deeper reasoning. Validate structure, evidence, and edge cases before writing.",
+    "extra": "Use extra-deep reasoning. Build a careful outline, verify evidence fit, then write.",
     "ultra": "Use very deep reasoning. Build a careful outline, verify evidence fit, then write.",
     "max": "Use maximum reasoning. Exhaustively validate requirements, evidence, gaps, and final structure before writing.",
 }
@@ -29,6 +30,7 @@ _THINKING_BUDGETS: dict[str, int] = {
     "low": 1024,
     "medium": 4096,
     "high": 8192,
+    "extra": 16000,
     "ultra": 16000,
     "max": 32000,
 }

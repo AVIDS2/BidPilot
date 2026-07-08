@@ -63,7 +63,6 @@ def tool_requires_approval(tool_name: str, approval_mode: ApprovalMode = "risky_
         return True
     if approval_mode == "full_access":
         return policy.risk_level == "destructive"
-    if approval_mode == "request_approval":
+    if approval_mode in {"request_approval", "custom"}:
         return policy.risk_level not in {"read", "navigate"}
     return policy.requires_approval or policy.risk_level in {"costing", "destructive"}
-

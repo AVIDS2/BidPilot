@@ -51,7 +51,7 @@ export function NavUser({
             render={
               <SidebarMenuButton
                 size="lg"
-                className="transition-all duration-200"
+                className="justify-start transition-all duration-200 group-data-[collapsible=icon]:justify-center"
                 style={{
                   background: "var(--muted)",
                   borderColor: "var(--border)",
@@ -71,11 +71,11 @@ export function NavUser({
                 {user.name?.charAt(0)?.toUpperCase() || "U"}
               </AvatarFallback>
             </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight">
+            <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
               <span className="truncate font-medium text-white text-xs">{user.name}</span>
               <span className="truncate text-xs" style={{ color: "var(--text-tertiary)" }}>{user.email}</span>
             </div>
-            <ChevronsUpDownIcon className="ml-auto size-3.5" style={{ color: "var(--text-quaternary)" }} />
+            <ChevronsUpDownIcon className="ml-auto size-3.5 group-data-[collapsible=icon]:hidden" style={{ color: "var(--text-quaternary)" }} />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="min-w-56 rounded-lg"

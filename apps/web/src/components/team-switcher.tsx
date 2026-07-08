@@ -40,7 +40,7 @@ export function TeamSwitcher({
           <DropdownMenuTrigger
             render={
               <SidebarMenuButton
-                className="w-fit px-2 transition-all duration-200"
+                className="w-full justify-start px-2 transition-all duration-200 group-data-[collapsible=icon]:justify-center"
                 style={{
                   color: "var(--foreground)",
                 }}
@@ -50,8 +50,8 @@ export function TeamSwitcher({
             <div className="flex aspect-square size-7 items-center justify-center rounded-lg">
               {activeTeam.logo}
             </div>
-            <span className="truncate font-medium text-sm">{activeTeam.name}</span>
-            <ChevronDownIcon className="opacity-50 size-3.5" style={{ color: "var(--text-tertiary)" }} />
+            <span className="truncate font-medium text-sm group-data-[collapsible=icon]:hidden">{activeTeam.name}</span>
+            <ChevronDownIcon className="opacity-50 size-3.5 group-data-[collapsible=icon]:hidden" style={{ color: "var(--text-tertiary)" }} />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             className="w-64 rounded-lg"

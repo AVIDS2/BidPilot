@@ -14,11 +14,11 @@
     "select": "Select reasoning effort",
     "menuTitle": "Reasoning",
     "options": {
-      "low": "Low",
-      "medium": "Medium",
-      "high": "High",
-      "ultra": "Ultra",
-      "max": "Max"
+      "low": "low",
+      "medium": "medium",
+      "high": "high",
+      "extra": "extra",
+      "max": "max"
     }
   },
   "approval": {
@@ -35,7 +35,8 @@
       "risky_only": "Only stop risky actions",
       "full_access": "Auto-run most actions; deletes still confirm",
       "custom": "Use organization policy"
-    }
+    },
+    "activeHint": "Sandbox: {{mode}} · {{hint}}"
   },
   "status": {
     "ready": "Ready",

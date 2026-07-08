@@ -116,7 +116,7 @@ interface QueuedPrompt {
   approvalMode: AssistantApprovalMode;
 }
 
-const REASONING_OPTIONS: AssistantReasoningEffort[] = ["low", "medium", "high", "ultra", "max"];
+const REASONING_OPTIONS: AssistantReasoningEffort[] = ["low", "medium", "high", "extra", "max"];
 const APPROVAL_MODES: AssistantApprovalMode[] = ["request_approval", "risky_only", "full_access", "custom"];
 
 function createAttachmentId(file: File, index: number) {
@@ -716,6 +716,7 @@ export function AIAssistantPanel() {
   const modelLabel = selectedProvider?.model ?? t("model.platformDefault", { defaultValue: "Platform default" });
   const reasoningLabel = t(`reasoning.options.${state.reasoningEffort}`, { defaultValue: state.reasoningEffort });
   const approvalLabel = t(`approval.options.${state.approvalMode}`, { defaultValue: state.approvalMode });
+  const approvalHint = t(`approval.hints.${state.approvalMode}`, { defaultValue: "" });
   const executionItemsByMessageId = useMemo(() => {
     const grouped = new Map<string, AssistantExecutionItem[]>();
     for (const item of state.executionItems) {
@@ -1396,6 +1397,7 @@ export function AIAssistantPanel() {
               <button
                 type="button"
                 aria-label={t("approval.select", { defaultValue: "Select approval mode" })}
+                title={approvalHint}
                 onClick={() => {
                   setAttachmentMenuOpen(false);
                   setHistoryOpen(false);
@@ -1535,6 +1537,15 @@ export function AIAssistantPanel() {
                 </div>
               )}
             </div>
+          </div>
+          <div className="mt-1.5 flex min-h-4 items-center px-1 text-[10px] leading-4 text-muted-foreground">
+            <span className="truncate">
+              {t("approval.activeHint", {
+                mode: approvalLabel,
+                hint: approvalHint,
+                defaultValue: `Sandbox: ${approvalLabel} · ${approvalHint}`,
+              })}
+            </span>
           </div>
           </div>
         </ReactBitsComposerFrame>

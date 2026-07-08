@@ -25,12 +25,13 @@ export function NavMain({
           <SidebarMenuItem key={item.title}>
             <SidebarMenuButton
               isActive={isActive}
+              tooltip={item.title}
               render={<Link to={item.url} />}
-              className="transition-all duration-200"
+              className="justify-start transition-all duration-200 group-data-[collapsible=icon]:justify-center"
               style={{
                 color: isActive ? "var(--primary)" : "var(--muted-foreground)",
                 background: isActive ? "rgba(132, 204, 22, 0.08)" : "transparent",
-                borderLeft: isActive ? "2px solid var(--primary)" : "2px solid transparent",
+                boxShadow: isActive ? "inset 2px 0 0 var(--primary)" : "inset 2px 0 0 transparent",
               }}
             >
               {item.icon}

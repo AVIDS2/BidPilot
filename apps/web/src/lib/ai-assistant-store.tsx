@@ -17,7 +17,7 @@ import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser
 /* ─── Types ─── */
 
 export type AssistantMode = "panel" | "command" | "inline";
-export type AssistantReasoningEffort = "low" | "medium" | "high" | "ultra" | "max";
+export type AssistantReasoningEffort = "low" | "medium" | "high" | "extra" | "max";
 export type AssistantApprovalMode = "request_approval" | "risky_only" | "full_access" | "custom";
 export type AssistantStatus =
   | "idle"
@@ -213,7 +213,10 @@ const initialState: AIAssistantState = {
 };
 
 function parseReasoningEffort(value: string | null): AssistantReasoningEffort {
-  if (value === "low" || value === "medium" || value === "high" || value === "ultra" || value === "max") {
+  if (value === "ultra") {
+    return "extra";
+  }
+  if (value === "low" || value === "medium" || value === "high" || value === "extra" || value === "max") {
     return value;
   }
   return "medium";

@@ -19,14 +19,17 @@ if (!Element.prototype.getAnimations) {
   Element.prototype.getAnimations = () => [];
 }
 
-if (!globalThis.requestAnimationFrame) {
-  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) =>
-    setTimeout(() => callback(performance.now()), 16)) as typeof requestAnimationFrame;
-}
+const requestAnimationFramePolyfill = ((callback: FrameRequestCallback) =>
+  setTimeout(() => {
+    if (typeof globalThis.requestAnimationFrame !== "function") return;
+    callback(globalThis.performance?.now?.() ?? Date.now());
+  }, 16)) as typeof requestAnimationFrame;
+const cancelAnimationFramePolyfill = ((handle: number) => clearTimeout(handle)) as typeof cancelAnimationFrame;
 
-if (!globalThis.cancelAnimationFrame) {
-  globalThis.cancelAnimationFrame = ((handle: number) => clearTimeout(handle)) as typeof cancelAnimationFrame;
-}
+globalThis.requestAnimationFrame = requestAnimationFramePolyfill;
+globalThis.cancelAnimationFrame = cancelAnimationFramePolyfill;
+window.requestAnimationFrame = requestAnimationFramePolyfill;
+window.cancelAnimationFrame = cancelAnimationFramePolyfill;
 
 if (!window.matchMedia) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({

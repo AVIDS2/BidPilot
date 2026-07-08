@@ -9,7 +9,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
 import { useAuth } from "@/lib/auth";
 import CountUp from "@/components/CountUp";
 import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
@@ -20,7 +19,8 @@ import {
 import {
   FolderIcon, FileTextIcon, ClipboardCheckIcon, CheckCircleIcon,
   PlusIcon, EyeIcon, DownloadIcon, SparklesIcon,
-  ArrowRightIcon,
+  ArrowRightIcon, UploadCloudIcon, GitBranchIcon, ShieldCheckIcon, BotIcon,
+  SettingsIcon,
 } from "lucide-react";
 
 function DashboardSkeleton() {
@@ -169,23 +169,133 @@ export function DashboardPage() {
 
   // Empty state
   if (statusCounts.total === 0) {
+    const emptySteps = [
+      {
+        icon: UploadCloudIcon,
+        title: t("dashboard:empty.steps.upload.title", { defaultValue: "Upload a tender bundle" }),
+        description: t("dashboard:empty.steps.upload.description", { defaultValue: "Collect RFP files, requirements, and reference materials in one workspace." }),
+      },
+      {
+        icon: GitBranchIcon,
+        title: t("dashboard:empty.steps.workflow.title", { defaultValue: "Run the workflow agent" }),
+        description: t("dashboard:empty.steps.workflow.description", { defaultValue: "Extract requirements, retrieve evidence, and draft sections with traceable runs." }),
+      },
+      {
+        icon: ShieldCheckIcon,
+        title: t("dashboard:empty.steps.review.title", { defaultValue: "Review and export" }),
+        description: t("dashboard:empty.steps.review.description", { defaultValue: "Approve sections, inspect audit trails, and prepare final deliverables." }),
+      },
+    ];
+
     return (
       <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{greeting}</h1>
-          <p className="text-muted-foreground">{t("dashboard:subtitle")}</p>
+        <ProductReveal blur={false}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">{greeting}</h1>
+              <p className="text-muted-foreground">{t("dashboard:empty.subtitle", { defaultValue: "Set up your first bid workspace and let the agent take over the repetitive parts." })}</p>
+            </div>
+            <Button onClick={() => navigate("/projects")} className="w-fit">
+              <PlusIcon className="size-4 mr-2" />
+              {t("dashboard:quickActions.newProject")}
+            </Button>
+          </div>
+        </ProductReveal>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">
+          <ProductElectricFrame radius={24}>
+            <Card className="h-full overflow-hidden border-primary/20 bg-gradient-to-br from-primary/8 via-background to-background">
+              <CardContent className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
+                <div className="min-w-0">
+                  <Badge variant="secondary" className="mb-4 w-fit">
+                    <SparklesIcon className="mr-1 size-3" />
+                    {t("dashboard:empty.badge", { defaultValue: "BidPilot launch path" })}
+                  </Badge>
+                  <h2 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
+                    {t("dashboard:empty.title", { defaultValue: "Create a bid project, then let the agent build the working set." })}
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+                    {t("dashboard:empty.description", { defaultValue: "BidPilot is organized around real proposal work: project, source bundle, workflow run, review, audit, export." })}
+                  </p>
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <Button onClick={() => navigate("/projects")} className="group">
+                      {t("dashboard:empty.primaryCta", { defaultValue: "Create workspace" })}
+                      <ArrowRightIcon className="ml-2 size-4 transition-transform group-hover:translate-x-0.5" />
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate("/settings/providers")}>
+                      <SettingsIcon className="mr-2 size-4" />
+                      {t("dashboard:empty.providerCta", { defaultValue: "Check AI provider" })}
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid gap-3 rounded-2xl border bg-background/60 p-3 shadow-inner" style={{ borderColor: "var(--border)" }}>
+                  <div className="flex items-center gap-2 rounded-xl bg-muted/50 p-3">
+                    <BotIcon className="size-4 text-primary" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{t("dashboard:empty.agentReady", { defaultValue: "Agent ready" })}</p>
+                      <p className="truncate text-xs text-muted-foreground">{t("dashboard:empty.agentHint", { defaultValue: "Ask it to create projects, upload files, or start drafting." })}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-muted/50 p-3 text-sm">
+                    <span className="text-muted-foreground">{t("dashboard:aiUsage.activeProviders")}</span>
+                    <span className="font-semibold tabular-nums">{activeProviders} / {totalProviders}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-xl bg-muted/50 p-3 text-sm">
+                    <span className="text-muted-foreground">{t("dashboard:stats.totalProjects")}</span>
+                    <span className="font-semibold tabular-nums">0</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </ProductElectricFrame>
+
+          <div className="grid gap-4">
+            <ProductGlareCard>
+              <Card className="h-full">
+                <CardHeader>
+                  <CardTitle className="text-base">{t("dashboard:empty.next.title", { defaultValue: "Recommended first run" })}</CardTitle>
+                  <CardDescription>{t("dashboard:empty.next.description", { defaultValue: "Use a small tender bundle first, then expand to a full proposal package." })}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  <Button variant="outline" className="justify-between" onClick={() => navigate("/projects")}>
+                    {t("dashboard:empty.next.create", { defaultValue: "Create project" })}
+                    <ArrowRightIcon className="size-4" />
+                  </Button>
+                  <Button variant="outline" className="justify-between" onClick={() => navigate("/settings/providers")}>
+                    {t("dashboard:empty.next.provider", { defaultValue: "Confirm model provider" })}
+                    <ArrowRightIcon className="size-4" />
+                  </Button>
+                </CardContent>
+              </Card>
+            </ProductGlareCard>
+          </div>
         </div>
-        <Empty className="min-h-[400px] border-dashed">
-          <EmptyHeader>
-            <EmptyMedia variant="icon"><FolderIcon /></EmptyMedia>
-            <EmptyTitle>{t("dashboard:empty.title", { defaultValue: "Create your first project" })}</EmptyTitle>
-            <EmptyDescription>{t("dashboard:empty.description", { defaultValue: "Start by creating a BidPilot project to manage your bid documents." })}</EmptyDescription>
-          </EmptyHeader>
-          <Button onClick={() => navigate("/projects")} className="mt-4">
-            <PlusIcon className="size-4 mr-2" />
-            {t("dashboard:quickActions.newProject")}
-          </Button>
-        </Empty>
+
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))" }}>
+          {emptySteps.map((step, index) => {
+            const Icon = step.icon;
+            return (
+              <motion.div
+                key={step.title}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: index * 0.08, ease: [0.32, 0.72, 0, 1] }}
+              >
+                <ProductGlareCard>
+                  <Card className="h-full">
+                    <CardHeader>
+                      <div className="mb-2 flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Icon className="size-4" />
+                      </div>
+                      <CardTitle className="text-base">{step.title}</CardTitle>
+                      <CardDescription className="leading-6">{step.description}</CardDescription>
+                    </CardHeader>
+                  </Card>
+                </ProductGlareCard>
+              </motion.div>
+            );
+          })}
+        </div>
       </div>
     );
   }
