@@ -1,0 +1,25 @@
+# BidPilot Development and Learning Progress
+
+Updated: 2026-07-12
+
+## Current State
+
+- Production deployment is at commit `72593b2`.
+- The product has a real bid-domain control plane: projects, bundles, parsed assets, requirements, evidence, deliverables, reviews, execution runs, providers, quotas, and audit records.
+- LangGraph is present for workflow execution and the assistant operator path.
+- The assistant UI and workflow UI exist, but the agent runtime is not yet a single coherent production architecture.
+- Current retrieval is primarily vector search with lexical fallback; hybrid retrieval and reranking are not implemented as a measured pipeline.
+- Long-term semantic, episodic, and procedural memory are not yet implemented as governed product capabilities.
+- Systematic agent quality evaluation and production trace correlation are still missing.
+
+## Active Learning Focus
+
+1. Establish the Agent Platform Re-foundation v2 blueprint.
+2. Unify the assistant and workflow runtime boundaries.
+3. Build a golden task dataset and evaluation harness.
+4. Implement retrieval 2.0: sparse + dense + fusion + rerank + citation checks.
+5. Implement governed memory and LLM Wiki write-back.
+
+## Working Rule
+
+Do not add another visible feature until the relevant concept, architecture decision, success metric, tests, and production failure modes are documented.
