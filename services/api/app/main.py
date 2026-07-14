@@ -33,6 +33,7 @@ from app.execution.router import router as execution_router
 from app.ops.router import router as ops_router
 from app.projects.router import router as projects_router
 from app.requirements.router import router as requirements_router
+from app.readiness.router import router as readiness_router
 from app.retrieval.router import router as retrieval_router
 from app.review.router import router as review_router
 from app.scenarios.router import router as scenarios_router
@@ -131,6 +132,7 @@ app.include_router(drafting_router, dependencies=_protected)
 app.include_router(evidence_router, dependencies=_protected)
 app.include_router(execution_router, dependencies=_protected)
 app.include_router(requirements_router, dependencies=_protected)
+app.include_router(readiness_router, dependencies=_protected)
 app.include_router(retrieval_router, dependencies=_protected)
 app.include_router(review_router, dependencies=_protected)
 app.include_router(audit_router, dependencies=[Depends(require_admin)])

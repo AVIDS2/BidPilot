@@ -525,6 +525,38 @@ class RequirementDecision(Base):
     requirement: Mapped["RequirementItem"] = relationship(back_populates="decisions")
 
 
+class ReadinessPack(Base):
+    __tablename__ = "readiness_pack"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("project.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    formula_version: Mapped[str] = mapped_column(String(30), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="generated")
+    summary_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    xlsx_storage_key: Mapped[str | None] = mapped_column(String(500))
+    docx_storage_key: Mapped[str | None] = mapped_column(String(500))
+    generated_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user.id", ondelete="SET NULL"),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "version_number",
+            name="uq_readiness_pack_project_version",
+        ),
+    )
+
+
 # ── Deliverables & Drafting ──────────────────────────────────────────────────
 
 
