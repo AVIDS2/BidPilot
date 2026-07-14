@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+_SAFE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]*$"
 
 
 class RequirementType(StrEnum):
@@ -46,11 +50,19 @@ class _ContractModel(BaseModel):
 
 
 class BidBenchSource(_ContractModel):
-    id: str = Field(min_length=1, max_length=100)
+    id: str = Field(min_length=1, max_length=100, pattern=_SAFE_ID_PATTERN)
     path: str = Field(min_length=1, max_length=500)
     title: str = Field(min_length=1, max_length=255)
     source_type: str = Field(min_length=1, max_length=80)
-    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    sha256: str = Field(min_length=64, max_length=64, pattern=r"^[a-fA-F0-9]{64}$")
+
+    @field_validator("path")
+    @classmethod
+    def require_safe_relative_path(cls, value: str) -> str:
+        path = Path(value)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("source path must be relative and stay inside the dataset directory")
+        return value
 
 
 class BidBenchLocator(_ContractModel):
@@ -69,7 +81,7 @@ class BidBenchLocator(_ContractModel):
 
 
 class BidBenchRequirement(_ContractModel):
-    id: str = Field(min_length=1, max_length=100)
+    id: str = Field(min_length=1, max_length=100, pattern=_SAFE_ID_PATTERN)
     original_text: str = Field(min_length=1)
     normalized_text: str = Field(min_length=1)
     requirement_type: RequirementType
@@ -84,11 +96,13 @@ class BidBenchRequirement(_ContractModel):
     def require_mandatory_locator(self) -> BidBenchRequirement:
         if self.is_mandatory and not self.locators:
             raise ValueError("mandatory requirement must include a source locator")
+        if self.requirement_type == RequirementType.SCORED and not self.locators:
+            raise ValueError("scored requirement must include a source locator")
         return self
 
 
 class BidBenchEvidence(_ContractModel):
-    id: str = Field(min_length=1, max_length=100)
+    id: str = Field(min_length=1, max_length=100, pattern=_SAFE_ID_PATTERN)
     source_id: str = Field(min_length=1, max_length=100)
     text: str = Field(min_length=1)
     locator: BidBenchLocator
@@ -103,7 +117,7 @@ class BidBenchEvidence(_ContractModel):
 
 class BidBenchDataset(_ContractModel):
     schema_version: Literal["1.0"]
-    dataset_id: str = Field(min_length=1, max_length=100)
+    dataset_id: str = Field(min_length=1, max_length=100, pattern=_SAFE_ID_PATTERN)
     title: str = Field(min_length=1, max_length=255)
     language: str = Field(default="zh-CN", min_length=2, max_length=20)
     dataset_role: DatasetRole
@@ -144,6 +158,19 @@ class BidBenchDataset(_ContractModel):
                         f"evidence {evidence.id!r} references unknown requirement {requirement_id!r}"
                     )
 
+        expected_pairs = {
+            (requirement.id, evidence_id)
+            for requirement in self.requirements
+            for evidence_id in requirement.expected_evidence_ids
+        }
+        supported_pairs = {
+            (requirement_id, evidence.id)
+            for evidence in self.evidence
+            for requirement_id in evidence.supports_requirement_ids
+        }
+        if expected_pairs != supported_pairs:
+            raise ValueError("requirement and evidence links must be symmetric")
+
         return self
 
     @staticmethod
@@ -155,8 +182,7 @@ class BidBenchDataset(_ContractModel):
 
 
 class BidBenchCandidateRequirement(_ContractModel):
-    id: str = Field(min_length=1, max_length=100)
-    ground_truth_id: str | None = Field(default=None, min_length=1, max_length=100)
+    id: str = Field(min_length=1, max_length=100, pattern=_SAFE_ID_PATTERN)
     normalized_text: str = Field(min_length=1)
     requirement_type: RequirementType
     is_mandatory: bool = False
@@ -167,7 +193,7 @@ class BidBenchCandidateRequirement(_ContractModel):
 
 
 class BidBenchCandidateClaim(_ContractModel):
-    id: str = Field(min_length=1, max_length=100)
+    id: str = Field(min_length=1, max_length=100, pattern=_SAFE_ID_PATTERN)
     text: str = Field(min_length=1)
     requirement_ids: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
@@ -177,8 +203,8 @@ class BidBenchCandidateClaim(_ContractModel):
 
 class BidBenchCandidate(_ContractModel):
     schema_version: Literal["1.0"]
-    dataset_id: str = Field(min_length=1, max_length=100)
-    candidate_id: str = Field(min_length=1, max_length=200)
+    dataset_id: str = Field(min_length=1, max_length=100, pattern=_SAFE_ID_PATTERN)
+    candidate_id: str = Field(min_length=1, max_length=200, pattern=_SAFE_ID_PATTERN)
     system_name: str = Field(min_length=1, max_length=200)
     git_commit: str | None = Field(default=None, max_length=64)
     provider: str | None = Field(default=None, max_length=100)

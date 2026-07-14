@@ -41,8 +41,15 @@ def build_candidate_from_requirement_snapshot(
 
     payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
     if isinstance(payload, dict):
-        payload = payload.get("requirements", [])
+        if "requirements" not in payload or not isinstance(payload["requirements"], list):
+            raise ValueError("snapshot object must contain a requirements list")
+        payload = payload["requirements"]
+    if not isinstance(payload, list):
+        raise ValueError("snapshot must be a requirement list or an object containing requirements")
     requirements = _REQUIREMENT_LIST.validate_python(payload)
+    project_ids = {requirement.project_id for requirement in requirements}
+    if len(project_ids) > 1:
+        raise ValueError("snapshot contains requirements from multiple projects")
 
     candidate_requirements = []
     for requirement in requirements:

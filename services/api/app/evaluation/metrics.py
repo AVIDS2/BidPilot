@@ -10,6 +10,7 @@ from contracts import (
     BidBenchCandidate,
     BidBenchCandidateRequirement,
     BidBenchDataset,
+    BidBenchLocator,
     BidBenchRequirement,
     RequirementType,
 )
@@ -25,6 +26,8 @@ class BidBenchScoreCounts(BaseModel):
     matched_mandatory_requirements: int
     scored_requirements: int
     matched_scored_requirements: int
+    correctly_classified_requirements: int
+    correctly_covered_requirements: int
     expected_evidence_links: int
     candidate_evidence_links: int
     true_positive_evidence_links: int
@@ -35,14 +38,17 @@ class BidBenchScoreCounts(BaseModel):
 class BidBenchMetrics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    formula_version: str = "1.0"
-    matching_policy: str = "explicit-id-or-normalized-exact-v1"
+    formula_version: str = "2.0"
+    matching_policy: str = "normalized-exact-v2"
     counts: BidBenchScoreCounts
     requirement_recall: float
     requirement_precision: float
     requirement_f1: float
     mandatory_recall: float
     scored_recall: float
+    scored_weight_recall: float
+    classification_accuracy: float
+    coverage_accuracy: float
     source_association_accuracy: float
     evidence_precision: float
     evidence_recall: float
@@ -77,12 +83,40 @@ def score_candidate(dataset: BidBenchDataset, candidate: BidBenchCandidate) -> B
     scored_recall = _ratio(len(matched_truth_ids & scored_ids), len(scored_ids), empty=1.0)
 
     correct_sources = 0
+    correctly_classified = 0
+    correctly_covered = 0
     for candidate_requirement, truth in matches:
-        truth_sources = {locator.source_id for locator in truth.locators}
-        candidate_sources = {locator.source_id for locator in candidate_requirement.locators}
-        if truth_sources & candidate_sources:
+        if candidate_requirement.requirement_type == truth.requirement_type and (
+            candidate_requirement.is_mandatory == truth.is_mandatory
+        ):
+            correctly_classified += 1
+        if candidate_requirement.coverage_status == truth.expected_coverage:
+            correctly_covered += 1
+        if any(
+            _locator_matches(candidate_locator, truth_locator)
+            for candidate_locator in candidate_requirement.locators
+            for truth_locator in truth.locators
+        ):
             correct_sources += 1
     source_accuracy = _ratio(correct_sources, len(matches))
+    classification_accuracy = _ratio(correctly_classified, len(matches))
+    coverage_accuracy = _ratio(correctly_covered, len(matches))
+
+    total_scored_weight = sum(
+        requirement.score_weight or 0
+        for requirement in dataset.requirements
+        if requirement.requirement_type == RequirementType.SCORED
+    )
+    matched_scored_weight = sum(
+        truth.score_weight or 0
+        for _, truth in matches
+        if truth.requirement_type == RequirementType.SCORED
+    )
+    scored_weight_recall = _ratio(
+        matched_scored_weight,
+        total_scored_weight,
+        empty=1.0,
+    )
 
     expected_evidence = {
         (requirement.id, evidence_id)
@@ -112,10 +146,12 @@ def score_candidate(dataset: BidBenchDataset, candidate: BidBenchCandidate) -> B
     evidence_f1 = _f1(evidence_precision, evidence_recall)
 
     accepted_claims = [claim for claim in candidate.claims if claim.accepted]
+    valid_evidence_ids = {evidence.id for evidence in dataset.evidence}
     unsupported_claims = [
         claim
         for claim in accepted_claims
-        if not claim.is_inference and not claim.evidence_ids
+        if not claim.is_inference
+        and not any(evidence_id in valid_evidence_ids for evidence_id in claim.evidence_ids)
     ]
     unsupported_claim_rate = (
         _ratio(len(unsupported_claims), len(accepted_claims)) if accepted_claims else None
@@ -124,11 +160,16 @@ def score_candidate(dataset: BidBenchDataset, candidate: BidBenchCandidate) -> B
         1.0 - unsupported_claim_rate if unsupported_claim_rate is not None else None
     )
 
-    completeness_score = _average([requirement_recall, mandatory_recall, scored_recall])
-    traceability_components = [source_accuracy, evidence_f1]
-    if claim_grounding_rate is not None:
-        traceability_components.append(claim_grounding_rate)
-    traceability_score = _average(traceability_components)
+    completeness_score = _average(
+        [
+            requirement_f1,
+            mandatory_recall,
+            scored_weight_recall,
+            classification_accuracy,
+            coverage_accuracy,
+        ]
+    )
+    traceability_score = _average([source_accuracy, evidence_f1])
     combined_score = 0.6 * completeness_score + 0.4 * traceability_score
 
     return BidBenchMetrics(
@@ -140,6 +181,8 @@ def score_candidate(dataset: BidBenchDataset, candidate: BidBenchCandidate) -> B
             matched_mandatory_requirements=len(matched_truth_ids & mandatory_ids),
             scored_requirements=len(scored_ids),
             matched_scored_requirements=len(matched_truth_ids & scored_ids),
+            correctly_classified_requirements=correctly_classified,
+            correctly_covered_requirements=correctly_covered,
             expected_evidence_links=len(expected_evidence),
             candidate_evidence_links=len(candidate_evidence),
             true_positive_evidence_links=len(true_positive_evidence),
@@ -151,6 +194,9 @@ def score_candidate(dataset: BidBenchDataset, candidate: BidBenchCandidate) -> B
         requirement_f1=requirement_f1,
         mandatory_recall=mandatory_recall,
         scored_recall=scored_recall,
+        scored_weight_recall=scored_weight_recall,
+        classification_accuracy=classification_accuracy,
+        coverage_accuracy=coverage_accuracy,
         source_association_accuracy=source_accuracy,
         evidence_precision=evidence_precision,
         evidence_recall=evidence_recall,
@@ -167,7 +213,6 @@ def _match_requirements(
     truth_requirements: list[BidBenchRequirement],
     candidate_requirements: list[BidBenchCandidateRequirement],
 ) -> list[tuple[BidBenchCandidateRequirement, BidBenchRequirement]]:
-    truth_by_id = {requirement.id: requirement for requirement in truth_requirements}
     truth_by_normalized: dict[str, list[BidBenchRequirement]] = {}
     for requirement in truth_requirements:
         truth_by_normalized.setdefault(_normalize_text(requirement.normalized_text), []).append(requirement)
@@ -176,24 +221,15 @@ def _match_requirements(
     matched_truth_ids: set[str] = set()
 
     for candidate_requirement in candidate_requirements:
-        truth: BidBenchRequirement | None = None
-        if candidate_requirement.ground_truth_id:
-            if candidate_requirement.ground_truth_id not in truth_by_id:
-                raise ValueError(
-                    f"candidate requirement {candidate_requirement.id!r} references unknown ground_truth_id "
-                    f"{candidate_requirement.ground_truth_id!r}"
-                )
-            truth = truth_by_id[candidate_requirement.ground_truth_id]
-        else:
-            normalized = _normalize_text(candidate_requirement.normalized_text)
-            truth = next(
-                (
-                    item
-                    for item in truth_by_normalized.get(normalized, [])
-                    if item.id not in matched_truth_ids
-                ),
-                None,
-            )
+        normalized = _normalize_text(candidate_requirement.normalized_text)
+        truth = next(
+            (
+                item
+                for item in truth_by_normalized.get(normalized, [])
+                if item.id not in matched_truth_ids
+            ),
+            None,
+        )
 
         if truth is None or truth.id in matched_truth_ids:
             continue
@@ -201,6 +237,44 @@ def _match_requirements(
         matched_truth_ids.add(truth.id)
 
     return matches
+
+
+def _locator_matches(candidate: BidBenchLocator, truth: BidBenchLocator) -> bool:
+    if candidate.source_id != truth.source_id:
+        return False
+    checks: list[bool] = []
+    if candidate.page is not None and truth.page is not None:
+        checks.append(candidate.page == truth.page)
+    if candidate.section and truth.section:
+        checks.append(_normalize_text(candidate.section) == _normalize_text(truth.section))
+    if candidate.table and truth.table:
+        checks.append(_normalize_text(candidate.table) == _normalize_text(truth.table))
+    if candidate.text_anchor and truth.text_anchor:
+        candidate_anchor = _normalize_text(candidate.text_anchor)
+        truth_anchor = _normalize_text(truth.text_anchor)
+        checks.append(
+            candidate_anchor == truth_anchor
+            or (len(truth_anchor) >= 8 and truth_anchor in candidate_anchor)
+            or (len(candidate_anchor) >= 8 and candidate_anchor in truth_anchor)
+        )
+    if candidate.bbox is not None and truth.bbox is not None:
+        checks.append(_bbox_iou(candidate.bbox, truth.bbox) >= 0.5)
+    return any(checks)
+
+
+def _bbox_iou(
+    left: tuple[float, float, float, float],
+    right: tuple[float, float, float, float],
+) -> float:
+    left_x1, left_y1, left_x2, left_y2 = left
+    right_x1, right_y1, right_x2, right_y2 = right
+    intersection_width = max(0.0, min(left_x2, right_x2) - max(left_x1, right_x1))
+    intersection_height = max(0.0, min(left_y2, right_y2) - max(left_y1, right_y1))
+    intersection = intersection_width * intersection_height
+    left_area = max(0.0, left_x2 - left_x1) * max(0.0, left_y2 - left_y1)
+    right_area = max(0.0, right_x2 - right_x1) * max(0.0, right_y2 - right_y1)
+    union = left_area + right_area - intersection
+    return intersection / union if union else 0.0
 
 
 def _normalize_text(value: str) -> str:

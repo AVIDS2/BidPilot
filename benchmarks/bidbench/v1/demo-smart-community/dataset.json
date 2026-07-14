@@ -13,19 +13,22 @@
       "id": "rfp",
       "path": "sources/01-rfp.md",
       "title": "智慧社区 AI 治理平台建设项目招标文件",
-      "source_type": "tender"
+      "source_type": "tender",
+      "sha256": "dfda83986a73d72aa24bb9402ccd69e150333c975b5e40083a6e7b4d5158bc97"
     },
     {
       "id": "supplier",
       "path": "sources/02-supplier-profile.md",
       "title": "星河云智科技有限公司能力资料",
-      "source_type": "supplier_evidence"
+      "source_type": "supplier_evidence",
+      "sha256": "6c3e52eb86e2b2a09c37db91598df4ef51b6fcbc1bb81b4558c85c0a9ea2b9f7"
     },
     {
       "id": "reference",
       "path": "sources/03-reference-case.md",
       "title": "云湖智慧园区治理平台同类案例",
-      "source_type": "reference_case"
+      "source_type": "reference_case",
+      "sha256": "778151900c9d1e17744fc8bd0c82de7b957fca3eb6ec1373551c30abbe48271f"
     }
   ],
   "requirements": [

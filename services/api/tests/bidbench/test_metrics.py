@@ -17,8 +17,8 @@ def _dataset() -> BidBenchDataset:
             "provenance": "Unit test",
             "license_id": "CC0-1.0",
             "sources": [
-                {"id": "rfp", "path": "rfp.md", "title": "RFP", "source_type": "tender"},
-                {"id": "other", "path": "other.md", "title": "Other", "source_type": "supplier_evidence"},
+                {"id": "rfp", "path": "rfp.md", "title": "RFP", "source_type": "tender", "sha256": "a" * 64},
+                {"id": "other", "path": "other.md", "title": "Other", "source_type": "supplier_evidence", "sha256": "b" * 64},
             ],
             "requirements": [
                 {
@@ -83,8 +83,7 @@ def _candidate() -> BidBenchCandidate:
             "requirements": [
                 {
                     "id": "cand-1",
-                    "ground_truth_id": "req-1",
-                    "normalized_text": "different wording",
+                    "normalized_text": "Requirement one",
                     "requirement_type": "mandatory",
                     "is_mandatory": True,
                     "coverage_status": "covered",
@@ -130,15 +129,18 @@ def test_score_candidate_calculates_completeness_and_traceability() -> None:
     assert report.requirement_f1 == pytest.approx(2 / 3)
     assert report.mandatory_recall == 1
     assert report.scored_recall == 1
+    assert report.scored_weight_recall == 1
+    assert report.classification_accuracy == 1
+    assert report.coverage_accuracy == 1
     assert report.source_association_accuracy == 0.5
     assert report.evidence_precision == pytest.approx(1 / 3)
     assert report.evidence_recall == 0.5
     assert report.evidence_f1 == pytest.approx(0.4)
     assert report.unsupported_claim_rate == pytest.approx(1 / 3)
     assert report.claim_grounding_rate == pytest.approx(2 / 3)
-    assert report.completeness_score == pytest.approx(8 / 9)
-    assert report.traceability_score == pytest.approx(47 / 90)
-    assert report.combined_score == pytest.approx(167 / 225)
+    assert report.completeness_score == pytest.approx(14 / 15)
+    assert report.traceability_score == pytest.approx(0.45)
+    assert report.combined_score == pytest.approx(0.74)
 
 
 def test_score_candidate_rejects_wrong_dataset() -> None:
@@ -146,3 +148,39 @@ def test_score_candidate_rejects_wrong_dataset() -> None:
 
     with pytest.raises(ValueError, match="dataset_id"):
         score_candidate(_dataset(), candidate)
+
+
+def test_candidate_cannot_self_declare_ground_truth_match() -> None:
+    payload = _candidate().model_dump(mode="json")
+    payload["requirements"][0]["normalized_text"] = "completely unrelated"
+    candidate = BidBenchCandidate.model_validate(payload)
+
+    report = score_candidate(_dataset(), candidate)
+
+    assert report.counts.matched_requirements == 1
+    assert report.mandatory_recall == 0
+
+
+def test_source_accuracy_requires_a_real_position_match() -> None:
+    payload = _candidate().model_dump(mode="json")
+    payload["requirements"][0]["locators"] = [
+        {"source_id": "rfp", "section": "invented section"}
+    ]
+    candidate = BidBenchCandidate.model_validate(payload)
+
+    report = score_candidate(_dataset(), candidate)
+
+    assert report.source_association_accuracy == 0
+
+
+def test_unknown_evidence_id_does_not_ground_a_claim() -> None:
+    payload = _candidate().model_dump(mode="json")
+    payload["claims"] = [
+        {"id": "claim-invalid", "text": "Fake grounding", "evidence_ids": ["does-not-exist"]}
+    ]
+    candidate = BidBenchCandidate.model_validate(payload)
+
+    report = score_candidate(_dataset(), candidate)
+
+    assert report.unsupported_claim_rate == 1
+    assert report.claim_grounding_rate == 0

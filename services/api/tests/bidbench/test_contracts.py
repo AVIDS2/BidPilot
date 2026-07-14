@@ -20,12 +20,14 @@ def _valid_dataset() -> dict:
                 "path": "sources/01-rfp.md",
                 "title": "Tender document",
                 "source_type": "tender",
+                "sha256": "a" * 64,
             },
             {
                 "id": "supplier",
                 "path": "sources/02-supplier.md",
                 "title": "Supplier profile",
                 "source_type": "supplier_evidence",
+                "sha256": "b" * 64,
             },
         ],
         "requirements": [
@@ -116,6 +118,16 @@ def test_mandatory_requirement_requires_a_source_locator() -> None:
         BidBenchDataset.model_validate(payload)
 
 
+def test_scored_requirement_requires_a_source_locator() -> None:
+    payload = _valid_dataset()
+    payload["requirements"][0]["is_mandatory"] = False
+    payload["requirements"][0]["requirement_type"] = "scored"
+    payload["requirements"][0]["locators"] = []
+
+    with pytest.raises(ValidationError, match="scored requirement"):
+        BidBenchDataset.model_validate(payload)
+
+
 def test_locator_requires_a_position_hint() -> None:
     payload = _valid_dataset()
     payload["requirements"][0]["locators"] = [{"source_id": "rfp"}]
@@ -194,3 +206,39 @@ def test_candidate_output_rejects_duplicate_requirement_ids() -> None:
 
     with pytest.raises(ValidationError, match="duplicate"):
         BidBenchCandidate.model_validate(payload)
+
+
+def test_dataset_rejects_path_like_dataset_id() -> None:
+    payload = _valid_dataset()
+    payload["dataset_id"] = "..\\outside"
+
+    with pytest.raises(ValidationError):
+        BidBenchDataset.model_validate(payload)
+
+
+def test_candidate_rejects_path_like_candidate_id() -> None:
+    with pytest.raises(ValidationError):
+        BidBenchCandidate.model_validate(
+            {
+                "schema_version": "1.0",
+                "dataset_id": "safe-dataset",
+                "candidate_id": "../../outside",
+                "system_name": "test",
+            }
+        )
+
+
+def test_dataset_requires_symmetric_requirement_evidence_links() -> None:
+    payload = _valid_dataset()
+    payload["evidence"][0]["supports_requirement_ids"] = []
+
+    with pytest.raises(ValidationError, match="symmetric"):
+        BidBenchDataset.model_validate(payload)
+
+
+def test_source_path_must_stay_inside_dataset_directory() -> None:
+    payload = _valid_dataset()
+    payload["sources"][0]["path"] = "../../outside.md"
+
+    with pytest.raises(ValidationError, match="relative"):
+        BidBenchDataset.model_validate(payload)

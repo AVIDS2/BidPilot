@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,6 +19,10 @@ class BidBenchRunReport(BaseModel):
     schema_version: str = "1.0"
     formula_version: str
     generated_at: datetime
+    input_fingerprint: str
+    dataset_sha256: str
+    candidate_sha256: str
+    source_hashes: dict[str, str]
     dataset_id: str
     dataset_title: str
     dataset_role: str
@@ -32,6 +36,7 @@ class BidBenchRunReport(BaseModel):
     latency_ms: int | None = None
     estimated_cost_usd: float | None = None
     metrics: BidBenchMetrics
+    gate: "BidBenchGateResult | None" = None
 
 
 class BidBenchThresholds(BaseModel):
@@ -44,15 +49,40 @@ class BidBenchThresholds(BaseModel):
     max_unsupported_claim_rate: float | None = Field(default=None, ge=0, le=1)
 
 
+class BidBenchGateResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    mode: str
+    passed: bool | None
+    thresholds: BidBenchThresholds
+    failures: list[str] = Field(default_factory=list)
+
+
+BidBenchRunReport.model_rebuild()
+
+
 def evaluate_files(dataset_path: Path, candidate_path: Path) -> BidBenchRunReport:
     dataset_file = _resolve_dataset_file(dataset_path)
-    dataset = BidBenchDataset.model_validate_json(dataset_file.read_text(encoding="utf-8"))
-    candidate = BidBenchCandidate.model_validate_json(candidate_path.read_text(encoding="utf-8"))
+    dataset_bytes = dataset_file.read_bytes()
+    candidate_bytes = candidate_path.read_bytes()
+    dataset = BidBenchDataset.model_validate_json(dataset_bytes)
+    candidate = BidBenchCandidate.model_validate_json(candidate_bytes)
+    source_hashes = _verify_source_hashes(dataset_file.parent, dataset)
+    dataset_sha256 = hashlib.sha256(dataset_bytes).hexdigest()
+    candidate_sha256 = hashlib.sha256(candidate_bytes).hexdigest()
+    fingerprint_payload = "|".join(
+        [dataset_sha256, candidate_sha256, *[source_hashes[key] for key in sorted(source_hashes)]]
+    ).encode("utf-8")
+    input_fingerprint = hashlib.sha256(fingerprint_payload).hexdigest()
     metrics = score_candidate(dataset, candidate)
 
     return BidBenchRunReport(
         formula_version=metrics.formula_version,
         generated_at=datetime.now(UTC),
+        input_fingerprint=input_fingerprint,
+        dataset_sha256=dataset_sha256,
+        candidate_sha256=candidate_sha256,
+        source_hashes=source_hashes,
         dataset_id=dataset.dataset_id,
         dataset_title=dataset.title,
         dataset_role=dataset.dataset_role.value,
@@ -77,6 +107,9 @@ def render_markdown(report: BidBenchRunReport) -> str:
         ("Requirement F1", metrics.requirement_f1),
         ("Mandatory recall", metrics.mandatory_recall),
         ("Scored recall", metrics.scored_recall),
+        ("Scored weight recall", metrics.scored_weight_recall),
+        ("Classification accuracy", metrics.classification_accuracy),
+        ("Coverage accuracy", metrics.coverage_accuracy),
         ("Source association accuracy", metrics.source_association_accuracy),
         ("Evidence precision", metrics.evidence_precision),
         ("Evidence recall", metrics.evidence_recall),
@@ -95,6 +128,7 @@ def render_markdown(report: BidBenchRunReport) -> str:
         f"- System: `{report.system_name}`",
         f"- Formula: `{report.formula_version}`",
         f"- Matching: `{metrics.matching_policy}`",
+        f"- Input fingerprint: `{report.input_fingerprint}`",
         f"- Generated: `{report.generated_at.isoformat()}`",
         "",
         "## Metrics",
@@ -118,7 +152,34 @@ def render_markdown(report: BidBenchRunReport) -> str:
             "",
         ]
     )
+    if report.gate is not None:
+        lines.extend(
+            [
+                "## Gate",
+                "",
+                f"- Mode: `{report.gate.mode}`",
+                f"- Passed: `{report.gate.passed}`",
+                f"- Failures: {len(report.gate.failures)}",
+                "",
+            ]
+        )
     return "\n".join(lines)
+
+
+def apply_thresholds(
+    report: BidBenchRunReport,
+    thresholds: BidBenchThresholds,
+    *,
+    informational: bool = False,
+) -> BidBenchRunReport:
+    failures = [] if informational else check_thresholds(report, thresholds)
+    gate = BidBenchGateResult(
+        mode="informational" if informational else "threshold",
+        passed=None if informational else not failures,
+        thresholds=thresholds,
+        failures=failures,
+    )
+    return report.model_copy(update={"gate": gate})
 
 
 def write_report(report: BidBenchRunReport, output_dir: Path) -> tuple[Path, Path]:
@@ -165,13 +226,36 @@ def _resolve_dataset_file(path: Path) -> Path:
     return path / "dataset.json" if path.is_dir() else path
 
 
+def _verify_source_hashes(
+    dataset_dir: Path,
+    dataset: BidBenchDataset,
+) -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    resolved_dataset_dir = dataset_dir.resolve()
+    for source in dataset.sources:
+        source_path = (dataset_dir / source.path).resolve()
+        if not source_path.is_relative_to(resolved_dataset_dir):
+            raise ValueError(f"source path escapes dataset directory: {source.path}")
+        if not source_path.is_file():
+            raise ValueError(f"source file not found: {source.path}")
+        actual = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        if actual.casefold() != source.sha256.casefold():
+            raise ValueError(
+                f"source sha256 mismatch for {source.id}: expected {source.sha256}, got {actual}"
+            )
+        hashes[source.id] = actual
+    return hashes
+
+
 def _format_percent(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.2%}"
 
 
 __all__ = [
+    "BidBenchGateResult",
     "BidBenchRunReport",
     "BidBenchThresholds",
+    "apply_thresholds",
     "check_thresholds",
     "evaluate_files",
     "render_markdown",

@@ -75,3 +75,43 @@ def test_current_requirement_snapshot_accepts_wrapped_api_response(tmp_path: Pat
     )
 
     assert [item.id for item in candidate.requirements] == ["platform-req-1"]
+
+
+def test_current_requirement_snapshot_rejects_error_response(tmp_path: Path) -> None:
+    snapshot_path = tmp_path / "error.json"
+    snapshot_path.write_text(json.dumps({"detail": "Unauthorized"}), encoding="utf-8")
+
+    try:
+        build_candidate_from_requirement_snapshot(
+            snapshot_path=snapshot_path,
+            dataset_id="fixture",
+            candidate_id="error",
+        )
+    except ValueError as exc:
+        assert "requirements" in str(exc)
+    else:
+        raise AssertionError("error response must not become an empty candidate")
+
+
+def test_current_requirement_snapshot_rejects_multiple_projects(tmp_path: Path) -> None:
+    snapshot_path = tmp_path / "mixed.json"
+    snapshot_path.write_text(
+        json.dumps(
+            [
+                {"id": "1", "project_id": "a", "section_key": "x", "requirement_text": "one"},
+                {"id": "2", "project_id": "b", "section_key": "x", "requirement_text": "two"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        build_candidate_from_requirement_snapshot(
+            snapshot_path=snapshot_path,
+            dataset_id="fixture",
+            candidate_id="mixed",
+        )
+    except ValueError as exc:
+        assert "multiple projects" in str(exc)
+    else:
+        raise AssertionError("mixed-project snapshots must be rejected")

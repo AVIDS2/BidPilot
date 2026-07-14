@@ -12,7 +12,7 @@ if str(API_ROOT) not in sys.path:
 
 from app.evaluation.bidbench import (  # noqa: E402
     BidBenchThresholds,
-    check_thresholds,
+    apply_thresholds,
     evaluate_files,
     write_report,
 )
@@ -35,24 +35,44 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-source-association-accuracy", type=float)
     parser.add_argument("--min-combined-score", type=float)
     parser.add_argument("--max-unsupported-claim-rate", type=float)
+    parser.add_argument(
+        "--informational",
+        action="store_true",
+        help="write a report without enforcing thresholds",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     report = evaluate_files(args.dataset, args.candidate)
-    run_output = args.output_dir / report.dataset_id / report.candidate_id
-    json_path, markdown_path = write_report(report, run_output)
-    failures = check_thresholds(
-        report,
-        BidBenchThresholds(
-            min_mandatory_recall=args.min_mandatory_recall,
-            min_scored_recall=args.min_scored_recall,
-            min_source_association_accuracy=args.min_source_association_accuracy,
-            min_combined_score=args.min_combined_score,
-            max_unsupported_claim_rate=args.max_unsupported_claim_rate,
-        ),
+    thresholds = BidBenchThresholds(
+        min_mandatory_recall=args.min_mandatory_recall,
+        min_scored_recall=args.min_scored_recall,
+        min_source_association_accuracy=args.min_source_association_accuracy,
+        min_combined_score=args.min_combined_score,
+        max_unsupported_claim_rate=args.max_unsupported_claim_rate,
     )
+    has_threshold = any(value is not None for value in thresholds.model_dump().values())
+    if not args.informational and not has_threshold:
+        print(
+            "Refusing a false-green run: provide at least one threshold or use --informational.",
+            file=sys.stderr,
+        )
+        return 2
+    report = apply_thresholds(report, thresholds, informational=args.informational)
+    output_root = args.output_dir.resolve()
+    run_output = (
+        output_root
+        / report.dataset_id
+        / report.candidate_id
+        / report.input_fingerprint[:12]
+    ).resolve()
+    if not run_output.is_relative_to(output_root):
+        print("Resolved output path escapes --output-dir", file=sys.stderr)
+        return 2
+    json_path, markdown_path = write_report(report, run_output)
+    failures = report.gate.failures if report.gate is not None else []
 
     print(f"BidBench combined score: {report.metrics.combined_score:.2%}")
     print(f"JSON report: {json_path}")
