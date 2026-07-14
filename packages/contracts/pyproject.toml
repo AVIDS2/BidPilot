@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "sqlalchemy>=2.0.39",
     "pgvector>=0.4.0",
+    "pydantic>=2.11.0",
 ]
 
 [build-system]
