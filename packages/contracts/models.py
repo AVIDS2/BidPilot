@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
@@ -232,8 +233,67 @@ class RequirementItem(Base):
     project_id: Mapped[str] = mapped_column(String(36), ForeignKey("project.id"), nullable=False)
     section_key: Mapped[str] = mapped_column(String(100), nullable=False)
     requirement_text: Mapped[str] = mapped_column(Text, nullable=False)
+    original_text: Mapped[str | None] = mapped_column(Text)
+    source_document_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("source_document.id", ondelete="SET NULL"),
+    )
+    source_locator_json: Mapped[dict | None] = mapped_column(JSON)
     priority: Mapped[str] = mapped_column(String(30), nullable=False, default="normal")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    owner_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        index=True,
+    )
+    reviewer_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        index=True,
+    )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime)
+    verification_status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="unverified",
+        server_default="unverified",
+        index=True,
+    )
+    extraction_confidence: Mapped[float | None] = mapped_column(Float)
+    lock_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    bid_profile: Mapped["BidRequirementProfile | None"] = relationship(
+        back_populates="requirement",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    evidence_links: Mapped[list["RequirementEvidenceLink"]] = relationship(
+        back_populates="requirement",
+        cascade="all, delete-orphan",
+    )
+    claim_links: Mapped[list["RequirementClaimLink"]] = relationship(
+        back_populates="requirement",
+        cascade="all, delete-orphan",
+    )
+    decisions: Mapped[list["RequirementDecision"]] = relationship(
+        back_populates="requirement",
+        cascade="all, delete-orphan",
+    )
+
+    __mapper_args__ = {"version_id_col": lock_version}
+    __table_args__ = (
+        Index("ix_requirement_item_project_verification", "project_id", "verification_status"),
+    )
 
 
 class Evidence(Base):
@@ -247,6 +307,222 @@ class Evidence(Base):
     quote_text: Mapped[str] = mapped_column(Text, nullable=False)
     locator_json: Mapped[dict | None] = mapped_column(JSON)
     confidence: Mapped[float | None] = mapped_column(Float)
+
+    requirement_links: Mapped[list["RequirementEvidenceLink"]] = relationship(
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+    )
+    claim_links: Mapped[list["ClaimEvidenceLink"]] = relationship(
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+    )
+
+
+class BidRequirementProfile(Base):
+    __tablename__ = "bid_requirement_profile"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    requirement_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("requirement_item.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    bid_category: Mapped[str] = mapped_column(String(30), nullable=False, default="technical", index=True)
+    is_mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    score_weight: Mapped[float | None] = mapped_column(Float)
+    risk_level: Mapped[str] = mapped_column(String(30), nullable=False, default="normal", index=True)
+    coverage_status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="uncovered",
+        server_default="uncovered",
+        index=True,
+    )
+    evidence_status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="missing",
+        server_default="missing",
+        index=True,
+    )
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime)
+    submission_metadata_json: Mapped[dict | None] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    requirement: Mapped["RequirementItem"] = relationship(back_populates="bid_profile")
+
+
+class RequirementEvidenceLink(Base):
+    __tablename__ = "requirement_evidence_link"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    requirement_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("requirement_item.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    evidence_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("evidence.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relation_type: Mapped[str] = mapped_column(String(30), nullable=False, default="supports")
+    verification_status: Mapped[str] = mapped_column(String(30), nullable=False, default="unverified")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user.id", ondelete="SET NULL"),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    requirement: Mapped["RequirementItem"] = relationship(back_populates="evidence_links")
+    evidence: Mapped["Evidence"] = relationship(back_populates="requirement_links")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "requirement_id",
+            "evidence_id",
+            "relation_type",
+            name="uq_requirement_evidence_relation",
+        ),
+    )
+
+
+class Claim(Base):
+    __tablename__ = "claim"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("project.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    claim_text: Mapped[str] = mapped_column(Text, nullable=False)
+    claim_type: Mapped[str] = mapped_column(String(30), nullable=False, default="factual")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    section_version_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("section_version.id", ondelete="SET NULL"),
+    )
+    generation_run_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("execution_run.id", ondelete="SET NULL"),
+    )
+    created_by_actor: Mapped[str] = mapped_column(String(30), nullable=False, default="ai")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user.id", ondelete="SET NULL"),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    requirement_links: Mapped[list["RequirementClaimLink"]] = relationship(
+        back_populates="claim",
+        cascade="all, delete-orphan",
+    )
+    evidence_links: Mapped[list["ClaimEvidenceLink"]] = relationship(
+        back_populates="claim",
+        cascade="all, delete-orphan",
+    )
+
+
+class RequirementClaimLink(Base):
+    __tablename__ = "requirement_claim_link"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    requirement_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("requirement_item.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    claim_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("claim.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    coverage_role: Mapped[str] = mapped_column(String(30), nullable=False, default="direct")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    requirement: Mapped["RequirementItem"] = relationship(back_populates="claim_links")
+    claim: Mapped["Claim"] = relationship(back_populates="requirement_links")
+
+    __table_args__ = (
+        UniqueConstraint("requirement_id", "claim_id", name="uq_requirement_claim"),
+    )
+
+
+class ClaimEvidenceLink(Base):
+    __tablename__ = "claim_evidence_link"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    claim_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("claim.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    evidence_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("evidence.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relation_type: Mapped[str] = mapped_column(String(30), nullable=False, default="supports")
+    verification_status: Mapped[str] = mapped_column(String(30), nullable=False, default="unverified")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    claim: Mapped["Claim"] = relationship(back_populates="evidence_links")
+    evidence: Mapped["Evidence"] = relationship(back_populates="claim_links")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "claim_id",
+            "evidence_id",
+            "relation_type",
+            name="uq_claim_evidence_relation",
+        ),
+    )
+
+
+class RequirementDecision(Base):
+    __tablename__ = "requirement_decision"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    requirement_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("requirement_item.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    decision_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    requested_by_user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("user.id"),
+        nullable=False,
+    )
+    approved_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user.id", ondelete="SET NULL"),
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    requirement: Mapped["RequirementItem"] = relationship(back_populates="decisions")
 
 
 # ── Deliverables & Drafting ──────────────────────────────────────────────────
