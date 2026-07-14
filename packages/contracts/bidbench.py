@@ -156,6 +156,7 @@ class BidBenchDataset(_ContractModel):
 
 class BidBenchCandidateRequirement(_ContractModel):
     id: str = Field(min_length=1, max_length=100)
+    ground_truth_id: str | None = Field(default=None, min_length=1, max_length=100)
     normalized_text: str = Field(min_length=1)
     requirement_type: RequirementType
     is_mandatory: bool = False

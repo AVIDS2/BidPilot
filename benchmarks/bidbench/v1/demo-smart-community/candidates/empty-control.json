@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "demo-smart-community",
+  "candidate_id": "empty-control",
+  "system_name": "empty-control",
+  "prompt_version": "none",
+  "run_number": 1,
+  "requirements": [],
+  "claims": []
+}
