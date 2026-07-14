@@ -1,0 +1,564 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "demo-smart-community",
+  "title": "智慧社区 AI 治理平台技术标开发基线",
+  "language": "zh-CN",
+  "dataset_role": "development",
+  "origin_type": "synthetic",
+  "provenance": "BidPilot 团队为离线评测创建的完全合成招标、供应商与案例资料。所有主体、资质和业绩均为虚构。",
+  "license_id": "CC0-1.0",
+  "description": "首个可见开发集，用于验证数据合同、需求抽取、来源定位和证据匹配。不得用于商业准确率声明。",
+  "sources": [
+    {
+      "id": "rfp",
+      "path": "sources/01-rfp.md",
+      "title": "智慧社区 AI 治理平台建设项目招标文件",
+      "source_type": "tender"
+    },
+    {
+      "id": "supplier",
+      "path": "sources/02-supplier-profile.md",
+      "title": "星河云智科技有限公司能力资料",
+      "source_type": "supplier_evidence"
+    },
+    {
+      "id": "reference",
+      "path": "sources/03-reference-case.md",
+      "title": "云湖智慧园区治理平台同类案例",
+      "source_type": "reference_case"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "req-001",
+      "original_text": "项目预算为 280 万元。超过预算报价为无效报价。",
+      "normalized_text": "投标总报价不得超过 280 万元",
+      "requirement_type": "commercial",
+      "is_mandatory": true,
+      "expected_coverage": "uncovered",
+      "locators": [{"source_id": "rfp", "section": "一、项目概况；7.3 报价部分", "text_anchor": "超过预算报价为无效报价"}],
+      "expected_evidence_ids": []
+    },
+    {
+      "id": "req-002",
+      "original_text": "建设周期为 90 个自然日。",
+      "normalized_text": "在 90 个自然日内完成建设验收",
+      "requirement_type": "delivery",
+      "is_mandatory": true,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "一、项目概况", "text_anchor": "建设周期为 90 个自然日"}],
+      "expected_evidence_ids": ["ev-010"]
+    },
+    {
+      "id": "req-003",
+      "original_text": "质保期不少于 3 年。",
+      "normalized_text": "提供不少于 3 年的质保服务",
+      "requirement_type": "commercial",
+      "is_mandatory": true,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "一、项目概况", "text_anchor": "质保期不少于 3 年"}],
+      "expected_evidence_ids": ["ev-006"]
+    },
+    {
+      "id": "req-004",
+      "original_text": "实现事件从发现、派单、处理、复核到归档的闭环。",
+      "normalized_text": "提供事件发现至归档的全流程闭环治理",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "二、建设目标", "text_anchor": "发现、派单、处理、复核到归档"}],
+      "expected_evidence_ids": ["ev-001", "ev-008"]
+    },
+    {
+      "id": "req-005",
+      "original_text": "对高频问题、风险事件和居民诉求进行自动归类与趋势分析。",
+      "normalized_text": "提供事件自动分类、风险识别和趋势分析",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "二、建设目标；3.2 AI 辅助能力", "text_anchor": "自动归类与趋势分析"}],
+      "expected_evidence_ids": ["ev-002", "ev-011"]
+    },
+    {
+      "id": "req-006",
+      "original_text": "支持街道、社区、物业、第三方服务单位多角色协同。",
+      "normalized_text": "支持多组织和多角色协同",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "二、建设目标", "text_anchor": "多角色协同"}],
+      "expected_evidence_ids": ["ev-001"]
+    },
+    {
+      "id": "req-007",
+      "original_text": "支持国产化数据库与国产操作系统适配。",
+      "normalized_text": "适配国产操作系统和国产数据库",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "二、建设目标", "text_anchor": "国产化数据库与国产操作系统适配"}],
+      "expected_evidence_ids": ["ev-004"]
+    },
+    {
+      "id": "req-008",
+      "original_text": "建立可审计、可追溯、可扩展的平台架构。",
+      "normalized_text": "平台操作与关键过程可审计可追溯",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "二、建设目标", "text_anchor": "可审计、可追溯"}],
+      "expected_evidence_ids": ["ev-003"]
+    },
+    {
+      "id": "req-009",
+      "original_text": "支持居民、网格员、物业人员提交事件。",
+      "normalized_text": "居民、网格员和物业人员均可提交事件",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "3.1 事件治理", "text_anchor": "居民、网格员、物业人员提交事件"}],
+      "expected_evidence_ids": ["ev-001", "ev-009"]
+    },
+    {
+      "id": "req-010",
+      "original_text": "事件类型配置至少包括环境卫生、消防隐患、设施损坏、邻里纠纷、安全巡查、养老关怀。",
+      "normalized_text": "事件分类至少覆盖六类指定社区事件",
+      "requirement_type": "technical",
+      "is_mandatory": true,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "3.1 事件治理", "text_anchor": "至少包括环境卫生"}],
+      "expected_evidence_ids": ["ev-002"]
+    },
+    {
+      "id": "req-011",
+      "original_text": "支持自动派单、人工改派、超时提醒、处理反馈、满意度评价。",
+      "normalized_text": "工单支持派单、改派、超时、反馈和满意度全链路",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "3.1 事件治理", "text_anchor": "自动派单、人工改派、超时提醒"}],
+      "expected_evidence_ids": ["ev-001", "ev-008"]
+    },
+    {
+      "id": "req-012",
+      "original_text": "支持自然语言查询，例如‘本月消防隐患最多的小区有哪些’。",
+      "normalized_text": "支持面向治理数据的自然语言查询",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "uncovered",
+      "locators": [{"source_id": "rfp", "section": "3.2 AI 辅助能力", "text_anchor": "支持自然语言查询"}],
+      "expected_evidence_ids": []
+    },
+    {
+      "id": "req-013",
+      "original_text": "支持街道级、社区级、小区级多层级看板。",
+      "normalized_text": "看板支持街道、社区和小区多层级展示",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "3.3 数据看板", "text_anchor": "街道级、社区级、小区级"}],
+      "expected_evidence_ids": ["ev-001", "ev-008"]
+    },
+    {
+      "id": "req-014",
+      "original_text": "支持手机端事件上报、拍照上传、处理反馈、消息通知。",
+      "normalized_text": "移动端支持事件和图片上报、反馈及通知",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "3.4 移动端", "text_anchor": "拍照上传"}],
+      "expected_evidence_ids": ["ev-009"]
+    },
+    {
+      "id": "req-015",
+      "original_text": "支持微信小程序或 H5 接入。",
+      "normalized_text": "提供微信小程序或 H5 接入方式",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "uncovered",
+      "locators": [{"source_id": "rfp", "section": "3.4 移动端", "text_anchor": "微信小程序或 H5"}],
+      "expected_evidence_ids": []
+    },
+    {
+      "id": "req-016",
+      "original_text": "支持基于角色的权限控制。",
+      "normalized_text": "使用 RBAC 实现角色权限控制",
+      "requirement_type": "technical",
+      "is_mandatory": true,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "3.5 权限与安全", "text_anchor": "基于角色的权限控制"}],
+      "expected_evidence_ids": ["ev-003"]
+    },
+    {
+      "id": "req-017",
+      "original_text": "支持操作日志、登录日志、数据访问日志。",
+      "normalized_text": "记录操作、登录和数据访问日志",
+      "requirement_type": "technical",
+      "is_mandatory": true,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "3.5 权限与安全", "text_anchor": "操作日志、登录日志、数据访问日志"}],
+      "expected_evidence_ids": ["ev-003"]
+    },
+    {
+      "id": "req-018",
+      "original_text": "敏感信息应加密存储。",
+      "normalized_text": "敏感信息采用加密存储",
+      "requirement_type": "technical",
+      "is_mandatory": true,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "3.5 权限与安全", "text_anchor": "敏感信息应加密存储"}],
+      "expected_evidence_ids": ["ev-003"]
+    },
+    {
+      "id": "req-019",
+      "original_text": "系统应具备防刷、防越权、防 SQL 注入、防 XSS 等基础安全能力。",
+      "normalized_text": "具备限流、越权防护、SQL 注入和 XSS 防护",
+      "requirement_type": "technical",
+      "is_mandatory": true,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "3.5 权限与安全", "text_anchor": "防刷、防越权、防 SQL 注入、防 XSS"}],
+      "expected_evidence_ids": ["ev-003"]
+    },
+    {
+      "id": "req-020",
+      "original_text": "后端服务应采用微服务或模块化架构。",
+      "normalized_text": "后端采用微服务或模块化架构",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "四、技术要求", "text_anchor": "微服务或模块化架构"}],
+      "expected_evidence_ids": ["ev-004"]
+    },
+    {
+      "id": "req-021",
+      "original_text": "数据库应支持 PostgreSQL 或国产数据库适配。",
+      "normalized_text": "数据库支持 PostgreSQL 或国产数据库",
+      "requirement_type": "technical",
+      "is_mandatory": true,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "四、技术要求", "text_anchor": "PostgreSQL 或国产数据库"}],
+      "expected_evidence_ids": ["ev-004"]
+    },
+    {
+      "id": "req-022",
+      "original_text": "文件存储应支持对象存储。",
+      "normalized_text": "文件使用对象存储",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "四、技术要求", "text_anchor": "支持对象存储"}],
+      "expected_evidence_ids": ["ev-004"]
+    },
+    {
+      "id": "req-023",
+      "original_text": "系统应提供标准 REST API。",
+      "normalized_text": "提供标准 REST API",
+      "requirement_type": "technical",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "四、技术要求", "text_anchor": "标准 REST API"}],
+      "expected_evidence_ids": ["ev-004", "ev-009"]
+    },
+    {
+      "id": "req-024",
+      "original_text": "应支持容器化部署。",
+      "normalized_text": "支持容器化部署",
+      "requirement_type": "technical",
+      "is_mandatory": true,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "四、技术要求", "text_anchor": "支持容器化部署"}],
+      "expected_evidence_ids": ["ev-004", "ev-009"]
+    },
+    {
+      "id": "req-025",
+      "original_text": "应提供备份恢复方案。",
+      "normalized_text": "提供数据备份和恢复方案",
+      "requirement_type": "technical",
+      "is_mandatory": true,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "四、技术要求", "text_anchor": "备份恢复方案"}],
+      "expected_evidence_ids": ["ev-003"]
+    },
+    {
+      "id": "req-026",
+      "original_text": "投标人应提供完整实施方案，包括需求调研、原型确认、开发测试、试运行、培训、验收和运维交接。",
+      "normalized_text": "实施方案覆盖调研、原型、开发测试、试运行、培训、验收和交接",
+      "requirement_type": "delivery",
+      "is_mandatory": true,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "五、项目实施要求", "text_anchor": "完整实施方案"}],
+      "expected_evidence_ids": ["ev-005", "ev-010"]
+    },
+    {
+      "id": "req-027",
+      "original_text": "第 10、30、60、80、90 天分别完成调研计划、原型、主要开发、联调试运行和验收交付。",
+      "normalized_text": "实施计划满足五个指定里程碑",
+      "requirement_type": "delivery",
+      "is_mandatory": true,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "五、项目实施要求", "text_anchor": "关键里程碑"}],
+      "expected_evidence_ids": ["ev-010"]
+    },
+    {
+      "id": "req-028",
+      "original_text": "提供 7x12 小时远程技术支持。",
+      "normalized_text": "提供 7x12 小时远程支持",
+      "requirement_type": "commercial",
+      "is_mandatory": true,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "六、服务要求", "text_anchor": "7x12 小时远程技术支持"}],
+      "expected_evidence_ids": ["ev-006"]
+    },
+    {
+      "id": "req-029",
+      "original_text": "重大故障 2 小时内响应，8 小时内给出解决方案。",
+      "normalized_text": "重大故障 2 小时响应且 8 小时提供方案",
+      "requirement_type": "commercial",
+      "is_mandatory": true,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "六、服务要求", "text_anchor": "2 小时内响应，8 小时内"}],
+      "expected_evidence_ids": ["ev-006"]
+    },
+    {
+      "id": "req-030",
+      "original_text": "提供不少于 2 次管理员培训和 3 次业务人员培训。",
+      "normalized_text": "至少提供 2 次管理员培训和 3 次业务培训",
+      "requirement_type": "delivery",
+      "is_mandatory": true,
+      "expected_coverage": "uncovered",
+      "locators": [{"source_id": "rfp", "section": "六、服务要求", "text_anchor": "2 次管理员培训和 3 次业务人员培训"}],
+      "expected_evidence_ids": []
+    },
+    {
+      "id": "req-031",
+      "original_text": "提供源码、部署文档、接口文档和用户手册。",
+      "normalized_text": "交付源码、部署文档、接口文档和用户手册",
+      "requirement_type": "submission",
+      "is_mandatory": true,
+      "expected_coverage": "uncovered",
+      "locators": [{"source_id": "rfp", "section": "六、服务要求", "text_anchor": "提供源码、部署文档、接口文档和用户手册"}],
+      "expected_evidence_ids": []
+    },
+    {
+      "id": "req-032",
+      "original_text": "投标文件至少包含投标函、授权书、响应表、方案、团队案例和报价明细等十一章。",
+      "normalized_text": "投标文件包含招标文件列出的全部十一类章节",
+      "requirement_type": "submission",
+      "is_mandatory": true,
+      "expected_coverage": "uncovered",
+      "locators": [{"source_id": "rfp", "section": "八、投标文件章节要求", "text_anchor": "至少包含以下章节"}],
+      "expected_evidence_ids": []
+    },
+    {
+      "id": "req-033",
+      "original_text": "企业资质与认证：5 分。",
+      "normalized_text": "以企业资质和认证争取 5 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "7.1 商务部分", "text_anchor": "企业资质与认证：5 分"}],
+      "expected_evidence_ids": ["ev-007"],
+      "score_weight": 5
+    },
+    {
+      "id": "req-034",
+      "original_text": "同类项目案例：8 分。",
+      "normalized_text": "以同类项目案例争取 8 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "7.1 商务部分", "text_anchor": "同类项目案例：8 分"}],
+      "expected_evidence_ids": ["ev-008", "ev-011"],
+      "score_weight": 8
+    },
+    {
+      "id": "req-035",
+      "original_text": "项目团队能力：5 分。",
+      "normalized_text": "以项目团队配置和能力争取 5 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "7.1 商务部分", "text_anchor": "项目团队能力：5 分"}],
+      "expected_evidence_ids": ["ev-005"],
+      "score_weight": 5
+    },
+    {
+      "id": "req-036",
+      "original_text": "售后服务承诺：2 分。",
+      "normalized_text": "以售后服务承诺争取 2 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "7.1 商务部分", "text_anchor": "售后服务承诺：2 分"}],
+      "expected_evidence_ids": ["ev-006"],
+      "score_weight": 2
+    },
+    {
+      "id": "req-037",
+      "original_text": "对项目需求理解：10 分。",
+      "normalized_text": "项目理解部分争取 10 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "7.2 技术部分", "text_anchor": "对项目需求理解：10 分"}],
+      "expected_evidence_ids": ["ev-001", "ev-008"],
+      "score_weight": 10
+    },
+    {
+      "id": "req-038",
+      "original_text": "总体架构设计：10 分。",
+      "normalized_text": "总体架构设计部分争取 10 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "7.2 技术部分", "text_anchor": "总体架构设计：10 分"}],
+      "expected_evidence_ids": ["ev-004"],
+      "score_weight": 10
+    },
+    {
+      "id": "req-039",
+      "original_text": "AI 能力方案：12 分。",
+      "normalized_text": "AI 能力方案部分争取 12 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "7.2 技术部分", "text_anchor": "AI 能力方案：12 分"}],
+      "expected_evidence_ids": ["ev-002", "ev-009"],
+      "score_weight": 12
+    },
+    {
+      "id": "req-040",
+      "original_text": "数据安全与权限方案：8 分。",
+      "normalized_text": "数据安全与权限方案争取 8 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "covered",
+      "locators": [{"source_id": "rfp", "section": "7.2 技术部分", "text_anchor": "数据安全与权限方案：8 分"}],
+      "expected_evidence_ids": ["ev-003"],
+      "score_weight": 8
+    },
+    {
+      "id": "req-041",
+      "original_text": "实施计划与风险控制：8 分。",
+      "normalized_text": "实施计划与风险控制部分争取 8 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "7.2 技术部分", "text_anchor": "实施计划与风险控制：8 分"}],
+      "expected_evidence_ids": ["ev-005", "ev-010"],
+      "score_weight": 8
+    },
+    {
+      "id": "req-042",
+      "original_text": "运维保障方案：6 分。",
+      "normalized_text": "运维保障方案争取 6 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "partial",
+      "locators": [{"source_id": "rfp", "section": "7.2 技术部分", "text_anchor": "运维保障方案：6 分"}],
+      "expected_evidence_ids": ["ev-006"],
+      "score_weight": 6
+    },
+    {
+      "id": "req-043",
+      "original_text": "产品演示或原型完整度：6 分。",
+      "normalized_text": "产品演示或原型完整度争取 6 分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "uncovered",
+      "locators": [{"source_id": "rfp", "section": "7.2 技术部分", "text_anchor": "产品演示或原型完整度：6 分"}],
+      "expected_evidence_ids": [],
+      "score_weight": 6
+    },
+    {
+      "id": "req-044",
+      "original_text": "报价部分 20 分，采用低价优先法。",
+      "normalized_text": "按低价优先法参与 20 分报价评分",
+      "requirement_type": "scored",
+      "is_mandatory": false,
+      "expected_coverage": "uncovered",
+      "locators": [{"source_id": "rfp", "section": "7.3 报价部分", "text_anchor": "报价采用低价优先法"}],
+      "expected_evidence_ids": [],
+      "score_weight": 20
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-001",
+      "source_id": "supplier",
+      "text": "公司已形成事件上报、工单派发、网格协同、移动巡检、居民评价、数据看板和运维监管一体化能力，并支持多组织、多社区、多角色权限模型。",
+      "locator": {"source_id": "supplier", "section": "2.1 社区治理平台能力", "text_anchor": "事件上报、工单派发、网格协同"},
+      "supports_requirement_ids": ["req-004", "req-006", "req-009", "req-011", "req-013", "req-037"]
+    },
+    {
+      "id": "ev-002",
+      "source_id": "supplier",
+      "text": "公司建设了文本分类、智能摘要、风险识别、处理建议推荐和报表自动生成能力。",
+      "locator": {"source_id": "supplier", "section": "2.2 AI 辅助治理能力", "text_anchor": "文本分类、智能摘要、风险识别"},
+      "supports_requirement_ids": ["req-005", "req-010", "req-039"]
+    },
+    {
+      "id": "ev-003",
+      "source_id": "supplier",
+      "text": "平台支持 RBAC、操作日志与审计追踪、敏感字段加密、API 限流、异常登录检测和数据备份恢复。",
+      "locator": {"source_id": "supplier", "section": "2.3 数据安全能力", "text_anchor": "RBAC 角色权限控制"},
+      "supports_requirement_ids": ["req-008", "req-016", "req-017", "req-018", "req-019", "req-025", "req-040"]
+    },
+    {
+      "id": "ev-004",
+      "source_id": "supplier",
+      "text": "平台适配统信 UOS、麒麟、PostgreSQL、达梦、Docker 与 Docker Compose，并使用模块化服务、MinIO/S3 和 REST 风格接口。",
+      "locator": {"source_id": "supplier", "section": "2.4 国产化适配；三、产品架构", "text_anchor": "统信 UOS 服务器版"},
+      "supports_requirement_ids": ["req-007", "req-020", "req-021", "req-022", "req-023", "req-024", "req-038"]
+    },
+    {
+      "id": "ev-005",
+      "source_id": "supplier",
+      "text": "本项目拟投入项目经理、产品经理、架构师、开发、算法、测试和实施运维等 12 人团队。",
+      "locator": {"source_id": "supplier", "section": "四、项目团队配置", "text_anchor": "本项目拟投入团队 12 人"},
+      "supports_requirement_ids": ["req-026", "req-035", "req-041"]
+    },
+    {
+      "id": "ev-006",
+      "source_id": "supplier",
+      "text": "公司承诺 3 年免费质保、7x12 小时远程支持，重大故障 2 小时响应、8 小时提供解决方案。",
+      "locator": {"source_id": "supplier", "section": "五、服务承诺", "text_anchor": "3 年免费质保服务"},
+      "supports_requirement_ids": ["req-003", "req-028", "req-029", "req-036", "req-042"]
+    },
+    {
+      "id": "ev-007",
+      "source_id": "supplier",
+      "text": "公司具备 ISO 9001、ISO 27001、CMMI 3、软件企业证书和多项软件著作权。",
+      "locator": {"source_id": "supplier", "section": "六、资质与认证", "text_anchor": "ISO 9001"},
+      "supports_requirement_ids": ["req-033"]
+    },
+    {
+      "id": "ev-008",
+      "source_id": "reference",
+      "text": "同类园区项目包含事件上报与工单流转、安全隐患闭环整改、数据看板、月报生成和移动端处理助手。",
+      "locator": {"source_id": "reference", "section": "二、建设内容", "text_anchor": "事件上报与工单流转"},
+      "supports_requirement_ids": ["req-004", "req-011", "req-013", "req-034", "req-037"]
+    },
+    {
+      "id": "ev-009",
+      "source_id": "reference",
+      "text": "系统采用容器化部署，通过 REST API 对接外部系统，支持手机端照片和文字提交，并使用 AI 分类模型推荐处理部门。",
+      "locator": {"source_id": "reference", "section": "三、技术方案", "text_anchor": "容器化部署"},
+      "supports_requirement_ids": ["req-009", "req-014", "req-023", "req-024", "req-039"]
+    },
+    {
+      "id": "ev-010",
+      "source_id": "reference",
+      "text": "同类项目在 75 天内完成调研、原型、开发、联调、培训和上线。",
+      "locator": {"source_id": "reference", "section": "四、实施周期", "text_anchor": "项目建设周期为 75 天"},
+      "supports_requirement_ids": ["req-002", "req-026", "req-027", "req-041"]
+    },
+    {
+      "id": "ev-011",
+      "source_id": "reference",
+      "text": "同类项目上线后工单响应、闭环率、报表效率、分类准确率和满意度均有量化改善。",
+      "locator": {"source_id": "reference", "section": "五、项目成效", "text_anchor": "工单平均响应时间"},
+      "supports_requirement_ids": ["req-005", "req-034"]
+    }
+  ]
+}
