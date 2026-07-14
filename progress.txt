@@ -1,6 +1,6 @@
 # BidPilot Development and Learning Progress
 
-Updated: 2026-07-12
+Updated: 2026-07-14
 
 ## Current State
 
@@ -11,15 +11,19 @@ Updated: 2026-07-12
 - Current retrieval is primarily vector search with lexical fallback; hybrid retrieval and reranking are not implemented as a measured pipeline.
 - Long-term semantic, episodic, and procedural memory are not yet implemented as governed product capabilities.
 - Systematic agent quality evaluation and production trace correlation are still missing.
+- The approved product category is now AI bid compliance and response execution, with the Requirement Ledger as the commercial spine.
+- The final quality standard requires table-stakes parity or better and measured leadership in completeness, traceability, collaboration, and governed execution.
 
 ## Active Learning Focus
 
-1. Establish the Agent Platform Re-foundation v2 blueprint.
-2. Unify the assistant and workflow runtime boundaries.
-3. Build a golden task dataset and evaluation harness.
-4. Implement retrieval 2.0: sparse + dense + fusion + rerank + citation checks.
-5. Implement governed memory and LLM Wiki write-back.
+1. Execute `docs/superpowers/specs/2026-07-14-bidpilot-product-agent-refoundation-v2-design.md`.
+2. Build BidBench and record the current/general-AI quality baseline.
+3. Implement the Requirement Ledger and Bid Readiness Pack.
+4. Unify assistant and workflow runtime contracts, policy, events, usage, audit, and recovery.
+5. Implement retrieval 2.0: sparse + dense + fusion + rerank + citation checks.
+6. Implement governed memory, Bid Wiki, and evidence graph write-back.
+7. Close enterprise security, observability, cost, commercial, UX, and release evidence.
 
 ## Working Rule
 
-Do not add another visible feature until the relevant concept, architecture decision, success metric, tests, and production failure modes are documented.
+Do not add another visible feature until the relevant concept, architecture decision, success metric, tests, and production failure modes are documented. Overlapping competitor capabilities must not be accepted at demo quality merely because they are not differentiators.
