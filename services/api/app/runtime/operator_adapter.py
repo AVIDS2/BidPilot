@@ -94,6 +94,8 @@ async def stream_operator_assistant_response(
         conversation_id=conversation_id,
         requested_project_id=payload.project_id,
     )
+    if active_project_id is None and payload.project_id is None:
+        active_project_id = _recover_conversation_project_context(db, user, conversation_id)
     if payload.confirmation is not None and payload.confirmation.approval_id:
         save_message(db, conversation_id, "user", payload.message)
         async for event in _resume_operator_approval(
@@ -520,6 +522,38 @@ def _bind_created_project_to_conversation(
             user_id=user.id,
             project_id=project_id,
         )
+
+
+def _recover_conversation_project_context(
+    db: Session,
+    user: CurrentUser,
+    conversation_id: str,
+) -> str | None:
+    """Backfill a legacy conversation from its own successful create action."""
+    action = (
+        db.query(RuntimeAction)
+        .join(RuntimeRun, RuntimeAction.run_id == RuntimeRun.id)
+        .filter(
+            RuntimeRun.conversation_id == conversation_id,
+            RuntimeRun.user_id == user.id,
+            RuntimeRun.org_id == user.org_id,
+            RuntimeAction.capability_name.in_(("create_project", "create_demo_workspace")),
+            RuntimeAction.status == "succeeded",
+        )
+        .order_by(RuntimeAction.completed_at.desc())
+        .first()
+    )
+    project_id = (action.result_json or {}).get("id") if action is not None else None
+    if not isinstance(project_id, str) or not project_id:
+        return None
+
+    bind_conversation_project_context(
+        db,
+        conversation_id=conversation_id,
+        user_id=user.id,
+        project_id=project_id,
+    )
+    return project_id
 
 
 def _sync_pending_input_state(

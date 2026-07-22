@@ -13,6 +13,7 @@ from app.assistant import router as assistant_router
 from app.auth.schemas import CurrentUser
 from app.memory.schemas import MemoryContextRead
 from app.models import (
+    ChatConversation,
     ChatTaskState,
     ModelUsageRecord,
     ModelUsageReservation,
@@ -939,6 +940,12 @@ def test_operator_engine_resumes_same_checkpoint_for_approved_action(
     approved_events = _sse_events(approved.text)
     assert "assistant.tool_succeeded" in [event for event, _payload in approved_events]
     project = test_db.query(Project).filter_by(name=project_name).one()
+    conversation = test_db.get(ChatConversation, confirmation["conversation_id"])
+    assert conversation is not None
+    assert conversation.project_id == project.id
+    # Mimic conversations created before persistent project scope was introduced.
+    conversation.project_id = None
+    test_db.commit()
     run = test_db.get(RuntimeRun, confirmation["runtime_run_id"])
     assert run is not None
     assert run.status == "succeeded"
@@ -952,6 +959,8 @@ def test_operator_engine_resumes_same_checkpoint_for_approved_action(
 
     assert followup.status_code == 200
     assert captured_contexts[-1].active_project_id == project.id
+    test_db.refresh(conversation)
+    assert conversation.project_id == project.id
     followup_events = _sse_events(followup.text)
     assert "assistant.confirmation_requested" not in [event for event, _payload in followup_events]
     assert any(
