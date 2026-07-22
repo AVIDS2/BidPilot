@@ -140,6 +140,16 @@ def _fallback_conversation_title(content: str) -> str | None:
     return title or None
 
 
+def _is_failed_assistant_reply(content: str) -> bool:
+    normalized = content.strip().lower()
+    return normalized.startswith(("执行失败", "操作未能完成", "error", "failed"))
+
+
+def _looks_like_failed_auto_title(title: str) -> bool:
+    normalized = title.lower()
+    return any(marker in normalized for marker in ("错误", "失败", "异常", "error", "failed"))
+
+
 def _generate_conversation_title(
     user_message: str,
     assistant_message: str,
@@ -216,17 +226,26 @@ def _maybe_refresh_conversation_title(db: Session, conversation_id: str) -> None
         return
 
     assistant_messages = [message for message in messages if message.role == "assistant"]
-    if len(assistant_messages) != 1:
+    first_successful_reply = next(
+        (message for message in assistant_messages if not _is_failed_assistant_reply(message.content)),
+        None,
+    )
+    if first_successful_reply is None:
         return
 
     fallback_title = _fallback_conversation_title(first_user_message.content)
     current_title = conversation.title.strip() if conversation.title else None
-    if current_title and fallback_title and current_title != fallback_title:
+    if (
+        current_title
+        and fallback_title
+        and current_title != fallback_title
+        and not _looks_like_failed_auto_title(current_title)
+    ):
         return
 
     generated_title = _generate_conversation_title(
         first_user_message.content,
-        assistant_messages[0].content,
+        first_successful_reply.content,
     )
     if not generated_title:
         return
@@ -249,6 +268,29 @@ def create_conversation(
     db.add(conversation)
     db.commit()
     db.refresh(conversation)
+    return conversation
+
+
+def bind_conversation_project_context(
+    db: Session,
+    *,
+    conversation_id: str,
+    user_id: str,
+    project_id: str,
+) -> ChatConversation | None:
+    """Bind a previously global conversation to the first project it creates.
+
+    Conversations are immutable once project-scoped so a later turn cannot
+    silently switch its knowledge and authorization boundary.
+    """
+    conversation = get_conversation(db, conversation_id, user_id)
+    if conversation is None:
+        return None
+    if conversation.project_id is None:
+        conversation.project_id = project_id
+        conversation.updated_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(conversation)
     return conversation
 
 

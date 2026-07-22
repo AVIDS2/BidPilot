@@ -384,6 +384,29 @@ class TestChatService:
         test_db.refresh(conv)
         assert conv.title == "自动生成标题"
 
+    def test_failed_first_reply_does_not_become_a_conversation_title(
+        self,
+        test_db,
+        chat_test_user_id,
+        monkeypatch,
+    ):
+        from app.chat.service import create_conversation, save_message
+
+        monkeypatch.setattr(
+            "app.chat.service._generate_conversation_title",
+            lambda *_args, **_kwargs: "项目资料准备",
+        )
+
+        conv = create_conversation(test_db, chat_test_user_id, None)
+        save_message(test_db, conv.id, "user", "帮我创建一个投标项目")
+        save_message(test_db, conv.id, "assistant", "执行失败：数据库暂时不可用")
+        test_db.refresh(conv)
+        assert conv.title == "帮我创建一个投标项目"
+
+        save_message(test_db, conv.id, "assistant", "项目已创建，可以继续上传资料。")
+        test_db.refresh(conv)
+        assert conv.title == "项目资料准备"
+
     def test_manual_conversation_title_is_not_overwritten(self, test_db, chat_test_user_id, monkeypatch):
         """A manual title should win over later auto-generation attempts."""
         from app.chat.service import create_conversation, save_message, rename_conversation

@@ -435,6 +435,44 @@ def test_operator_graph_never_requests_approval_for_an_unnamed_project(
     assert test_db.query(RuntimeAction).filter_by(run_id=run.id).count() == 0
 
 
+def test_operator_graph_does_not_repeat_project_creation_for_a_followup_question(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = _user(default_org_id, default_user_id)
+    run = create_runtime_run(
+        test_db,
+        user,
+        kind="assistant_turn",
+        engine="langgraph_operator",
+        input_json={"message": "接下来应该如何操作"},
+    )
+    graph = build_operator_graph(
+        test_db,
+        user,
+        planner=lambda _context: OperatorPlan(
+            mode="tool",
+            capability_name="create_project",
+            arguments={"name": "不应重复创建的项目"},
+        ),
+        checkpointer=InMemorySaver(),
+    )
+
+    result = graph.invoke(
+        {
+            "user_message": "接下来应该如何操作",
+            "runtime_run_id": run.id,
+            "active_project_id": "project-current",
+            "calls_made": 0,
+        },
+        config={"configurable": {"thread_id": run.id}},
+    )
+
+    assert result["final_message"] == "下一步可以上传招标文件、需求清单或参考资料；我会据此整理要求、证据和待办事项。"
+    assert test_db.query(RuntimeAction).filter_by(run_id=run.id).count() == 0
+
+
 def test_operator_graph_interrupt_resume_executes_one_approved_mutation(
     test_db,
     default_org_id: str,
@@ -472,7 +510,7 @@ def test_operator_graph_interrupt_resume_executes_one_approved_mutation(
 
     resumed = graph.invoke(Command(resume={"decision": "approve"}), config=config)
 
-    assert resumed["final_message"] == f"项目「{project_name}」已创建。"
+    assert resumed["final_message"] == "下一步可以上传招标文件、需求清单或参考资料；我会据此整理要求、证据和待办事项。"
     assert test_db.query(Project).filter_by(name=project_name).count() == 1
     test_db.refresh(run)
     assert run.status == "succeeded"
@@ -855,17 +893,25 @@ def test_operator_engine_resumes_same_checkpoint_for_approved_action(
     monkeypatch.setattr("app.assistant.tools.check_plan_limit", lambda *_args, **_kwargs: None)
     checkpointer = InMemorySaver()
     project_name = f"Endpoint Graph Project {uuid.uuid4().hex[:8]}"
+    captured_contexts: list[OperatorPlanningContext] = []
     monkeypatch.setattr("app.runtime.operator_adapter.get_operator_checkpointer", lambda: checkpointer)
     monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: object())
     monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        "app.runtime.operator_adapter.build_langchain_planner",
-        lambda _llm, **_kwargs: lambda _context: OperatorPlan(
-            mode="tool",
-            capability_name="create_project",
-            arguments={"name": project_name, "scenario_package": "bidpilot"},
-        ),
-    )
+
+    def planner_factory(_llm, **_kwargs):
+        def planner(context: OperatorPlanningContext) -> OperatorPlan:
+            captured_contexts.append(context)
+            if "创建项目" in context.user_message:
+                return OperatorPlan(
+                    mode="tool",
+                    capability_name="create_project",
+                    arguments={"name": project_name, "scenario_package": "bidpilot"},
+                )
+            return OperatorPlan(mode="answer", message="当前项目可以继续上传资料。")
+
+        return planner
+
+    monkeypatch.setattr("app.runtime.operator_adapter.build_langchain_planner", planner_factory)
 
     requested = client.post("/assistant/stream", json={"message": f"创建项目 {project_name}"})
 
@@ -892,9 +938,24 @@ def test_operator_engine_resumes_same_checkpoint_for_approved_action(
     assert approved.status_code == 200
     approved_events = _sse_events(approved.text)
     assert "assistant.tool_succeeded" in [event for event, _payload in approved_events]
-    assert test_db.query(Project).filter_by(name=project_name).count() == 1
+    project = test_db.query(Project).filter_by(name=project_name).one()
     run = test_db.get(RuntimeRun, confirmation["runtime_run_id"])
     assert run is not None
     assert run.status == "succeeded"
     assert list(checkpointer.list({"configurable": {"thread_id": confirmation["conversation_id"]}}))
     assert list(checkpointer.list({"configurable": {"thread_id": run.id}})) == []
+
+    followup = client.post(
+        "/assistant/stream",
+        json={"message": "接下来应该如何操作", "conversation_id": confirmation["conversation_id"]},
+    )
+
+    assert followup.status_code == 200
+    assert captured_contexts[-1].active_project_id == project.id
+    followup_events = _sse_events(followup.text)
+    assert "assistant.confirmation_requested" not in [event for event, _payload in followup_events]
+    assert any(
+        payload.get("content") == "当前项目可以继续上传资料。"
+        for event, payload in followup_events
+        if event == "assistant.message"
+    )

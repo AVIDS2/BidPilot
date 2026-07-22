@@ -21,7 +21,12 @@ from app.assistant.attachments import attachment_planner_context, build_attachme
 from app.assistant.schemas import AssistantConfirmation, AssistantRequest
 from app.assistant.task_state import clear_task_state, pending_input_context, set_task_state
 from app.auth.schemas import CurrentUser
-from app.chat.service import get_conversation_messages, save_message
+from app.chat.service import (
+    bind_conversation_project_context,
+    get_conversation_messages,
+    resolve_conversation_project_context,
+    save_message,
+)
 from app.memory.schemas import MemoryContextRead
 from app.memory.service import memory_context_for_agent
 from app.models import RuntimeAction, RuntimeApproval, RuntimeRun
@@ -83,6 +88,12 @@ async def stream_operator_assistant_response(
 ) -> AsyncGenerator[str, None]:
     """Run one explicit operator graph turn or resume its pending interrupt."""
     conversation_id = _ensure_conversation(db, user, payload)
+    active_project_id = resolve_conversation_project_context(
+        db,
+        user,
+        conversation_id=conversation_id,
+        requested_project_id=payload.project_id,
+    )
     if payload.confirmation is not None and payload.confirmation.approval_id:
         save_message(db, conversation_id, "user", payload.message)
         async for event in _resume_operator_approval(
@@ -126,14 +137,14 @@ async def stream_operator_assistant_response(
 
     conversation_context = _bounded_conversation_context(db, conversation_id)
     pending_input = pending_input_context(db, conversation_id)
-    memory_context = _load_authorized_memory_context(db, user, payload)
+    memory_context = _load_authorized_memory_context(db, user, payload, project_id=active_project_id)
     save_message(db, conversation_id, "user", payload.message)
     run = create_runtime_run(
         db,
         user,
         kind="assistant_turn",
         engine="langgraph_operator",
-        project_id=payload.project_id,
+        project_id=active_project_id,
         conversation_id=conversation_id,
         provider_config_id=payload.provider_config_id,
         model=model,
@@ -165,7 +176,7 @@ async def stream_operator_assistant_response(
         conversation_context=conversation_context,
         memory_context=memory_context,
         available_attachments=attachment_planner_context(payload.attachments),
-        active_project_id=payload.project_id,
+        active_project_id=active_project_id,
         pending_input=pending_input,
     ):
         yield event
@@ -427,6 +438,7 @@ async def _invoke_operator_graph(
         )
         return
 
+    _bind_created_project_to_conversation(db, user, conversation_id, run.id)
     message = str(result.get("final_message") or "")
     if message:
         save_message(db, conversation_id, "assistant", message)
@@ -465,13 +477,15 @@ def _load_authorized_memory_context(
     db: Session,
     user: CurrentUser,
     payload: AssistantRequest,
+    *,
+    project_id: str | None,
 ) -> MemoryContextRead | None:
     """Memory retrieval is additive and cannot make an Operator turn fail."""
     try:
         return memory_context_for_agent(
             db,
             current_user=user,
-            project_id=payload.project_id,
+            project_id=project_id,
             query=payload.message,
             top_k=4,
             max_characters=OPERATOR_PLANNER_MAX_MEMORY_CONTEXT_CHARACTERS,
@@ -479,6 +493,33 @@ def _load_authorized_memory_context(
     except Exception as exc:
         logger.warning("Operator memory context unavailable: %s", type(exc).__name__)
         return None
+
+
+def _bind_created_project_to_conversation(
+    db: Session,
+    user: CurrentUser,
+    conversation_id: str,
+    run_id: str,
+) -> None:
+    """Persist the project created by this turn as its future conversation scope."""
+    action = (
+        db.query(RuntimeAction)
+        .filter(
+            RuntimeAction.run_id == run_id,
+            RuntimeAction.capability_name.in_(("create_project", "create_demo_workspace")),
+            RuntimeAction.status == "succeeded",
+        )
+        .order_by(RuntimeAction.completed_at.desc())
+        .first()
+    )
+    project_id = (action.result_json or {}).get("id") if action is not None else None
+    if isinstance(project_id, str) and project_id:
+        bind_conversation_project_context(
+            db,
+            conversation_id=conversation_id,
+            user_id=user.id,
+            project_id=project_id,
+        )
 
 
 def _sync_pending_input_state(

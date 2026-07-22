@@ -134,11 +134,26 @@ def _extract_project_name_from_request(user_message: str) -> str | None:
     return None
 
 
+def _is_explicit_project_creation_request(user_message: str) -> bool:
+    normalized = user_message.lower()
+    mentions_project = "项目" in user_message or "project" in normalized
+    requests_creation = any(
+        marker in normalized
+        for marker in ("创建", "新建", "建立", "建一个", "开一个", "create", "new project")
+    )
+    return mentions_project and requests_creation
+
+
+def _project_next_step_message() -> str:
+    return "下一步可以上传招标文件、需求清单或参考资料；我会据此整理要求、证据和待办事项。"
+
+
 def _normalize_plan_arguments(
     plan: OperatorPlan,
     *,
     user_message: str,
     pending_input: dict[str, Any] | None,
+    active_project_id: str | None,
 ) -> OperatorPlan:
     """Bind explicit request values and stop incomplete mutations before approval."""
     if plan.mode != "tool" or not plan.capability_name:
@@ -146,6 +161,8 @@ def _normalize_plan_arguments(
 
     arguments = dict(plan.arguments)
     if plan.capability_name == "create_project":
+        if active_project_id and not _is_explicit_project_creation_request(user_message):
+            return OperatorPlan(mode="answer", message=_project_next_step_message())
         explicit_name = _extract_project_name_from_request(user_message)
         pending_name = bool(
             pending_input
@@ -319,6 +336,8 @@ def build_langchain_planner(
         "涉及创建、起草、导出、重试或删除时仍选择对应能力，系统会在服务端执行审批。\n"
         "创建项目时，必须将用户明确提供的项目名称写入 arguments.name；若名称不明确，"
         "返回 needs_input，capability_name=create_project，missing_fields=[name]，绝不能创建空参数项目。\n"
+        "若 active_project_id 已存在，表示当前会话已经有项目上下文；用户询问下一步、如何使用或继续时，"
+        "应围绕当前项目回答，除非当前用户消息明确要求创建一个新的项目，否则禁止再次选择 create_project。\n"
         "如果本轮有可入库附件：用户明确要求上传、加入项目、建立资料包或创建项目并处理附件时，"
         "应使用 attach_uploaded_documents。若需要先创建项目，创建后继续规划并使用上一步返回的项目 ID。\n"
         "若提供了当前活动项目 ID，后续项目范围内操作必须优先使用它；不要猜测或编造项目 ID。\n"
@@ -436,6 +455,7 @@ def build_operator_graph(
             plan,
             user_message=state.get("user_message", ""),
             pending_input=state.get("pending_input") or None,
+            active_project_id=state.get("active_project_id"),
         )
         if plan.mode == "tool" and calls_made >= max_capability_calls:
             plan = OperatorPlan(
@@ -518,7 +538,17 @@ def build_operator_graph(
             "last_result": {"summary": result.summary, "payload": result.payload},
             "active_project_id": active_project_id,
             "continue_planning": continue_planning,
-            **({} if continue_planning else {"final_message": result.summary}),
+            **(
+                {}
+                if continue_planning
+                else {
+                    "final_message": (
+                        _project_next_step_message()
+                        if plan.capability_name in {"create_project", "create_demo_workspace"}
+                        else result.summary
+                    )
+                }
+            ),
         }
 
     def finalize_node(state: OperatorState) -> dict[str, Any]:
