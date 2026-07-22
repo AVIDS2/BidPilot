@@ -6,7 +6,7 @@
     },
     "createProject": {
       "title": "Create Your First Project",
-      "description": "A project holds your source documents, extracted requirements, and generated drafts. You can create one from the Projects page."
+      "description": "A project holds your source documents, extracted requirements, and generated drafts. Start with your own tender package or inspect a transparent sample workspace."
     },
     "allSet": {
       "title": "You're All Set",
@@ -15,6 +15,10 @@
   },
   "buttons": {
     "next": "Next",
-    "done": "Done"
-  }
+    "done": "Done",
+    "tryDemo": "Explore demo workspace",
+    "startOwn": "Use my own documents"
+  },
+  "demoCreated": "Demo workspace is ready.",
+  "demoCreateFailed": "Unable to create the demo workspace. Please try again."
 }

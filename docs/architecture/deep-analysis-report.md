@@ -74,7 +74,7 @@
 | **Agent框架** | LangGraph 0.4+ | 多Agent工作流编排 |
 | **认证** | JWT + bcrypt + email verification | 用户认证和授权 |
 | **日志** | structlog | 结构化日志 |
-| **速率限制** | slowapi | API速率限制 |
+| **速率限制** | Redis 固定窗口限流器 | 全局 API 与认证入口限流 |
 
 ### 2.2 API 应用结构
 
@@ -583,9 +583,9 @@ cosine_distance(KnowledgeChunk.embedding, query_embedding)
 - Dev User：开发环境下的默认管理员
 
 **速率限制：**
-- slowapi中间件
-- 可配置限制（默认60请求/分钟）
-- 邮箱重发限制（3次/小时）
+- Redis 固定窗口全局 API 限流，生产环境故障关闭
+- 显式可信代理 CIDR 后才接受转发客户端地址
+- 登录、注册、密码重置和邮箱重发使用独立 Redis 预算
 
 ### 7.2 数据安全
 

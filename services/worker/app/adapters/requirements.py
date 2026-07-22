@@ -6,7 +6,7 @@ Falls back to a simple pattern-based extraction when no API key is configured.
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 

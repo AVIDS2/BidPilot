@@ -263,6 +263,7 @@ export function ProviderSettingsPage() {
 
   // Form state
   const [formProviderType, setFormProviderType] = useState<ProviderProtocol>("openai");
+  const [formProviderId, setFormProviderId] = useState<string>("custom-openai");
   const [formLabel, setFormLabel] = useState("");
   const [formApiKey, setFormApiKey] = useState("");
   const [formApiUrl, setFormApiUrl] = useState("");
@@ -339,7 +340,9 @@ export function ProviderSettingsPage() {
     onSuccess: (result) => {
       const models = result.data.models;
       setAvailableModels(models);
-      if (models.length > 0) {
+      if (result.data.discovery_mode !== "supported" && result.data.message) {
+        toast.message(result.data.message);
+      } else if (models.length > 0) {
         toast.success(t("toast.modelsLoaded", { count: models.length }));
       } else {
         toast.message(t("toast.modelsEmpty"));
@@ -378,6 +381,7 @@ export function ProviderSettingsPage() {
 
   function resetForm() {
     setFormProviderType("openai");
+    setFormProviderId("custom-openai");
     setFormLabel("");
     setFormApiKey("");
     setFormApiUrl("");
@@ -394,6 +398,7 @@ export function ProviderSettingsPage() {
 
     setSelectedPresetId(preset.id);
     setFormProviderType(preset.providerType);
+    setFormProviderId(preset.id);
     setFormApiUrl(preset.apiUrl);
     setFormModel(preset.model);
     setAvailableModels([]);
@@ -411,6 +416,7 @@ export function ProviderSettingsPage() {
   function handleEditProvider(provider: ProviderConfig) {
     setEditingProvider(provider);
     setFormProviderType(provider.provider_type);
+    setFormProviderId(provider.provider_id || (provider.provider_type === "anthropic" ? "custom-anthropic" : "custom-openai"));
     setFormLabel(provider.label);
     setFormApiKey("");
     setFormApiUrl(provider.api_url ?? "");
@@ -454,6 +460,7 @@ export function ProviderSettingsPage() {
 
     const payload: ProviderConfigCreate = {
       provider_type: formProviderType,
+      provider_id: formProviderId,
       label: formLabel.trim(),
       api_key: formApiKey.trim(),
       api_url: formApiUrl.trim() || undefined,
@@ -484,6 +491,7 @@ export function ProviderSettingsPage() {
     }
     listModelsMut.mutate({
       provider_type: formProviderType,
+      provider_id: formProviderId,
       api_key: formApiKey.trim(),
       api_url: formApiUrl.trim() || undefined,
     });
@@ -753,6 +761,8 @@ export function ProviderSettingsPage() {
                 onValueChange={(v: string | null) => {
                   if (!v) return;
                   setFormProviderType(v as ProviderProtocol);
+                  setFormProviderId(v === "anthropic" ? "custom-anthropic" : "custom-openai");
+                  setSelectedPresetId(null);
                   if (!editingProvider) {
                     setFormModel(DEFAULT_MODELS[v as ProviderProtocol]);
                   }

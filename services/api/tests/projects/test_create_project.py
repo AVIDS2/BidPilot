@@ -1,4 +1,3 @@
-import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -76,3 +75,42 @@ def test_create_project(client) -> None:
     data = response.json()
     assert data["name"] == "Acme Bid"
     assert data["scenario_package"] == "bidpilot"
+
+
+def test_create_demo_project_is_idempotent_and_traceable(client) -> None:
+    first = client.post("/projects/demo")
+    assert first.status_code == 201
+    project = first.json()
+    assert project["name"].startswith("演示 ·")
+
+    second = client.post("/projects/demo")
+    assert second.status_code == 200
+    assert second.json()["id"] == project["id"]
+
+    bundles = client.get(f"/bundles?project_id={project['id']}")
+    assert bundles.status_code == 200
+    assert len(bundles.json()) == 1
+    assert bundles.json()[0]["source_type"] == "builtin_demo"
+    assert bundles.json()[0]["ingest_status"] == "ingested"
+
+    documents = client.get(f"/documents?bundle_id={bundles.json()[0]['id']}")
+    assert documents.status_code == 200
+    assert documents.json()["total"] == 3
+    document = documents.json()["items"][0]
+    download = client.get(f"/documents/{document['id']}/download")
+    assert download.status_code == 200
+    assert b"\xe6" in download.content
+
+    requirements = client.get(f"/requirements?project_id={project['id']}")
+    assert requirements.status_code == 200
+    assert len(requirements.json()) == 6
+    assert all(item["source_document_id"] for item in requirements.json())
+
+    evidence = client.get(f"/evidence?project_id={project['id']}")
+    assert evidence.status_code == 200
+    assert len(evidence.json()) == 3
+
+    events = client.get(f"/audit/events?project_id={project['id']}")
+    assert events.status_code == 200
+    seeded = next(event for event in events.json() if event["event_type"] == "project.demo_seeded")
+    assert seeded["payload"]["source_kind"] == "builtin_demo"

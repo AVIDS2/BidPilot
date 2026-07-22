@@ -3,13 +3,16 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.entitlements.service import resolve_org_entitlements
 from app.email.service import send_password_reset_email, send_email_verification_email, send_account_deletion_confirmation_email
-from app.models import Subscription, User
+from app.models import User
+from app.security.client_identity import get_client_identity_fingerprint
+from app.security.redis_rate_limiter import RateLimitExceeded, RateLimiterUnavailable
 from app.security.turnstile import verify_turnstile_or_raise
 
 import math
 from .schemas import CurrentUser, TokenResponse, UserLogin, UserRegister, UserUpdate, SubscriptionRead, SubscriptionUpdate, PasswordResetRequest, PasswordResetConfirm, UsersPaginatedResponse
-from .service import get_current_user_from_token, get_dev_user, login_command, register_user_command, update_user_command, update_subscription_command, _get_user_plan, _user_to_current, require_admin, create_password_reset_token, confirm_password_reset, create_email_verification_token, verify_email_command, refresh_token_command, login_rate_limiter, resend_rate_limiter, admin_verify_user_command
+from .service import AUTH_REQUIRED, get_current_user_from_token, get_dev_user, login_command, register_user_command, update_user_command, update_subscription_command, _user_to_current, require_admin, create_password_reset_token, confirm_password_reset, create_email_verification_token, verify_email_command, refresh_token_command, login_rate_limiter, resend_rate_limiter, registration_rate_limiter, password_reset_rate_limiter, admin_verify_user_command, delete_user_account_command
 from app.billing.service import get_billing_summary
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -19,12 +22,23 @@ _bearer = HTTPBearer(auto_error=False)
 @router.post("/register", response_model=CurrentUser, status_code=status.HTTP_201_CREATED)
 def register(payload: UserRegister, request: Request, db: Session = Depends(get_db)) -> CurrentUser:
     try:
+        registration_rate_limiter.check(get_client_identity_fingerprint(request))
         verify_turnstile_or_raise(payload.turnstile_token, request)
         user = register_user_command(db, payload)
         # Send verification email (async-safe: logs to console if SMTP not configured)
         token = create_email_verification_token(db, user.id)
         send_email_verification_email(payload.email, token)
         return user
+    except RateLimiterUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Registration protection is temporarily unavailable.",
+        )
+    except RateLimitExceeded:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many registration attempts. Please try again later.",
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -37,6 +51,11 @@ def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)) -
         result = login_command(db, payload.email, payload.password)
         login_rate_limiter.reset(payload.email)
         return result
+    except RateLimiterUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication protection is temporarily unavailable.",
+        )
     except ValueError as e:
         msg = str(e)
         if "disabled" in msg.lower():
@@ -62,6 +81,8 @@ def current_user(
     db: Session = Depends(get_db),
 ) -> CurrentUser:
     if credentials is None:
+        if AUTH_REQUIRED:
+            raise HTTPException(status_code=401, detail="Authentication required")
         return get_dev_user()
     user = get_current_user_from_token(db, credentials.credentials)
     if user is None:
@@ -92,14 +113,22 @@ def get_subscription(
     db: Session = Depends(get_db),
 ) -> SubscriptionRead:
     if credentials is None:
+        if AUTH_REQUIRED:
+            raise HTTPException(status_code=401, detail="Authentication required")
         return SubscriptionRead(plan="professional", status="active", stripe_customer_id=None)
     user = get_current_user_from_token(db, credentials.credentials)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
-    sub = db.query(Subscription).filter_by(user_id=user.id).first()
-    if sub is None:
-        return SubscriptionRead(plan="starter", status="active", stripe_customer_id=None)
-    return SubscriptionRead(plan=sub.plan, status=sub.status, stripe_customer_id=sub.stripe_customer_id)
+    entitlement = resolve_org_entitlements(
+        db,
+        org_id=user.org_id,
+        actor_user_id=user.id,
+    )
+    return SubscriptionRead(
+        plan=entitlement.plan,
+        status=entitlement.subscription_status,
+        stripe_customer_id=entitlement.stripe_customer_id,
+    )
 
 
 @router.get("/billing-summary")
@@ -112,7 +141,11 @@ def get_billing_summary_for_current_user(
     user = get_current_user_from_token(db, credentials.credentials)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
-    summary = get_billing_summary(db, user.id)
+    summary = get_billing_summary(
+        db,
+        org_id=user.org_id,
+        actor_user_id=user.id,
+    )
     return {"data": summary.model_dump()}
 
 
@@ -138,11 +171,11 @@ def list_users(
     admin: CurrentUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> UsersPaginatedResponse:
-    org_id = admin.org_id or "default"
-    total = db.query(User).filter(User.org_id == org_id).count()
+    # This is the platform-operator directory. Workspace-scoped collaboration
+    # belongs to /organizations/current/members and must not hide standalone users.
+    total = db.query(User).count()
     users = (
         db.query(User)
-        .filter(User.org_id == org_id)
         .order_by(User.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
@@ -211,11 +244,23 @@ def request_password_reset(payload: PasswordResetRequest, request: Request, db: 
     If the email exists, a reset link is sent. If SMTP is not configured,
     the token is logged to console for development.
     """
-    verify_turnstile_or_raise(payload.turnstile_token, request)
-    token = create_password_reset_token(db, payload.email)
-    if token is not None:
-        send_password_reset_email(payload.email, token)
-    return {"message": "If an account exists for that email, a reset link has been sent."}
+    try:
+        password_reset_rate_limiter.check(get_client_identity_fingerprint(request))
+        verify_turnstile_or_raise(payload.turnstile_token, request)
+        token = create_password_reset_token(db, payload.email)
+        if token is not None:
+            send_password_reset_email(payload.email, token)
+        return {"message": "If an account exists for that email, a reset link has been sent."}
+    except RateLimiterUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset protection is temporarily unavailable.",
+        )
+    except RateLimitExceeded:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many password reset attempts. Please try again later.",
+        )
 
 
 @router.post("/password-reset/confirm")
@@ -265,6 +310,11 @@ def resend_verification(
     try:
         verify_turnstile_or_raise(turnstile_token or None, request)
         resend_rate_limiter.check(target_email)
+    except RateLimiterUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication protection is temporarily unavailable.",
+        )
     except ValueError as e:
         raise HTTPException(status_code=429, detail=str(e))
 
@@ -312,18 +362,16 @@ def delete_current_user(
         raise HTTPException(status_code=401, detail="Invalid token")
     # Prevent admins from deleting themselves if they're the only admin
     if user.role == "admin":
-        admin_count = db.query(User).filter(User.role == "admin", User.disabled == False).count()
+        admin_count = db.query(User).filter(User.role == "admin", User.disabled.is_(False)).count()
         if admin_count <= 1:
             raise HTTPException(status_code=400, detail="Cannot delete the last admin account. Promote another user first.")
     orm_user = db.get(User, user.id)
     if orm_user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    email = orm_user.email
-    # Clean up refresh tokens before deleting user (FK constraint)
-    from app.models import RefreshToken
-    db.query(RefreshToken).filter(RefreshToken.user_id == orm_user.id).delete()
-    db.delete(orm_user)
-    db.commit()
+    try:
+        email = delete_user_account_command(db, orm_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     send_account_deletion_confirmation_email(email)
     return {"message": "Account deleted successfully."}
 
@@ -342,8 +390,7 @@ def export_user_data(
 
     from app.models import (
         Project, Bundle, SourceDocument, Deliverable, DeliverableSection,
-        RequirementItem, Evidence, ExecutionRun, ReviewComment, ReviewThread,
-        AuditEvent, SectionVersion,
+        RequirementItem, Evidence, ExecutionRun, ReviewComment, AuditEvent, SectionVersion,
     )
 
     # Find all projects this user has interacted with

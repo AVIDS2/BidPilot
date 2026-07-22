@@ -46,7 +46,7 @@ def render_markdown_to_docx(sections: list[dict]) -> bytes:
     Returns the DOCX file as bytes.
     """
     from docx import Document
-    from docx.shared import Pt, RGBColor
+    from docx.shared import Pt
 
     doc = Document()
 

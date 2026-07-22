@@ -3,14 +3,63 @@
 import os
 import tempfile
 
-from app.adapters.parser import _extract_text, _split_into_chunks, ParsedChunk, store_chunks
+import pytest
+
+from app.adapters.parser import _extract_text, _split_into_chunks
 from app.adapters import embedding as embedding_adapter
 from app.adapters import llm as llm_adapter
+from app.adapters import anthropic_llm as anthropic_llm_adapter
 from app.adapters import requirements as requirements_adapter
 from app.adapters.embedding import generate_embedding, generate_embeddings_batch
+from contracts import EmbeddingOutcomeStatus
 from app.adapters.llm import draft_section
+from app.adapters.provider_errors import ProviderInvocationError, provider_error_for_status
 from app.adapters.requirements import extract_requirements
 from app.adapters.export import render_markdown_to_docx, _parse_markdown_to_blocks
+
+
+_EMBEDDING_ENV_NAMES = (
+    "EMBEDDING_API_KEY",
+    "EMBEDDING_API_URL",
+    "EMBEDDING_MODEL",
+    "EMBEDDING_DIMENSIONS",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_BASE_URL",
+    "OPENROUTER_EMBEDDING_MODEL",
+    "OPENROUTER_EMBEDDING_DIMENSIONS",
+    "OPENAI_API_KEY",
+    "DOCPILOT_PROVIDER_OPENAI_API_KEY",
+    "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
+    "DOCPILOT_PROVIDER_DOMESTIC_BASE_URL",
+    "DOCPILOT_EMBEDDING_MODEL_TEXT",
+    "ALIYUN_API_KEY",
+    "DASHSCOPE_API_KEY",
+)
+
+
+def _clear_embedding_env(monkeypatch) -> None:
+    for name in _EMBEDDING_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+
+
+_CHAT_ENV_NAMES = (
+    "LLM_API_KEY",
+    "LLM_API_URL",
+    "LLM_MODEL",
+    "OPENAI_API_KEY",
+    "DOCPILOT_PROVIDER_OPENAI_API_KEY",
+    "DOCPILOT_PROVIDER_OPENAI_BASE_URL",
+    "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
+    "DOCPILOT_PROVIDER_DOMESTIC_BASE_URL",
+    "DOCPILOT_LLM_MODEL_PRIMARY",
+    "ALIYUN_API_KEY",
+    "DASHSCOPE_API_KEY",
+)
+
+
+def _clear_chat_env(monkeypatch) -> None:
+    for name in _CHAT_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
 
 
 class TestParserChunking:
@@ -72,37 +121,20 @@ class TestParserChunking:
 
 
 class TestEmbeddingAdapter:
-    def test_stub_embedding_without_api_key(self) -> None:
-        # Ensure no API key is set
-        os.environ.pop("EMBEDDING_API_KEY", None)
-        os.environ.pop("OPENROUTER_API_KEY", None)
-        os.environ.pop("OPENROUTER_BASE_URL", None)
-        os.environ.pop("OPENROUTER_EMBEDDING_MODEL", None)
-        os.environ.pop("OPENROUTER_EMBEDDING_DIMENSIONS", None)
-        os.environ.pop("OPENAI_API_KEY", None)
-        os.environ.pop("DOCPILOT_PROVIDER_OPENAI_API_KEY", None)
-        os.environ.pop("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", None)
-        os.environ.pop("ALIYUN_API_KEY", None)
-        os.environ.pop("DASHSCOPE_API_KEY", None)
+    def test_embedding_without_api_key_is_explicitly_not_configured(self, monkeypatch) -> None:
+        _clear_embedding_env(monkeypatch)
         result = generate_embedding("test text")
-        assert result.model == "stub"
-        assert len(result.embedding) == 1536
-        assert all(v == 0.0 for v in result.embedding)
+        assert result.model == "not_configured"
+        assert result.status is EmbeddingOutcomeStatus.NOT_CONFIGURED
+        assert result.embedding is None
+        assert result.error_code == "embedding_not_configured"
 
-    def test_batch_stub_without_api_key(self) -> None:
-        os.environ.pop("EMBEDDING_API_KEY", None)
-        os.environ.pop("OPENROUTER_API_KEY", None)
-        os.environ.pop("OPENROUTER_BASE_URL", None)
-        os.environ.pop("OPENROUTER_EMBEDDING_MODEL", None)
-        os.environ.pop("OPENROUTER_EMBEDDING_DIMENSIONS", None)
-        os.environ.pop("OPENAI_API_KEY", None)
-        os.environ.pop("DOCPILOT_PROVIDER_OPENAI_API_KEY", None)
-        os.environ.pop("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", None)
-        os.environ.pop("ALIYUN_API_KEY", None)
-        os.environ.pop("DASHSCOPE_API_KEY", None)
+    def test_batch_without_api_key_is_not_configured_without_zero_vectors(self, monkeypatch) -> None:
+        _clear_embedding_env(monkeypatch)
         results = generate_embeddings_batch(["text1", "text2"])
         assert len(results) == 2
-        assert all(r.model == "stub" for r in results)
+        assert all(result.status is EmbeddingOutcomeStatus.NOT_CONFIGURED for result in results)
+        assert all(result.embedding is None for result in results)
 
     def test_domestic_embedding_env_uses_dashscope_defaults(self, monkeypatch) -> None:
         monkeypatch.delenv("EMBEDDING_API_KEY", raising=False)
@@ -185,13 +217,51 @@ class TestEmbeddingAdapter:
         result = generate_embedding("hello")
 
         assert result.model == "qwen/qwen3-embedding-8b"
+        assert result.status is EmbeddingOutcomeStatus.SUCCESS
         assert len(result.embedding) == 1536
+        assert result.profile_id == "openrouter:qwen/qwen3-embedding-8b:1536:bidpilot-lexical-v1"
+        assert result.token_count == 3
+        assert result.usage_reported is True
         assert captured["url"] == "https://openrouter.ai/api/v1/embeddings"
         assert captured["json"] == {
             "input": "hello",
             "model": "qwen/qwen3-embedding-8b",
             "dimensions": 1536,
         }
+
+    def test_timeout_returns_retryable_outcome_without_vector(self, monkeypatch) -> None:
+        _clear_embedding_env(monkeypatch)
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+
+        def raise_timeout(*_args, **_kwargs):
+            raise embedding_adapter.httpx.TimeoutException("simulated timeout")
+
+        monkeypatch.setattr(embedding_adapter.httpx, "post", raise_timeout)
+
+        result = generate_embedding("hello")
+
+        assert result.status is EmbeddingOutcomeStatus.TRANSIENT_FAILURE
+        assert result.embedding is None
+        assert result.error_code == "provider_timeout"
+
+    def test_dimension_mismatch_returns_explicit_outcome_without_vector(self, monkeypatch) -> None:
+        _clear_embedding_env(monkeypatch)
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+
+        class Response:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return {"data": [{"embedding": [0.1] * 1024}]}
+
+        monkeypatch.setattr(embedding_adapter.httpx, "post", lambda *_args, **_kwargs: Response())
+
+        result = generate_embedding("hello")
+
+        assert result.status is EmbeddingOutcomeStatus.DIMENSION_MISMATCH
+        assert result.embedding is None
+        assert result.error_code == "embedding_dimension_mismatch"
 
 
 class TestLLMAdapter:
@@ -222,6 +292,56 @@ class TestLLMAdapter:
         assert llm_adapter._api_key() == "test-dashscope-key"
         assert llm_adapter._api_url() == "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
         assert llm_adapter._api_model() == "qwen3.5-flash"
+
+    def test_timeout_raises_a_retryable_provider_error(self, monkeypatch) -> None:
+        _clear_chat_env(monkeypatch)
+        monkeypatch.setenv("LLM_API_KEY", "test-provider-key")
+
+        def raise_timeout(*_args, **_kwargs):
+            raise llm_adapter.httpx.TimeoutException("simulated timeout")
+
+        monkeypatch.setattr(llm_adapter.httpx, "post", raise_timeout)
+
+        with pytest.raises(ProviderInvocationError) as error:
+            draft_section("technical-approach", ["evidence"], "project-1")
+
+        assert error.value.error_code == "provider_timeout"
+        assert error.value.retryable is True
+
+    def test_production_missing_provider_never_returns_stub(self, monkeypatch) -> None:
+        _clear_chat_env(monkeypatch)
+        monkeypatch.setenv("DOCPILOT_ENV", "production")
+        monkeypatch.delenv("DOCPILOT_ALLOW_STUB_LLM", raising=False)
+
+        with pytest.raises(ProviderInvocationError) as error:
+            draft_section("technical-approach", ["evidence"], "project-1")
+
+        assert error.value.error_code == "provider_not_configured"
+        assert error.value.retryable is False
+
+    def test_anthropic_auth_failure_is_not_retryable(self, monkeypatch) -> None:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-provider-key")
+
+        class Response:
+            status_code = 401
+
+        monkeypatch.setattr(anthropic_llm_adapter.httpx, "post", lambda *_args, **_kwargs: Response())
+
+        with pytest.raises(ProviderInvocationError) as error:
+            anthropic_llm_adapter.draft_section("technical-approach", ["evidence"], "project-1")
+
+        assert error.value.error_code == "provider_auth_failed"
+        assert error.value.retryable is False
+
+
+def test_provider_status_classification_is_safe_and_deterministic() -> None:
+    rate_limited = provider_error_for_status(429)
+    invalid = provider_error_for_status(422)
+
+    assert rate_limited.error_code == "provider_rate_limited"
+    assert rate_limited.retryable is True
+    assert invalid.error_code == "provider_request_invalid"
+    assert invalid.retryable is False
 
 
 class TestProviderEnv:

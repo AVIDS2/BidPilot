@@ -121,6 +121,7 @@ export function ReviewTab({
             <Select
               value={selectedSectionId ?? ""}
               onValueChange={(value) => {
+                if (typeof value !== "string" || !value) return;
                 onSelectSection(value);
                 onSelectThread(null);
               }}

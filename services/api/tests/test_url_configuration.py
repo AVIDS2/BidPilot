@@ -1,12 +1,9 @@
-import importlib
 from unittest.mock import patch
 
 
 def test_invitation_email_uses_configured_app_url(monkeypatch):
     monkeypatch.setenv("DOCPILOT_APP_URL", "https://bidpilot.rglens.com")
     from app.email import service
-
-    importlib.reload(service)
 
     sent = []
 
@@ -25,8 +22,6 @@ def test_verification_and_reset_urls_use_configured_app_url(monkeypatch):
     monkeypatch.setenv("DOCPILOT_APP_URL", "https://bidpilot.rglens.com")
     from app.email import service
 
-    importlib.reload(service)
-
     sent = []
 
     def capture(message):
@@ -42,11 +37,10 @@ def test_verification_and_reset_urls_use_configured_app_url(monkeypatch):
 
 
 def test_email_brand_and_from_header_use_bidpilot(monkeypatch):
-    monkeypatch.setenv("DOCPILOT_SMTP_FROM", "2141325767@qq.com")
-    monkeypatch.setenv("DOCPILOT_SMTP_FROM_NAME", "BidPilot")
     from app.email import service
 
-    importlib.reload(service)
+    monkeypatch.setattr(service, "SMTP_FROM", "2141325767@qq.com")
+    monkeypatch.setattr(service, "SMTP_FROM_NAME", "BidPilot")
 
     from_header, envelope_from = service._get_from_addresses()
     assert from_header == "BidPilot <2141325767@qq.com>"
@@ -63,3 +57,20 @@ def test_email_brand_and_from_header_use_bidpilot(monkeypatch):
     assert sent[0].subject == "BidPilot — Verify Your Email"
     assert "Welcome to BidPilot!" in sent[0].body_text
     assert "DocPilot" not in sent[0].body_text
+
+
+def test_smtp_backend_requires_a_complete_credential_set():
+    from app.email import service
+
+    assert service._smtp_is_configured(
+        host="smtp.example.test",
+        user="mailer@example.test",
+        password="",
+        from_address="noreply@example.test",
+    ) is False
+    assert service._smtp_is_configured(
+        host="smtp.example.test",
+        user="mailer@example.test",
+        password="app-password",
+        from_address="noreply@example.test",
+    ) is True

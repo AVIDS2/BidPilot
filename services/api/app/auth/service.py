@@ -1,6 +1,6 @@
 import hashlib
 import os
-import time
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
@@ -8,12 +8,37 @@ import bcrypt
 import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Organization, User, Subscription, Project, RefreshToken
+from app.entitlements.constants import (
+    PLAN_PROJECT_LIMITS,
+    VALID_PLANS,
+    VALID_SUBSCRIPTION_STATUSES,
+)
+from app.entitlements.service import EntitlementAccessDenied, resolve_org_entitlements
+from app.models import (
+    Organization,
+    OrganizationMembership,
+    OrganizationSubscription,
+    Project,
+    ProjectMember,
+    RefreshToken,
+    Subscription,
+    Team,
+    TeamMember,
+    User,
+)
+from app.organizations.service import (
+    create_personal_organization_command,
+    create_organization_membership_command,
+    has_active_org_owner,
+)
+from app.security.redis_rate_limiter import create_rate_limiter
+from app.usage.service import get_user_plan
 
-from .repository import create_user, get_user_by_email, get_user_by_id
+from .repository import get_user_by_email, get_user_by_id
 from .schemas import CurrentUser, TokenResponse, UserRegister, UserUpdate
 
 JWT_SECRET = os.environ.get("DOCPILOT_JWT_SECRET", "dev-secret-change-in-production-32bytes!")
@@ -23,11 +48,7 @@ REFRESH_EXPIRES_DAYS = 7
 RESET_EXPIRES_MINUTES = 30
 AUTH_REQUIRED = os.environ.get("DOCPILOT_AUTH_REQUIRED", "false").lower() == "true"
 
-PLAN_LIMITS: dict[str, int] = {
-    "starter": 3,
-    "professional": -1,
-    "enterprise": -1,
-}
+PLAN_LIMITS = PLAN_PROJECT_LIMITS
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -74,8 +95,7 @@ def _create_refresh_token(user_id: str) -> str:
 
 
 def _get_user_plan(db: Session, user: User) -> str:
-    sub = db.query(Subscription).filter_by(user_id=user.id).first()
-    return sub.plan if sub else "starter"
+    return get_user_plan(db, user.id)
 
 
 def _get_org_slug(db: Session, org_id: str) -> str:
@@ -98,37 +118,73 @@ def _user_to_current(db: Session, user: User, plan: str | None = None) -> Curren
     )
 
 
-def check_plan_limit(db: Session, user_id: str, resource: str = "projects", delta: int = 0, plan: str | None = None) -> None:
-    """Raise ValueError if the user's plan limit would be exceeded.
+def check_plan_limit(
+    db: Session,
+    user_id: str,
+    resource: str = "projects",
+    delta: int = 0,
+    plan: str | None = None,
+    *,
+    org_id: str | None = None,
+) -> None:
+    """Raise ValueError if the active workspace limit would be exceeded.
 
-    `delta` is the number of new items being added (default 0 = just check current count).
-    `plan` overrides the plan lookup (useful when already known from auth context).
+    ``plan`` remains accepted for old internal callers but is intentionally
+    ignored: browser or cached user state must not determine paid capability.
     """
-    if plan is None:
-        sub = db.query(Subscription).filter_by(user_id=user_id).first()
-        plan = sub.plan if sub else "starter"
-    limit = PLAN_LIMITS.get(plan, PLAN_LIMITS["starter"])
+    # The anonymous local-development fallback is server generated and never
+    # available when production authentication is enabled. Keep it unmetered
+    # so local demos and tests do not depend on persisted billing fixtures.
+    if not AUTH_REQUIRED and user_id == "dev-user":
+        return
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise ValueError("User not found")
+    active_org_id = org_id or user.org_id
+    try:
+        entitlement = resolve_org_entitlements(
+            db,
+            org_id=active_org_id,
+            actor_user_id=user_id,
+        )
+    except EntitlementAccessDenied as exc:
+        raise ValueError("Organization access denied") from exc
+    limit = entitlement.project_limit
 
     if limit == -1:
         return  # unlimited
 
     if resource == "projects":
-        user = get_user_by_id(db, user_id)
-        org_id = user.org_id if user else None
-        current_count = db.query(Project).filter_by(status="active", org_id=org_id).count() if org_id else db.query(Project).filter_by(status="active").count()
+        current_count = db.query(Project).filter_by(
+            status="active",
+            org_id=active_org_id,
+        ).count()
     else:
         current_count = 0
 
     if current_count + delta > limit:
-        raise ValueError(f"{plan} plan limit of {limit} {resource} would be exceeded. Upgrade to create more.")
+        raise ValueError(
+            f"{entitlement.plan} plan limit of {limit} {resource} would be exceeded. "
+            "Upgrade to create more."
+        )
 
 
-VALID_PLANS = {"starter", "professional", "enterprise"}
-VALID_SUBSCRIPTION_STATUSES = {"active", "trialing", "past_due", "canceled", "unpaid"}
+def update_subscription_command(
+    db: Session,
+    user_id: str,
+    new_plan: str,
+    status: str = "active",
+    *,
+    stripe_customer_id: str | None = None,
+    stripe_subscription_id: str | None = None,
+    stripe_state_event_created_at: int | None = None,
+    commit: bool = True,
+) -> Subscription:
+    """Update a local subscription and optionally attach Stripe identifiers.
 
-
-def update_subscription_command(db: Session, user_id: str, new_plan: str, status: str = "active") -> Subscription:
-    """Update or create a subscription for the given user. Admin-only in router."""
+    Webhook processing passes ``commit=False`` so the subscription mutation and
+    its idempotency receipt are committed atomically.
+    """
     if new_plan not in VALID_PLANS:
         raise ValueError(f"Invalid plan: {new_plan}. Must be one of {VALID_PLANS}")
     if status not in VALID_SUBSCRIPTION_STATUSES:
@@ -140,8 +196,18 @@ def update_subscription_command(db: Session, user_id: str, new_plan: str, status
     else:
         sub.plan = new_plan
         sub.status = status
-    db.commit()
-    db.refresh(sub)
+    if stripe_customer_id:
+        sub.stripe_customer_id = stripe_customer_id
+    if stripe_subscription_id:
+        sub.stripe_subscription_id = stripe_subscription_id
+    if stripe_state_event_created_at is not None:
+        sub.stripe_state_event_created_at = stripe_state_event_created_at
+
+    if commit:
+        db.commit()
+        db.refresh(sub)
+    else:
+        db.flush()
     return sub
 
 
@@ -165,6 +231,10 @@ def register_user_command(db: Session, payload: UserRegister) -> CurrentUser:
     _validate_password_strength(payload.password)
 
     org_id: str | None = None
+    membership_role = "member"
+    invitation = None
+    created_organization = False
+    user_id = str(uuid.uuid4())
 
     # 1. Invitation token takes highest priority
     if payload.invitation_token:
@@ -175,8 +245,9 @@ def register_user_command(db: Session, payload: UserRegister) -> CurrentUser:
         if invitation is not None:
             from datetime import UTC, datetime
             if invitation.expires_at > datetime.now(UTC).replace(tzinfo=None):
+                if invitation.email.casefold() != payload.email.strip().casefold():
+                    raise ValueError("Invitation email does not match registration email")
                 org_id = invitation.org_id
-                invitation.status = "accepted"
             else:
                 invitation.status = "expired"
         if org_id is None:
@@ -192,22 +263,50 @@ def register_user_command(db: Session, payload: UserRegister) -> CurrentUser:
         db.add(org)
         db.flush()
         org_id = org.id
+        membership_role = "owner"
+        created_organization = True
 
-    # 3. Fall back to default org
+    # 3. Standalone accounts get an isolated personal workspace. The legacy
+    # default workspace remains only for existing data and bootstrap paths.
     if org_id is None:
-        org = _get_or_create_default_org(db)
+        org = create_personal_organization_command(db, user_id=user_id, commit=False)
         org_id = org.id
+        membership_role = "owner"
+        created_organization = True
 
     user = User(
+        id=user_id,
         email=payload.email,
         display_name=payload.display_name,
         password_hash=_hash_password(payload.password),
         org_id=org_id,
     )
-    user = create_user(db, user)
+    db.add(user)
+    db.flush()
+    create_organization_membership_command(
+        db,
+        org_id=org_id,
+        user_id=user.id,
+        role=membership_role,
+        commit=False,
+    )
+    if created_organization:
+        from app.entitlements.service import upsert_organization_subscription_command
+
+        upsert_organization_subscription_command(
+            db,
+            org_id=org_id,
+            billing_owner_user_id=user.id,
+            plan="starter",
+            seat_limit=1,
+            commit=False,
+        )
+    if invitation is not None:
+        invitation.status = "accepted"
     sub = Subscription(user_id=user.id, plan="starter")
     db.add(sub)
     db.commit()
+    db.refresh(user)
     return _user_to_current(db, user, plan="starter")
 
 
@@ -254,6 +353,142 @@ def update_user_command(db: Session, user_id: str, payload: UserUpdate) -> Curre
     db.commit()
     db.refresh(user)
     return _user_to_current(db, user)
+
+
+def delete_user_account_command(db: Session, user_id: str) -> str:
+    """Delete an account only when it cannot orphan organization assets.
+
+    Team ownership and billing authority must be transferred explicitly. A
+    standalone account can be removed with its empty personal workspace; any
+    retained operational records are converted into a clear conflict instead
+    of leaking a database foreign-key failure to the client.
+    """
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise ValueError("User not found")
+
+    email = user.email
+    try:
+        team_owner_membership = (
+            db.query(OrganizationMembership)
+            .join(Organization)
+            .filter(
+                OrganizationMembership.user_id == user.id,
+                OrganizationMembership.status == "active",
+                OrganizationMembership.role == "owner",
+                Organization.workspace_kind == "team",
+            )
+            .first()
+        )
+        if team_owner_membership is not None:
+            raise ValueError(
+                "Transfer ownership of every team workspace before deleting this account"
+            )
+
+        team_billing_subscription = (
+            db.query(OrganizationSubscription)
+            .join(Organization)
+            .filter(
+                OrganizationSubscription.billing_owner_user_id == user.id,
+                Organization.workspace_kind == "team",
+            )
+            .first()
+        )
+        if team_billing_subscription is not None:
+            raise ValueError(
+                "Transfer team billing responsibility before deleting this account"
+            )
+
+        personal_workspaces = list(
+            db.query(Organization)
+            .join(OrganizationMembership)
+            .filter(
+                OrganizationMembership.user_id == user.id,
+                OrganizationMembership.status == "active",
+                Organization.workspace_kind == "personal",
+            )
+            .all()
+        )
+        for workspace in personal_workspaces:
+            active_member_count = (
+                db.query(OrganizationMembership)
+                .filter(
+                    OrganizationMembership.org_id == workspace.id,
+                    OrganizationMembership.status == "active",
+                )
+                .count()
+            )
+            if active_member_count != 1:
+                raise ValueError(
+                    "Remove or transfer members from the personal workspace before deleting this account"
+                )
+            if db.query(Project.id).filter(Project.org_id == workspace.id).first() is not None:
+                raise ValueError(
+                    "Delete or transfer personal workspace projects before deleting this account"
+                )
+            if db.query(Team.id).filter(Team.org_id == workspace.id).first() is not None:
+                raise ValueError(
+                    "Delete or transfer personal workspace teams before deleting this account"
+                )
+
+            subscription = (
+                db.query(OrganizationSubscription)
+                .filter(OrganizationSubscription.org_id == workspace.id)
+                .first()
+            )
+            if subscription is not None and (
+                subscription.plan != "starter" or subscription.stripe_subscription_id
+            ):
+                raise ValueError(
+                    "Cancel the personal workspace subscription before deleting this account"
+                )
+
+        owned_project_memberships = list(
+            db.query(ProjectMember)
+            .filter(
+                ProjectMember.user_id == user.id,
+                ProjectMember.role == "owner",
+            )
+            .all()
+        )
+        for membership in owned_project_memberships:
+            owner_count = (
+                db.query(ProjectMember)
+                .filter(
+                    ProjectMember.project_id == membership.project_id,
+                    ProjectMember.role == "owner",
+                )
+                .count()
+            )
+            if owner_count <= 1:
+                raise ValueError(
+                    "Transfer ownership of every project before deleting this account"
+                )
+
+        personal_workspace_ids = [workspace.id for workspace in personal_workspaces]
+        db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+        db.query(TeamMember).filter(TeamMember.user_id == user.id).delete()
+        db.query(ProjectMember).filter(ProjectMember.user_id == user.id).delete()
+        if personal_workspace_ids:
+            db.query(OrganizationSubscription).filter(
+                OrganizationSubscription.org_id.in_(personal_workspace_ids)
+            ).delete(synchronize_session=False)
+
+        db.delete(user)
+        db.flush()
+        for workspace in personal_workspaces:
+            db.delete(workspace)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError(
+            "This account has retained operational records. Export data and contact support for assisted deletion."
+        ) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    return email
 
 
 def get_current_user_from_token(db: Session, token: str) -> CurrentUser | None:
@@ -472,10 +707,19 @@ def bootstrap_admin_command(
             email_verified=True,
             org_id=org.id,
         )
-        user = create_user(db, user)
+        db.add(user)
+        db.flush()
+        create_organization_membership_command(
+            db,
+            org_id=org.id,
+            user_id=user.id,
+            role="owner" if not has_active_org_owner(db, org.id) else "admin",
+            commit=False,
+        )
         sub = Subscription(user_id=user.id, plan="professional")
         db.add(sub)
         db.commit()
+        db.refresh(user)
         return BootstrapAdminResult(
             user=_user_to_current(db, user, plan="professional"),
             status="created",
@@ -499,58 +743,40 @@ def bootstrap_admin_command(
     )
 
 
-class LoginRateLimiter:
-    """Simple in-memory rate limiter for login attempts per email."""
-
-    def __init__(self, max_attempts: int = 5, window_seconds: int = 300) -> None:
-        self.max_attempts = max_attempts
-        self.window_seconds = window_seconds
-        self._attempts: dict[str, list[float]] = {}
-
-    def check(self, email: str) -> None:
-        """Raise ValueError if too many recent login attempts for this email."""
-        now = time.monotonic()
-        cutoff = now - self.window_seconds
-        self._attempts[email] = [t for t in self._attempts.get(email, []) if t > cutoff]
-        if len(self._attempts[email]) >= self.max_attempts:
-            raise ValueError(f"Too many login attempts. Please try again in {self.window_seconds // 60} minutes.")
-        self._attempts[email].append(now)
-
-    def reset(self, email: str) -> None:
-        """Clear attempt history for a successful login."""
-        self._attempts.pop(email, None)
-
-
-class ResendRateLimiter:
-    """Rate limiter for email verification resend requests per email."""
-
-    def __init__(self, max_attempts: int = 3, window_seconds: int = 3600) -> None:
-        self.max_attempts = max_attempts
-        self.window_seconds = window_seconds
-        self._attempts: dict[str, list[float]] = {}
-
-    def check(self, email: str) -> None:
-        """Raise ValueError if too many recent resend attempts for this email."""
-        now = time.monotonic()
-        cutoff = now - self.window_seconds
-        self._attempts[email] = [t for t in self._attempts.get(email, []) if t > cutoff]
-        if len(self._attempts[email]) >= self.max_attempts:
-            raise ValueError(f"Too many verification emails sent. Please try again in {self.window_seconds // 60} minutes.")
-        self._attempts[email].append(now)
-
-
 _redis_url = os.environ.get("DOCPILOT_REDIS_URL")
-if _redis_url:
-    try:
-        from app.security.redis_rate_limiter import create_rate_limiter
-        login_rate_limiter = create_rate_limiter(_redis_url, max_attempts=5, window_seconds=300, prefix="rl:login", label="login")
-        resend_rate_limiter = create_rate_limiter(_redis_url, max_attempts=3, window_seconds=3600, prefix="rl:resend", label="resend")
-    except Exception:
-        login_rate_limiter = LoginRateLimiter()
-        resend_rate_limiter = ResendRateLimiter()
-else:
-    login_rate_limiter = LoginRateLimiter()
-    resend_rate_limiter = ResendRateLimiter()
+_requires_distributed_rate_limit = os.environ.get("DOCPILOT_ENV", "").lower() == "production"
+login_rate_limiter = create_rate_limiter(
+    _redis_url,
+    max_attempts=5,
+    window_seconds=300,
+    prefix="rl:login",
+    label="login",
+    require_redis=_requires_distributed_rate_limit,
+)
+resend_rate_limiter = create_rate_limiter(
+    _redis_url,
+    max_attempts=3,
+    window_seconds=3600,
+    prefix="rl:resend",
+    label="resend",
+    require_redis=_requires_distributed_rate_limit,
+)
+registration_rate_limiter = create_rate_limiter(
+    _redis_url,
+    max_attempts=5,
+    window_seconds=3600,
+    prefix="rl:register",
+    label="registration",
+    require_redis=_requires_distributed_rate_limit,
+)
+password_reset_rate_limiter = create_rate_limiter(
+    _redis_url,
+    max_attempts=3,
+    window_seconds=3600,
+    prefix="rl:password-reset",
+    label="password reset",
+    require_redis=_requires_distributed_rate_limit,
+)
 
 
 def admin_verify_user_command(db: Session, user_id: str) -> CurrentUser:

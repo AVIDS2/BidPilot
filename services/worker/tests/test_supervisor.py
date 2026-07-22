@@ -1,12 +1,8 @@
 """Tests for supervisor routing logic."""
 
-import pytest
 from app.graph.nodes.supervisor import (
     supervisor_node,
     route_initial,
-    route_after_rfp,
-    route_after_retrieval,
-    route_after_draft,
     route_after_review,
 )
 from app.graph.state import BidPilotState
@@ -22,6 +18,11 @@ def _make_state(**overrides) -> BidPilotState:
         "input_review_feedback": None,
         "requirements": [],
         "requirements_parsed": False,
+        "memory_context_loaded": True,
+        "memory_context_items": [],
+        "memory_context_version": None,
+        "memory_context_degraded_reasons": [],
+        "memory_proposal_ids": [],
         "evidence_chunks": [],
         "evidence_retrieved": False,
         "draft_markdown": "",
@@ -29,6 +30,8 @@ def _make_state(**overrides) -> BidPilotState:
         "draft_created": False,
         "review_result": None,
         "review_passed": False,
+        "claim_candidates": [],
+        "claim_integrity_status": "not_assessed",
         "section_version_id": None,
         "persisted": False,
         "human_decision": None,
@@ -45,6 +48,10 @@ class TestRouteInitial:
     def test_no_requirements_goes_to_rfp_parser(self):
         state = _make_state(requirements_parsed=False)
         assert route_initial(state) == "rfp_parser"
+
+    def test_parsed_requirements_without_memory_go_to_memory_context(self):
+        state = _make_state(requirements_parsed=True, memory_context_loaded=False)
+        assert route_initial(state) == "memory_context"
 
     def test_no_evidence_goes_to_knowledge_retriever(self):
         state = _make_state(requirements_parsed=True, evidence_retrieved=False)

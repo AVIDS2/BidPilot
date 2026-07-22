@@ -152,11 +152,11 @@ All planned phases are complete. Next work should deepen existing stubs rather t
 ## Deepening: release rehearsal gate
 
 - Added `scripts/release_rehearsal.py` with a dry-run default and `--run` execution mode
-- Core rehearsal covers API migrations, API tests, frontend typecheck, frontend unit tests, and frontend build
+- Core rehearsal covers API migrations, API and Worker Ruff checks, API and Worker tests, frontend typecheck, frontend unit tests, and frontend build
 - Optional flags add browser smoke, API load smoke, and production readiness checks when the required local services or secrets are available
 - Added tests for rehearsal step generation and dry-run rendering
 - Added `docs/ops/release-rehearsal-runbook.md` and linked it from deployment and release docs
-- Verified the core rehearsal with `python scripts/release_rehearsal.py --run`; it completed migrations, API tests, frontend typecheck, frontend unit tests, and frontend build successfully
+- Verified the core rehearsal with `python scripts/release_rehearsal.py --run`; it completed migrations, API and Worker Ruff checks, API and Worker tests, frontend typecheck, frontend unit tests, and frontend build successfully
 
 ## Deepening: backup/restore and pilot readiness
 

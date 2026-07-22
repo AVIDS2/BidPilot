@@ -1,0 +1,37 @@
+{
+  "title": "知识资产",
+  "subtitle": "跨可访问项目查看 Bid Wiki 的共享知识是否就绪、等待审核或缺少来源材料。",
+  "refresh": "刷新",
+  "metrics": {
+    "projects": "可访问项目",
+    "sharedKnowledge": "共享知识条目",
+    "reviewQueue": "待审核队列"
+  },
+  "filters": {
+    "all": "全部",
+    "ready": "知识已就绪",
+    "review": "待审核",
+    "empty": "暂无共享知识"
+  },
+  "projectsTitle": "项目知识",
+  "projectsDescription": "共 {{count}} 个可访问项目；进入项目可查看证据和待审提案。",
+  "sharedCount": "{{count}} 条共享知识",
+  "proposalCount": "{{count}} 条待审核提案",
+  "notCompiled": "尚未编译",
+  "noSharedKnowledge": "尚未生成共享知识",
+  "updatedAt": "更新于 {{date}}",
+  "compiledAt": "编译于 {{date}}",
+  "openBidWiki": "打开 Bid Wiki",
+  "openProjects": "打开项目",
+  "emptyTitle": "暂时没有可见项目知识",
+  "emptyDescription": "创建或打开项目、导入来源材料后，编译项目 Bid Wiki 进入审核流程。",
+  "emptyFilterTitle": "没有符合此筛选条件的项目",
+  "emptyFilterDescription": "切换筛选条件，或进入项目建立受治理的知识资产。",
+  "compilationStatuses": {
+    "queued": "已进入编译队列",
+    "running": "正在编译",
+    "succeeded": "已编译",
+    "failed": "编译失败",
+    "dispatch_failed": "编译暂不可用"
+  }
+}

@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.db import Base
 from app.models import User, Subscription, Organization
-from app.auth.service import bootstrap_admin_command
 
 ORG_ID = "00000000-0000-0000-0000-000000000001"
 

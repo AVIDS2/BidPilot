@@ -31,7 +31,7 @@ declare global {
 
 interface TurnstileWidgetProps {
   action: string;
-  onTokenChange: (token: string | null) => void;
+  onTokenChange?: (token: string | null) => void;
   onWidgetIdChange?: (widgetId: string | null) => void;
   className?: string;
 }
@@ -95,7 +95,7 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
   const publishToken = useCallback(
     (token: string | null) => {
       currentTokenRef.current = token;
-      onTokenChange(token);
+      onTokenChange?.(token);
       resolvePending(token);
     },
     [onTokenChange, resolvePending],
@@ -152,7 +152,7 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
     if (widgetIdRef.current && window.turnstile) {
       safelyCallTurnstile(() => window.turnstile?.reset(widgetIdRef.current ?? undefined));
     }
-    onTokenChange(null);
+    onTokenChange?.(null);
   }, [onTokenChange]);
 
   useImperativeHandle(ref, () => ({ execute, reset }), [execute, reset]);

@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "demo-smart-community-retrieval-dev",
+  "title": "智慧社区投标资料检索开发集",
+  "dataset_role": "development",
+  "sources": [
+    {
+      "id": "rfp",
+      "path": "sources/01-rfp.md",
+      "title": "智慧社区 AI 治理平台建设项目招标文件",
+      "source_type": "tender",
+      "sha256": "dfda83986a73d72aa24bb9402ccd69e150333c975b5e40083a6e7b4d5158bc97"
+    },
+    {
+      "id": "supplier",
+      "path": "sources/02-supplier-profile.md",
+      "title": "星河云智科技有限公司能力资料",
+      "source_type": "supplier_evidence",
+      "sha256": "6c3e52eb86e2b2a09c37db91598df4ef51b6fcbc1bb81b4558c85c0a9ea2b9f7"
+    },
+    {
+      "id": "reference",
+      "path": "sources/03-reference-case.md",
+      "title": "云湖智慧园区治理平台同类案例",
+      "source_type": "reference_case",
+      "sha256": "778151900c9d1e17744fc8bd0c82de7b957fca3eb6ec1373551c30abbe48271f"
+    }
+  ],
+  "queries": [
+    {
+      "id": "query-rbac-audit",
+      "query": "招标文件对权限控制、日志和数据安全有什么要求？",
+      "authorized_project_id": "bidbench-demo-project",
+      "relevant_chunk_ids": ["rfp-security"],
+      "expected_locators": [
+        {
+          "source_id": "rfp",
+          "section": "3.5 权限与安全",
+          "text_anchor": "支持基于角色的权限控制"
+        }
+      ],
+      "mandatory_evidence": true
+    },
+    {
+      "id": "query-service-commitment",
+      "query": "招标文件规定了怎样的质保期和重大故障响应时限？",
+      "authorized_project_id": "bidbench-demo-project",
+      "relevant_chunk_ids": ["rfp-service"],
+      "expected_locators": [
+        {
+          "source_id": "rfp",
+          "section": "六、服务要求",
+          "text_anchor": "重大故障 2 小时内响应"
+        }
+      ],
+      "mandatory_evidence": true
+    },
+    {
+      "id": "query-architecture",
+      "query": "技术要求里是否要求容器化部署和标准 REST API？",
+      "authorized_project_id": "bidbench-demo-project",
+      "relevant_chunk_ids": ["rfp-architecture"],
+      "expected_locators": [
+        {
+          "source_id": "rfp",
+          "section": "四、技术要求",
+          "text_anchor": "应支持容器化部署"
+        }
+      ],
+      "mandatory_evidence": true
+    },
+    {
+      "id": "query-supplier-domestic-adaptation",
+      "query": "供应商资料是否表明支持国产化数据库和容器化部署？",
+      "authorized_project_id": "bidbench-demo-project",
+      "relevant_chunk_ids": ["supplier-domestic-adaptation"],
+      "expected_locators": [
+        {
+          "source_id": "supplier",
+          "section": "2.4 国产化适配",
+          "text_anchor": "Docker 与 Docker Compose 容器化部署"
+        }
+      ],
+      "required_degraded_reasons": ["dense_unavailable"]
+    }
+  ]
+}

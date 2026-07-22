@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth.service import _hash_password
 from app.db import Base
-from app.models import Organization, Project, Subscription, User
+from app.models import Organization, OrganizationMembership, Project, Subscription, User
 from app.billing.service import get_billing_summary
 from app.usage.service import record_usage_event
 from app.usage.schemas import ProviderSource
@@ -31,6 +31,7 @@ def _make_user(db: Session, plan: str = "starter") -> User:
     )
     db.add(user)
     db.flush()
+    db.add(OrganizationMembership(org_id=org.id, user_id=user.id, role="owner"))
     db.add(Subscription(user_id=user.id, plan=plan, status="active"))
     project = Project(org_id=org.id, slug=f"{plan}-project", name="Project", scenario_package="bidpilot")
     db.add(project)

@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 
+from app.access.service import require_project_capability
+from app.auth.schemas import CurrentUser
 from app.models import AuditEvent
 
 from .repository import list_events_by_project
@@ -26,7 +28,17 @@ def record_audit_event(
     return event
 
 
-def list_audit_events(db: Session, project_id: str) -> list[dict[str, object]]:
+def list_audit_events(
+    db: Session,
+    project_id: str,
+    current_user: CurrentUser,
+) -> list[dict[str, object]]:
+    require_project_capability(
+        db,
+        current_user=current_user,
+        project_id=project_id,
+        capability="project.read",
+    )
     events = list_events_by_project(db, project_id)
     return [
         {

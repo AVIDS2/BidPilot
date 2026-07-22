@@ -93,7 +93,9 @@ export function AssistantWorkflowCard({ item }: { item: AssistantExecutionItem }
           )}
           {item.currentNode && (
             <p className="mt-2" style={{ color: "var(--muted-foreground)" }}>
-              {t("execution.currentNode", { node: item.currentNode })}
+              {t("execution.currentNode", {
+                node: t(`activity.node.${item.currentNode}`, { defaultValue: item.currentNode }),
+              })}
             </p>
           )}
           {item.reviewResult && (
@@ -123,7 +125,9 @@ export function AssistantWorkflowCard({ item }: { item: AssistantExecutionItem }
                     <span style={{ color: node.status === "failed" ? "var(--destructive)" : tone }}>
                       {nodeIcon(node)}
                     </span>
-                    <span className="truncate">{node.name}</span>
+                    <span className="truncate">
+                      {t(`activity.node.${node.name}`, { defaultValue: node.name })}
+                    </span>
                   </span>
                   <span className="shrink-0">{t(`execution.nodeStatus.${node.status}`)}</span>
                 </div>

@@ -12,8 +12,18 @@ import enPricing from "./public/locales/en/pricing.json";
 import enOnboarding from "./public/locales/en/onboarding.json";
 import enAIAssistant from "./public/locales/en/ai-assistant.json";
 import enSettings from "./public/locales/en/settings.json";
+import enRuns from "./public/locales/en/runs.json";
+import enKnowledgePortfolio from "./public/locales/en/knowledge-portfolio.json";
 
 vi.mock("@/lib/i18n", () => ({ default: i18n }));
+
+if (!document.doctype) {
+  document.insertBefore(document.implementation.createDocumentType("html", "", ""), document.documentElement);
+}
+if (document.compatMode !== "CSS1Compat") {
+  // happy-dom does not expose compatMode even when the document has a doctype.
+  Object.defineProperty(document, "compatMode", { configurable: true, value: "CSS1Compat" });
+}
 
 if (!Element.prototype.getAnimations) {
   Element.prototype.getAnimations = () => [];
@@ -47,7 +57,7 @@ if (!window.matchMedia) {
 i18n.use(initReactI18next).init({
   lng: "en",
   fallbackLng: "en",
-  ns: ["common", "admin", "auth", "landing", "projects", "account", "pricing", "onboarding", "ai-assistant", "settings"],
+  ns: ["common", "admin", "auth", "landing", "projects", "account", "pricing", "onboarding", "ai-assistant", "settings", "runs", "knowledge-portfolio"],
   defaultNS: "common",
   resources: {
     en: {
@@ -61,6 +71,8 @@ i18n.use(initReactI18next).init({
       onboarding: enOnboarding,
       "ai-assistant": enAIAssistant,
       settings: enSettings,
+      runs: enRuns,
+      "knowledge-portfolio": enKnowledgePortfolio,
     },
   },
   interpolation: { escapeValue: false },

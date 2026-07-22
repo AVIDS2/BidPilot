@@ -5,13 +5,19 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncGenerator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
 from app.agent.policy import get_tool_policy
 from app.auth.schemas import CurrentUser
-from app.chat.service import create_conversation, get_conversation, get_conversation_messages, save_message
+from app.chat.service import (
+    create_conversation,
+    get_conversation,
+    get_conversation_messages,
+    resolve_conversation_project_context,
+    save_message,
+)
 from app.models import ChatTaskState
 
 from .guardrails import requires_confirmation
@@ -27,6 +33,12 @@ from .audit import (
 )
 from .runtime import AssistantRuntime
 from .schemas import AssistantConfirmation, AssistantIntent, AssistantRequest, AssistantToolResult
+from .task_state import (
+    clear_task_state,
+    get_task_state,
+    is_task_state_stale,
+    set_task_state,
+)
 from .tools import execute_tool
 
 
@@ -38,6 +50,13 @@ async def stream_assistant_response(
     user: CurrentUser,
     payload: AssistantRequest,
 ) -> AsyncGenerator[str, None]:
+    project_id = resolve_conversation_project_context(
+        db,
+        user,
+        conversation_id=payload.conversation_id,
+        requested_project_id=payload.project_id,
+    )
+    payload = payload.model_copy(update={"project_id": project_id})
     conversation_id = _ensure_conversation(db, user, payload)
     save_message(db, conversation_id, "user", payload.message)
 
@@ -76,6 +95,8 @@ async def stream_assistant_response(
 
     intent = _resume_pending_intent(db, conversation_id, payload.message, task_state)
     if intent is None:
+        intent = _attachment_ingestion_intent(payload)
+    if intent is None:
         intent = await runtime.classify(payload.message, payload.project_id)
     yield _sse(
         "assistant.intent_detected",
@@ -110,9 +131,17 @@ async def stream_assistant_response(
         return
 
     arguments = dict(intent.arguments)
-    if payload.provider_config_id and intent.tool_name in {"start_draft_section", "start_redraft_section"}:
+    if payload.provider_config_id and intent.tool_name in {
+        "start_draft_section",
+        "start_redraft_section",
+        "propose_memory_graph",
+    }:
         arguments["provider_config_id"] = payload.provider_config_id
-    if payload.reasoning_effort and intent.tool_name in {"start_draft_section", "start_redraft_section"}:
+    if payload.reasoning_effort and intent.tool_name in {
+        "start_draft_section",
+        "start_redraft_section",
+        "propose_memory_graph",
+    }:
         arguments["reasoning_effort"] = payload.reasoning_effort
 
     if requires_confirmation(intent.tool_name, payload.approval_mode):
@@ -244,16 +273,17 @@ async def _emit_tool_result(
             },
         )
 
+    terminal_state = "running_workflow" if result.workflow else "completed"
     yield _sse(
         "assistant.tool_succeeded",
         {
             "tool_name": result.tool_name,
             "result": transport_result,
             "summary": summary,
-            "state": "completed",
+            "state": terminal_state,
         },
     )
-    yield _sse("assistant.message", {"content": summary, "state": "completed"})
+    yield _sse("assistant.message", {"content": summary, "state": terminal_state})
     if conversation_id:
         save_message(db, conversation_id, "assistant", summary)
     yield _sse(
@@ -274,12 +304,20 @@ def _ensure_conversation(db: Session, user: CurrentUser, payload: AssistantReque
 
 
 def _confirmation_message(tool_name: str, arguments: dict) -> str:
+    if tool_name == "create_demo_workspace":
+        return "需要你确认：我将创建内置演示工作区。它会占用一个项目名额，但不会使用 AI 额度。"
     if tool_name == "create_project":
         return f"需要你确认：我将创建项目「{arguments.get('name')}」。"
     if tool_name == "start_draft_section":
         return f"需要你确认：我将启动章节「{arguments.get('section_key')}」的起草工作流。"
     if tool_name == "start_redraft_section":
         return f"需要你确认：我将启动章节「{arguments.get('section_key')}」的重写工作流。"
+    if tool_name == "propose_memory_graph":
+        return "需要你确认：我将从这条已验证的项目知识生成实体关系提案。该操作会使用一次模型额度，结果仍需人工审核。"
+    if tool_name == "attach_uploaded_documents":
+        return f"需要你确认：我将把 {len(arguments.get('attachment_ids') or [])} 个附件加入项目资料包并开始解析。"
+    if tool_name == "generate_readiness_pack":
+        return "需要你确认：我将生成当前项目的投标准备度包。"
     if tool_name == "delete_project":
         return "需要你确认：这是删除项目操作。请输入完整项目名称后我再执行删除。"
     return "需要你确认后我再执行这个操作。"
@@ -338,6 +376,24 @@ def _resume_pending_intent(
     task_state: ChatTaskState | None = None,
 ) -> AssistantIntent | None:
     if task_state is not None:
+        if task_state.status == "needs_input" and task_state.tool_name == "propose_memory_graph":
+            missing_fields = task_state.missing_fields_json or {}
+            if "memory_record_id" not in (missing_fields.get("fields") or []):
+                return None
+            memory_record_id = _extract_uuid(message)
+            if not memory_record_id:
+                return AssistantIntent(
+                    mode="needs_input",
+                    tool_name="propose_memory_graph",
+                    arguments=task_state.arguments_json or {},
+                    missing_fields=["memory_record_id"],
+                    response="我还需要有效的共享知识记录 ID，才能安全生成实体关系提案。",
+                )
+            return AssistantIntent(
+                mode="workflow_trigger",
+                tool_name="propose_memory_graph",
+                arguments={**(task_state.arguments_json or {}), "memory_record_id": memory_record_id},
+            )
         if task_state.status != "needs_input" or task_state.tool_name != "create_project":
             return None
         missing_fields = task_state.missing_fields_json or {}
@@ -402,12 +458,49 @@ def _extract_followup_project_name(text: str) -> str | None:
     return stripped
 
 
+def _extract_uuid(text: str) -> str | None:
+    match = re.search(
+        r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+        text,
+    )
+    return match.group(0) if match else None
+
+
 def _default_project_name() -> str:
     return f"新建投标项目 {datetime.now(UTC).strftime('%m%d')}"
 
 
+def _attachment_ingestion_intent(payload: AssistantRequest) -> AssistantIntent | None:
+    attachment_ids = [
+        attachment.id
+        for attachment in payload.attachments
+        if attachment.id and not attachment.document_id
+    ]
+    if not attachment_ids:
+        return None
+    text = payload.message.lower()
+    if not any(token in text for token in ("上传", "加入", "入库", "资料包", "导入", "attach", "upload", "ingest")):
+        return None
+    if not payload.project_id:
+        return AssistantIntent(
+            mode="needs_input",
+            tool_name="attach_uploaded_documents",
+            missing_fields=["project_id"],
+            response="附件已安全暂存。请先打开或告诉我目标项目，我再将它们加入资料包并解析。",
+        )
+    return AssistantIntent(
+        mode="tool_action",
+        tool_name="attach_uploaded_documents",
+        arguments={
+            "project_id": payload.project_id,
+            "attachment_ids": attachment_ids,
+            "bundle_label": "Agent 上传资料",
+        },
+    )
+
+
 def _get_task_state(db: Session, conversation_id: str) -> ChatTaskState | None:
-    return db.get(ChatTaskState, conversation_id)
+    return get_task_state(db, conversation_id)
 
 
 def _set_task_state(
@@ -419,36 +512,26 @@ def _set_task_state(
     arguments: dict,
     missing_fields: list[str],
 ) -> None:
-    state = db.get(ChatTaskState, conversation_id)
-    if state is None:
-        state = ChatTaskState(conversation_id=conversation_id)
-        db.add(state)
-    state.status = status
-    state.tool_name = tool_name
-    state.arguments_json = dict(arguments)
-    state.missing_fields_json = {"fields": list(missing_fields)}
-    db.commit()
+    set_task_state(
+        db,
+        conversation_id,
+        status=status,
+        tool_name=tool_name,
+        arguments=arguments,
+        missing_fields=missing_fields,
+    )
 
 
 def _clear_task_state(db: Session, conversation_id: str) -> None:
-    state = db.get(ChatTaskState, conversation_id)
-    if state is None:
-        return
-    db.delete(state)
-    db.commit()
+    clear_task_state(db, conversation_id)
 
 
 def _is_pending_confirmation(task_state: ChatTaskState | None) -> bool:
     return task_state is not None and task_state.status == "needs_confirmation" and bool(task_state.tool_name)
 
 
-_TASK_STATE_TTL = timedelta(minutes=30)
-
-
 def _is_stale_task_state(task_state: ChatTaskState | None) -> bool:
-    if task_state is None:
-        return False
-    return datetime.now(UTC) - task_state.updated_at.replace(tzinfo=UTC) > _TASK_STATE_TTL
+    return is_task_state_stale(task_state)
 
 
 def _is_confirm_followup(message: str) -> bool:

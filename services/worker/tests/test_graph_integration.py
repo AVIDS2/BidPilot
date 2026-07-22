@@ -1,8 +1,9 @@
 """Integration tests for the BidPilot LangGraph agent graph."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from app.graph import builder
 from app.graph.builder import graph, invoke_graph
+from app.runtime.events import RuntimeCancellationRequested
 
 
 class TestGraphCompilation:
@@ -19,36 +20,26 @@ class TestGraphCompilation:
 
 
 class TestGraphInvocation:
-    @patch("app.graph.nodes.knowledge_retriever.SessionLocal")
-    @patch("app.graph.nodes.section_drafter.draft_section_openai")
-    @patch("app.graph.nodes.quality_reviewer.SessionLocal")
-    @patch("app.graph.nodes.persist_result.SessionLocal")
-    def test_simple_draft_flow(self, mock_persist_db, mock_review_db, mock_draft, mock_retrieval_db):
-        """Test a simple flow: supervisor -> retrieval -> drafter -> reviewer -> persist."""
-        # Mock retrieval to return empty chunks
-        mock_retrieval_session = MagicMock()
-        mock_retrieval_session.scalars.return_value.all.return_value = []
-        mock_retrieval_db.return_value = mock_retrieval_session
+    def test_instrumented_node_stops_at_the_first_safe_boundary_after_cancellation(self, monkeypatch):
+        """A cancellation arriving during a node prevents the next graph transition."""
+        cancellation_checks = iter([False, True])
+        published = []
 
-        # Mock LLM draft
-        mock_draft.return_value = MagicMock(
-            content_markdown="## Test Draft\n\nContent here.",
-            model_used="test-model",
-            evidence_ids=[],
+        monkeypatch.setattr(
+            builder,
+            "is_runtime_cancellation_requested",
+            lambda _runtime_run_id: next(cancellation_checks),
         )
+        monkeypatch.setattr(builder, "publish_node_started", lambda *_args: published.append("started"))
+        monkeypatch.setattr(builder, "publish_node_succeeded", lambda *_args: published.append("succeeded"))
+        monkeypatch.setattr(builder, "publish_cancellation_detected", lambda *_args: published.append("cancelled"))
 
-        # Mock quality review - pass
-        mock_review_session = MagicMock()
-        mock_review_db.return_value = mock_review_session
+        wrapped = builder._instrument_node("section_drafter", lambda _state: {"draft_created": True})
 
-        # Mock persist
-        mock_persist_session = MagicMock()
-        mock_persist_db.return_value = mock_persist_session
+        with pytest.raises(RuntimeCancellationRequested):
+            wrapped({"runtime_run_id": "runtime-cancel-boundary"})
 
-        # This test would need proper mocking of all DB interactions
-        # For now, just verify the graph can be invoked without crashing
-        # In a real test, you'd mock all SQLAlchemy sessions
-        pass
+        assert published == ["started", "cancelled"]
 
     def test_invoke_graph_with_defaults(self):
         """Test invoke_graph convenience function creates proper initial state."""

@@ -16,7 +16,6 @@ import {
   FolderOpenIcon,
   ImageIcon,
   Loader2Icon,
-  PaperclipIcon,
   XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -36,7 +35,6 @@ import {
 import {
   isAssistantBusy,
   useAIAssistant,
-  type AssistantConfirmationRequest,
   type AssistantExecutionItem,
   type AssistantRequestAttachment,
   type AssistantReasoningEffort,
@@ -396,7 +394,17 @@ function AttachmentPreviewCard({
   );
 }
 
-function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activityItems?: AssistantExecutionItem[] }) {
+function MessageBubble({
+  msg,
+  activityItems = [],
+  onCancelWorkflow,
+  onConfigureProvider,
+}: {
+  msg: ChatMessage;
+  activityItems?: AssistantExecutionItem[];
+  onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
+  onConfigureProvider?: () => void;
+}) {
   const isUser = msg.role === "user";
   if (isUser) {
     const hasAttachments = Boolean(msg.attachments && msg.attachments.length > 0);
@@ -441,7 +449,13 @@ function MessageBubble({ msg, activityItems = [] }: { msg: ChatMessage; activity
           borderColor: "transparent",
         }}
       >
-        {activityItems.length > 0 && <AssistantActivityTimeline items={activityItems} />}
+        {activityItems.length > 0 && (
+          <AssistantActivityTimeline
+            items={activityItems}
+            onCancelWorkflow={onCancelWorkflow}
+            onConfigureProvider={onConfigureProvider}
+          />
+        )}
         {msg.content ? (
           <Markdown variant="assistant" className="[&_code]:break-words">
             {normalizeAssistantMarkdown(msg.content)}
@@ -671,7 +685,11 @@ function HistorySidebar({
 
 /* ─── Main Panel Component ─── */
 
-export function AIAssistantPanel() {
+export function AIAssistantPanel({
+  variant = "panel",
+}: {
+  variant?: "panel" | "workspace";
+}) {
   const {
     state,
     close,
@@ -685,8 +703,10 @@ export function AIAssistantPanel() {
     setSelectedProviderConfig,
     setReasoningEffort,
     setApprovalMode,
+    cancelWorkflow,
   } = useAIAssistant();
   const { t } = useTranslation("ai-assistant");
+  const isWorkspace = variant === "workspace";
   const [input, setInput] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
@@ -714,6 +734,11 @@ export function AIAssistantPanel() {
     () => providerConfigs.find((provider) => provider.id === state.selectedProviderConfigId) ?? null,
     [providerConfigs, state.selectedProviderConfigId],
   );
+  const openProviderSettings = useCallback(() => {
+    close();
+    window.history.pushState({}, "", "/settings/providers");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, [close]);
   const modelLabel = selectedProvider?.model ?? t("model.platformDefault", { defaultValue: "Platform default" });
   const reasoningLabel = t(`reasoning.options.${state.reasoningEffort}`, { defaultValue: state.reasoningEffort });
   const approvalLabel = t(`approval.options.${state.approvalMode}`, { defaultValue: state.approvalMode });
@@ -846,7 +871,12 @@ export function AIAssistantPanel() {
 
       try {
         const bundle = await bundlePromise;
-        const document = await uploadDocument(bundle.id, record.file);
+        const document = await uploadDocument(
+          bundle.id,
+          record.file,
+          undefined,
+          record.assistantAttachmentId,
+        );
         setAttachments((current) =>
           current.map((attachment) =>
             attachment.id === record.id
@@ -1033,27 +1063,46 @@ export function AIAssistantPanel() {
     }
   }, [cancelRenameConversation, editingConversationId, editingTitle, refreshConversations, updateConversationTitle]);
 
+  const startConversationOnSurface = useCallback(() => {
+    startNewConversation();
+    setHistoryOpen(false);
+    if (isWorkspace) close();
+  }, [close, isWorkspace, startNewConversation]);
+
+  const loadConversationOnSurface = useCallback(async (conversationId: string) => {
+    await loadConversation(conversationId);
+    setHistoryOpen(false);
+    if (isWorkspace) close();
+  }, [close, isWorkspace, loadConversation]);
+
   const handleDeleteConversation = useCallback(async (id: string) => {
     try {
       await deleteChatConversation(id);
       if (state.currentConversationId === id) {
-        startNewConversation();
+        startConversationOnSurface();
       }
       await refreshConversations();
     } catch (error) {
       console.error("Failed to delete conversation:", error);
     }
-  }, [state.currentConversationId, startNewConversation, refreshConversations]);
+  }, [refreshConversations, startConversationOnSurface, state.currentConversationId]);
 
-  if (!state.isOpen || state.mode !== "panel") return null;
+  if (!isWorkspace && (!state.isOpen || state.mode !== "panel")) return null;
 
   return (
     <div
-      className="fixed inset-0 z-40 flex h-[100dvh] w-full flex-col animate-slide-in border-l sm:left-auto sm:w-[390px] md:w-[500px] xl:w-[560px]"
+      className={cn(
+        "flex flex-col overflow-hidden",
+        isWorkspace
+          ? "relative h-[calc(100dvh-8rem)] min-h-[32rem] w-full rounded-2xl border"
+          : "fixed inset-0 z-40 h-[100dvh] w-full animate-slide-in border-l sm:left-auto sm:w-[390px] md:w-[500px] xl:w-[560px]",
+      )}
       style={{
         background: "color-mix(in oklch, var(--background) 94%, transparent)",
         borderColor: "color-mix(in oklch, var(--border) 78%, transparent)",
-        boxShadow: "-28px 0 72px oklch(0 0 0 / 0.34), inset 1px 0 0 color-mix(in oklch, white 5%, transparent)",
+        boxShadow: isWorkspace
+          ? "inset 0 1px 0 color-mix(in oklch, white 5%, transparent)"
+          : "-28px 0 72px oklch(0 0 0 / 0.34), inset 1px 0 0 color-mix(in oklch, white 5%, transparent)",
         backdropFilter: "blur(22px) saturate(1.18)",
       }}
     >
@@ -1098,15 +1147,17 @@ export function AIAssistantPanel() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={startNewConversation} title={t("panel.newConversation")}>
+          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={startConversationOnSurface} title={t("panel.newConversation")}>
             <PlusIcon className="size-4" />
           </Button>
           <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={() => toggle("command")} title={t("panel.openCommand")}>
             <CommandIcon className="size-4" />
           </Button>
-          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={close} title={t("panel.close")}>
-            <PanelRightCloseIcon className="size-4" />
-          </Button>
+          {!isWorkspace && (
+            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={close} title={t("panel.close")}>
+              <PanelRightCloseIcon className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1131,8 +1182,8 @@ export function AIAssistantPanel() {
                 currentId={state.currentConversationId}
                 searchQuery={historySearch}
                 onSearchChange={setHistorySearch}
-                onSelect={loadConversation}
-                onNew={startNewConversation}
+                onSelect={loadConversationOnSurface}
+                onNew={startConversationOnSurface}
                 onRename={beginRenameConversation}
                 onDelete={handleDeleteConversation}
                 onClose={() => setHistoryOpen(false)}
@@ -1187,11 +1238,22 @@ export function AIAssistantPanel() {
                           onCancel={() => void confirmAssistantAction(false)}
                         />
                       )}
-                      <MessageBubble msg={msg} activityItems={msg.role === "assistant" ? turnItems : []} />
+                      <MessageBubble
+                        msg={msg}
+                        activityItems={msg.role === "assistant" ? turnItems : []}
+                        onCancelWorkflow={msg.role === "assistant" ? cancelWorkflow : undefined}
+                        onConfigureProvider={msg.role === "assistant" ? openProviderSettings : undefined}
+                      />
                     </div>
                   );
                 })}
-                {unassignedExecutionItems.length > 0 && <AssistantActivityTimeline items={unassignedExecutionItems} />}
+                {unassignedExecutionItems.length > 0 && (
+                  <AssistantActivityTimeline
+                    items={unassignedExecutionItems}
+                    onCancelWorkflow={cancelWorkflow}
+                    onConfigureProvider={openProviderSettings}
+                  />
+                )}
                 {state.pendingConfirmation && !state.pendingConfirmation.messageId && (
                   <AssistantConfirmationCard
                     confirmation={state.pendingConfirmation}
@@ -1340,6 +1402,7 @@ export function AIAssistantPanel() {
             </div>
             <textarea
               ref={inputRef}
+              aria-label={t("inputPlaceholder")}
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);

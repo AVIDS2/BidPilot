@@ -1,5 +1,8 @@
 import importlib.util
+import json
 from pathlib import Path
+
+import pytest
 
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[3] / "scripts" / "load_smoke.py"
@@ -10,28 +13,49 @@ assert _SPEC.loader is not None
 _SPEC.loader.exec_module(load_smoke)
 
 
-def test_summarize_results_computes_error_rate_and_p95_latency() -> None:
+def test_normalize_base_url_requires_safe_absolute_http_target() -> None:
+    assert (
+        load_smoke.normalize_base_url("https://api.example.com/", require_https=True)
+        == "https://api.example.com"
+    )
+
+    with pytest.raises(ValueError, match="credentials"):
+        load_smoke.normalize_base_url("https://user:password@api.example.com", require_https=True)
+    with pytest.raises(ValueError, match="https"):
+        load_smoke.normalize_base_url("http://api.example.com", require_https=True)
+    with pytest.raises(ValueError, match="absolute"):
+        load_smoke.normalize_base_url("/health", require_https=False)
+
+    assert load_smoke.normalize_endpoint("/health") == "/health"
+    with pytest.raises(ValueError, match="query"):
+        load_smoke.normalize_endpoint("/health?token=secret")
+    with pytest.raises(ValueError, match="absolute"):
+        load_smoke.normalize_endpoint("https://api.example.com/health")
+
+
+def test_evidence_artifact_is_redacted_and_retains_threshold_result(tmp_path: Path) -> None:
     samples = [
-        load_smoke.Sample(endpoint="/health", status_code=200, elapsed_ms=10.0, error=None),
-        load_smoke.Sample(endpoint="/health", status_code=200, elapsed_ms=20.0, error=None),
-        load_smoke.Sample(endpoint="/openapi.json", status_code=500, elapsed_ms=30.0, error=None),
-        load_smoke.Sample(endpoint="/openapi.json", status_code=None, elapsed_ms=40.0, error="timeout"),
+        load_smoke.Sample(endpoint="/health", status_code=200, elapsed_ms=12.5, error=None),
+        load_smoke.Sample(endpoint="/openapi.json", status_code=503, elapsed_ms=20.0, error=None),
     ]
-
     summary = load_smoke.summarize_results(samples)
+    failures = load_smoke.check_thresholds(summary, max_error_rate=0.0, max_p95_ms=1000.0)
+    artifact = load_smoke.build_evidence_artifact(
+        base_url="https://api.example.com",
+        endpoints=["/health", "/openapi.json"],
+        requests_per_endpoint=1,
+        concurrency=1,
+        timeout=5.0,
+        max_error_rate=0.0,
+        max_p95_ms=1000.0,
+        samples=samples,
+        summary=summary,
+        failures=failures,
+    )
+    output_file = load_smoke.write_evidence_artifact(artifact, tmp_path / "evidence" / "load-smoke.json")
 
-    assert summary.total == 4
-    assert summary.failures == 2
-    assert summary.error_rate == 0.5
-    assert summary.p95_ms == 40.0
-
-
-def test_check_thresholds_reports_error_rate_and_latency_failures() -> None:
-    summary = load_smoke.LoadSummary(total=10, failures=2, error_rate=0.2, avg_ms=50.0, p95_ms=250.0)
-
-    failures = load_smoke.check_thresholds(summary, max_error_rate=0.1, max_p95_ms=200.0)
-
-    assert failures == [
-        "error_rate 20.00% exceeded threshold 10.00%",
-        "p95_ms 250.00 exceeded threshold 200.00",
-    ]
+    saved = json.loads(output_file.read_text(encoding="utf-8"))
+    assert saved["passed"] is False
+    assert saved["summary"]["failures"] == 1
+    assert saved["base_url"] == "https://api.example.com"
+    assert "password" not in output_file.read_text(encoding="utf-8")

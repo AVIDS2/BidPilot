@@ -5,24 +5,54 @@ import {
   CheckCircle2Icon,
   ChevronDownIcon,
   CircleDashedIcon,
+  DownloadIcon,
   Loader2Icon,
+  Settings2Icon,
   XCircleIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import ShinyText from "@/components/ShinyText";
+import { Button } from "@/components/ui/button";
 import { REACTBITS_AURORA } from "@/components/reactbits-theme";
+import { downloadAssistantArtifact } from "@/lib/api";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import { cn } from "@/lib/utils";
 import { getAssistantToolIcon, getAssistantToolLabel } from "./assistant-tool-metadata";
 
-type ActivityTone = "running" | "succeeded" | "failed" | "pending";
+type ActivityTone = "running" | "succeeded" | "failed" | "pending" | "cancelled";
 type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+interface FailureGuidance {
+  message: string;
+  canOpenProviderSettings: boolean;
+}
+
+const PROVIDER_SETTINGS_ERROR_CODES = new Set([
+  "provider_not_configured",
+  "provider_config_missing",
+  "provider_auth_failed",
+  "provider_model_unavailable",
+  "provider_request_invalid",
+  "provider_response_invalid",
+]);
+
+function getFailureGuidance(errorCode: string | undefined, t: Translate): FailureGuidance | null {
+  if (!errorCode) return null;
+  const fallback = t("activity.failure.workflow_internal_error", {
+    defaultValue: "The workflow could not finish safely. Please try again later.",
+  });
+  return {
+    message: t(`activity.failure.${errorCode}`, { defaultValue: fallback }),
+    canOpenProviderSettings: PROVIDER_SETTINGS_ERROR_CODES.has(errorCode),
+  };
+}
 
 function getTone(items: AssistantExecutionItem[]): ActivityTone {
   if (items.some((item) => item.status === "failed")) return "failed";
   if (items.some((item) => item.status === "running")) return "running";
   if (items.some((item) => item.status === "pending")) return "pending";
+  if (items.some((item) => item.status === "cancelled")) return "cancelled";
   return "succeeded";
 }
 
@@ -51,6 +81,19 @@ function getFieldLabel(key: string, t: Translate) {
 }
 
 function summarizeResult(item: AssistantExecutionItem, t: Translate) {
+  if (item.status === "running" && item.retryAttempt && item.retryMaxAttempts) {
+    return t("activity.providerRetry", {
+      attempt: item.retryAttempt,
+      maxAttempts: item.retryMaxAttempts,
+      defaultValue: `Retrying the model service (${item.retryAttempt}/${item.retryMaxAttempts})`,
+    });
+  }
+  if (item.status === "cancelled") {
+    return t("activity.result.cancelled", { defaultValue: "Workflow cancelled" });
+  }
+  if (item.isCancellationRequested) {
+    return t("activity.result.cancellationRequested", { defaultValue: "Cancellation requested" });
+  }
   if (item.errorMessage) return item.errorMessage;
   const result = item.result ?? {};
   if (typeof result.route === "string") {
@@ -92,13 +135,89 @@ function sanitizeToolText(value?: string) {
 }
 
 function isLowSignalField(key: string, value: unknown) {
-  if (["projects", "runs", "content", "tool_call_id", "run_id", "id", "count", "project_id"].includes(key)) {
+  if (
+    [
+      "projects",
+      "runs",
+      "content",
+      "tool_call_id",
+      "run_id",
+      "id",
+      "count",
+      "project_id",
+      "deliverable_id",
+      "pack_id",
+      "download_path",
+      "xlsx_download_path",
+      "docx_download_path",
+    ].includes(key)
+  ) {
     return true;
   }
   if (typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value)) {
     return true;
   }
   return false;
+}
+
+interface DownloadAction {
+  format: "docx" | "pdf" | "xlsx";
+  path: string;
+}
+
+function getDownloadActions(result?: Record<string, unknown>): DownloadAction[] {
+  if (!result) return [];
+  const actions: DownloadAction[] = [];
+  const add = (format: DownloadAction["format"], path: unknown) => {
+    if (typeof path === "string") actions.push({ format, path });
+  };
+
+  const exportFormat = result.format;
+  if ((exportFormat === "docx" || exportFormat === "pdf") && typeof result.download_path === "string") {
+    add(exportFormat, result.download_path);
+  }
+  add("docx", result.docx_download_path);
+  add("xlsx", result.xlsx_download_path);
+  return actions;
+}
+
+function ResultDownloadActions({ result, t }: { result?: Record<string, unknown>; t: Translate }) {
+  const actions = getDownloadActions(result);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadFailed, setDownloadFailed] = useState(false);
+
+  if (actions.length === 0) return null;
+
+  const handleDownload = async (action: DownloadAction) => {
+    if (downloading) return;
+    setDownloading(action.path);
+    setDownloadFailed(false);
+    try {
+      await downloadAssistantArtifact(action.path, `bidpilot-${action.format}.${action.format}`);
+    } catch {
+      setDownloadFailed(true);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {actions.map((action) => (
+        <button
+          key={action.path}
+          type="button"
+          onClick={() => void handleDownload(action)}
+          disabled={downloading !== null}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-medium text-foreground transition hover:border-primary/45 hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+        >
+          {downloading === action.path ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <DownloadIcon className="h-3 w-3" />}
+          {t(`activity.download.${action.format}`, { defaultValue: `Download ${action.format.toUpperCase()}` })}
+        </button>
+      ))}
+      {downloadFailed && <span className="basis-full text-[11px] text-destructive">{t("activity.download.failed")}</span>}
+    </div>
+  );
 }
 
 function countByKind(items: AssistantExecutionItem[]) {
@@ -125,8 +244,15 @@ function buildActivityLabel(
         ? "activity.summarySingleRunning"
         : tone === "failed"
           ? "activity.summarySingleFailed"
+          : tone === "cancelled"
+            ? "activity.summarySingleCancelled"
           : "activity.summarySingleDone";
     return t(key, { label, defaultValue: `${label} ${tone}` });
+  }
+  if (tone === "cancelled") {
+    return t("activity.summaryCancelled", {
+      defaultValue: "Workflow cancelled",
+    });
   }
   const keyPrefix = tone === "running" || tone === "pending" ? "activity.summaryRunning" : "activity.summaryDone";
   if (workflows > 0) {
@@ -183,11 +309,22 @@ function DetailValue({ value }: { value: unknown }) {
   return <span>{String(value)}</span>;
 }
 
-function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
+function ActivityDetail({
+  item,
+  onCancelWorkflow,
+  onConfigureProvider,
+  isCancelling,
+}: {
+  item: AssistantExecutionItem;
+  onCancelWorkflow?: (runtimeRunId: string) => void;
+  onConfigureProvider?: () => void;
+  isCancelling?: boolean;
+}) {
   const { t } = useTranslation("ai-assistant");
   const Icon = getAssistantToolIcon(item);
   const label = getAssistantToolLabel(item.toolName, t);
   const safeSummary = sanitizeToolText(item.summary);
+  const failureGuidance = item.status === "failed" ? getFailureGuidance(item.errorCode, t) : null;
   const completedNodes = item.nodes?.filter((node) => node.status === "completed").length ?? 0;
   const totalNodes = item.nodes?.length ?? 0;
   const detailRows = [
@@ -200,6 +337,11 @@ function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
       .slice(0, 3)
       .map(([key, value]) => ({ key, value })),
   ].filter((row, index, rows) => rows.findIndex((candidate) => candidate.key === row.key) === index);
+  const canCancel =
+    item.kind === "workflow" &&
+    Boolean(item.runtimeRunId) &&
+    (item.status === "running" || item.status === "pending") &&
+    !item.isCancellationRequested;
 
   return (
     <div className="group flex gap-2.5 py-1.5 text-xs">
@@ -213,7 +355,21 @@ function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
             {t(`activity.status.${item.status}`, { defaultValue: item.status })}
           </span>
         </div>
-        <div className="mt-0.5 leading-5 text-muted-foreground/85">{safeSummary || summarizeResult(item, t)}</div>
+        <div className="mt-0.5 leading-5 text-muted-foreground/85">
+          {failureGuidance?.message || safeSummary || summarizeResult(item, t)}
+        </div>
+        {failureGuidance?.canOpenProviderSettings && onConfigureProvider && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onConfigureProvider}
+            className="mt-2 h-7 px-2 text-[11px]"
+          >
+            <Settings2Icon data-icon="inline-start" />
+            {t("activity.openProviderSettings", { defaultValue: "Open model settings" })}
+          </Button>
+        )}
         {totalNodes > 0 && (
           <div className="mt-1 text-[11px] text-muted-foreground">
             {t("execution.nodesCompleted", {
@@ -233,6 +389,7 @@ function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
             ))}
           </div>
         )}
+        <ResultDownloadActions result={item.result} t={t} />
         {item.nodes && item.nodes.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
             {item.nodes.map((node) => (
@@ -242,16 +399,43 @@ function ActivityDetail({ item }: { item: AssistantExecutionItem }) {
             ))}
           </div>
         )}
+        {canCancel && onCancelWorkflow && (
+          <button
+            type="button"
+            onClick={() => onCancelWorkflow(item.runtimeRunId!)}
+            disabled={isCancelling}
+            className="mt-2 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:border-foreground/25 hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+          >
+            {isCancelling
+              ? t("activity.cancelling", { defaultValue: "Cancelling..." })
+              : t("activity.cancelWorkflow", { defaultValue: "Cancel workflow" })}
+          </button>
+        )}
+        {item.isCancellationRequested && item.status !== "cancelled" && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            {t("activity.cancellationRequested", { defaultValue: "Cancellation requested. Stopping at a safe boundary." })}
+          </p>
+        )}
       </div>
     </div>
   );
 }
 
-export function AssistantActivityTimeline({ items }: { items: AssistantExecutionItem[] }) {
+export function AssistantActivityTimeline({
+  items,
+  onCancelWorkflow,
+  onConfigureProvider,
+}: {
+  items: AssistantExecutionItem[];
+  onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
+  onConfigureProvider?: () => void;
+}) {
   const { t } = useTranslation("ai-assistant");
   const tone = getTone(items);
   const defaultExpanded = tone === "running" || tone === "failed";
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
+  const [cancellationError, setCancellationError] = useState<string | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
   const activityRef = useRef<HTMLDivElement | null>(null);
   const { tools, workflows } = useMemo(() => countByKind(items), [items]);
@@ -262,6 +446,18 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
 
   const label = items.length > 0 ? buildActivityLabel(items, tone, tools, workflows, t) : "";
   const statusLabel = t(`activity.status.${tone}`, { defaultValue: tone });
+  const requestCancellation = async (runtimeRunId: string) => {
+    if (!onCancelWorkflow || cancellingRunId) return;
+    setCancellingRunId(runtimeRunId);
+    setCancellationError(null);
+    try {
+      await onCancelWorkflow(runtimeRunId);
+    } catch {
+      setCancellationError(t("activity.cancelFailed", { defaultValue: "Unable to request cancellation. Please try again." }));
+    } finally {
+      setCancellingRunId(null);
+    }
+  };
 
   useGSAP(
     () => {
@@ -340,9 +536,15 @@ export function AssistantActivityTimeline({ items }: { items: AssistantExecution
         >
           {items.map((item) => (
             <div key={item.id} className="assistant-activity-detail">
-              <ActivityDetail item={item} />
+              <ActivityDetail
+                item={item}
+                onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
+                onConfigureProvider={onConfigureProvider}
+                isCancelling={cancellingRunId === item.runtimeRunId}
+              />
             </div>
           ))}
+          {cancellationError && <p className="pt-1 text-[11px] text-destructive">{cancellationError}</p>}
         </div>
       )}
     </div>

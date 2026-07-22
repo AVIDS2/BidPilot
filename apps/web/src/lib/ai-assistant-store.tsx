@@ -4,15 +4,25 @@ import {
   useReducer,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
   type Dispatch,
 } from "react";
 import {
+  cancelRuntimeWorkflow,
   getChatConversationMessages,
+  listRuntimeEvents,
   listChatConversations,
   type ChatConversationRead,
 } from "@/lib/api";
 import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser-storage";
+import {
+  advanceRuntimeSequenceCursor,
+  isRuntimeSequenceNewer,
+  isTerminalRuntimeEvent,
+  runtimeEventToAssistantEvents,
+  type RuntimeEventCursor,
+} from "@/lib/runtime-event-feed";
 
 /* ─── Types ─── */
 
@@ -70,6 +80,8 @@ interface SendAssistantOptions {
 
 export interface AssistantConfirmationRequest {
   messageId?: string;
+  approvalId?: string;
+  runtimeRunId?: string;
   toolName: string;
   arguments: Record<string, unknown>;
   message: string;
@@ -83,17 +95,21 @@ export interface AssistantExecutionItem {
   kind: "intent" | "tool" | "workflow";
   toolName?: string;
   runId?: string;
-  status: "pending" | "running" | "succeeded" | "failed";
+  runtimeRunId?: string;
+  status: "pending" | "running" | "succeeded" | "failed" | "cancelled";
   title: string;
   summary?: string;
   arguments?: Record<string, unknown>;
   result?: Record<string, unknown>;
   errorMessage?: string;
   errorCode?: string;
+  retryAttempt?: number;
+  retryMaxAttempts?: number;
   currentNode?: string | null;
   nodes?: WorkflowNodeProgress[];
   reviewResult?: WorkflowReviewResult | null;
   isWaitingApproval?: boolean;
+  isCancellationRequested?: boolean;
   approvalMessage?: string | null;
   isRunning?: boolean;
   timestamp: number;
@@ -177,8 +193,20 @@ type Action =
   | { type: "SET_ACTIVE_ASSISTANT_MESSAGE"; messageId: string | null }
   | { type: "SET_STATUS"; status: AssistantStatus }
   | { type: "ADD_EXECUTION_ITEM"; item: AssistantExecutionItem }
-  | { type: "UPDATE_EXECUTION_ITEM"; toolName: string; runId?: string; patch: Partial<AssistantExecutionItem> }
-  | { type: "MERGE_WORKFLOW_NODE"; runId: string; node: WorkflowNodeProgress; currentNode?: string | null }
+  | {
+      type: "UPDATE_EXECUTION_ITEM";
+      toolName: string;
+      runId?: string;
+      runtimeRunId?: string;
+      patch: Partial<AssistantExecutionItem>;
+    }
+  | {
+      type: "MERGE_WORKFLOW_NODE";
+      runId?: string;
+      runtimeRunId?: string;
+      node: WorkflowNodeProgress;
+      currentNode?: string | null;
+    }
   | { type: "SET_SESSION_ERROR"; message: string; errorCode?: string }
   | { type: "SET_PENDING_CONFIRMATION"; confirmation: AssistantConfirmationRequest | null }
   | { type: "SET_SELECTED_PROVIDER_CONFIG"; providerConfigId: string | null }
@@ -357,7 +385,9 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "UPDATE_EXECUTION_ITEM": {
       let updated = false;
       const executionItems = state.executionItems.map((item) => {
-        const matches = action.runId
+        const matches = action.runtimeRunId
+          ? item.runtimeRunId === action.runtimeRunId
+          : action.runId
           ? item.runId === action.runId
           : item.toolName === action.toolName && item.messageId === state.activeAssistantMessageId;
         if (matches) {
@@ -373,6 +403,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           kind: "tool",
           toolName: action.toolName,
           runId: action.runId,
+          runtimeRunId: action.runtimeRunId,
           status: action.patch.status ?? "pending",
           title: action.toolName,
           timestamp: Date.now(),
@@ -383,9 +414,16 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     }
     case "MERGE_WORKFLOW_NODE": {
       const executionItems = state.executionItems.map((item) => {
-        if (item.runId !== action.runId) return item;
+        const matches = action.runId
+          ? item.runId === action.runId
+          : action.runtimeRunId
+            ? item.runtimeRunId === action.runtimeRunId
+            : false;
+        if (!matches) return item;
         const status: AssistantExecutionItem["status"] =
-          item.status === "failed" || item.status === "succeeded" ? item.status : "running";
+          item.status === "failed" || item.status === "succeeded" || item.status === "cancelled"
+            ? item.status
+            : "running";
         const nodes = item.nodes ?? [];
         const idx = nodes.findIndex((node) => node.name === action.node.name);
         const nextNodes = [...nodes];
@@ -462,24 +500,33 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
   }
 }
 
-function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
-  const lines = part.split("\n");
-  let eventType = "";
-  let dataJson = "";
-  for (const line of lines) {
-    if (line.startsWith("event: ")) {
-      eventType = line.slice(7).trim();
-    } else if (line.startsWith("data: ")) {
-      dataJson = line.slice(6);
-    }
-  }
-  if (!eventType || !dataJson) return;
+interface AssistantSseHandlingOptions {
+  shouldHandleRuntimeEvent?: (data: Record<string, unknown>) => boolean;
+  onRuntimeRun?: (runId: string) => void;
+  onConversation?: (conversationId: string) => void;
+  onTerminal?: () => void;
+}
 
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(dataJson);
-  } catch {
-    return;
+function handleAssistantSsePart(
+  part: string,
+  dispatch: Dispatch<Action>,
+  options?: AssistantSseHandlingOptions,
+) {
+  const parsedSse = parseSsePart(part);
+  if (!parsedSse) return;
+  handleAssistantSseEvent(parsedSse.eventType, parsedSse.data, dispatch, options);
+}
+
+function handleAssistantSseEvent(
+  eventType: string,
+  parsed: Record<string, unknown>,
+  dispatch: Dispatch<Action>,
+  options?: AssistantSseHandlingOptions,
+) {
+  const runtimeRunId = typeof parsed.runtime_run_id === "string" ? parsed.runtime_run_id : undefined;
+  if (runtimeRunId) {
+    options?.onRuntimeRun?.(runtimeRunId);
+    if (options?.shouldHandleRuntimeEvent && !options.shouldHandleRuntimeEvent(parsed)) return;
   }
 
   const state = typeof parsed.state === "string" ? (parsed.state as AssistantStatus) : undefined;
@@ -491,6 +538,7 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
     const conversationId = parsed.conversation_id;
     if (typeof conversationId === "string") {
       dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
+      options?.onConversation?.(conversationId);
     }
     return;
   }
@@ -505,6 +553,8 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
     dispatch({
       type: "SET_PENDING_CONFIRMATION",
       confirmation: {
+        approvalId: typeof parsed.approval_id === "string" ? parsed.approval_id : undefined,
+        runtimeRunId: typeof parsed.runtime_run_id === "string" ? parsed.runtime_run_id : undefined,
         toolName,
         arguments: args,
         message: String(parsed.message ?? "Confirm this action"),
@@ -528,11 +578,20 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
 
   if (eventType === "assistant.tool_started") {
     const toolName = String(parsed.tool_name ?? "");
+    if (runtimeRunId) {
+      dispatch({
+        type: "MERGE_WORKFLOW_NODE",
+        runtimeRunId,
+        node: { name: toolName, status: "running", startedAt: new Date().toISOString() },
+        currentNode: toolName,
+      });
+    }
     dispatch({
       type: "UPDATE_EXECUTION_ITEM",
       toolName,
+      runtimeRunId,
       patch: {
-        kind: "tool",
+        ...(runtimeRunId ? {} : { kind: "tool" as const }),
         status: "running",
         title: toolName,
         arguments: asRecord(parsed.arguments),
@@ -545,6 +604,7 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
     const toolName = String(parsed.tool_name ?? "");
     const result = asRecord(parsed.result);
     const runId = typeof result.run_id === "string" ? result.run_id : undefined;
+    const workflowRuntimeRunId = typeof result.runtime_run_id === "string" ? result.runtime_run_id : undefined;
     dispatch({ type: "CLEAR_TRANSIENT_STATE" });
     dispatch({
       type: "ADD_EXECUTION_ITEM",
@@ -553,6 +613,7 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
         kind: "workflow",
         toolName,
         runId,
+        runtimeRunId: workflowRuntimeRunId,
         status: "running",
         title: toolName,
         arguments: asRecord(parsed.arguments),
@@ -561,9 +622,24 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
         timestamp: Date.now(),
       },
     });
-    if (runId) {
+    if (workflowRuntimeRunId) {
       dispatch({ type: "SET_STATUS", status: "running_workflow" });
-      void streamWorkflowRun(runId, dispatch).catch((error) => {
+      void pollRuntimeWorkflow(workflowRuntimeRunId, toolName, dispatch, options).catch((error) => {
+        dispatch({
+          type: "UPDATE_EXECUTION_ITEM",
+          toolName,
+          runtimeRunId: workflowRuntimeRunId,
+          patch: {
+            status: "failed",
+            isRunning: false,
+            errorMessage: error instanceof Error ? error.message : "Workflow event stream failed",
+          },
+        });
+        dispatch({ type: "SET_STATUS", status: "failed" });
+      });
+    } else if (runId) {
+      dispatch({ type: "SET_STATUS", status: "running_workflow" });
+      void streamWorkflowRun(runId, toolName, dispatch).catch((error) => {
         dispatch({
           type: "UPDATE_EXECUTION_ITEM",
           toolName,
@@ -583,18 +659,40 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
   if (eventType === "assistant.tool_succeeded") {
     const toolName = String(parsed.tool_name ?? "");
     const result = asRecord(parsed.result);
+    if (runtimeRunId) {
+      // This is the parent runtime capability completing. A workflow capability
+      // creates and tracks its child runtime separately in `workflow_started`.
+      // Keeping this parent tool in `running` would indefinitely buffer a
+      // completed assistant response for read-only capabilities.
+      dispatch({
+        type: "UPDATE_EXECUTION_ITEM",
+        toolName,
+        runtimeRunId,
+        patch: {
+          status: "succeeded",
+          result,
+          summary: String(parsed.summary ?? ""),
+          isRunning: false,
+        },
+      });
+      return;
+    }
     if (typeof result.run_id === "string") {
+      const runtimeRunId = typeof result.runtime_run_id === "string" ? result.runtime_run_id : undefined;
       dispatch({
         type: "UPDATE_EXECUTION_ITEM",
         toolName,
         runId: result.run_id,
+        runtimeRunId,
         patch: {
           status: "running",
           result,
+          runtimeRunId,
           summary: String(parsed.summary ?? ""),
           isRunning: true,
         },
       });
+      dispatch({ type: "SET_STATUS", status: "running_workflow" });
       return;
     }
     dispatch({
@@ -610,6 +708,13 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
       window.history.pushState({}, "", result.route);
       window.dispatchEvent(new PopStateEvent("popstate"));
     }
+    if (
+      (toolName === "create_demo_workspace" || toolName === "create_project") &&
+      typeof result.id === "string"
+    ) {
+      window.history.pushState({}, "", `/projects/${encodeURIComponent(result.id)}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
     return;
   }
 
@@ -621,6 +726,75 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
       patch: {
         status: "failed",
         errorMessage: String(parsed.error_message ?? "Tool failed"),
+        errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
+      },
+    });
+    return;
+  }
+
+  if (eventType === "assistant.tool_progressed") {
+    const toolName = String(parsed.tool_name ?? "");
+    dispatch({
+      type: "UPDATE_EXECUTION_ITEM",
+      toolName,
+      patch: {
+        kind: "tool",
+        status: "running",
+        title: toolName,
+        summary: undefined,
+        errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
+        retryAttempt: typeof parsed.retry_attempt === "number" ? parsed.retry_attempt : undefined,
+        retryMaxAttempts: typeof parsed.retry_max_attempts === "number" ? parsed.retry_max_attempts : undefined,
+      },
+    });
+    return;
+  }
+
+  if (eventType === "assistant.workflow_provider_retry") {
+    const toolName = String(parsed.tool_name ?? "workflow");
+    dispatch({
+      type: "UPDATE_EXECUTION_ITEM",
+      toolName,
+      runtimeRunId,
+      patch: {
+        status: "running",
+        isRunning: true,
+        summary: undefined,
+        errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
+        retryAttempt: typeof parsed.retry_attempt === "number" ? parsed.retry_attempt : undefined,
+        retryMaxAttempts: typeof parsed.retry_max_attempts === "number" ? parsed.retry_max_attempts : undefined,
+      },
+    });
+    return;
+  }
+
+  if (eventType === "assistant.workflow_node_failed") {
+    const nodeName = String(parsed.node_name ?? parsed.tool_name ?? "workflow");
+    dispatch({
+      type: "MERGE_WORKFLOW_NODE",
+      runtimeRunId,
+      node: {
+        name: nodeName,
+        status: "failed",
+        error: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
+      },
+      currentNode: null,
+    });
+    return;
+  }
+
+  if (eventType === "assistant.workflow_failed") {
+    dispatch({
+      type: "UPDATE_EXECUTION_ITEM",
+      toolName: String(parsed.tool_name ?? "workflow"),
+      runtimeRunId,
+      patch: {
+        status: "failed",
+        isRunning: false,
+        isWaitingApproval: false,
+        currentNode: null,
+        errorMessage: String(parsed.error_message ?? "Workflow failed"),
+        errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
       },
     });
     return;
@@ -635,7 +809,9 @@ function handleAssistantSsePart(part: string, dispatch: Dispatch<Action>) {
     const conversationId = parsed.conversation_id;
     if (typeof conversationId === "string") {
       dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
+      options?.onConversation?.(conversationId);
     }
+    options?.onTerminal?.();
   }
 }
 
@@ -662,6 +838,7 @@ interface AIAssistantContextValue {
   setSelectedProviderConfig: (providerConfigId: string | null) => void;
   setReasoningEffort: (effort: AssistantReasoningEffort) => void;
   setApprovalMode: (mode: AssistantApprovalMode) => void;
+  cancelWorkflow: (runtimeRunId: string) => Promise<void>;
   confirmAssistantAction: (approved: boolean, confirmationText?: string) => Promise<void>;
   executeCommand: (commandId: string) => void;
   refreshConversations: () => Promise<void>;
@@ -682,6 +859,7 @@ function getAuthToken() {
 
 async function streamWorkflowRun(
   runId: string,
+  toolName: string,
   dispatch: Dispatch<Action>,
   onTerminal?: () => void,
 ) {
@@ -701,7 +879,7 @@ async function streamWorkflowRun(
   let buffer = "";
 
   const updateWorkflow = (patch: Partial<AssistantExecutionItem>) => {
-    dispatch({ type: "UPDATE_EXECUTION_ITEM", toolName: "start_draft_section", runId, patch });
+    dispatch({ type: "UPDATE_EXECUTION_ITEM", toolName, runId, patch });
   };
 
   while (true) {
@@ -717,10 +895,12 @@ async function streamWorkflowRun(
 
       const { eventType, data } = parsed;
       if (eventType === "connected") {
+        const runtimeRunId = typeof data.runtime_run_id === "string" ? data.runtime_run_id : undefined;
         updateWorkflow({
           status: "running",
           isRunning: true,
           currentNode: null,
+          runtimeRunId,
         });
         dispatch({ type: "SET_STATUS", status: "running_workflow" });
       } else if (eventType === "node_started") {
@@ -739,6 +919,24 @@ async function streamWorkflowRun(
           node: { name: nodeName, status: "completed", completedAt: new Date().toISOString() },
           currentNode: null,
         });
+      } else if (eventType === "provider_retry") {
+        const nodeName = typeof data.node_name === "string" ? data.node_name : undefined;
+        if (nodeName) {
+          dispatch({
+            type: "MERGE_WORKFLOW_NODE",
+            runId,
+            node: { name: nodeName, status: "running" },
+            currentNode: nodeName,
+          });
+        }
+        updateWorkflow({
+          status: "running",
+          isRunning: true,
+          summary: undefined,
+          errorCode: typeof data.error_code === "string" ? data.error_code : undefined,
+          retryAttempt: typeof data.attempt === "number" ? data.attempt : undefined,
+          retryMaxAttempts: typeof data.max_attempts === "number" ? data.max_attempts : undefined,
+        });
       } else if (eventType === "review_result") {
         updateWorkflow({
           reviewResult: {
@@ -753,6 +951,24 @@ async function streamWorkflowRun(
           isWaitingApproval: true,
           approvalMessage: typeof data.draft_preview === "string" ? data.draft_preview : "等待人工审核",
         });
+      } else if (eventType === "graph_cancellation_requested") {
+        updateWorkflow({
+          status: "running",
+          isRunning: true,
+          isWaitingApproval: false,
+          isCancellationRequested: true,
+        });
+      } else if (eventType === "graph_cancelled") {
+        updateWorkflow({
+          status: "cancelled",
+          isRunning: false,
+          isWaitingApproval: false,
+          isCancellationRequested: true,
+          currentNode: null,
+        });
+        dispatch({ type: "SET_STATUS", status: "completed" });
+        onTerminal?.();
+        return;
       } else if (eventType === "graph_completed") {
         updateWorkflow({
           status: data.persisted ? "succeeded" : "failed",
@@ -764,13 +980,31 @@ async function streamWorkflowRun(
         onTerminal?.();
         return;
       } else if (eventType === "graph_error") {
+        const cancelled = data.status === "cancelled";
+        const nodeName = typeof data.node_name === "string" ? data.node_name : undefined;
+        const errorCode = typeof data.error_code === "string" ? data.error_code : undefined;
+        if (nodeName && !cancelled) {
+          dispatch({
+            type: "MERGE_WORKFLOW_NODE",
+            runId,
+            node: { name: nodeName, status: "failed", error: errorCode },
+            currentNode: null,
+          });
+        }
         updateWorkflow({
-          status: "failed",
+          status: cancelled ? "cancelled" : "failed",
           isRunning: false,
+          isWaitingApproval: false,
+          isCancellationRequested: cancelled,
           currentNode: null,
-          errorMessage: typeof data.error_message === "string" ? data.error_message : "Workflow failed",
+          errorMessage: cancelled
+            ? undefined
+            : typeof data.error_message === "string"
+              ? data.error_message
+              : "Workflow failed",
+          errorCode,
         });
-        dispatch({ type: "SET_STATUS", status: "failed" });
+        dispatch({ type: "SET_STATUS", status: cancelled ? "completed" : "failed" });
         onTerminal?.();
         return;
       }
@@ -778,6 +1012,57 @@ async function streamWorkflowRun(
   }
 
   onTerminal?.();
+}
+
+const RUNTIME_EVENT_POLL_INTERVAL_MS = 1_200;
+const RUNTIME_EVENT_POLL_MAX_ATTEMPTS = 500;
+
+function waitForRuntimePoll() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, RUNTIME_EVENT_POLL_INTERVAL_MS));
+}
+
+async function pollRuntimeWorkflow(
+  runtimeRunId: string,
+  toolName: string,
+  dispatch: Dispatch<Action>,
+  options?: AssistantSseHandlingOptions,
+) {
+  let afterSequence = 0;
+
+  for (let attempt = 0; attempt < RUNTIME_EVENT_POLL_MAX_ATTEMPTS; attempt += 1) {
+    const response = await listRuntimeEvents(runtimeRunId, afterSequence);
+    let terminalStatus: AssistantExecutionItem["status"] | null = null;
+
+    for (const event of response.items) {
+      afterSequence = Math.max(afterSequence, event.sequence);
+      for (const compatibilityEvent of runtimeEventToAssistantEvents(event, null)) {
+        handleAssistantSseEvent(compatibilityEvent.eventType, compatibilityEvent.data, dispatch, options);
+      }
+      if (event.type === "run.completed") terminalStatus = "succeeded";
+      if (event.type === "run.failed") terminalStatus = "failed";
+      if (event.type === "run.cancelled") terminalStatus = "cancelled";
+    }
+
+    if (terminalStatus) {
+      dispatch({
+        type: "UPDATE_EXECUTION_ITEM",
+        toolName,
+        runtimeRunId,
+        patch: {
+          status: terminalStatus,
+          isRunning: false,
+          isWaitingApproval: false,
+          currentNode: null,
+        },
+      });
+      dispatch({ type: "SET_STATUS", status: terminalStatus === "failed" ? "failed" : "completed" });
+      return;
+    }
+
+    await waitForRuntimePoll();
+  }
+
+  throw new Error("Workflow status polling timed out");
 }
 
 function parseSsePart(part: string): { eventType: string; data: Record<string, unknown> } | null {
@@ -799,6 +1084,28 @@ function parseSsePart(part: string): { eventType: string; data: Record<string, u
   }
 }
 
+async function replayRuntimeEvents(
+  runId: string,
+  cursors: RuntimeEventCursor,
+  conversationId: string | null,
+  dispatch: Dispatch<Action>,
+  options: AssistantSseHandlingOptions,
+): Promise<{ replayed: boolean; terminal: boolean }> {
+  const response = await listRuntimeEvents(runId, cursors[runId] ?? 0);
+  let replayed = false;
+  let terminal = false;
+
+  for (const event of response.items) {
+    for (const compatibilityEvent of runtimeEventToAssistantEvents(event, conversationId)) {
+      replayed = true;
+      handleAssistantSseEvent(compatibilityEvent.eventType, compatibilityEvent.data, dispatch, options);
+    }
+    terminal ||= isTerminalRuntimeEvent(event);
+  }
+
+  return { replayed, terminal };
+}
+
 
 export function isAssistantBusy(status: AssistantStatus) {
   return ["thinking", "executing_tool", "running_workflow"].includes(status);
@@ -806,6 +1113,20 @@ export function isAssistantBusy(status: AssistantStatus) {
 
 export function AIAssistantProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const runtimeEventCursorsRef = useRef<RuntimeEventCursor>({});
+
+  const shouldHandleRuntimeEvent = useCallback((data: Record<string, unknown>) => {
+    const runId = typeof data.runtime_run_id === "string" ? data.runtime_run_id : undefined;
+    const sequence = typeof data.runtime_sequence === "number" ? data.runtime_sequence : undefined;
+    if (!runId || sequence === undefined || !Number.isInteger(sequence) || sequence < 1) return true;
+    if (!isRuntimeSequenceNewer(runtimeEventCursorsRef.current, runId, sequence)) return false;
+    runtimeEventCursorsRef.current = advanceRuntimeSequenceCursor(
+      runtimeEventCursorsRef.current,
+      runId,
+      sequence,
+    );
+    return true;
+  }, []);
 
   const open = useCallback(
     (mode?: AssistantMode) => dispatch({ type: "OPEN", mode }),
@@ -874,6 +1195,26 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_APPROVAL_MODE", mode });
   }, []);
 
+  const cancelWorkflow = useCallback(async (runtimeRunId: string) => {
+    const run = await cancelRuntimeWorkflow(runtimeRunId);
+    const cancelled = run.status === "cancelled";
+    dispatch({
+      type: "UPDATE_EXECUTION_ITEM",
+      toolName: "start_draft_section",
+      runtimeRunId,
+      patch: {
+        status: cancelled ? "cancelled" : "running",
+        isRunning: !cancelled,
+        isWaitingApproval: false,
+        isCancellationRequested: true,
+        currentNode: cancelled ? null : undefined,
+      },
+    });
+    if (cancelled) {
+      dispatch({ type: "SET_STATUS", status: "completed" });
+    }
+  }, []);
+
   const startNewConversation = useCallback(() => {
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: null });
     dispatch({ type: "CLEAR_MESSAGES" });
@@ -891,7 +1232,12 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     async (
       content: string,
       options?: SendAssistantOptions,
-      confirmation?: { approved: boolean; tool_name: string; arguments: Record<string, unknown> },
+      confirmation?: {
+        approved: boolean;
+        tool_name: string;
+        arguments: Record<string, unknown>;
+        approval_id?: string;
+      },
     ) => {
       const displayContent = confirmation
         ? confirmation.approved
@@ -919,6 +1265,36 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       };
       dispatch({ type: "ADD_MESSAGE", message: aiMsg });
       dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: aiMsg.id });
+
+      let activeRuntimeRunId: string | null = null;
+      let activeConversationId = state.currentConversationId;
+      let receivedTerminalEvent = false;
+      const sseOptions: AssistantSseHandlingOptions = {
+        shouldHandleRuntimeEvent,
+        onRuntimeRun: (runId) => {
+          activeRuntimeRunId = runId;
+        },
+        onConversation: (conversationId) => {
+          activeConversationId = conversationId;
+        },
+        onTerminal: () => {
+          receivedTerminalEvent = true;
+        },
+      };
+      const recoverDurableTimeline = async () => {
+        if (!activeRuntimeRunId || receivedTerminalEvent) {
+          return { replayed: false, terminal: receivedTerminalEvent };
+        }
+        const recovered = await replayRuntimeEvents(
+          activeRuntimeRunId,
+          runtimeEventCursorsRef.current,
+          activeConversationId,
+          dispatch,
+          sseOptions,
+        );
+        receivedTerminalEvent ||= recovered.terminal;
+        return recovered;
+      };
 
       try {
         const token = getAuthToken();
@@ -972,17 +1348,33 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           buffer = parts.pop() ?? "";
 
           for (const part of parts) {
-            handleAssistantSsePart(part, dispatch);
+            handleAssistantSsePart(part, dispatch, sseOptions);
           }
         }
+
+        await recoverDurableTimeline();
       } catch (err) {
-        console.error("AI assistant error:", err);
+        try {
+          const recovered = await recoverDurableTimeline();
+          if (recovered.replayed || recovered.terminal) return;
+        } catch (recoveryError) {
+          console.warn("Failed to replay assistant runtime events:", recoveryError);
+        }
         const status = typeof (err as { status?: number }).status === "number" ? (err as { status?: number }).status : undefined;
         const errorCode = typeof (err as { errorCode?: string }).errorCode === "string" ? (err as { errorCode?: string }).errorCode : undefined;
         const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+        const providerSelectionUnavailable = status === 404 && message === "Provider config not found";
+        if (!providerSelectionUnavailable) {
+          console.error("AI assistant request failed", { status, errorCode: errorCode || undefined });
+        }
+        if (providerSelectionUnavailable) {
+          dispatch({ type: "SET_SELECTED_PROVIDER_CONFIG", providerConfigId: null });
+        }
         const friendly =
           status === 403 || errorCode === "usage_limit_exceeded"
             ? "你的试用额度已用完，请升级计划或稍后再试。"
+            : providerSelectionUnavailable
+              ? "所选模型配置已不可用，已切回平台默认模型。请确认后重新发送。"
             : message;
         dispatch({ type: "SET_SESSION_ERROR", message: friendly, errorCode });
       } finally {
@@ -997,6 +1389,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       state.approvalMode,
       state.selectedProviderConfigId,
       state.status,
+      shouldHandleRuntimeEvent,
     ],
   );
 
@@ -1020,6 +1413,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         approved,
         tool_name: pending.toolName,
         arguments: confirmationArguments,
+        approval_id: pending.approvalId,
       });
     },
     [sendAssistantRequest, state.pendingConfirmation],
@@ -1048,6 +1442,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         setSelectedProviderConfig,
         setReasoningEffort,
         setApprovalMode,
+        cancelWorkflow,
         confirmAssistantAction,
         executeCommand,
         refreshConversations,

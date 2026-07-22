@@ -3,6 +3,7 @@ from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
+from app.access.service import require_execution_run_capability
 from app.auth.service import require_auth
 from app.db import get_db
 from app.usage.service import UsageLimitExceeded
@@ -44,7 +45,12 @@ def redraft_section(
 
 
 @router.post("/runs/{run_id}/resume", response_model=DraftSectionResponse)
-def resume_run(run_id: str, payload: ResumeRunRequest, db: Session = Depends(get_db)) -> DraftSectionResponse:
+def resume_run(
+    run_id: str,
+    payload: ResumeRunRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> DraftSectionResponse:
     """Resume an interrupted drafting run after human review.
 
     The LangGraph graph pauses at the ``human_approval`` node when the
@@ -55,7 +61,7 @@ def resume_run(run_id: str, payload: ResumeRunRequest, db: Session = Depends(get
     a resumable state.
     """
     try:
-        return resume_run_command(db, run_id, payload)
+        return resume_run_command(db, run_id, payload, current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except RuntimeError as exc:
@@ -63,7 +69,11 @@ def resume_run(run_id: str, payload: ResumeRunRequest, db: Session = Depends(get
 
 
 @router.get("/runs/{run_id}/stream")
-async def stream_run_events(run_id: str, db: Session = Depends(get_db)):
+async def stream_run_events(
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+):
     """SSE endpoint for real-time graph execution progress.
 
     Emits Server-Sent Events as the LangGraph agent graph progresses
@@ -84,4 +94,10 @@ async def stream_run_events(run_id: str, db: Session = Depends(get_db)):
     The stream automatically terminates when the run reaches a terminal
     status (succeeded, failed, cancelled, error) or after 5 minutes.
     """
+    require_execution_run_capability(
+        db,
+        current_user=current_user,
+        run_id=run_id,
+        capability="project.read",
+    )
     return EventSourceResponse(stream_graph_events(run_id, db))

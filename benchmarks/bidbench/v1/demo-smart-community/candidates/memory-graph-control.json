@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "memory-graph-development-v1",
+  "fixture_fingerprint": "6fa14054c596de9aed50927763adb108eb8231ad3f9a30d8ff899675d651fbdc",
+  "extractor_policy_version": "memory-graph-proposer-v1",
+  "git_commit": "control-fixture",
+  "provider": "fixture",
+  "model": "deterministic-control",
+  "provenance": {
+    "evidence_set_id": "demo-smart-community-memory-graph",
+    "capture_id": "demo-memory-graph-control-v1",
+    "capture_kind": "control_fixture",
+    "review_level": "two_person_review",
+    "evaluator_version": "memory-graph-bench-v1"
+  },
+  "results": [
+    {
+      "case_id": "private-deployment-requirement",
+      "org_id": "org-demo",
+      "project_id": "project-demo-smart-community",
+      "memory_record_id": "memory-deployment-requirement",
+      "proposal_json": {
+        "schema_version": "bidpilot.memory-graph/v1",
+        "entities": [
+          {
+            "local_id": "deployment",
+            "canonical_name": "私有化部署",
+            "entity_type": "requirement",
+            "evidence_refs": [
+              {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-privacy-03"}
+            ]
+          },
+          {
+            "local_id": "response",
+            "canonical_name": "投标方案",
+            "entity_type": "deliverable",
+            "evidence_refs": [
+              {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-privacy-03"}
+            ]
+          }
+        ],
+        "relations": [
+          {
+            "subject_local_id": "deployment",
+            "predicate": "requires",
+            "object_local_id": "response",
+            "evidence_refs": [
+              {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-privacy-03"}
+            ]
+          }
+        ]
+      },
+      "review_summary": {
+        "accepted_item_count": 3,
+        "rejected_item_count": 0,
+        "pending_item_count": 0
+      }
+    },
+    {
+      "case_id": "delivery-deadline",
+      "org_id": "org-demo",
+      "project_id": "project-demo-smart-community",
+      "memory_record_id": "memory-delivery-deadline",
+      "proposal_json": {
+        "schema_version": "bidpilot.memory-graph/v1",
+        "entities": [
+          {
+            "local_id": "deadline",
+            "canonical_name": "项目交付日期",
+            "entity_type": "deadline",
+            "evidence_refs": [
+              {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-delivery-08"}
+            ]
+          },
+          {
+            "local_id": "response",
+            "canonical_name": "投标方案",
+            "entity_type": "deliverable",
+            "evidence_refs": [
+              {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-delivery-08"}
+            ]
+          }
+        ],
+        "relations": [
+          {
+            "subject_local_id": "response",
+            "predicate": "has_deadline",
+            "object_local_id": "deadline",
+            "evidence_refs": [
+              {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-delivery-08"}
+            ]
+          }
+        ]
+      },
+      "review_summary": {
+        "accepted_item_count": 3,
+        "rejected_item_count": 0,
+        "pending_item_count": 0
+      }
+    }
+  ]
+}

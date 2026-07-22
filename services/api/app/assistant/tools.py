@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.access.service import (
+    list_accessible_projects,
+    require_bundle_capability,
+    require_deliverable_capability,
+    require_deliverable_section_capability,
+    require_execution_run_capability,
+    require_project_capability,
+)
 from app.auth.schemas import CurrentUser
 from app.auth.service import check_plan_limit
+from app.assistant.attachments import attach_staged_attachments_to_project
 from app.bundles.service import list_bundles_query
 from app.deliverables.schemas import DeliverableCreate
 from app.deliverables.service import create_deliverable_command, list_deliverables_query
@@ -15,11 +23,29 @@ from app.drafting.schemas import DraftSectionRequest, RedraftSectionRequest
 from app.drafting.service import draft_section_command, redraft_section_command
 from app.evidence.service import list_evidence_query
 from app.execution.service import list_runs_query, retry_failed_run_command
+from app.export.service import generate_deliverable_export_command
+from app.memory.schemas import MemoryCreate, MemoryGraphExtractionCreate
+from app.memory.service import (
+    create_memory_command,
+    delete_memory_command,
+    list_memory_portfolio_query,
+    memory_context_for_agent,
+    start_memory_graph_extraction_command,
+)
 from app.models import Deliverable, DeliverableSection, Project, ReviewThread
 from app.projects.schemas import ProjectCreate
-from app.projects.service import create_project_command
-from app.requirements.service import list_requirements_query
+from app.projects.demo import create_demo_project_command
+from app.projects.service import create_project_command, delete_project_command_for_user
+from app.readiness.service import generate_readiness_pack_command, get_readiness_summary_query, select_readiness_gaps
+from app.review.schemas import ReviewDecisionCreate
+from app.review.service import submit_review_decision_command
+from app.requirements.service import (
+    get_claim_review_queue_query,
+    get_requirement_query,
+    list_requirements_query,
+)
 from app.versions.service import list_versions_query
+from contracts import MemoryKind, MemoryScope
 
 from .schemas import AssistantToolResult
 
@@ -32,6 +58,8 @@ def execute_tool(
 ) -> AssistantToolResult:
     if tool_name == "search_projects":
         return search_projects(db, user, arguments)
+    if tool_name == "create_demo_workspace":
+        return create_demo_workspace(db, user, arguments)
     if tool_name == "create_project":
         return create_project(db, user, arguments)
     if tool_name == "get_project_summary":
@@ -40,8 +68,20 @@ def execute_tool(
         return list_project_bundles(db, user, arguments)
     if tool_name == "list_sections":
         return list_sections(db, user, arguments)
+    if tool_name == "search_bid_wiki":
+        return search_bid_wiki_tool(db, user, arguments)
+    if tool_name == "list_knowledge_portfolio":
+        return list_knowledge_portfolio_tool(db, user)
+    if tool_name == "propose_memory":
+        return propose_memory_tool(db, user, arguments)
+    if tool_name == "propose_memory_graph":
+        return propose_memory_graph_tool(db, user, arguments)
+    if tool_name == "forget_memory":
+        return forget_memory_tool(db, user, arguments)
     if tool_name == "list_pending_reviews":
         return list_pending_reviews(db, user, arguments)
+    if tool_name == "submit_review_decision":
+        return submit_review_decision_tool(db, user, arguments)
     if tool_name == "open_page":
         return open_page(arguments)
     if tool_name == "get_runtime_status":
@@ -52,12 +92,22 @@ def execute_tool(
         return start_redraft_section(db, user, arguments)
     if tool_name == "list_requirements":
         return list_requirements_tool(db, user, arguments)
+    if tool_name == "list_claim_review_queue":
+        return list_claim_review_queue_tool(db, user, arguments)
+    if tool_name == "get_readiness_summary":
+        return get_readiness_summary_tool(db, user, arguments)
+    if tool_name == "list_readiness_gaps":
+        return list_readiness_gaps_tool(db, user, arguments)
+    if tool_name == "open_requirement_source":
+        return open_requirement_source_tool(db, user, arguments)
     if tool_name == "list_evidence":
         return list_evidence_tool(db, user, arguments)
     if tool_name == "list_deliverables":
         return list_deliverables_tool(db, user, arguments)
     if tool_name == "list_documents":
         return list_documents_tool(db, user, arguments)
+    if tool_name == "attach_uploaded_documents":
+        return attach_uploaded_documents_tool(db, user, arguments)
     if tool_name == "get_section_versions":
         return get_section_versions_tool(db, user, arguments)
     if tool_name == "create_deliverable":
@@ -66,6 +116,8 @@ def execute_tool(
         return retry_run_tool(db, user, arguments)
     if tool_name == "export_deliverable":
         return export_deliverable_tool(db, user, arguments)
+    if tool_name == "generate_readiness_pack":
+        return generate_readiness_pack_tool(db, user, arguments)
     if tool_name == "delete_project":
         return delete_project_tool(db, user, arguments)
     if tool_name == "upload_document":
@@ -75,10 +127,11 @@ def execute_tool(
 
 def search_projects(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     query = (arguments.get("query") or "").strip()
-    stmt = select(Project).where(Project.org_id == (user.org_id or "default"))
+    projects = list_accessible_projects(db, current_user=user)
     if query:
-        stmt = stmt.where(Project.name.ilike(f"%{query}%"))
-    projects = db.scalars(stmt.order_by(Project.created_at.desc()).limit(10)).all()
+        normalized_query = query.casefold()
+        projects = [project for project in projects if normalized_query in project.name.casefold()]
+    projects = projects[:10]
     result = {
         "items": [
             {
@@ -102,7 +155,13 @@ def create_project(db: Session, user: CurrentUser, arguments: dict) -> Assistant
     if not name:
         raise ValueError("Project name is required")
 
-    check_plan_limit(db, user.id, "projects", delta=1, plan=user.plan)
+    check_plan_limit(
+        db,
+        user.id,
+        "projects",
+        delta=1,
+        org_id=user.org_id,
+    )
     project = create_project_command(
         db,
         ProjectCreate(
@@ -110,11 +169,27 @@ def create_project(db: Session, user: CurrentUser, arguments: dict) -> Assistant
             scenario_package=arguments.get("scenario_package") or "bidpilot",
         ),
         user.org_id or "default",
+        user.id,
     )
     return AssistantToolResult(
         tool_name="create_project",
         result=project.model_dump(),
         summary=f"项目「{project.name}」已创建。",
+    )
+
+
+def create_demo_workspace(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project, created = create_demo_project_command(db, user)
+    result = {**project.model_dump(), "created": created}
+    summary = (
+        f"演示工作区「{project.name}」已准备好。"
+        if created
+        else f"已打开现有演示工作区「{project.name}」。"
+    )
+    return AssistantToolResult(
+        tool_name="create_demo_workspace",
+        result=result,
+        summary=summary,
     )
 
 
@@ -135,7 +210,7 @@ def get_project_summary(db: Session, user: CurrentUser, arguments: dict) -> Assi
 
 def list_project_bundles(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     project = _get_project_for_user(db, user, arguments["project_id"])
-    bundles = list_bundles_query(db, project.id)
+    bundles = list_bundles_query(db, project.id, current_user=user)
     return AssistantToolResult(
         tool_name="list_project_bundles",
         result={"items": [bundle.model_dump() for bundle in bundles]},
@@ -181,7 +256,14 @@ def list_pending_reviews(db: Session, user: CurrentUser, arguments: dict) -> Ass
         _get_project_for_user(db, user, project_id)
         query = query.filter(Deliverable.project_id == project_id)
     else:
-        query = query.join(Project, Deliverable.project_id == Project.id).filter(Project.org_id == (user.org_id or "default"))
+        project_ids = [project.id for project in list_accessible_projects(db, current_user=user)]
+        if not project_ids:
+            return AssistantToolResult(
+                tool_name="list_pending_reviews",
+                result={"items": []},
+                summary="有 0 个待处理评审。",
+            )
+        query = query.filter(Deliverable.project_id.in_(project_ids))
     rows = query.limit(20).all()
     return AssistantToolResult(
         tool_name="list_pending_reviews",
@@ -205,6 +287,7 @@ def open_page(arguments: dict) -> AssistantToolResult:
     allowed_routes = {
         "/",
         "/projects",
+        "/knowledge",
         "/pricing",
         "/docs",
         "/settings/providers",
@@ -222,7 +305,7 @@ def get_runtime_status(db: Session, user: CurrentUser, arguments: dict) -> Assis
     project_id = arguments.get("project_id")
     if project_id:
         _get_project_for_user(db, user, project_id)
-        runs = list_runs_query(db, project_id)
+        runs = list_runs_query(db, project_id, user)
     else:
         runs = []
     return AssistantToolResult(
@@ -233,6 +316,12 @@ def get_runtime_status(db: Session, user: CurrentUser, arguments: dict) -> Assis
 
 
 def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    require_project_capability(
+        db,
+        current_user=user,
+        project_id=arguments["project_id"],
+        capability="workflow.run",
+    )
     response = draft_section_command(
         db,
         DraftSectionRequest(
@@ -240,6 +329,7 @@ def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> Assi
             section_key=arguments["section_key"],
             provider_config_id=arguments.get("provider_config_id"),
             reasoning_effort=arguments.get("reasoning_effort"),
+            parent_runtime_run_id=arguments.get("parent_runtime_run_id"),
         ),
         user,
     )
@@ -251,7 +341,158 @@ def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> Assi
     )
 
 
+def submit_review_decision_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project_id = str(arguments.get("project_id") or "").strip()
+    section_id = str(arguments.get("section_id") or "").strip()
+    decision = str(arguments.get("decision") or "").strip().lower()
+    if not project_id or not section_id:
+        raise ValueError("project_id and section_id are required")
+    if decision not in {"approved", "rejected"}:
+        raise ValueError("decision must be approved or rejected")
+    section = require_deliverable_section_capability(
+        db,
+        current_user=user,
+        section_id=section_id,
+        capability="review.write",
+    )
+    deliverable = db.get(Deliverable, section.deliverable_id)
+    if deliverable is None or deliverable.project_id != project_id:
+        raise ValueError("Section does not belong to this project")
+    review = submit_review_decision_command(
+        db,
+        ReviewDecisionCreate(
+            section_id=section_id,
+            decision=decision,
+            comment=str(arguments.get("comment") or "").strip() or None,
+        ),
+        user,
+    )
+    summary = "章节审核已通过。" if review.decision == "approved" else "章节已退回修改。"
+    return AssistantToolResult(
+        tool_name="submit_review_decision",
+        result={
+            "section_id": review.section_id,
+            "decision": review.decision,
+            "review_thread_id": review.id,
+        },
+        summary=summary,
+    )
+
+
+def search_bid_wiki_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    context = memory_context_for_agent(
+        db,
+        current_user=user,
+        project_id=arguments.get("project_id"),
+        query=str(arguments.get("query") or "").strip(),
+    )
+    items = [
+        {
+            "id": item.record_id,
+            "title": item.title,
+            "body_markdown": item.body_markdown,
+            "scope": item.scope.value,
+            "kind": item.kind.value,
+            "citations": [citation.model_dump(exclude_none=True) for citation in item.citations],
+        }
+        for item in context.items
+    ]
+    return AssistantToolResult(
+        tool_name="search_bid_wiki",
+        result={
+            "memory_version": context.memory_version,
+            "items": items,
+            "degraded_reasons": list(context.degraded_reasons),
+        },
+        summary=f"找到 {len(items)} 条可用记忆。",
+    )
+
+
+def list_knowledge_portfolio_tool(db: Session, user: CurrentUser) -> AssistantToolResult:
+    """Return the same aggregate-only view used by the Workbench portfolio.
+
+    This deliberately does not construct a memory context pack. The Agent can
+    help a user choose a project, but it must enter that project before reading
+    any Bid Wiki record body or evidence.
+    """
+    items = [item.model_dump(mode="json") for item in list_memory_portfolio_query(db, user, limit=50)]
+    return AssistantToolResult(
+        tool_name="list_knowledge_portfolio",
+        result={"items": items, "count": len(items)},
+        summary=f"已检查 {len(items)} 个可访问项目的知识状态。",
+    )
+
+
+def propose_memory_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    scope = MemoryScope(arguments.get("scope", MemoryScope.USER_PRIVATE.value))
+    record = create_memory_command(
+        db,
+        MemoryCreate(
+            scope=scope,
+            project_id=arguments.get("project_id"),
+            kind=MemoryKind(arguments.get("kind", MemoryKind.PREFERENCE.value)),
+            title=str(arguments.get("title") or "个人工作偏好").strip(),
+            body_markdown=str(arguments.get("body_markdown") or "").strip(),
+        ),
+        user,
+    )
+    summary = "已保存为个人工作偏好。" if scope is MemoryScope.USER_PRIVATE else "已提交到项目知识审核队列。"
+    return AssistantToolResult(
+        tool_name="propose_memory",
+        result={"id": record.id, "status": record.status.value, "scope": record.scope.value},
+        summary=summary,
+    )
+
+
+def propose_memory_graph_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project_id = str(arguments.get("project_id") or "").strip()
+    memory_record_id = str(arguments.get("memory_record_id") or "").strip()
+    if not project_id or not memory_record_id:
+        raise ValueError("project_id and memory_record_id are required")
+
+    response = start_memory_graph_extraction_command(
+        db,
+        MemoryGraphExtractionCreate(
+            project_id=project_id,
+            memory_record_id=memory_record_id,
+            provider_config_id=arguments.get("provider_config_id"),
+            reasoning_effort=arguments.get("reasoning_effort"),
+        ),
+        user,
+    )
+    summary = "已复用正在处理的实体关系提案。" if response.reused else "实体关系提案已启动，完成后会进入项目知识审核队列。"
+    return AssistantToolResult(
+        tool_name="propose_memory_graph",
+        result={
+            "run_id": response.run_id,
+            "runtime_run_id": response.runtime_run_id,
+            "status": response.status,
+            "reused": response.reused,
+        },
+        summary=summary,
+        workflow=True,
+    )
+
+
+def forget_memory_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    memory_id = str(arguments.get("memory_id") or "").strip()
+    if not memory_id:
+        raise ValueError("memory_id is required")
+    delete_memory_command(db, memory_id, user)
+    return AssistantToolResult(
+        tool_name="forget_memory",
+        result={"deleted": True, "memory_id": memory_id},
+        summary="这条记忆已遗忘。",
+    )
+
+
 def start_redraft_section(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    require_project_capability(
+        db,
+        current_user=user,
+        project_id=arguments["project_id"],
+        capability="workflow.run",
+    )
     response = redraft_section_command(
         db,
         RedraftSectionRequest(
@@ -260,6 +501,7 @@ def start_redraft_section(db: Session, user: CurrentUser, arguments: dict) -> As
             review_feedback=arguments.get("review_feedback"),
             provider_config_id=arguments.get("provider_config_id"),
             reasoning_effort=arguments.get("reasoning_effort"),
+            parent_runtime_run_id=arguments.get("parent_runtime_run_id"),
         ),
         user,
     )
@@ -272,12 +514,12 @@ def start_redraft_section(db: Session, user: CurrentUser, arguments: dict) -> As
 
 
 def _get_project_for_user(db: Session, user: CurrentUser, project_id: str) -> Project:
-    project = db.get(Project, project_id)
-    if project is None:
-        raise ValueError("Project not found")
-    if project.org_id != (user.org_id or "default"):
-        raise ValueError("Project not found")
-    return project
+    return require_project_capability(
+        db,
+        current_user=user,
+        project_id=project_id,
+        capability="project.read",
+    ).project
 
 
 # ── New read-only tools ──────────────────────────────────────────────────────
@@ -285,7 +527,7 @@ def _get_project_for_user(db: Session, user: CurrentUser, project_id: str) -> Pr
 
 def list_requirements_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     project = _get_project_for_user(db, user, arguments["project_id"])
-    items = list_requirements_query(db, project.id)
+    items = list_requirements_query(db, project.id, current_user=user)
     return AssistantToolResult(
         tool_name="list_requirements",
         result={"items": [item.model_dump() for item in items]},
@@ -295,7 +537,7 @@ def list_requirements_tool(db: Session, user: CurrentUser, arguments: dict) -> A
 
 def list_evidence_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     project = _get_project_for_user(db, user, arguments["project_id"])
-    items = list_evidence_query(db, project.id)
+    items = list_evidence_query(db, project.id, user)
     return AssistantToolResult(
         tool_name="list_evidence",
         result={"items": [item.model_dump() for item in items]},
@@ -305,7 +547,7 @@ def list_evidence_tool(db: Session, user: CurrentUser, arguments: dict) -> Assis
 
 def list_deliverables_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     project = _get_project_for_user(db, user, arguments["project_id"])
-    items = list_deliverables_query(db, project.id)
+    items = list_deliverables_query(db, project.id, user)
     return AssistantToolResult(
         tool_name="list_deliverables",
         result={"items": [item.model_dump() for item in items]},
@@ -317,7 +559,15 @@ def list_documents_tool(db: Session, user: CurrentUser, arguments: dict) -> Assi
     project = _get_project_for_user(db, user, arguments["project_id"])
     bundle_id = arguments.get("bundle_id")
     if bundle_id:
-        items = list_documents_query(db, bundle_id)
+        bundle = require_bundle_capability(
+            db,
+            current_user=user,
+            bundle_id=bundle_id,
+            capability="project.read",
+        )
+        if bundle.project_id != project.id:
+            raise ValueError("Bundle does not belong to this project")
+        items = list_documents_query(db, bundle_id, user)
     else:
         items = []
     return AssistantToolResult(
@@ -327,10 +577,72 @@ def list_documents_tool(db: Session, user: CurrentUser, arguments: dict) -> Assi
     )
 
 
+def list_claim_review_queue_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    queue = get_claim_review_queue_query(db, project.id, current_user=user)
+    result = {
+        "project_id": queue.project_id,
+        "count": queue.count,
+        "ready_to_verify_count": queue.ready_to_verify_count,
+        "blocked_by_evidence_count": queue.blocked_by_evidence_count,
+        "truncated": queue.truncated,
+    }
+    if queue.count == 0:
+        summary = f"项目「{project.name}」目前没有待人工核验的 AI 主张。"
+    else:
+        summary = (
+            f"项目「{project.name}」有 {queue.count} 条 AI 主张等待人工核验，"
+            f"其中 {queue.ready_to_verify_count} 条已具备核验条件，"
+            f"{queue.blocked_by_evidence_count} 条仍缺少已核验证据。"
+        )
+    return AssistantToolResult(
+        tool_name="list_claim_review_queue",
+        result=result,
+        summary=summary,
+    )
+
+
+def attach_uploaded_documents_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project_id = str(arguments.get("project_id") or "").strip()
+    attachment_ids = arguments.get("attachment_ids")
+    if not project_id:
+        raise ValueError("project_id is required")
+    if not isinstance(attachment_ids, list) or not all(isinstance(item, str) and item for item in attachment_ids):
+        raise ValueError("attachment_ids must be a non-empty list of staged attachment ids")
+    result = attach_staged_attachments_to_project(
+        db,
+        current_user=user,
+        project_id=project_id,
+        attachment_ids=attachment_ids,
+        bundle_label=arguments.get("bundle_label"),
+    )
+    count = int(result["attachment_count"])
+    summary = (
+        f"已将 {count} 个附件加入资料包，并开始解析。"
+        if result.get("ingest_queued") is not False
+        else f"已将 {count} 个附件加入资料包；解析任务等待重新提交。"
+    )
+    return AssistantToolResult(
+        tool_name="attach_uploaded_documents",
+        result=result,
+        summary=summary,
+    )
+
+
 def get_section_versions_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
-    _get_project_for_user(db, user, arguments["project_id"])
+    project = _get_project_for_user(db, user, arguments["project_id"])
     section_id = arguments.get("section_id", "")
-    items = list_versions_query(db, section_id) if section_id else []
+    if section_id:
+        section = require_deliverable_section_capability(
+            db,
+            current_user=user,
+            section_id=section_id,
+            capability="project.read",
+        )
+        deliverable = db.get(Deliverable, section.deliverable_id)
+        if deliverable is None or deliverable.project_id != project.id:
+            raise ValueError("Section does not belong to this project")
+    items = list_versions_query(db, section_id, user) if section_id else []
     return AssistantToolResult(
         tool_name="get_section_versions",
         result={"items": [item.model_dump() for item in items]},
@@ -342,12 +654,19 @@ def get_section_versions_tool(db: Session, user: CurrentUser, arguments: dict) -
 
 
 def create_deliverable_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
-    project = _get_project_for_user(db, user, arguments["project_id"])
+    project = require_project_capability(
+        db,
+        current_user=user,
+        project_id=arguments["project_id"],
+        capability="project.manage",
+    ).project
     title = str(arguments.get("title") or "").strip()
     if not title:
         raise ValueError("Deliverable title is required")
     deliverable = create_deliverable_command(
-        db, DeliverableCreate(project_id=project.id, type=arguments.get("type", "proposal"), title=title)
+        db,
+        DeliverableCreate(project_id=project.id, type=arguments.get("type", "proposal"), title=title),
+        user,
     )
     return AssistantToolResult(
         tool_name="create_deliverable",
@@ -360,12 +679,106 @@ def retry_run_tool(db: Session, user: CurrentUser, arguments: dict) -> Assistant
     run_id = arguments.get("run_id", "")
     if not run_id:
         raise ValueError("run_id is required")
-    run = retry_failed_run_command(db, run_id)
+    require_execution_run_capability(
+        db,
+        current_user=user,
+        run_id=run_id,
+        capability="workflow.run",
+    )
+    run = retry_failed_run_command(db, run_id, user)
     return AssistantToolResult(
         tool_name="retry_run",
         result=run.model_dump(),
-        summary=f"已重试运行 {run_id[:8]}。",
+        summary=f"已创建新的重试运行 {run.id[:8]}。",
     )
+
+
+def get_readiness_summary_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    summary = get_readiness_summary_query(db, project.id, current_user=user)
+    return AssistantToolResult(
+        tool_name="get_readiness_summary",
+        result={
+            "project_id": summary.project_id,
+            "project_name": summary.project_name,
+            "readiness_score": summary.readiness_score,
+            "counts": summary.counts.model_dump(),
+            "scores": summary.scores.model_dump(),
+            "blockers": {
+                "mandatory": len(summary.mandatory_gaps),
+                "evidence": len(summary.evidence_gaps),
+                "contradictions": len(summary.contradictions),
+                "overdue": len(summary.overdue),
+            },
+        },
+        summary=(
+            f"项目「{summary.project_name}」当前就绪度为 {summary.readiness_score:.1f} 分，"
+            f"有 {len(summary.mandatory_gaps)} 个强制项缺口和 {len(summary.evidence_gaps)} 个证据缺口。"
+        ),
+    )
+
+
+def list_readiness_gaps_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    kind = str(arguments.get("kind") or "all")
+    summary = get_readiness_summary_query(db, project.id, current_user=user)
+    items = select_readiness_gaps(summary, kind=kind)[:20]
+    return AssistantToolResult(
+        tool_name="list_readiness_gaps",
+        result={
+            "kind": kind,
+            "items": [_readiness_gap_to_result(item) for item in items],
+        },
+        summary=f"项目「{summary.project_name}」有 {len(items)} 个{_readiness_gap_label(kind)}。",
+    )
+
+
+def open_requirement_source_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    requirement_id = str(arguments.get("requirement_id") or "")
+    if not requirement_id:
+        raise ValueError("requirement_id is required")
+    requirement = get_requirement_query(db, requirement_id, current_user=user)
+    result = {
+        "id": requirement.id,
+        "requirement_text": requirement.requirement_text,
+        "original_text": requirement.original_text,
+        "source_document_name": requirement.source_document_name,
+        "source_locator_json": requirement.source_locator_json,
+        "verification_status": requirement.verification_status,
+        "coverage_status": requirement.bid_profile.coverage_status if requirement.bid_profile else "uncovered",
+    }
+    if requirement.source_locator_json:
+        summary = f"已定位需求「{requirement.requirement_text[:32]}」的来源定位。"
+    else:
+        summary = f"需求「{requirement.requirement_text[:32]}」尚未关联来源定位。"
+    return AssistantToolResult(
+        tool_name="open_requirement_source",
+        result=result,
+        summary=summary,
+    )
+
+
+def _readiness_gap_to_result(item) -> dict:
+    return {
+        "id": item.id,
+        "requirement_text": item.requirement_text,
+        "risk_level": item.risk_level,
+        "coverage_status": item.coverage_status,
+        "evidence_status": item.evidence_status,
+        "owner_user_id": item.owner_user_id,
+        "source_locator_json": item.source_locator_json,
+    }
+
+
+def _readiness_gap_label(kind: str) -> str:
+    return {
+        "high_risk": "高风险缺口",
+        "mandatory": "强制项缺口",
+        "evidence": "证据缺口",
+        "contradictions": "矛盾项",
+        "overdue": "逾期项",
+        "uncovered": "未覆盖项",
+    }.get(kind, "待处理缺口")
 
 
 def export_deliverable_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
@@ -373,26 +786,71 @@ def export_deliverable_tool(db: Session, user: CurrentUser, arguments: dict) -> 
     fmt = arguments.get("format", "docx")
     if not deliverable_id:
         raise ValueError("deliverable_id is required")
-    deliverable = db.get(Deliverable, deliverable_id)
-    if deliverable is None:
-        raise ValueError("Deliverable not found")
+    deliverable = require_deliverable_capability(
+        db,
+        current_user=user,
+        deliverable_id=deliverable_id,
+        capability="deliverables.export",
+    )
+    if deliverable.project_id != arguments.get("project_id"):
+        raise ValueError("Deliverable does not belong to this project")
     if deliverable.status != "approved":
         raise ValueError("Deliverable must be approved before export")
+    artifact = generate_deliverable_export_command(
+        db,
+        deliverable_id=deliverable_id,
+        artifact_format=str(fmt).lower(),
+        current_user=user,
+        require_approved=True,
+    )
     return AssistantToolResult(
         tool_name="export_deliverable",
-        result={"deliverable_id": deliverable_id, "format": fmt, "status": "ready"},
-        summary=f"交付物「{deliverable.title}」的 {fmt.upper()} 导出已就绪，请前往导出页面下载。",
+        result={
+            "deliverable_id": deliverable_id,
+            "format": str(fmt).lower(),
+            "status": "ready",
+            "download_path": artifact.download_path,
+            "persisted": artifact.storage_key is not None,
+        },
+        summary=f"交付物「{deliverable.title}」的 {str(fmt).upper()} 已生成，可下载。",
+    )
+
+
+def generate_readiness_pack_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    project_id = str(arguments.get("project_id") or "").strip()
+    if not project_id:
+        raise ValueError("project_id is required")
+    pack = generate_readiness_pack_command(
+        db,
+        project_id,
+        current_user=user,
+        actor_id=user.id,
+    )
+    return AssistantToolResult(
+        tool_name="generate_readiness_pack",
+        result={
+            "pack_id": pack.id,
+            "version_number": pack.version_number,
+            "status": pack.status,
+            "xlsx_download_path": f"/readiness/packs/{pack.id}/xlsx",
+            "docx_download_path": f"/readiness/packs/{pack.id}/docx",
+        },
+        summary=f"投标准备度包 v{pack.version_number} 已生成，可下载 DOCX 和 XLSX。",
     )
 
 
 def delete_project_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
-    project = _get_project_for_user(db, user, arguments["project_id"])
+    project = require_project_capability(
+        db,
+        current_user=user,
+        project_id=arguments["project_id"],
+        capability="project.delete",
+    ).project
     name = project.name
     confirmation_text = str(arguments.get("confirmation_text") or "").strip()
     if confirmation_text != name:
         raise ValueError(f"删除项目需要输入完整项目名称「{name}」进行确认。")
-    db.delete(project)
-    db.commit()
+    delete_project_command_for_user(db, project.id, user)
     return AssistantToolResult(
         tool_name="delete_project",
         result={"deleted": True, "project_id": arguments["project_id"], "name": name},

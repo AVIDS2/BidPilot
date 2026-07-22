@@ -26,3 +26,26 @@ def test_agent_llm_uses_anthropic_messages_provider() -> None:
     )
 
     assert isinstance(llm, ChatAnthropic)
+
+
+def test_agent_llm_adds_profile_header_for_mimo(monkeypatch) -> None:
+    from app.agent import llm as agent_llm
+
+    captured: dict[str, object] = {}
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(agent_llm, "ChatOpenAI", FakeChatOpenAI)
+
+    agent_llm._make(
+        "openai",
+        "test-mimo-key",
+        "https://mimo.example.test/v1",
+        "mimo-v2.5-pro",
+        provider_id="mimo",
+    )
+
+    assert captured["base_url"] == "https://mimo.example.test/v1"
+    assert captured["default_headers"] == {"api-key": "test-mimo-key"}

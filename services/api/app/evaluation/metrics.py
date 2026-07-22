@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import unicodedata
+from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
 
 from contracts import (
     BidBenchCandidate,
+    BidBenchCandidateClaim,
     BidBenchCandidateRequirement,
     BidBenchDataset,
     BidBenchLocator,
@@ -33,12 +35,17 @@ class BidBenchScoreCounts(BaseModel):
     true_positive_evidence_links: int
     accepted_claims: int
     unsupported_claims: int
+    traceable_claims: int = 0
+    untraceable_claims: int = 0
+    claims_with_unknown_requirement_refs: int = 0
+    claims_with_missing_evidence_refs: int = 0
+    claims_with_unsupported_requirement_evidence_pairs: int = 0
 
 
 class BidBenchMetrics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    formula_version: str = "2.0"
+    formula_version: str = "2.1"
     matching_policy: str = "normalized-exact-v2"
     counts: BidBenchScoreCounts
     requirement_recall: float
@@ -55,6 +62,7 @@ class BidBenchMetrics(BaseModel):
     evidence_f1: float
     unsupported_claim_rate: float | None
     claim_grounding_rate: float | None
+    claim_trace_integrity_rate: float | None = None
     completeness_score: float
     traceability_score: float
     combined_score: float
@@ -159,6 +167,16 @@ def score_candidate(dataset: BidBenchDataset, candidate: BidBenchCandidate) -> B
     claim_grounding_rate = (
         1.0 - unsupported_claim_rate if unsupported_claim_rate is not None else None
     )
+    claim_trace = _score_claim_trace_integrity(
+        accepted_claims,
+        matched_by_candidate_id=matched_by_candidate_id,
+        valid_evidence_ids=valid_evidence_ids,
+        valid_requirement_evidence_pairs={
+            (requirement_id, evidence.id)
+            for evidence in dataset.evidence
+            for requirement_id in evidence.supports_requirement_ids
+        },
+    )
 
     completeness_score = _average(
         [
@@ -188,6 +206,13 @@ def score_candidate(dataset: BidBenchDataset, candidate: BidBenchCandidate) -> B
             true_positive_evidence_links=len(true_positive_evidence),
             accepted_claims=len(accepted_claims),
             unsupported_claims=len(unsupported_claims),
+            traceable_claims=claim_trace.traceable_claims,
+            untraceable_claims=claim_trace.untraceable_claims,
+            claims_with_unknown_requirement_refs=claim_trace.claims_with_unknown_requirement_refs,
+            claims_with_missing_evidence_refs=claim_trace.claims_with_missing_evidence_refs,
+            claims_with_unsupported_requirement_evidence_pairs=(
+                claim_trace.claims_with_unsupported_requirement_evidence_pairs
+            ),
         ),
         requirement_recall=requirement_recall,
         requirement_precision=requirement_precision,
@@ -203,9 +228,72 @@ def score_candidate(dataset: BidBenchDataset, candidate: BidBenchCandidate) -> B
         evidence_f1=evidence_f1,
         unsupported_claim_rate=unsupported_claim_rate,
         claim_grounding_rate=claim_grounding_rate,
+        claim_trace_integrity_rate=claim_trace.claim_trace_integrity_rate,
         completeness_score=completeness_score,
         traceability_score=traceability_score,
         combined_score=combined_score,
+    )
+
+
+@dataclass(frozen=True)
+class _ClaimTraceIntegrity:
+    traceable_claims: int
+    untraceable_claims: int
+    claims_with_unknown_requirement_refs: int
+    claims_with_missing_evidence_refs: int
+    claims_with_unsupported_requirement_evidence_pairs: int
+    claim_trace_integrity_rate: float | None
+
+
+def _score_claim_trace_integrity(
+    claims: list[BidBenchCandidateClaim],
+    *,
+    matched_by_candidate_id: dict[str, str],
+    valid_evidence_ids: set[str],
+    valid_requirement_evidence_pairs: set[tuple[str, str]],
+) -> _ClaimTraceIntegrity:
+    """Score the explicit Requirement -> Evidence -> Claim contract only."""
+    traceable_claims = 0
+    unknown_requirement_refs = 0
+    missing_evidence_refs = 0
+    unsupported_pairs = 0
+
+    for claim in claims:
+        candidate_requirement_ids = set(claim.requirement_ids)
+        evidence_ids = set(claim.evidence_ids)
+        if not candidate_requirement_ids or not candidate_requirement_ids.issubset(
+            matched_by_candidate_id
+        ):
+            unknown_requirement_refs += 1
+            continue
+        if not evidence_ids or not evidence_ids.issubset(valid_evidence_ids):
+            missing_evidence_refs += 1
+            continue
+
+        truth_requirement_ids = {
+            matched_by_candidate_id[requirement_id]
+            for requirement_id in candidate_requirement_ids
+        }
+        requirement_evidence_pairs = {
+            (requirement_id, evidence_id)
+            for requirement_id in truth_requirement_ids
+            for evidence_id in evidence_ids
+        }
+        if not requirement_evidence_pairs.issubset(valid_requirement_evidence_pairs):
+            unsupported_pairs += 1
+            continue
+        traceable_claims += 1
+
+    untraceable_claims = len(claims) - traceable_claims
+    return _ClaimTraceIntegrity(
+        traceable_claims=traceable_claims,
+        untraceable_claims=untraceable_claims,
+        claims_with_unknown_requirement_refs=unknown_requirement_refs,
+        claims_with_missing_evidence_refs=missing_evidence_refs,
+        claims_with_unsupported_requirement_evidence_pairs=unsupported_pairs,
+        claim_trace_integrity_rate=(
+            _ratio(traceable_claims, len(claims)) if claims else None
+        ),
     )
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from contracts import BidBenchCandidate, BidBenchDataset
+from contracts import BidBenchCandidate, BidBenchDataset, EvaluationEvidenceProvenance
 
 from .metrics import BidBenchMetrics, score_candidate
 
@@ -35,6 +35,7 @@ class BidBenchRunReport(BaseModel):
     run_number: int
     latency_ms: int | None = None
     estimated_cost_usd: float | None = None
+    provenance: EvaluationEvidenceProvenance | None = None
     metrics: BidBenchMetrics
     gate: "BidBenchGateResult | None" = None
 
@@ -47,6 +48,7 @@ class BidBenchThresholds(BaseModel):
     min_source_association_accuracy: float | None = Field(default=None, ge=0, le=1)
     min_combined_score: float | None = Field(default=None, ge=0, le=1)
     max_unsupported_claim_rate: float | None = Field(default=None, ge=0, le=1)
+    min_claim_trace_integrity_rate: float | None = Field(default=None, ge=0, le=1)
 
 
 class BidBenchGateResult(BaseModel):
@@ -95,6 +97,7 @@ def evaluate_files(dataset_path: Path, candidate_path: Path) -> BidBenchRunRepor
         run_number=candidate.run_number,
         latency_ms=candidate.latency_ms,
         estimated_cost_usd=candidate.estimated_cost_usd,
+        provenance=candidate.provenance,
         metrics=metrics,
     )
 
@@ -115,6 +118,7 @@ def render_markdown(report: BidBenchRunReport) -> str:
         ("Evidence recall", metrics.evidence_recall),
         ("Evidence F1", metrics.evidence_f1),
         ("Unsupported claim rate", metrics.unsupported_claim_rate),
+        ("Claim trace integrity", metrics.claim_trace_integrity_rate),
         ("Completeness score", metrics.completeness_score),
         ("Traceability score", metrics.traceability_score),
         ("Combined score", metrics.combined_score),
@@ -149,6 +153,20 @@ def render_markdown(report: BidBenchRunReport) -> str:
             f"- Candidate evidence links: {metrics.counts.candidate_evidence_links}",
             f"- Accepted claims: {metrics.counts.accepted_claims}",
             f"- Unsupported claims: {metrics.counts.unsupported_claims}",
+            f"- Traceable accepted claims: {metrics.counts.traceable_claims}",
+            f"- Untraceable accepted claims: {metrics.counts.untraceable_claims}",
+            (
+                "- Claims with unknown requirement references: "
+                f"{metrics.counts.claims_with_unknown_requirement_refs}"
+            ),
+            (
+                "- Claims with missing or unknown evidence references: "
+                f"{metrics.counts.claims_with_missing_evidence_refs}"
+            ),
+            (
+                "- Claims with unsupported requirement/evidence pairs: "
+                f"{metrics.counts.claims_with_unsupported_requirement_evidence_pairs}"
+            ),
             "",
         ]
     )
@@ -205,9 +223,17 @@ def check_thresholds(
             thresholds.min_source_association_accuracy,
         ),
         "combined_score": (metrics.combined_score, thresholds.min_combined_score),
+        "claim_trace_integrity_rate": (
+            metrics.claim_trace_integrity_rate,
+            thresholds.min_claim_trace_integrity_rate,
+        ),
     }
     for name, (actual, minimum) in minimums.items():
-        if minimum is not None and actual < minimum:
+        if minimum is None:
+            continue
+        if actual is None:
+            failures.append(f"{name} is unavailable but requires minimum {minimum:.4f}")
+        elif actual < minimum:
             failures.append(f"{name}={actual:.4f} is below minimum {minimum:.4f}")
 
     maximum = thresholds.max_unsupported_claim_rate

@@ -21,7 +21,7 @@ def get_project_readiness(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> BidReadinessSummary:
-    return get_readiness_summary_query(db, project_id, org_id=current_user.org_id)
+    return get_readiness_summary_query(db, project_id, current_user=current_user)
 
 
 @router.post(
@@ -37,7 +37,7 @@ def generate_readiness_pack(
     return generate_readiness_pack_command(
         db,
         project_id,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
     )
 
@@ -53,7 +53,7 @@ def download_readiness_pack(
         db,
         pack_id,
         artifact_format,
-        org_id=current_user.org_id,
+        current_user=current_user,
     )
     return Response(
         content=data,

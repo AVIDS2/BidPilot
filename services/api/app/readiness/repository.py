@@ -1,7 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import BidRequirementProfile, Project, ReadinessPack, RequirementItem
+from app.models import Project, ReadinessPack, RequirementItem
 
 
 def get_project_for_org(

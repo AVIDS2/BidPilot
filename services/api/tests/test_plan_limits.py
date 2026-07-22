@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.db import Base
-from app.models import User, Subscription, Project, Organization
+from app.models import Organization, OrganizationMembership, Project, Subscription, User
 from app.auth.service import _hash_password, check_plan_limit, PLAN_LIMITS
 
 ORG_ID = "00000000-0000-0000-0000-000000000001"
@@ -26,6 +26,8 @@ def db():
 def _make_user(db: Session, email: str, plan: str = "starter") -> User:
     user = User(email=email, display_name=email.split("@")[0], password_hash=_hash_password("pass"), role="member", org_id=ORG_ID)
     db.add(user)
+    db.flush()
+    db.add(OrganizationMembership(org_id=ORG_ID, user_id=user.id, role="owner"))
     db.commit()
     sub = Subscription(user_id=user.id, plan=plan, status="active")
     db.add(sub)
@@ -70,6 +72,8 @@ def test_professional_unlimited(db: Session):
 def test_no_subscription_defaults_to_starter(db: Session):
     user = User(email="d@e.com", display_name="D", password_hash=_hash_password("pass"), role="member", org_id=ORG_ID)
     db.add(user)
+    db.flush()
+    db.add(OrganizationMembership(org_id=ORG_ID, user_id=user.id, role="owner"))
     db.commit()
     # No subscription record → treated as starter
     with pytest.raises(ValueError, match="plan limit"):

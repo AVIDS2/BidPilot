@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from urllib.parse import quote
 
+from app.auth.schemas import CurrentUser
+from app.auth.service import require_auth
 from app.db import get_db
 
 from .schemas import DocumentsPaginatedResponse, SourceDocumentRead
-from .service import download_document_command, list_documents_paginated_query, list_documents_query, upload_document_command
+from .service import download_document_command, list_documents_paginated_query, upload_document_command
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -17,16 +19,19 @@ def list_documents(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
 ) -> DocumentsPaginatedResponse:
     """List documents in a bundle with pagination support for large bundles."""
-    return list_documents_paginated_query(db, bundle_id, page, page_size)
+    return list_documents_paginated_query(db, bundle_id, page, page_size, current_user)
 
 
 @router.post("/upload", response_model=SourceDocumentRead, status_code=201)
 async def upload_document(
     bundle_id: str,
     file: UploadFile = File(...),
+    assistant_attachment_id: str | None = Form(None),
     db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
 ) -> SourceDocumentRead:
     data = await file.read()
     return upload_document_command(
@@ -35,12 +40,18 @@ async def upload_document(
         filename=file.filename or "untitled",
         content_type=file.content_type or "application/octet-stream",
         data=data,
+        current_user=current_user,
+        assistant_attachment_id=assistant_attachment_id,
     )
 
 
 @router.get("/{document_id}/download")
-def download_document(document_id: str, db: Session = Depends(get_db)) -> Response:
-    result = download_document_command(db, document_id)
+def download_document(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> Response:
+    result = download_document_command(db, document_id, current_user)
     if result is None:
         raise HTTPException(status_code=404, detail="Document not found")
     data, filename, content_type = result

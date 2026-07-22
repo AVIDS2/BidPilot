@@ -110,9 +110,24 @@ def _candidate() -> BidBenchCandidate:
                 },
             ],
             "claims": [
-                {"id": "claim-1", "text": "Grounded", "evidence_ids": ["ev-1"]},
-                {"id": "claim-2", "text": "Unsupported"},
-                {"id": "claim-3", "text": "Inference", "is_inference": True},
+                {
+                    "id": "claim-1",
+                    "text": "Grounded",
+                    "requirement_ids": ["cand-1"],
+                    "evidence_ids": ["ev-1"],
+                },
+                {
+                    "id": "claim-2",
+                    "text": "Unsupported",
+                    "requirement_ids": ["cand-1"],
+                },
+                {
+                    "id": "claim-3",
+                    "text": "Inference",
+                    "requirement_ids": ["cand-2"],
+                    "evidence_ids": ["ev-2"],
+                    "is_inference": True,
+                },
             ],
         }
     )
@@ -138,6 +153,10 @@ def test_score_candidate_calculates_completeness_and_traceability() -> None:
     assert report.evidence_f1 == pytest.approx(0.4)
     assert report.unsupported_claim_rate == pytest.approx(1 / 3)
     assert report.claim_grounding_rate == pytest.approx(2 / 3)
+    assert report.claim_trace_integrity_rate == pytest.approx(2 / 3)
+    assert report.counts.traceable_claims == 2
+    assert report.counts.untraceable_claims == 1
+    assert report.counts.claims_with_missing_evidence_refs == 1
     assert report.completeness_score == pytest.approx(14 / 15)
     assert report.traceability_score == pytest.approx(0.45)
     assert report.combined_score == pytest.approx(0.74)
@@ -176,7 +195,12 @@ def test_source_accuracy_requires_a_real_position_match() -> None:
 def test_unknown_evidence_id_does_not_ground_a_claim() -> None:
     payload = _candidate().model_dump(mode="json")
     payload["claims"] = [
-        {"id": "claim-invalid", "text": "Fake grounding", "evidence_ids": ["does-not-exist"]}
+        {
+            "id": "claim-invalid",
+            "text": "Fake grounding",
+            "requirement_ids": ["cand-1"],
+            "evidence_ids": ["does-not-exist"],
+        }
     ]
     candidate = BidBenchCandidate.model_validate(payload)
 
@@ -184,3 +208,49 @@ def test_unknown_evidence_id_does_not_ground_a_claim() -> None:
 
     assert report.unsupported_claim_rate == 1
     assert report.claim_grounding_rate == 0
+    assert report.claim_trace_integrity_rate == 0
+    assert report.counts.claims_with_missing_evidence_refs == 1
+
+
+def test_known_evidence_for_the_wrong_requirement_fails_claim_trace_integrity() -> None:
+    payload = _candidate().model_dump(mode="json")
+    payload["claims"] = [
+        {
+            "id": "claim-wrong-pair",
+            "text": "Wrong requirement/evidence pair",
+            "requirement_ids": ["cand-1"],
+            "evidence_ids": ["ev-2"],
+        }
+    ]
+    candidate = BidBenchCandidate.model_validate(payload)
+
+    report = score_candidate(_dataset(), candidate)
+
+    assert report.unsupported_claim_rate == 0
+    assert report.claim_trace_integrity_rate == 0
+    assert report.counts.claims_with_unsupported_requirement_evidence_pairs == 1
+
+
+def test_score_candidate_treats_accepted_risk_as_an_explicit_coverage_outcome() -> None:
+    dataset_payload = _dataset().model_dump(mode="json")
+    dataset_payload["requirements"][2]["expected_coverage"] = "accepted_risk"
+    candidate_payload = _candidate().model_dump(mode="json")
+    candidate_payload["requirements"][1]["normalized_text"] = "invented requirement"
+    candidate_payload["requirements"][1]["coverage_status"] = "uncovered"
+    candidate_payload["requirements"][2] = {
+        "id": "cand-3",
+        "normalized_text": "Requirement three",
+        "requirement_type": "technical",
+        "is_mandatory": False,
+        "coverage_status": "accepted_risk",
+        "locators": [{"source_id": "rfp", "section": "3"}],
+        "evidence_ids": [],
+    }
+
+    report = score_candidate(
+        BidBenchDataset.model_validate(dataset_payload),
+        BidBenchCandidate.model_validate(candidate_payload),
+    )
+
+    assert report.counts.matched_requirements == 2
+    assert report.coverage_accuracy == 1

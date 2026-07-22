@@ -75,6 +75,7 @@
     "emailPlaceholder": "colleague@example.com",
     "inviteSent": "Invitation sent",
     "inviteFailed": "Failed to send invitation",
+    "workspaceManagerRequired": "An owner or admin role in this workspace is required.",
     "revoked": "Invitation revoked",
     "revokeFailed": "Failed to revoke invitation",
     "expiresIn": "Expires in {{days}} days",
@@ -83,5 +84,27 @@
     "accepted": "Accepted",
     "expired": "Expired",
     "revoked": "Revoked"
+  },
+  "workspaceMembers": {
+    "title": "Workspace members",
+    "hint": "Members consume workspace seats. Removing one revokes project and team access in this workspace.",
+    "membersCount": "{{count}} members",
+    "you": "You",
+    "billingOwner": "Billing owner",
+    "transferBillingOwner": "Transfer billing",
+    "billingOwnerTransferred": "Billing owner transferred",
+    "roleUpdated": "Workspace role updated",
+    "removeMember": "Remove from workspace",
+    "removeTitle": "Remove this member?",
+    "removeDescription": "This revokes {{name}}'s project and team access in the current workspace. If they solely own a project, ownership transfers to you. They keep a usable personal or other workspace.",
+    "memberRemoved": "Member removed from workspace",
+    "memberRemovedWithPersonalWorkspace": "Member removed and given a personal workspace",
+    "operationFailed": "Workspace member action failed",
+    "cancel": "Cancel",
+    "roles": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member"
+    }
   }
 }

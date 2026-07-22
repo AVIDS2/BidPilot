@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from io import BytesIO
+import logging
 from pathlib import Path
 from time import time
 from uuid import uuid4
+
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.access.service import require_project_capability
+from app.audit.service import record_audit_event
+from app.auth.schemas import CurrentUser
+from app.celery_client import celery
+from app.models import AssistantAttachment, Bundle, SourceDocument
+from app.usage.schemas import ProviderSource
+from app.usage.service import EMBEDDING_INDEX_STARTED, check_indexing_quota, record_usage_event
 
 from .schemas import (
     AssistantAttachmentKind,
@@ -17,6 +32,8 @@ MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 MAX_ATTACHMENT_TEXT_CHARS = 16_000
 MAX_TOTAL_ATTACHMENT_TEXT_CHARS = 24_000
 ATTACHMENT_CACHE_TTL_SECONDS = 60 * 60
+ASSISTANT_ATTACHMENT_RETENTION = timedelta(hours=24)
+MAX_STAGED_ATTACHMENTS_PER_ACTION = 6
 
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _TEXT_EXTENSIONS = {
@@ -35,6 +52,299 @@ _TEXT_EXTENSIONS = {
 }
 
 _ATTACHMENT_TEXT_CACHE: dict[str, tuple[float, str]] = {}
+logger = logging.getLogger(__name__)
+
+
+def stage_assistant_attachment(
+    db: Session,
+    *,
+    current_user: CurrentUser,
+    filename: str,
+    content_type: str,
+    data: bytes,
+    kind: AssistantAttachmentKind,
+    extraction: AssistantAttachmentUploadResponse,
+) -> AssistantAttachmentUploadResponse:
+    """Persist an uploaded file before it becomes project evidence.
+
+    The raw object is private to the uploading user and organization.  It is
+    only copied into a project after the governed ingestion capability runs.
+    """
+    now = _utcnow()
+    attachment = AssistantAttachment(
+        user_id=current_user.id,
+        org_id=current_user.org_id,
+        storage_key="pending",
+        original_filename=filename or "untitled",
+        mime_type=content_type or "application/octet-stream",
+        kind=kind,
+        size=len(data),
+        checksum=sha256(data).hexdigest(),
+        extraction_status=extraction.extraction_status,
+        extracted_text=extraction.extracted_text,
+        extraction_error=extraction.error,
+        status="staging",
+        expires_at=now + ASSISTANT_ATTACHMENT_RETENTION,
+    )
+    db.add(attachment)
+    db.flush()
+
+    try:
+        from app.adapters.storage import upload_assistant_staging_bytes
+
+        attachment.storage_key = upload_assistant_staging_bytes(
+            org_id=current_user.org_id,
+            user_id=current_user.id,
+            attachment_id=attachment.id,
+            data=data,
+            content_type=attachment.mime_type,
+        )
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Assistant attachment staging failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Unable to stage attachment") from exc
+
+    attachment.status = "staged"
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        _delete_storage_keys_quietly([attachment.storage_key])
+        logger.warning("Assistant attachment staging persistence failed: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Unable to stage attachment") from exc
+    db.refresh(attachment)
+    return _upload_response_from_record(attachment)
+
+
+def hydrate_assistant_attachments(
+    db: Session,
+    *,
+    current_user: CurrentUser,
+    attachments: list[AssistantAttachmentPayload],
+) -> list[AssistantAttachmentPayload]:
+    """Load attachment text from the server-side record, never from the browser."""
+    if not attachments:
+        return []
+    if len(attachments) > MAX_STAGED_ATTACHMENTS_PER_ACTION:
+        raise HTTPException(status_code=400, detail="Too many attachments in one assistant turn")
+
+    attachment_ids = [attachment.id for attachment in attachments]
+    if any(not attachment_id for attachment_id in attachment_ids):
+        raise HTTPException(status_code=400, detail="Assistant attachments must be uploaded before use")
+    if len(set(attachment_ids)) != len(attachment_ids):
+        raise HTTPException(status_code=400, detail="Duplicate assistant attachment ids are not allowed")
+
+    records = {
+        record.id: record
+        for record in db.scalars(
+            select(AssistantAttachment).where(
+                AssistantAttachment.id.in_(attachment_ids),
+                AssistantAttachment.user_id == current_user.id,
+                AssistantAttachment.org_id == current_user.org_id,
+            )
+        )
+    }
+    if len(records) != len(attachment_ids):
+        raise HTTPException(status_code=404, detail="Assistant attachment not found")
+
+    hydrated: list[AssistantAttachmentPayload] = []
+    for attachment_id in attachment_ids:
+        record = records[attachment_id or ""]
+        if record.status != "attached":
+            _require_staged_attachment(record)
+        hydrated.append(_payload_from_record(record))
+    return hydrated
+
+
+def attachment_planner_context(attachments: list[AssistantAttachmentPayload]) -> list[dict[str, str | int]]:
+    """Return non-sensitive attachment metadata for the bounded operator planner."""
+    return [
+        {
+            "id": attachment.id or "",
+            "name": attachment.name[:255],
+            "kind": attachment.kind,
+            "mime_type": attachment.mime_type or "application/octet-stream",
+            "size": attachment.size or 0,
+        }
+        for attachment in attachments
+        if attachment.id and not attachment.document_id
+    ]
+
+
+def attach_staged_attachments_to_project(
+    db: Session,
+    *,
+    current_user: CurrentUser,
+    project_id: str,
+    attachment_ids: list[str],
+    bundle_label: str | None = None,
+) -> dict[str, object]:
+    """Copy approved staged attachments into a project bundle and queue ingestion."""
+    if not attachment_ids:
+        raise ValueError("At least one staged attachment is required")
+    if len(attachment_ids) > MAX_STAGED_ATTACHMENTS_PER_ACTION:
+        raise ValueError(f"At most {MAX_STAGED_ATTACHMENTS_PER_ACTION} attachments can be ingested at once")
+    if len(set(attachment_ids)) != len(attachment_ids):
+        raise ValueError("Duplicate staged attachment ids are not allowed")
+
+    project = require_project_capability(
+        db,
+        current_user=current_user,
+        project_id=project_id,
+        capability="bundles.write",
+    ).project
+    attachments = _load_staged_attachments_for_ingestion(
+        db,
+        current_user=current_user,
+        attachment_ids=attachment_ids,
+    )
+    check_indexing_quota(db, current_user.id, current_user.org_id, ProviderSource.OFFICIAL)
+
+    label = (bundle_label or "Agent 上传资料").strip()[:255] or "Agent 上传资料"
+    bundle = _find_reusable_agent_bundle(db, project.id, label)
+    if bundle is None:
+        bundle = Bundle(
+            project_id=project.id,
+            label=label,
+            source_type="assistant_upload",
+            ingest_status="awaiting_upload",
+        )
+        db.add(bundle)
+        db.flush()
+
+    copied_storage_keys: list[str] = []
+    documents: list[SourceDocument] = []
+    try:
+        from app.adapters.storage import download_storage_key, upload_bytes
+
+        for attachment in attachments:
+            data = download_storage_key(attachment.storage_key)
+            storage_key = upload_bytes(
+                project.id,
+                f"{bundle.id}/{uuid4().hex}-{_safe_filename(attachment.original_filename)}",
+                data,
+                attachment.mime_type,
+            )
+            copied_storage_keys.append(storage_key)
+            document = SourceDocument(
+                bundle_id=bundle.id,
+                storage_key=storage_key,
+                mime_type=attachment.mime_type,
+                checksum=attachment.checksum,
+                original_filename=attachment.original_filename,
+                parse_status="pending",
+            )
+            db.add(document)
+            db.flush()
+            attachment.status = "attached"
+            attachment.project_id = project.id
+            attachment.bundle_id = bundle.id
+            attachment.document_id = document.id
+            attachment.attached_at = _utcnow()
+            documents.append(document)
+
+        bundle.ingest_status = "queued"
+        record_usage_event(
+            db,
+            user_id=current_user.id,
+            org_id=current_user.org_id,
+            project_id=project.id,
+            event_type=EMBEDDING_INDEX_STARTED,
+            provider_source=ProviderSource.OFFICIAL,
+            metadata_json={
+                "bundle_id": bundle.id,
+                "attachment_count": len(attachments),
+                "action": "assistant_attachment_ingest",
+            },
+        )
+        record_audit_event(
+            db,
+            project_id=project.id,
+            event_type="assistant.attachments_ingested",
+            actor_type="assistant",
+            actor_id=current_user.id,
+            payload={
+                "bundle_id": bundle.id,
+                "attachment_ids": [attachment.id for attachment in attachments],
+                "document_ids": [document.id for document in documents],
+                "attachment_count": len(documents),
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        _delete_storage_keys_quietly(copied_storage_keys)
+        raise
+
+    queued = _queue_bundle_ingestion(db, bundle, current_user)
+    _delete_attached_staging_objects(db, attachments)
+    return {
+        "project_id": project.id,
+        "bundle_id": bundle.id,
+        "bundle_label": bundle.label,
+        "document_ids": [document.id for document in documents],
+        "attachment_count": len(documents),
+        "ingest_queued": queued,
+    }
+
+
+def link_staged_attachment_to_document(
+    db: Session,
+    *,
+    current_user: CurrentUser,
+    attachment_id: str,
+    document: SourceDocument,
+    project_id: str,
+) -> str:
+    """Mark a browser-uploaded staging record as consumed by the same document."""
+    attachment = db.scalar(
+        select(AssistantAttachment)
+        .where(
+            AssistantAttachment.id == attachment_id,
+            AssistantAttachment.user_id == current_user.id,
+            AssistantAttachment.org_id == current_user.org_id,
+        )
+        .with_for_update()
+    )
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Assistant attachment not found")
+    _require_staged_attachment(attachment)
+    if attachment.checksum != document.checksum:
+        raise HTTPException(status_code=409, detail="Assistant attachment does not match uploaded document")
+
+    attachment.status = "attached"
+    attachment.project_id = project_id
+    attachment.bundle_id = document.bundle_id
+    attachment.document_id = document.id
+    attachment.attached_at = _utcnow()
+    record_audit_event(
+        db,
+        project_id=project_id,
+        event_type="assistant.attachment_linked",
+        actor_type="user",
+        actor_id=current_user.id,
+        payload={"attachment_id": attachment.id, "document_id": document.id},
+    )
+    return attachment.storage_key
+
+
+def delete_staged_attachment_storage(db: Session, attachment_id: str) -> bool:
+    """Remove an already-consumed staging object without touching project evidence."""
+    attachment = db.get(AssistantAttachment, attachment_id)
+    if attachment is None or not attachment.storage_key:
+        return True
+    if attachment.status not in {"attached", "expired"}:
+        return False
+    try:
+        from app.adapters.storage import delete_storage_key
+
+        delete_storage_key(attachment.storage_key)
+    except Exception as exc:
+        logger.warning("Assistant attachment staged-object cleanup failed: %s", type(exc).__name__)
+        return False
+    attachment.storage_key = ""
+    db.commit()
+    return True
 
 
 def extract_attachment_text(
@@ -267,3 +577,140 @@ def _status_reason(status: str | None) -> str:
     if status == "unsupported":
         return "格式暂不支持。"
     return "附件没有提供提取文本。"
+
+
+def _upload_response_from_record(attachment: AssistantAttachment) -> AssistantAttachmentUploadResponse:
+    return AssistantAttachmentUploadResponse(
+        id=attachment.id,
+        name=attachment.original_filename,
+        kind=attachment.kind,  # type: ignore[arg-type]
+        mime_type=attachment.mime_type,
+        size=attachment.size,
+        extraction_status=attachment.extraction_status,  # type: ignore[arg-type]
+        extracted_text=attachment.extracted_text,
+        error=attachment.extraction_error,
+    )
+
+
+def _payload_from_record(attachment: AssistantAttachment) -> AssistantAttachmentPayload:
+    return AssistantAttachmentPayload(
+        id=attachment.id,
+        name=attachment.original_filename,
+        kind=attachment.kind,  # type: ignore[arg-type]
+        mime_type=attachment.mime_type,
+        size=attachment.size,
+        extraction_status=attachment.extraction_status,  # type: ignore[arg-type]
+        extracted_text=attachment.extracted_text,
+        document_id=attachment.document_id,
+        error=attachment.extraction_error,
+    )
+
+
+def _load_staged_attachments_for_ingestion(
+    db: Session,
+    *,
+    current_user: CurrentUser,
+    attachment_ids: list[str],
+) -> list[AssistantAttachment]:
+    records = {
+        record.id: record
+        for record in db.scalars(
+            select(AssistantAttachment)
+            .where(
+                AssistantAttachment.id.in_(attachment_ids),
+                AssistantAttachment.user_id == current_user.id,
+                AssistantAttachment.org_id == current_user.org_id,
+            )
+            .with_for_update()
+        )
+    }
+    if len(records) != len(attachment_ids):
+        raise HTTPException(status_code=404, detail="Assistant attachment not found")
+    ordered = [records[attachment_id] for attachment_id in attachment_ids]
+    for attachment in ordered:
+        _require_staged_attachment(attachment)
+    return ordered
+
+
+def _require_staged_attachment(attachment: AssistantAttachment) -> None:
+    if attachment.expires_at <= _utcnow():
+        attachment.status = "expired"
+        raise HTTPException(status_code=410, detail="Assistant attachment expired; upload it again")
+    if attachment.status != "staged":
+        raise HTTPException(status_code=409, detail="Assistant attachment is no longer available for ingestion")
+
+
+def _find_reusable_agent_bundle(db: Session, project_id: str, label: str) -> Bundle | None:
+    return db.scalar(
+        select(Bundle)
+        .where(
+            Bundle.project_id == project_id,
+            Bundle.label == label,
+            Bundle.source_type == "assistant_upload",
+            Bundle.ingest_status.not_in(("queued", "running", "indexing")),
+        )
+        .order_by(Bundle.created_at.desc())
+    )
+
+
+def _queue_bundle_ingestion(db: Session, bundle: Bundle, current_user: CurrentUser) -> bool:
+    try:
+        celery.send_task("worker.ingest_bundle", args=[bundle.id])
+        return True
+    except Exception as exc:  # Keep durable documents available for manual retry.
+        logger.warning("Assistant attachment ingestion dispatch failed: %s", type(exc).__name__)
+        bundle.ingest_status = "ready_to_ingest"
+        record_audit_event(
+            db,
+            project_id=bundle.project_id,
+            event_type="assistant.attachment_ingest_dispatch_failed",
+            actor_type="assistant",
+            actor_id=current_user.id,
+            payload={"bundle_id": bundle.id},
+        )
+        db.commit()
+        return False
+
+
+def _delete_storage_keys_quietly(storage_keys: list[str]) -> None:
+    if not storage_keys:
+        return
+    try:
+        from app.adapters.storage import delete_storage_key
+
+        for storage_key in storage_keys:
+            delete_storage_key(storage_key)
+    except Exception as exc:
+        logger.warning("Assistant attachment staged-object cleanup failed: %s", type(exc).__name__)
+
+
+def _delete_attached_staging_objects(db: Session, attachments: list[AssistantAttachment]) -> None:
+    deleted = False
+    for attachment in attachments:
+        if not attachment.storage_key:
+            continue
+        try:
+            from app.adapters.storage import delete_storage_key
+
+            delete_storage_key(attachment.storage_key)
+        except Exception as exc:
+            logger.warning("Assistant attachment staged-object cleanup failed: %s", type(exc).__name__)
+            continue
+        attachment.storage_key = ""
+        deleted = True
+    if not deleted:
+        return
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Assistant attachment cleanup state persistence failed: %s", type(exc).__name__)
+
+
+def _safe_filename(filename: str) -> str:
+    value = filename.replace("\\", "/").rsplit("/", 1)[-1].strip()
+    return value[:240] or "untitled"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)

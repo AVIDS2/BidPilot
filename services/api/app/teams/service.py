@@ -1,6 +1,7 @@
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Organization, Team, TeamMember, User
+from app.models import OrganizationMembership, Team, TeamMember, User
 
 
 def create_team_command(db: Session, org_id: str, name: str, slug: str) -> Team:
@@ -48,6 +49,15 @@ def add_team_member_command(db: Session, team_id: str, user_id: str, role: str =
     user = db.get(User, user_id)
     if user is None:
         raise ValueError("User not found")
+    membership = db.scalar(
+        select(OrganizationMembership.id).where(
+            OrganizationMembership.org_id == team.org_id,
+            OrganizationMembership.user_id == user.id,
+            OrganizationMembership.status == "active",
+        )
+    )
+    if membership is None or user.disabled:
+        raise ValueError("User is not an active organization member")
     existing = db.query(TeamMember).filter_by(team_id=team_id, user_id=user_id).first()
     if existing is not None:
         raise ValueError("User is already a member of this team")

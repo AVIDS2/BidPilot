@@ -178,6 +178,28 @@ def test_candidate_output_accepts_versioned_saved_result() -> None:
     assert candidate.requirements[0].coverage_status == "covered"
 
 
+def test_candidate_accepts_accepted_risk_coverage() -> None:
+    candidate = BidBenchCandidate.model_validate(
+        {
+            "schema_version": "1.0",
+            "dataset_id": "fixture",
+            "candidate_id": "accepted-risk",
+            "system_name": "unit-test",
+            "requirements": [
+                {
+                    "id": "candidate-req-1",
+                    "normalized_text": "Explicitly accepted risk",
+                    "requirement_type": "technical",
+                    "is_mandatory": False,
+                    "coverage_status": "accepted_risk",
+                }
+            ],
+        }
+    )
+
+    assert candidate.requirements[0].coverage_status == "accepted_risk"
+
+
 def test_candidate_output_rejects_duplicate_requirement_ids() -> None:
     payload = {
         "schema_version": "1.0",

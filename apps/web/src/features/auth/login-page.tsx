@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
@@ -19,7 +19,6 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
   const { login, token } = useAuth();
@@ -43,14 +42,9 @@ export function LoginPage() {
       toast.error(t("toast.verificationResendFailed"));
     } finally {
       resetTurnstile(turnstileWidgetId);
-      setTurnstileToken(null);
       setResending(false);
     }
   };
-
-  const handleTurnstileToken = useCallback((value: string | null) => {
-    setTurnstileToken(value);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,7 +78,6 @@ export function LoginPage() {
       }
     } finally {
       resetTurnstile(turnstileWidgetId);
-      setTurnstileToken(null);
       setLoading(false);
     }
   };
@@ -194,7 +187,6 @@ export function LoginPage() {
             <TurnstileWidget
               ref={turnstileRef}
               action="login"
-              onTokenChange={handleTurnstileToken}
               onWidgetIdChange={setTurnstileWidgetId}
               className="min-h-[65px]"
             />

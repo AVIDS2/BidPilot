@@ -1,10 +1,23 @@
 from sqlalchemy.orm import Session
 
-from .repository import get_parsed_asset, list_assets_by_document
+from app.access.service import require_parsed_asset_capability, require_source_document_capability
+from app.auth.schemas import CurrentUser
+
+from .repository import list_assets_by_document
 from .schemas import ParsedAssetRead
 
 
-def list_assets_query(db: Session, source_document_id: str) -> list[ParsedAssetRead]:
+def list_assets_query(
+    db: Session,
+    source_document_id: str,
+    current_user: CurrentUser,
+) -> list[ParsedAssetRead]:
+    require_source_document_capability(
+        db,
+        current_user=current_user,
+        document_id=source_document_id,
+        capability="project.read",
+    )
     assets = list_assets_by_document(db, source_document_id)
     return [
         ParsedAssetRead(
@@ -19,10 +32,17 @@ def list_assets_query(db: Session, source_document_id: str) -> list[ParsedAssetR
     ]
 
 
-def get_asset_query(db: Session, asset_id: str) -> ParsedAssetRead | None:
-    asset = get_parsed_asset(db, asset_id)
-    if asset is None:
-        return None
+def get_asset_query(
+    db: Session,
+    asset_id: str,
+    current_user: CurrentUser,
+) -> ParsedAssetRead:
+    asset = require_parsed_asset_capability(
+        db,
+        current_user=current_user,
+        asset_id=asset_id,
+        capability="project.read",
+    )
     return ParsedAssetRead(
         id=asset.id,
         source_document_id=asset.source_document_id,

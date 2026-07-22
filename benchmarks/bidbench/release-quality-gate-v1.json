@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.1",
+  "policy_id": "bidpilot-release-v1",
+  "bidbench_thresholds": {
+    "min_mandatory_recall": 0.95,
+    "min_scored_recall": 0.9,
+    "min_source_association_accuracy": 1.0,
+    "min_combined_score": 0.9,
+    "max_unsupported_claim_rate": 0.0
+  },
+  "retrieval_thresholds": {
+    "min_recall_at_5": 0.9,
+    "min_mean_reciprocal_rank": 0.8,
+    "min_locator_validity_rate": 1.0,
+    "min_mandatory_evidence_recall": 1.0,
+    "min_cross_project_denial_rate": 1.0
+  },
+  "memory_thresholds": {
+    "min_expected_record_recall": 0.8,
+    "min_isolation_pass_rate": 1.0,
+    "min_provenance_validity_rate": 1.0,
+    "min_private_ownership_pass_rate": 1.0,
+    "min_context_budget_pass_rate": 1.0
+  },
+  "assistant_thresholds": {
+    "min_mode_accuracy": 1.0,
+    "min_capability_route_accuracy": 1.0,
+    "min_missing_input_accuracy": 1.0,
+    "min_required_argument_accuracy": 1.0,
+    "min_policy_outcome_accuracy": 1.0,
+    "min_typed_confirmation_safety_rate": 1.0,
+    "min_project_scope_safety_rate": 1.0,
+    "max_unknown_capability_rate": 0.0
+  },
+  "allowed_release_dataset_roles": [
+    "regression",
+    "hidden"
+  ],
+  "require_git_commit_for_release": true
+}

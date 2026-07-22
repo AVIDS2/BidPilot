@@ -8,12 +8,27 @@ from __future__ import annotations
 
 import os
 
-DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+from contracts.embedding_config import (
+    DASHSCOPE_BASE_URL,
+    embedding_api_key as embedding_api_key,
+    embedding_api_url as embedding_api_url,
+    embedding_dimensions as embedding_dimensions,
+    embedding_model as embedding_model,
+    embedding_provider_family as embedding_provider_family,
+)
+
 DASHSCOPE_CHAT_MODEL = "qwen3.5-flash"
-DASHSCOPE_EMBEDDING_MODEL = "text-embedding-v4"
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OPENROUTER_EMBEDDING_MODEL = "qwen/qwen3-embedding-8b"
-OPENROUTER_EMBEDDING_DIMENSIONS = 1536
+
+__all__ = [
+    "chat_api_key",
+    "chat_api_url",
+    "chat_model",
+    "embedding_api_key",
+    "embedding_api_url",
+    "embedding_dimensions",
+    "embedding_model",
+    "embedding_provider_family",
+]
 
 
 def _first_present(names: list[tuple[str, str]]) -> tuple[str | None, str | None]:
@@ -88,98 +103,3 @@ def chat_model(default_model: str) -> str:
     if family == "domestic":
         return os.environ.get("DOCPILOT_LLM_MODEL_PRIMARY", DASHSCOPE_CHAT_MODEL)
     return default_model
-
-
-def embedding_api_key() -> str | None:
-    key, _family = _first_present(
-        [
-            ("EMBEDDING_API_KEY", "legacy"),
-            ("OPENROUTER_API_KEY", "openrouter"),
-            ("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic"),
-            ("ALIYUN_API_KEY", "domestic"),
-            ("DASHSCOPE_API_KEY", "domestic"),
-            ("DOCPILOT_PROVIDER_OPENAI_API_KEY", "openai"),
-            ("OPENAI_API_KEY", "openai"),
-        ]
-    )
-    return key
-
-
-def embedding_api_url(default_url: str) -> str:
-    explicit_url = os.environ.get("EMBEDDING_API_URL")
-    if explicit_url:
-        return explicit_url
-
-    _key, family = _first_present(
-        [
-            ("EMBEDDING_API_KEY", "legacy"),
-            ("OPENROUTER_API_KEY", "openrouter"),
-            ("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic"),
-            ("ALIYUN_API_KEY", "domestic"),
-            ("DASHSCOPE_API_KEY", "domestic"),
-            ("DOCPILOT_PROVIDER_OPENAI_API_KEY", "openai"),
-            ("OPENAI_API_KEY", "openai"),
-        ]
-    )
-
-    if family == "domestic":
-        base_url = os.environ.get("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", DASHSCOPE_BASE_URL)
-        return _endpoint(base_url, "embeddings")
-
-    if family == "openrouter":
-        base_url = os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL)
-        return _endpoint(base_url, "embeddings")
-
-    if family == "openai":
-        base_url = os.environ.get("DOCPILOT_PROVIDER_OPENAI_BASE_URL")
-        if base_url:
-            return _endpoint(base_url, "embeddings")
-
-    return default_url
-
-
-def embedding_model(default_model: str) -> str:
-    explicit_model = os.environ.get("EMBEDDING_MODEL")
-    if explicit_model:
-        return explicit_model
-
-    _key, family = _first_present(
-        [
-            ("EMBEDDING_API_KEY", "legacy"),
-            ("OPENROUTER_API_KEY", "openrouter"),
-            ("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic"),
-            ("ALIYUN_API_KEY", "domestic"),
-            ("DASHSCOPE_API_KEY", "domestic"),
-            ("DOCPILOT_PROVIDER_OPENAI_API_KEY", "openai"),
-            ("OPENAI_API_KEY", "openai"),
-        ]
-    )
-    if family == "domestic":
-        return os.environ.get("DOCPILOT_EMBEDDING_MODEL_TEXT", DASHSCOPE_EMBEDDING_MODEL)
-    if family == "openrouter":
-        return os.environ.get("OPENROUTER_EMBEDDING_MODEL", OPENROUTER_EMBEDDING_MODEL)
-    return default_model
-
-
-def embedding_dimensions() -> int | None:
-    explicit_dimensions = (
-        os.environ.get("EMBEDDING_DIMENSIONS")
-        or os.environ.get("DOCPILOT_EMBEDDING_DIMENSIONS")
-    )
-    if explicit_dimensions:
-        return int(explicit_dimensions)
-
-    _key, family = _first_present(
-        [
-            ("EMBEDDING_API_KEY", "legacy"),
-            ("OPENROUTER_API_KEY", "openrouter"),
-            ("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic"),
-            ("ALIYUN_API_KEY", "domestic"),
-            ("DASHSCOPE_API_KEY", "domestic"),
-            ("DOCPILOT_PROVIDER_OPENAI_API_KEY", "openai"),
-            ("OPENAI_API_KEY", "openai"),
-        ]
-    )
-    if family == "openrouter":
-        return int(os.environ.get("OPENROUTER_EMBEDDING_DIMENSIONS", OPENROUTER_EMBEDDING_DIMENSIONS))
-    return None

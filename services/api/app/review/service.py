@@ -1,7 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.access.service import (
+    require_deliverable_section_capability,
+    require_review_thread_capability,
+)
 from app.audit.service import record_audit_event
+from app.auth.schemas import CurrentUser
 from app.email.service import send_review_notification_email
 from app.models import Deliverable, DeliverableSection, Project, ReviewComment, ReviewThread
 
@@ -9,11 +14,18 @@ from .repository import create_comment, create_review_thread, list_comments_by_t
 from .schemas import ReviewCommentCreate, ReviewCommentRead, ReviewDecisionCreate, ReviewDecisionRead, ReviewThreadRead
 
 
-def submit_review_decision_command(db: Session, payload: ReviewDecisionCreate) -> ReviewDecisionRead:
+def submit_review_decision_command(
+    db: Session,
+    payload: ReviewDecisionCreate,
+    current_user: CurrentUser,
+) -> ReviewDecisionRead:
     # Update section status based on decision
-    section = db.get(DeliverableSection, payload.section_id)
-    if section is None:
-        raise ValueError("Section not found")
+    section = require_deliverable_section_capability(
+        db,
+        current_user=current_user,
+        section_id=payload.section_id,
+        capability="review.write",
+    )
 
     section.status = payload.decision  # "approved" or "rejected"
     db.flush()
@@ -22,8 +34,8 @@ def submit_review_decision_command(db: Session, payload: ReviewDecisionCreate) -
     thread = ReviewThread(
         deliverable_section_id=payload.section_id,
         status=payload.decision,
-        opened_by="dev-user",
-        resolved_by="dev-user",
+        opened_by=current_user.id,
+        resolved_by=current_user.id,
     )
     thread = create_review_thread(db, thread)
 
@@ -32,7 +44,7 @@ def submit_review_decision_command(db: Session, payload: ReviewDecisionCreate) -
         comment = ReviewComment(
             review_thread_id=thread.id,
             author_type="human",
-            author_id="dev-user",
+            author_id=current_user.id,
             body=payload.comment,
         )
         db.add(comment)
@@ -44,7 +56,18 @@ def submit_review_decision_command(db: Session, payload: ReviewDecisionCreate) -
         project_id = deliverable.project_id
 
     if project_id:
-        record_audit_event(db, project_id=project_id, event_type=f"review.{payload.decision}", payload={"section_id": payload.section_id, "section_key": section.section_key, "comment": payload.comment})
+        record_audit_event(
+            db,
+            project_id=project_id,
+            event_type=f"review.{payload.decision}",
+            actor_type="user",
+            actor_id=current_user.id,
+            payload={
+                "section_id": payload.section_id,
+                "section_key": section.section_key,
+                "comment": payload.comment,
+            },
+        )
 
         # Check if all sections are approved → update deliverable status
         if deliverable and payload.decision == "approved":
@@ -56,7 +79,14 @@ def submit_review_decision_command(db: Session, payload: ReviewDecisionCreate) -
             )
             if all(s.status == "approved" for s in all_sections):
                 deliverable.status = "approved"
-                record_audit_event(db, project_id=project_id, event_type="deliverable.approved", payload={"deliverable_id": deliverable.id})
+                record_audit_event(
+                    db,
+                    project_id=project_id,
+                    event_type="deliverable.approved",
+                    actor_type="user",
+                    actor_id=current_user.id,
+                    payload={"deliverable_id": deliverable.id},
+                )
 
         db.commit()
 
@@ -83,7 +113,17 @@ def submit_review_decision_command(db: Session, payload: ReviewDecisionCreate) -
     )
 
 
-def list_threads_query(db: Session, section_id: str) -> list[ReviewThreadRead]:
+def list_threads_query(
+    db: Session,
+    section_id: str,
+    current_user: CurrentUser,
+) -> list[ReviewThreadRead]:
+    require_deliverable_section_capability(
+        db,
+        current_user=current_user,
+        section_id=section_id,
+        capability="project.read",
+    )
     threads = list_threads_by_section(db, section_id)
     return [
         ReviewThreadRead(
@@ -97,11 +137,21 @@ def list_threads_query(db: Session, section_id: str) -> list[ReviewThreadRead]:
     ]
 
 
-def add_comment_command(db: Session, payload: ReviewCommentCreate) -> ReviewCommentRead:
+def add_comment_command(
+    db: Session,
+    payload: ReviewCommentCreate,
+    current_user: CurrentUser,
+) -> ReviewCommentRead:
+    require_review_thread_capability(
+        db,
+        current_user=current_user,
+        thread_id=payload.thread_id,
+        capability="review.write",
+    )
     comment = ReviewComment(
         review_thread_id=payload.thread_id,
-        author_type=payload.author_type,
-        author_id=payload.author_id,
+        author_type="human",
+        author_id=current_user.id,
         body=payload.body,
     )
     comment = create_comment(db, comment)
@@ -116,7 +166,17 @@ def add_comment_command(db: Session, payload: ReviewCommentCreate) -> ReviewComm
     )
 
 
-def list_comments_query(db: Session, thread_id: str) -> list[ReviewCommentRead]:
+def list_comments_query(
+    db: Session,
+    thread_id: str,
+    current_user: CurrentUser,
+) -> list[ReviewCommentRead]:
+    require_review_thread_capability(
+        db,
+        current_user=current_user,
+        thread_id=thread_id,
+        capability="project.read",
+    )
     comments = list_comments_by_thread(db, thread_id)
     return [
         ReviewCommentRead(

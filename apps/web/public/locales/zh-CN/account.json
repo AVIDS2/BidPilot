@@ -31,6 +31,7 @@
     "description": "订阅与额度概览。",
     "plan": "方案：{{plan}}",
     "customer": "已连接 Stripe 客户：{{status}}",
+    "ownerOnly": "仅工作区账单负责人可以管理账单。",
     "connected": "是",
     "notConnected": "否",
     "manage": "管理方案",
@@ -55,7 +56,26 @@
     "assistant": "助手对话消息",
     "indexing": "资料索引任务",
     "remaining": "剩余 {{count}} 次",
-    "unlimited": "不限量，受公平使用和风控限制"
+    "unlimited": "不限量，受公平使用和风控限制",
+    "modelMetering": "模型 Token 用量",
+    "modelMeteringDescription": "仅记录服务商回传的 Token。配置经过审核的价目表后才会显示金额。",
+    "costUnavailable": "金额暂不可用",
+    "officialModel": "平台模型容量",
+    "byokModel": "你的模型密钥",
+    "tokenBreakdown": "输入 {{input}} · 输出 {{output}}",
+    "tokenBudgetNotSet": "未设置额外 Token 上限",
+    "tokenRemaining": "工作区上限剩余 {{count}} Token",
+    "tokenReserved": "{{count}} Token 已为执行中的任务预留"
+  },
+  "workspace": {
+    "title": "工作区席位",
+    "description": "当前工作区的席位与账单负责人信息。",
+    "seats": "已使用 {{used}} / {{limit}} 个席位",
+    "available": "剩余 {{count}} 个席位",
+    "overCapacity": "当前有 {{count}} 名活跃成员超出已付费席位，已阻止新增邀请。",
+    "compatibility": "启用工作区账单后将执行席位限制。",
+    "billingOwner": "您是此工作区的账单负责人。",
+    "member": "仅工作区负责人可以管理席位和账单。"
   },
   "security": {
     "title": "安全设置",

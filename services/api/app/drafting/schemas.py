@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ReasoningEffort = Literal["low", "medium", "high", "extra", "max", "ultra"]
 
@@ -10,19 +10,22 @@ class DraftSectionRequest(BaseModel):
     section_key: str
     provider_config_id: str | None = None
     reasoning_effort: ReasoningEffort | None = None
+    parent_runtime_run_id: str | None = None
 
 
 class RedraftSectionRequest(BaseModel):
     project_id: str
     section_key: str
-    review_feedback: str | None = None
+    review_feedback: str | None = Field(default=None, max_length=4_000)
     provider_config_id: str | None = None
     reasoning_effort: ReasoningEffort | None = None
+    parent_runtime_run_id: str | None = None
 
 
 class DraftSectionResponse(BaseModel):
     run_id: str
     status: str
+    runtime_run_id: str | None = None
 
 
 class ResumeRunRequest(BaseModel):
@@ -33,7 +36,7 @@ class ResumeRunRequest(BaseModel):
     """
 
     decision: Literal["approved", "rejected"]
-    feedback: str | None = None
+    feedback: str | None = Field(default=None, max_length=4_000)
 
 
 # ── SSE event schemas ────────────────────────────────────────────────────
@@ -96,6 +99,13 @@ class SSEGraphErrorEvent(BaseModel):
 
     error_message: str
     timestamp: str | None = None
+
+
+class SSEGraphCancelledEvent(BaseModel):
+    """Emitted when a workflow stops at a durable cancellation boundary."""
+
+    status: Literal["cancelled"]
+    timestamp: str
 
 
 class SSEHeartbeatEvent(BaseModel):

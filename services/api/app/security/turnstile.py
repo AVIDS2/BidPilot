@@ -3,6 +3,8 @@ import os
 import httpx
 from fastapi import HTTPException, Request, status
 
+from app.security.client_identity import get_client_ip
+
 SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 VERIFY_TIMEOUT_SECONDS = 5.0
 
@@ -21,7 +23,7 @@ def verify_turnstile_or_raise(token: str | None, request: Request) -> None:
             detail="Human verification is required.",
         )
 
-    remote_ip = _client_ip(request)
+    remote_ip = get_client_ip(request)
     payload = {"secret": secret, "response": token}
     if remote_ip:
         payload["remoteip"] = remote_ip
@@ -41,15 +43,3 @@ def verify_turnstile_or_raise(token: str | None, request: Request) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Human verification failed.",
         )
-
-
-def _client_ip(request: Request) -> str | None:
-    cf_ip = request.headers.get("CF-Connecting-IP")
-    if cf_ip:
-        return cf_ip
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None

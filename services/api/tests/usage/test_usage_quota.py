@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db import Base
 from app.auth.service import _hash_password
-from app.models import Organization, Project, Subscription, User, UsageEvent
+from app.models import Organization, OrganizationMembership, Project, Subscription, User, UsageEvent
 from app.usage.schemas import ProviderSource
 from app.usage.service import count_official_workflow_starts, get_usage_quota, record_usage_event
 
@@ -36,6 +36,7 @@ def _make_user(db: Session, plan: str) -> tuple[User, Project]:
     )
     db.add(user)
     db.flush()
+    db.add(OrganizationMembership(org_id=org.id, user_id=user.id, role="owner"))
     db.add(Subscription(user_id=user.id, plan=plan, status="active"))
     project = Project(
         org_id=org.id,
@@ -123,7 +124,7 @@ def test_count_official_workflow_starts_ignores_byok():
             )
         db.commit()
 
-        assert count_official_workflow_starts(db, user.id) == 0
+        assert count_official_workflow_starts(db, user.org_id) == 0
         assert db.query(UsageEvent).count() == 2
     finally:
         db.close()

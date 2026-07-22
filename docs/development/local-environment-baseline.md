@@ -41,6 +41,7 @@ Connection baseline:
 - host: `localhost`
 - host port: `5433`
 - database: `docpilot`
+- dedicated test database: `docpilot_test`
 - username: `docpilot`
 - password: `docpilot`
 
@@ -55,6 +56,33 @@ postgresql://docpilot:docpilot@localhost:5433/docpilot
 - do not use a host-installed PostgreSQL instance for DocPilot
 - do not create a second unrelated Postgres setup outside this project unless the docs are updated
 - if Postgres is needed and not running, start it from this repository's Docker setup
+
+## Test database rule
+
+API tests and local release rehearsals must never use `docpilot`. They require a
+dedicated database whose name ends in `_test`. Prepare the documented local test
+database once:
+
+```powershell
+uv run --directory services/api python ../../scripts/prepare_local_test_database.py
+```
+
+Then set `DOCPILOT_TEST_DATABASE_URL` in an ignored local environment file to
+the same local PostgreSQL connection with database name `docpilot_test`, and
+initialize it before testing:
+
+```powershell
+$env:DOCPILOT_DATABASE_URL = $env:DOCPILOT_TEST_DATABASE_URL
+uv run --directory services/api alembic upgrade head
+```
+
+The test bootstrap rejects a database name that does not end in `_test` before
+it imports application code. This protects local development data and makes
+release-rehearsal evidence reproducible.
+
+`alembic` is invoked outside the test bootstrap, so it reads
+`DOCPILOT_DATABASE_URL` directly. Set it explicitly as shown above; do not run
+migrations against `docpilot` while intending to migrate `docpilot_test`.
 
 Start command:
 

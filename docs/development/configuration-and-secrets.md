@@ -61,6 +61,7 @@ These names are the preferred starting point for implementation.
 ### API and worker
 
 - `DOCPILOT_DATABASE_URL`
+- `DOCPILOT_TEST_DATABASE_URL` (test runner and local release rehearsal only)
 - `DOCPILOT_REDIS_URL`
 - `DOCPILOT_S3_ENDPOINT`
 - `DOCPILOT_S3_BUCKET`
@@ -76,6 +77,9 @@ These names are the preferred starting point for implementation.
 - `ALIYUN_API_KEY` / `DASHSCOPE_API_KEY` as local compatibility aliases for Aliyun Bailian/DashScope only
 - `DOCPILOT_SECRETS_KEY`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER`
+- `DOCPILOT_AGENT_CHECKPOINTER`
+- `DOCPILOT_ASSISTANT_ENGINE`
+- `DOCPILOT_AGENT_MEMORY_EMBEDDING_TIMEOUT_SECONDS`
 
 ### Telemetry
 
@@ -90,6 +94,16 @@ These names are the preferred starting point for implementation.
 - `DOCPILOT_JWT_SECRET`
 - `DOCPILOT_SESSION_SECRET`
 - `DOCPILOT_SECRETS_KEY`
+- `DOCPILOT_RATE_LIMIT`
+- `DOCPILOT_RATE_LIMIT_STORAGE_URI` (optional authenticated Redis override)
+- `DOCPILOT_TRUSTED_PROXY_CIDRS`
+
+### Billing (API only)
+
+- `DOCPILOT_STRIPE_SECRET_KEY`
+- `DOCPILOT_STRIPE_WEBHOOK_SECRET`
+- `DOCPILOT_STRIPE_PRO_PRICE_ID`
+- `DOCPILOT_STRIPE_ENTERPRISE_PRICE_ID`
 
 ## Environment strategy
 
@@ -99,6 +113,19 @@ These names are the preferred starting point for implementation.
 - safe dummy or development credentials are acceptable
 - local config should default toward developer productivity
 - the concrete local baseline is defined in `docs/development/local-environment-baseline.md`
+
+### Test execution
+
+- API tests and `scripts/release_rehearsal.py --run` require a dedicated
+  PostgreSQL database whose name ends in `_test`.
+- Set `DOCPILOT_TEST_DATABASE_URL` in an ignored local environment file, or set
+  `DOCPILOT_DATABASE_URL` itself to a URL ending in `_test` for CI.
+- Test startup copies that value into `DOCPILOT_DATABASE_URL` before the API
+  engine is imported. A normal development or production database is rejected
+  before migrations or tests run.
+- On the documented local Docker baseline, create the isolated database with
+  `uv run --directory services/api python ../../scripts/prepare_local_test_database.py`,
+  then migrate it with Alembic before the first test run.
 
 ## Current documented local baseline
 
@@ -122,7 +149,38 @@ Never commit this value. For Aliyun Bailian/DashScope keys, remove the default `
 
 Official platform provider keys must stay server-side. In local development the worker accepts `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `ALIYUN_API_KEY`, or `DASHSCOPE_API_KEY` for Aliyun-compatible chat calls. In staging/production, prefer `DOCPILOT_PROVIDER_DOMESTIC_API_KEY` injected by the deployment secret manager. Never expose official or user-supplied provider keys to the browser.
 
-`DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres` is the production default for durable workflow checkpoints. `memory` is allowed only for local smoke tests where Postgres checkpoint pipeline behavior is being isolated.
+`DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING` is a required non-secret server-side
+integer in staging and production. It is the per-workspace hard maximum for
+platform-funded LLM and server-owned embedding tokens: API preflight and each
+Worker-owned physical provider call reserve against it before provider I/O. A
+workspace billing owner may set a lower `official_monthly_token_limit`, but can
+never raise or remove the platform ceiling. `0` is an emergency kill switch for
+platform-funded provider calls. BYOK usage is kept on its own ledger and may
+use an owner-selected personal safeguard without consuming the platform
+ceiling.
+
+This is a token guardrail, not a currency price catalogue. Every server-owned
+embedding request reserves a conservative upper bound before I/O and settles
+once from provider-reported `usage.total_tokens`; an omitted usage field stays
+reserved as uncertain rather than being treated as free. Indexing-job quotas
+remain a separate product limit. Currency reconciliation, a reviewed price
+catalogue, and invoice matching are still separate launch requirements.
+
+`DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres` is the production default for durable workflow checkpoints. `DOCPILOT_AGENT_CHECKPOINTER=postgres` is the corresponding durable setting for the interactive Assistant. `memory` is allowed only for explicit local smoke tests where checkpoint behavior is being isolated.
+
+`DOCPILOT_ASSISTANT_ENGINE=operator` is the production default. It uses the product runtime policy, idempotency, approval, and event contracts; `deterministic` remains a local/test fallback and the legacy ReAct path is not an approved production engine.
+
+SMTP is considered configured only when `DOCPILOT_SMTP_HOST`,
+`DOCPILOT_SMTP_USER`, `DOCPILOT_SMTP_PASS`, and `DOCPILOT_SMTP_FROM` are all
+present. Use an app password or provider credential rather than the mailbox's
+interactive login password; set `DOCPILOT_SMTP_FROM_NAME=BidPilot` for the
+display name. A personal mailbox can be acceptable for a short pilot but does
+not establish the domain authentication needed for reliable production
+delivery.
+
+`DOCPILOT_AGENT_MEMORY_EMBEDDING_TIMEOUT_SECONDS` defaults to `2.5` and is capped at five seconds. It applies only to optional automatic memory recall during an Agent turn: when no authorized memory exists, no embedding request is sent; when the provider is slow or unavailable, the Agent continues with lexical recall and explicit degraded state rather than blocking the conversation.
+
+Before API or Worker starts in staging or production, apply Alembic migrations and run `python scripts/setup_langgraph_checkpoints.py` once against the target database. The production Compose file performs both as ordered one-shot services: `migrate` upgrades the business schema, then `checkpoints` creates or upgrades LangGraph checkpoint tables without logging the connection URL. Runtime services only open prepared storage; they do not create business or checkpoint tables lazily.
 
 ## Trial and quota policy
 
@@ -132,10 +190,45 @@ Initial product policy:
 - Logged-in starter users: 3 official-provider workflow draft runs per month as a free trial.
 - Logged-in starter users: 100 official-provider assistant messages per month.
 - Logged-in starter users: 5 official-provider document indexing jobs per month.
-- Professional and enterprise plans are unlimited in-product, but still subject to fair-use, abuse, storage, and infrastructure controls.
+- Professional and enterprise plans are unlimited in-product, but every official
+  LLM call remains below `DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING` and any
+  lower organization safeguard.
 - BYOK users: user provider keys are encrypted with `DOCPILOT_SECRETS_KEY`; provider token cost is not charged to the platform, but abuse/rate limits still apply.
 
 Quota must be enforced in the backend before starting a workflow, creating an indexing job, or calling a paid provider. UI-only blocking is not sufficient.
+
+## Stripe billing configuration
+
+Stripe credentials and price IDs belong only to the API deployment environment.
+They must never be prefixed with `VITE_`, returned by an API response, written to
+logs, or copied into a provider configuration record.
+
+Before enabling paid self-service, configure the following in the Stripe
+Dashboard for the exact environment (test and live use separate webhook
+secrets):
+
+1. Create a recurring `licensed` Professional price and set its ID as
+   `DOCPILOT_STRIPE_PRO_PRICE_ID`. Enterprise is sales-led by default; set
+   `DOCPILOT_STRIPE_ENTERPRISE_PRICE_ID` only if its self-service Checkout is
+   deliberately enabled.
+2. Create an HTTPS webhook destination at
+   `https://bidpilot-api.rglens.com/billing/webhook` and subscribe to
+   `checkout.session.completed`, `customer.subscription.created`,
+   `customer.subscription.updated`, `customer.subscription.deleted`,
+   `invoice.paid`, and `invoice.payment_failed`.
+3. Store that destination's signing secret as
+   `DOCPILOT_STRIPE_WEBHOOK_SECRET`; it is not the Stripe API secret key.
+4. Enable and configure Stripe's Customer Portal for payment-method updates,
+   plan changes, and cancellation. Keep quantity changes disabled until the
+   seat-overage remediation workflow is implemented. BidPilot reconciles a
+   Portal plan switch from the Subscription item's actual configured Price ID,
+   rather than trusting stale Checkout metadata, and redirects existing Stripe
+   customers to the hosted portal rather than creating a second subscription.
+
+The local billing control plane stores only Stripe identifiers, signed event
+metadata needed for reconciliation, and an event receipt/outcome. It does not
+store card data or raw webhook bodies. The webhook receipt table provides
+replay protection; application changes must preserve it.
 
 ### Staging
 
@@ -150,7 +243,22 @@ Quota must be enforced in the backend before starting a workflow, creating an in
 - production promotion must pass `python scripts/production_readiness.py --target production`
 - `DOCPILOT_AUTH_REQUIRED` must be `true` outside local development
 - deployment secrets must not use localhost endpoints or documented development defaults
+- `DOCPILOT_ENV` must be `production`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER` must be `postgres`
+- `DOCPILOT_AGENT_CHECKPOINTER` must be `postgres`
+- `DOCPILOT_ASSISTANT_ENGINE` must be `operator`
+- `DOCPILOT_RATE_LIMIT` must be a reviewed positive fixed-window budget such as `1000/minute`
+- `DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING` must be a reviewed non-negative
+  per-workspace platform maximum; `0` intentionally disables platform-funded
+  LLM calls during an incident
+- `DOCPILOT_TRUSTED_PROXY_CIDRS` must contain only the direct reverse-proxy peer addresses seen by the API; the API must remain loopback-bound behind that proxy
+- If paid billing is enabled, `DOCPILOT_STRIPE_SECRET_KEY`,
+  `DOCPILOT_STRIPE_WEBHOOK_SECRET`, and `DOCPILOT_STRIPE_PRO_PRICE_ID` must be
+  configured for the same Stripe mode (test or live). Configure the Enterprise
+  price only when self-service Enterprise Checkout is deliberately enabled.
+  Production readiness rejects a Test Mode secret key when paid billing is
+  enabled. The Customer Portal and webhook destination must be verified before
+  opening checkout to users.
 
 ## Ownership and update rule
 

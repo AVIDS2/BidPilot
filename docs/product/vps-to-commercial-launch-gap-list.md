@@ -8,9 +8,11 @@ This document captures what is still missing after the current VPS pilot hardeni
 - email verification and SMTP delivery;
 - project/org access isolation;
 - starter workflow usage quota enforcement;
+- durable Assistant/workflow/indexing usage ledger and starter budgets;
 - user-configurable provider keys with encrypted storage;
 - production readiness checks for environment variables;
-- basic payment scaffolding and admin plan updates;
+- Stripe Checkout/Customer Portal routing, signed webhook reconciliation, and
+  user-level entitlement updates;
 - release rehearsal and backup/restore runbooks.
 
 ## Still missing before public commercial launch
@@ -26,9 +28,13 @@ This document captures what is still missing after the current VPS pilot hardeni
 ### Billing
 
 - live Stripe or equivalent payment settlement in a real launch environment;
-- invoice and receipt handling;
-- subscription cancellation/reactivation flows surfaced in UI;
-- webhook monitoring and replay procedure.
+- retained Stripe test-mode and live-mode rehearsal evidence;
+- Stripe Dashboard price, webhook, and Customer Portal configuration operated
+  on the real deployment;
+- in-product invoice/receipt history, refunds, disputes, and settlement
+  reconciliation;
+- organization/seat billing and shared-entitlement rules;
+- webhook outcome monitoring, alerts, and a reviewed receipt-retention policy.
 
 ### Identity and access
 
@@ -39,9 +45,8 @@ This document captures what is still missing after the current VPS pilot hardeni
 
 ### AI and usage control
 
-- durable monthly usage ledger and plan-based reset window;
-- per-feature gating beyond project count;
-- assistant and workflow quotas exposed in UI;
+- per-feature gating beyond projects, workflow, Assistant, and indexing;
+- organization-level AI budgets and provider-spend ceilings;
 - provider health monitoring and fallback routing;
 - operator visibility into provider spend.
 

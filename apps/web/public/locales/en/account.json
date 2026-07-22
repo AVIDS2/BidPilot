@@ -31,6 +31,7 @@
     "description": "Subscription and quota overview.",
     "plan": "Plan: {{plan}}",
     "customer": "Stripe customer connected: {{status}}",
+    "ownerOnly": "Only the workspace billing owner can manage billing.",
     "connected": "Yes",
     "notConnected": "No",
     "manage": "Manage plan",
@@ -55,7 +56,26 @@
     "assistant": "Assistant messages",
     "indexing": "Document indexing jobs",
     "remaining": "{{count}} remaining",
-    "unlimited": "Unlimited with fair-use controls"
+    "unlimited": "Unlimited with fair-use controls",
+    "modelMetering": "Model token metering",
+    "modelMeteringDescription": "Provider-reported tokens only. Monetary cost appears after a reviewed price catalog is configured.",
+    "costUnavailable": "Cost unavailable",
+    "officialModel": "Platform model capacity",
+    "byokModel": "Your provider key",
+    "tokenBreakdown": "In {{input}} · Out {{output}}",
+    "tokenBudgetNotSet": "No additional token cap configured",
+    "tokenRemaining": "{{count}} tokens protected by the workspace cap",
+    "tokenReserved": "{{count}} held for in-flight work"
+  },
+  "workspace": {
+    "title": "Workspace capacity",
+    "description": "Seats and billing ownership for this workspace.",
+    "seats": "{{used}} of {{limit}} seats in use",
+    "available": "{{count}} seats available",
+    "overCapacity": "{{count}} active member exceeds the paid seat count. New invites are blocked.",
+    "compatibility": "Seat limits will apply when workspace billing is enabled.",
+    "billingOwner": "You are the workspace billing owner.",
+    "member": "Only the workspace owner can manage seats and billing."
   },
   "security": {
     "title": "Security",

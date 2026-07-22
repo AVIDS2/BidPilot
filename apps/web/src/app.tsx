@@ -1,40 +1,43 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { DashboardPage } from "./features/dashboard/dashboard-page";
-import { ProjectListPage } from "./features/projects/project-list-page";
-import { ProjectDetailPage } from "./features/projects/project-detail-page";
-import { AccountPage } from "./features/account/account-page";
-import { PricingPage } from "./features/pricing/pricing-page";
-import { LandingPage } from "./features/landing/landing-page";
-import { UserManagementPage } from "./features/admin/user-management-page";
-import { TeamManagementPage } from "./features/admin/team-management-page";
-import { InvitationManagementPage } from "./features/admin/invitation-management-page";
-import { ProviderSettingsPage } from "./features/settings/provider-settings-page";
-import { DocsPage } from "./features/docs/docs-page";
-import { LoginPage } from "./features/auth/login-page";
-import { SignupPage } from "./features/auth/signup-page";
-import { ForgotPasswordPage } from "./features/auth/forgot-password-page";
-import { ResetPasswordPage } from "./features/auth/reset-password-page";
-import { VerifyEmailPromptPage } from "./features/auth/verify-email-prompt-page";
-import { VerifyEmailPage } from "./features/auth/verify-email-page";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SiteHeader } from "@/components/site-header";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Nav } from "@/components/layout/Nav";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ThemeProvider } from "next-themes";
-import { FileTextIcon, SettingsIcon, UsersIcon, UserPlusIcon, MailIcon, LayoutDashboardIcon, CreditCardIcon, BookOpenIcon } from "lucide-react";
-import { BrandMark } from "@/components/brand";
-import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
-import { AIAssistantPanel, CommandPalette, FloatingAssistant, InlineSuggestionBar } from "@/components/ai-assistant";
-import { useAIAssistantHotkeys } from "@/hooks/use-ai-assistant-hotkeys";
-import { cn } from "@/lib/utils";
 
 const queryClient = new QueryClient();
+
+const LandingPage = lazy(() => import("./features/landing/landing-page").then(({ LandingPage }) => ({ default: LandingPage })));
+const LoginPage = lazy(() => import("./features/auth/login-page").then(({ LoginPage }) => ({ default: LoginPage })));
+const SignupPage = lazy(() => import("./features/auth/signup-page").then(({ SignupPage }) => ({ default: SignupPage })));
+const ForgotPasswordPage = lazy(() => import("./features/auth/forgot-password-page").then(({ ForgotPasswordPage }) => ({ default: ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("./features/auth/reset-password-page").then(({ ResetPasswordPage }) => ({ default: ResetPasswordPage })));
+const VerifyEmailPromptPage = lazy(() => import("./features/auth/verify-email-prompt-page").then(({ VerifyEmailPromptPage }) => ({ default: VerifyEmailPromptPage })));
+const VerifyEmailPage = lazy(() => import("./features/auth/verify-email-page").then(({ VerifyEmailPage }) => ({ default: VerifyEmailPage })));
+const PricingPage = lazy(() => import("./features/pricing/pricing-page").then(({ PricingPage }) => ({ default: PricingPage })));
+const DocsPage = lazy(() => import("./features/docs/docs-page").then(({ DocsPage }) => ({ default: DocsPage })));
+const DashboardPage = lazy(() => import("./features/dashboard/dashboard-page").then(({ DashboardPage }) => ({ default: DashboardPage })));
+const AgentWorkspacePage = lazy(() => import("./features/agent/agent-workspace-page").then(({ AgentWorkspacePage }) => ({ default: AgentWorkspacePage })));
+const RunCenterPage = lazy(() => import("./features/runs/run-center-page").then(({ RunCenterPage }) => ({ default: RunCenterPage })));
+const KnowledgePortfolioPage = lazy(() => import("./features/knowledge/knowledge-portfolio-page").then(({ KnowledgePortfolioPage }) => ({ default: KnowledgePortfolioPage })));
+const ProjectListPage = lazy(() => import("./features/projects/project-list-page").then(({ ProjectListPage }) => ({ default: ProjectListPage })));
+const ProjectDetailPage = lazy(() => import("./features/projects/project-detail-page").then(({ ProjectDetailPage }) => ({ default: ProjectDetailPage })));
+const AccountPage = lazy(() => import("./features/account/account-page").then(({ AccountPage }) => ({ default: AccountPage })));
+const UserManagementPage = lazy(() => import("./features/admin/user-management-page").then(({ UserManagementPage }) => ({ default: UserManagementPage })));
+const TeamManagementPage = lazy(() => import("./features/admin/team-management-page").then(({ TeamManagementPage }) => ({ default: TeamManagementPage })));
+const InvitationManagementPage = lazy(() => import("./features/admin/invitation-management-page").then(({ InvitationManagementPage }) => ({ default: InvitationManagementPage })));
+const ProviderSettingsPage = lazy(() => import("./features/settings/provider-settings-page").then(({ ProviderSettingsPage }) => ({ default: ProviderSettingsPage })));
+const PlatformShell = lazy(() => import("@/components/platform-shell").then(({ PlatformShell }) => ({ default: PlatformShell })));
+
+function RouteLoadingFallback() {
+  return (
+    <div className="flex min-h-[50dvh] items-center justify-center text-sm text-muted-foreground" role="status">
+      Loading workspace...
+    </div>
+  );
+}
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth();
@@ -51,78 +54,6 @@ function PublicLayout() {
       <Nav />
       <Outlet />
     </div>
-  );
-}
-
-function PlatformShell() {
-  const { user, isAuthenticated } = useAuth();
-  const { t } = useTranslation();
-  const { state, toggle } = useAIAssistant();
-  useAIAssistantHotkeys();
-
-  const isAdmin = user?.role === "admin";
-
-  const navItems = [
-    { title: t("nav.dashboard"), url: "/dashboard", icon: <LayoutDashboardIcon /> },
-    { title: t("nav.projects"), url: "/projects", icon: <FileTextIcon /> },
-    { title: t("nav.settings"), url: "/settings/providers", icon: <SettingsIcon /> },
-    { title: t("nav.pricing", { defaultValue: "定价" }), url: "/pricing", icon: <CreditCardIcon /> },
-    { title: t("nav.docs", { defaultValue: "文档" }), url: "/docs", icon: <BookOpenIcon /> },
-    { title: t("nav.teams"), url: "/admin/teams", icon: <UserPlusIcon /> },
-    { title: t("nav.invitations"), url: "/admin/invitations", icon: <MailIcon /> },
-    { title: t("nav.users"), url: "/admin/users", icon: <UsersIcon /> },
-  ];
-
-  const teams = [
-    { name: "BidPilot", logo: <BrandMark decorative className="size-5" />, plan: t("app.tagline") },
-  ];
-
-  const adminOnlyUrls = ["/admin/users", "/admin/teams", "/admin/invitations"];
-  const visibleNavItems = navItems.filter(
-    (item) => !adminOnlyUrls.includes(item.url) || isAdmin
-  );
-  const assistantPanelOpen = state.isOpen && state.mode === "panel";
-
-  const sidebarUser = {
-    name: user?.display_name || t("user.fallbackName"),
-    email: user?.email || "",
-    avatar: "",
-  };
-
-  return (
-    <SidebarProvider
-      style={{
-        "--sidebar-width": "calc(var(--spacing) * 72)",
-        "--header-height": "calc(var(--spacing) * 12)",
-      } as React.CSSProperties}
-    >
-      <CommandPalette open={state.isOpen && state.mode === "command"} onOpenChange={(open) => { if (!open) toggle(); }} />
-      <AppSidebar
-        navItems={visibleNavItems}
-        teams={teams}
-        user={sidebarUser}
-      />
-      <SidebarInset
-        className={cn(
-          "min-w-0 overflow-x-hidden transition-[margin] duration-200 ease-out",
-          assistantPanelOpen && "xl:mr-[560px]",
-        )}
-      >
-        <SiteHeader />
-        <InlineSuggestionBar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="@container/main flex min-w-0 flex-1 flex-col gap-2">
-            <div className="flex min-w-0 flex-col gap-4 px-3 py-4 sm:px-4 md:gap-6 md:py-6 lg:px-6">
-              <ErrorBoundary>
-                <Outlet />
-              </ErrorBoundary>
-            </div>
-          </div>
-        </div>
-      </SidebarInset>
-      <AIAssistantPanel />
-      <FloatingAssistant />
-    </SidebarProvider>
   );
 }
 
@@ -165,6 +96,9 @@ function AppRoutes() {
       {/* Platform pages - Sidebar navigation */}
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/agent" element={<AgentWorkspacePage />} />
+        <Route path="/runs" element={<RunCenterPage />} />
+        <Route path="/knowledge" element={<KnowledgePortfolioPage />} />
         <Route path="/projects" element={<ProjectListPage />} />
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
         <Route path="/account" element={<AccountPage />} />
@@ -182,16 +116,14 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
       <AuthProvider>
-      <AIAssistantProvider>
-        <TooltipProvider>
-          <BrowserRouter>
-            <ErrorBoundary>
+        <BrowserRouter>
+          <ErrorBoundary>
+            <Suspense fallback={<RouteLoadingFallback />}>
               <AppRoutes />
-            </ErrorBoundary>
-          </BrowserRouter>
-          <Toaster />
-        </TooltipProvider>
-      </AIAssistantProvider>
+            </Suspense>
+          </ErrorBoundary>
+        </BrowserRouter>
+        <Toaster />
       </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

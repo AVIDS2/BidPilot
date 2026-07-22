@@ -134,6 +134,7 @@ describe("ProviderSettingsPage", () => {
           { id: "deepseek-chat" },
           { id: "deepseek-reasoner" },
         ],
+        discovery_mode: "supported",
       },
     });
 
@@ -144,6 +145,16 @@ describe("ProviderSettingsPage", () => {
     fireEvent.click(deepseekCardLabel.closest("button") as HTMLButtonElement);
     fireEvent.change(screen.getByLabelText(/API Key/i), { target: { value: "sk-test" } });
     fireEvent.click(screen.getByRole("button", { name: /fetch models/i }));
+
+    await waitFor(() => {
+      expect(listProviderModels).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider_type: "openai",
+          provider_id: "deepseek",
+          api_url: "https://api.deepseek.com",
+        }),
+      );
+    });
 
     expect(await screen.findByRole("button", { name: "deepseek-chat" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "deepseek-reasoner" }));

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ipaddress
 import os
+import re
 from typing import Mapping, NamedTuple
+from urllib.parse import urlsplit
 
 
 DEVELOPMENT_DEFAULTS = {
@@ -30,7 +33,18 @@ REQUIRED_PRODUCTION_VARIABLES = [
     "DOCPILOT_SECRETS_KEY",
     "DOCPILOT_APP_URL",
     "DOCPILOT_CORS_ORIGINS",
+    "DOCPILOT_ENV",
     "DOCPILOT_LANGGRAPH_CHECKPOINTER",
+    "DOCPILOT_AGENT_CHECKPOINTER",
+    "DOCPILOT_ASSISTANT_ENGINE",
+    "USE_LANGGRAPH",
+    "DOCPILOT_POSTGRES_DB",
+    "DOCPILOT_POSTGRES_USER",
+    "DOCPILOT_POSTGRES_PASSWORD",
+    "DOCPILOT_REDIS_PASSWORD",
+    "DOCPILOT_RATE_LIMIT",
+    "DOCPILOT_TRUSTED_PROXY_CIDRS",
+    "DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING",
 ]
 
 PROVIDER_KEY_VARIABLES = [
@@ -45,8 +59,23 @@ PROVIDER_KEY_VARIABLES = [
 SMTP_PRODUCTION_VARIABLES = [
     "DOCPILOT_SMTP_HOST",
     "DOCPILOT_SMTP_USER",
+    "DOCPILOT_SMTP_PASS",
     "DOCPILOT_SMTP_FROM",
 ]
+
+STRIPE_BILLING_REQUIRED_IF_ENABLED = [
+    "DOCPILOT_STRIPE_SECRET_KEY",
+    "DOCPILOT_STRIPE_WEBHOOK_SECRET",
+    "DOCPILOT_STRIPE_PRO_PRICE_ID",
+]
+STRIPE_BILLING_OPTIONAL = ["DOCPILOT_STRIPE_ENTERPRISE_PRICE_ID"]
+
+_PLACEHOLDER_PREFIXES = ("replace", "change", "your", "example", "<")
+_PLACEHOLDER_VALUES = {"todo", "tbd", "none", "null", "password", "secret"}
+_WEAK_POSTGRES_PASSWORDS = {"bidpilot", "bidpilot123", "docpilot", "docpilot123"}
+_WEAK_REDIS_PASSWORDS = {"redis", "redis123", "bidpilot", "bidpilot123", "docpilot", "docpilot123"}
+_RATE_LIMIT_PATTERN = re.compile(r"^(?P<count>[1-9][0-9]*)/(?P<window>second|seconds|minute|minutes|hour|hours|day|days)$")
+_NON_NEGATIVE_INTEGER_PATTERN = re.compile(r"^(0|[1-9][0-9]*)$")
 
 
 class ReadinessResult(NamedTuple):
@@ -76,6 +105,27 @@ def _is_fernet_key(value: str) -> bool:
     return len(decoded) == 32
 
 
+def _is_placeholder(value: str) -> bool:
+    normalized = value.strip().casefold()
+    return normalized in _PLACEHOLDER_VALUES or normalized.startswith(_PLACEHOLDER_PREFIXES)
+
+
+def _is_valid_rate_limit(value: str) -> bool:
+    return bool(_RATE_LIMIT_PATTERN.fullmatch(value.strip().lower()))
+
+
+def _has_valid_proxy_cidrs(value: str) -> bool:
+    candidates = [item.strip() for item in value.split(",") if item.strip()]
+    if not candidates:
+        return False
+    try:
+        for candidate in candidates:
+            ipaddress.ip_network(candidate, strict=False)
+    except ValueError:
+        return False
+    return True
+
+
 def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult:
     errors: list[str] = []
     warnings: list[str] = []
@@ -87,6 +137,8 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
     for name in REQUIRED_PRODUCTION_VARIABLES:
         if _is_missing(env.get(name)):
             errors.append(f"{name} is required")
+        elif _is_placeholder(env[name]):
+            errors.append(f"{name} must not use a placeholder value")
 
     if env.get("DOCPILOT_AUTH_REQUIRED", "").lower() != "true":
         errors.append("DOCPILOT_AUTH_REQUIRED must be true for production")
@@ -109,6 +161,33 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
     if env.get("DOCPILOT_LANGGRAPH_CHECKPOINTER") != "postgres":
         errors.append("DOCPILOT_LANGGRAPH_CHECKPOINTER must be postgres for production")
 
+    if env.get("DOCPILOT_AGENT_CHECKPOINTER") != "postgres":
+        errors.append("DOCPILOT_AGENT_CHECKPOINTER must be postgres for production")
+
+    if (env.get("DOCPILOT_ENV") or "").lower() != "production":
+        errors.append("DOCPILOT_ENV must be production for production deployment")
+
+    if env.get("DOCPILOT_ASSISTANT_ENGINE") != "operator":
+        errors.append("DOCPILOT_ASSISTANT_ENGINE must be operator for production")
+
+    if env.get("USE_LANGGRAPH", "").lower() not in {"1", "true", "yes"}:
+        errors.append("USE_LANGGRAPH must be true for production workflows")
+
+    if env.get("DOCPILOT_ALLOW_STUB_LLM", "").lower() in {"1", "true", "yes"}:
+        errors.append("DOCPILOT_ALLOW_STUB_LLM must not be enabled for production")
+
+    rate_limit = env.get("DOCPILOT_RATE_LIMIT")
+    if rate_limit and not _is_valid_rate_limit(rate_limit):
+        errors.append("DOCPILOT_RATE_LIMIT must use '<positive integer>/<second|minute|hour|day>'")
+
+    trusted_proxy_cidrs = env.get("DOCPILOT_TRUSTED_PROXY_CIDRS")
+    if trusted_proxy_cidrs and not _has_valid_proxy_cidrs(trusted_proxy_cidrs):
+        errors.append("DOCPILOT_TRUSTED_PROXY_CIDRS must contain one or more valid IPs or CIDRs")
+
+    official_token_ceiling = env.get("DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING", "")
+    if official_token_ceiling and not _NON_NEGATIVE_INTEGER_PATTERN.fullmatch(official_token_ceiling.strip()):
+        errors.append("DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING must be a non-negative integer")
+
     for name, defaults in DEVELOPMENT_DEFAULTS.items():
         value = env.get(name)
         if value in defaults:
@@ -130,11 +209,58 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
     for name in SMTP_PRODUCTION_VARIABLES:
         if _is_missing(env.get(name)):
             errors.append(f"{name} is required for production email")
+        elif _is_placeholder(env[name]):
+            errors.append(f"{name} must not use a placeholder value")
 
-    if not any(not _is_missing(env.get(name)) for name in PROVIDER_KEY_VARIABLES):
+    if not any(
+        not _is_missing(env.get(name)) and not _is_placeholder(env[name])
+        for name in PROVIDER_KEY_VARIABLES
+    ):
         errors.append("one provider API key is required")
 
+    stripe_values = [env.get(name) for name in (*STRIPE_BILLING_REQUIRED_IF_ENABLED, *STRIPE_BILLING_OPTIONAL)]
+    if any(not _is_missing(value) for value in stripe_values):
+        for name in STRIPE_BILLING_REQUIRED_IF_ENABLED:
+            value = env.get(name)
+            if _is_missing(value):
+                errors.append(f"{name} is required when Stripe billing is enabled")
+            elif _is_placeholder(value):
+                errors.append(f"{name} must not use a placeholder value when Stripe billing is enabled")
+        for name in STRIPE_BILLING_OPTIONAL:
+            value = env.get(name)
+            if value and _is_placeholder(value):
+                errors.append(f"{name} must not use a placeholder value when set")
+        stripe_secret_key = env.get("DOCPILOT_STRIPE_SECRET_KEY", "")
+        if target == "production" and stripe_secret_key and not stripe_secret_key.startswith("sk_live_"):
+            errors.append(
+                "DOCPILOT_STRIPE_SECRET_KEY must use a Stripe live-mode secret key for production"
+            )
+
+    postgres_password = env.get("DOCPILOT_POSTGRES_PASSWORD")
+    if postgres_password and postgres_password.casefold() in _WEAK_POSTGRES_PASSWORDS:
+        errors.append("DOCPILOT_POSTGRES_PASSWORD must not use the development default")
+
+    redis_password = env.get("DOCPILOT_REDIS_PASSWORD")
+    if redis_password and redis_password.casefold() in _WEAK_REDIS_PASSWORDS:
+        errors.append("DOCPILOT_REDIS_PASSWORD must not use the development default")
+    redis_url = env.get("DOCPILOT_REDIS_URL")
+    if redis_url and not _redis_url_has_password(redis_url):
+        errors.append("DOCPILOT_REDIS_URL must include a password for production")
+    rate_limit_storage_uri = env.get("DOCPILOT_RATE_LIMIT_STORAGE_URI")
+    if rate_limit_storage_uri:
+        if _uses_localhost(rate_limit_storage_uri):
+            errors.append("DOCPILOT_RATE_LIMIT_STORAGE_URI must not use localhost for production")
+        if not _redis_url_has_password(rate_limit_storage_uri):
+            errors.append("DOCPILOT_RATE_LIMIT_STORAGE_URI must include a password for production")
+
     return ReadinessResult(ok=len(errors) == 0, errors=errors, warnings=warnings)
+
+
+def _redis_url_has_password(value: str) -> bool:
+    try:
+        return bool(urlsplit(value).password)
+    except ValueError:
+        return False
 
 
 def parse_args() -> argparse.Namespace:

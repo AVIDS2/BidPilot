@@ -1,11 +1,18 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { listTeams, createTeam, deleteTeam, updateTeam, addTeamMember, removeTeamMember, listUsers } from "@/lib/api";
+import {
+  addTeamMember,
+  createTeam,
+  deleteTeam,
+  listOrganizationMembers,
+  listTeams,
+  removeTeamMember,
+  updateTeam,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
 import {
@@ -52,9 +59,9 @@ export function TeamManagementPage() {
     queryKey: ["teams"],
   });
 
-  const { data: usersData } = useQuery({
-    queryFn: () => listUsers(1, 100),
-    queryKey: ["admin-users", 1],
+  const { data: workspaceMembers, isLoading: isLoadingWorkspaceMembers } = useQuery({
+    queryFn: listOrganizationMembers,
+    queryKey: ["organization-members"],
   });
 
   const createMut = useMutation({
@@ -98,21 +105,24 @@ export function TeamManagementPage() {
     onError: () => toast.error(t("teamManagement.operationFailed")),
   });
 
-  if (isLoading) return <TeamManagementSkeleton />;
+  if (isLoading || isLoadingWorkspaceMembers) return <TeamManagementSkeleton />;
 
-  if (currentUser?.role !== "admin") {
+  const currentMembership = workspaceMembers?.find((member) => member.id === currentUser?.id);
+  const canManageTeams = currentMembership?.role === "owner" || currentMembership?.role === "admin";
+
+  if (!canManageTeams) {
     return (
       <div className="flex flex-col gap-6">
         <div className="flex flex-col items-center justify-center py-20" style={{ color: "var(--muted-foreground)" }}>
           <ShieldIcon className="size-10 mb-3 opacity-40" />
-          <p className="text-sm">{t("userManagement.adminRequired")}</p>
+          <p className="text-sm">{t("invitationManagement.workspaceManagerRequired")}</p>
         </div>
       </div>
     );
   }
 
   const teams = teamsData?.items ?? [];
-  const users = usersData?.items ?? [];
+  const users = workspaceMembers ?? [];
   const totalPages = Math.max(1, Math.ceil(teams.length / CARDS_PER_PAGE));
   const paginatedTeams = teams.slice((currentPage - 1) * CARDS_PER_PAGE, currentPage * CARDS_PER_PAGE);
 
@@ -264,7 +274,9 @@ export function TeamManagementPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            {users.map((u) => (
+                            {users
+                              .filter((user) => !team.members?.some((member) => member.user_id === user.id))
+                              .map((u) => (
                               <SelectItem key={u.id} value={u.id}>
                                 {u.display_name} ({u.email})
                               </SelectItem>
@@ -290,7 +302,7 @@ export function TeamManagementPage() {
                                 background: m.role === "admin" ? "rgba(132, 204, 22, 0.15)" : "var(--border)",
                                 color: m.role === "admin" ? "var(--primary)" : "var(--muted-foreground)",
                               }}>
-                                {t(`role.${m.role}`, { defaultValue: m.role })}
+                                {t(`workspaceMembers.roles.${m.role}`, { defaultValue: m.role })}
                               </span>
                               <button
                                 className="text-muted-foreground hover:text-red-400 transition-colors"

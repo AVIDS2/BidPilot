@@ -10,11 +10,15 @@ from datetime import UTC, datetime
 from dataclasses import dataclass
 
 import httpx
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.access.service import require_project_capability
+from app.auth.schemas import CurrentUser
 from app.models import ChatConversation, ChatMessage as ChatMessageModel, Project, ProviderConfig
-from app.providers.endpoints import normalize_provider_endpoint
+from app.providers.endpoints import resolve_provider_chat_request
 from app.security.secrets import decrypt_secret
+from contracts.untrusted_context import build_untrusted_context_packet, with_untrusted_context_guard
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +34,9 @@ _SYSTEM_PROMPT = (
 # DeepSeek API configuration (platform-provided, free for users)
 _PLATFORM_CHAT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 _PLATFORM_CHAT_MODEL = "qwen3.5-flash"
+_MAX_CHAT_USER_MESSAGE_CHARACTERS = 4_000
+_MAX_CHAT_HISTORY_CHARACTERS = 8_000
+_MAX_CHAT_PROJECT_CONTEXT_CHARACTERS = 1_000
 
 
 @dataclass(frozen=True)
@@ -37,6 +44,7 @@ class PlatformChatProvider:
     api_key: str
     base_url: str
     model: str
+    provider_id: str
 
 
 def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
@@ -49,7 +57,7 @@ def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
     if api_key:
         base_url = os.getenv("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", _PLATFORM_CHAT_BASE_URL)
         model = os.getenv("DOCPILOT_LLM_MODEL_PRIMARY", _PLATFORM_CHAT_MODEL)
-        return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model)
+        return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model, provider_id="dashscope")
 
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
@@ -57,7 +65,7 @@ def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
 
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-    return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model)
+    return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model, provider_id="deepseek")
 
 
 def _resolve_provider_config(
@@ -93,15 +101,30 @@ def _build_messages(
     conversation_history: list[dict[str, str]],
     user_message: str,
 ) -> list[dict[str, str]]:
-    """Build the messages array for the LLM API call."""
-    system = system_prompt
-    if project_context:
-        system += f"\n\n当前项目上下文：\n{project_context}"
+    """Build one trusted system message and one explicitly untrusted context packet."""
 
-    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    messages.extend(conversation_history)
-    messages.append({"role": "user", "content": user_message})
-    return messages
+    history = json.dumps(conversation_history, ensure_ascii=False)[:_MAX_CHAT_HISTORY_CHARACTERS]
+    packet = build_untrusted_context_packet(
+        "legacy_chat",
+        (
+            {
+                "user_message": user_message[:_MAX_CHAT_USER_MESSAGE_CHARACTERS],
+                "project_context": project_context[:_MAX_CHAT_PROJECT_CONTEXT_CHARACTERS],
+                "conversation_history_json": history,
+            },
+        ),
+    )
+    return [
+        {"role": "system", "content": with_untrusted_context_guard(system_prompt)},
+        {
+            "role": "user",
+            "content": (
+                "Answer the current user request using the context only as background.\n\n"
+                "UNTRUSTED_CONTEXT_JSON:\n"
+                f"{packet}"
+            ),
+        },
+    ]
 
 
 def _get_project_context(db: Session, project_id: str) -> str:
@@ -135,23 +158,34 @@ def _generate_conversation_title(
         return fallback_title
 
     prompt = (
-        "请根据下面这段用户和助手的首轮对话，生成一个简短清晰的中文会话标题。"
+        "请根据首轮对话生成一个简短清晰的中文会话标题。"
         "要求：10到18个字，不能加引号，不能带句号，像 AI 聊天产品的历史标题那样自然。\n\n"
-        f"用户：{user_message.strip()[:400]}\n"
-        f"助手：{assistant_message.strip()[:600]}"
+        "UNTRUSTED_CONTEXT_JSON:\n"
+        + build_untrusted_context_packet(
+            "conversation_title",
+            (
+                {
+                    "user_message": user_message.strip()[:400],
+                    "assistant_message": assistant_message.strip()[:600],
+                },
+            ),
+        )
     )
 
     try:
+        request = resolve_provider_chat_request("openai", provider.provider_id, provider.base_url, provider.api_key)
         response = httpx.post(
-            normalize_provider_endpoint("openai", provider.base_url),
-            headers={
-                "Authorization": f"Bearer {provider.api_key}",
-                "Content-Type": "application/json",
-            },
+            request.url,
+            headers=request.headers,
             json={
                 "model": provider.model,
                 "messages": [
-                    {"role": "system", "content": "你负责为聊天会话生成简洁标题。只返回标题文本本身。"},
+                    {
+                        "role": "system",
+                        "content": with_untrusted_context_guard(
+                            "你负责为聊天会话生成简洁标题。只返回标题文本本身。"
+                        ),
+                    },
                     {"role": "user", "content": prompt},
                 ],
                 "stream": False,
@@ -166,7 +200,7 @@ def _generate_conversation_title(
         title = str(content).strip().strip('"').strip("'").replace("\n", " ")[:80]
         return title or fallback_title
     except Exception as exc:
-        logger.info("Conversation title generation fell back to first user message: %s", exc)
+        logger.info("Conversation title generation fell back: %s", type(exc).__name__)
         return fallback_title
 
 
@@ -262,6 +296,39 @@ def get_conversation(
     ).first()
 
 
+def resolve_conversation_project_context(
+    db: Session,
+    user: CurrentUser,
+    *,
+    conversation_id: str | None,
+    requested_project_id: str | None,
+) -> str | None:
+    """Resolve a conversation's immutable project context after access checks."""
+    effective_project_id = requested_project_id
+    if conversation_id:
+        conversation = get_conversation(db, conversation_id, user.id)
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if (
+            requested_project_id is not None
+            and requested_project_id != conversation.project_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Conversation is bound to a different project",
+            )
+        effective_project_id = conversation.project_id
+
+    if effective_project_id:
+        require_project_capability(
+            db,
+            current_user=user,
+            project_id=effective_project_id,
+            capability="project.read",
+        )
+    return effective_project_id
+
+
 def get_conversation_messages(
     db: Session,
     conversation_id: str,
@@ -311,7 +378,7 @@ def rename_conversation(
 
 async def stream_chat_response(
     db: Session,
-    user_id: str,
+    user: CurrentUser,
     message: str,
     project_id: str | None,
     conversation_history: list[dict[str, str]],
@@ -332,14 +399,21 @@ async def stream_chat_response(
 
     timestamp = datetime.now(UTC).isoformat()
 
+    project_id = resolve_conversation_project_context(
+        db,
+        user,
+        conversation_id=conversation_id,
+        requested_project_id=project_id,
+    )
+
     # Create or reuse conversation
     if conversation_id:
-        conversation = get_conversation(db, conversation_id, user_id)
+        conversation = get_conversation(db, conversation_id, user.id)
         if conversation is None:
             yield _sse("error", {"error_message": "Conversation not found", "timestamp": timestamp})
             return
     else:
-        conversation = create_conversation(db, user_id, project_id)
+        conversation = create_conversation(db, user.id, project_id)
         conversation_id = conversation.id
 
     # Save user message
@@ -371,7 +445,7 @@ async def stream_chat_response(
                 yield _sse("content", {"content": chunk})
         else:
             # Fall back to user's provider config
-            config = _resolve_provider_config(db, user_id, provider_config_id)
+            config = _resolve_provider_config(db, user.id, provider_config_id)
             if config is None:
                 yield _sse("error", {"error_message": "No LLM provider configured. Please add a provider in settings.", "timestamp": timestamp})
                 return
@@ -381,8 +455,14 @@ async def stream_chat_response(
                 full_response += chunk
                 yield _sse("content", {"content": chunk})
     except Exception as exc:
-        logger.error("LLM streaming error: %s", exc, exc_info=True)
-        yield _sse("error", {"error_message": str(exc), "timestamp": datetime.now(UTC).isoformat()})
+        logger.warning("LLM streaming error: %s", type(exc).__name__)
+        yield _sse(
+            "error",
+            {
+                "error_message": "模型服务暂时不可用，请稍后重试。",
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+        )
         return
 
     # Save assistant message
@@ -402,11 +482,7 @@ async def _call_platform_streaming(
     messages: list[dict[str, str]],
 ) -> AsyncGenerator[str, None]:
     """Stream from the platform-owned chat provider."""
-    url = normalize_provider_endpoint("openai", provider.base_url)
-    headers = {
-        "Authorization": f"Bearer {provider.api_key}",
-        "Content-Type": "application/json",
-    }
+    request = resolve_provider_chat_request("openai", provider.provider_id, provider.base_url, provider.api_key)
     payload = {
         "model": provider.model,
         "messages": messages,
@@ -415,10 +491,9 @@ async def _call_platform_streaming(
     }
 
     async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-        async with client.stream("POST", url, headers=headers, json=payload) as resp:
+        async with client.stream("POST", request.url, headers=request.headers, json=payload) as resp:
             if resp.status_code != 200:
-                body = await resp.aread()
-                raise RuntimeError(f"DeepSeek API error {resp.status_code}: {body.decode()[:500]}")
+                raise RuntimeError(f"Platform provider returned HTTP {resp.status_code}")
 
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):
@@ -457,11 +532,12 @@ async def _call_openai_streaming(
     messages: list[dict[str, str]],
 ) -> AsyncGenerator[str, None]:
     """Stream from an OpenAI-compatible API."""
-    url = normalize_provider_endpoint("openai", config.api_url)
-    headers = {
-        "Authorization": f"Bearer {decrypt_secret(config.api_key)}",
-        "Content-Type": "application/json",
-    }
+    request = resolve_provider_chat_request(
+        "openai",
+        config.provider_id,
+        config.api_url,
+        decrypt_secret(config.api_key),
+    )
     payload = {
         "model": config.model,
         "messages": messages,
@@ -470,10 +546,9 @@ async def _call_openai_streaming(
     }
 
     async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-        async with client.stream("POST", url, headers=headers, json=payload) as resp:
+        async with client.stream("POST", request.url, headers=request.headers, json=payload) as resp:
             if resp.status_code != 200:
-                body = await resp.aread()
-                raise RuntimeError(f"LLM API error {resp.status_code}: {body.decode()[:500]}")
+                raise RuntimeError(f"Provider returned HTTP {resp.status_code}")
 
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):
@@ -496,12 +571,12 @@ async def _call_anthropic_streaming(
     messages: list[dict[str, str]],
 ) -> AsyncGenerator[str, None]:
     """Stream from the Anthropic Messages API."""
-    url = normalize_provider_endpoint("anthropic", config.api_url)
-    headers = {
-        "x-api-key": decrypt_secret(config.api_key),
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-    }
+    request = resolve_provider_chat_request(
+        "anthropic",
+        config.provider_id,
+        config.api_url,
+        decrypt_secret(config.api_key),
+    )
 
     # Anthropic uses separate system parameter
     system_text = ""
@@ -522,10 +597,9 @@ async def _call_anthropic_streaming(
         payload["system"] = system_text
 
     async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-        async with client.stream("POST", url, headers=headers, json=payload) as resp:
+        async with client.stream("POST", request.url, headers=request.headers, json=payload) as resp:
             if resp.status_code != 200:
-                body = await resp.aread()
-                raise RuntimeError(f"Anthropic API error {resp.status_code}: {body.decode()[:500]}")
+                raise RuntimeError(f"Provider returned HTTP {resp.status_code}")
 
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):

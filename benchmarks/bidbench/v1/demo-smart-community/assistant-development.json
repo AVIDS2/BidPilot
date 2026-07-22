@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "assistant-development-v1",
+  "title": "BidPilot synthetic AssistantBench development fixture",
+  "dataset_role": "development",
+  "description": "Synthetic router and policy cases only. It contains no customer documents, chat history, provider payloads, or credentials.",
+  "cases": [
+    {
+      "id": "create-project",
+      "message": "创建项目 名为 智慧社区投标",
+      "approval_mode": "risky_only",
+      "expected_mode": "tool_action",
+      "expected_tool_name": "create_project",
+      "required_argument_keys": ["name", "scenario_package"],
+      "expected_policy_outcome": "require_approval",
+      "expected_typed_confirmation": false
+    },
+    {
+      "id": "readiness-with-project",
+      "message": "查看当前项目的就绪度",
+      "project_id": "project-demo-smart-community",
+      "approval_mode": "risky_only",
+      "expected_mode": "tool_action",
+      "expected_tool_name": "get_readiness_summary",
+      "required_argument_keys": ["project_id"],
+      "expect_project_scope": true,
+      "expected_policy_outcome": "allow",
+      "expected_typed_confirmation": false
+    },
+    {
+      "id": "draft-technical-section",
+      "message": "生成技术方案章节",
+      "project_id": "project-demo-smart-community",
+      "approval_mode": "risky_only",
+      "expected_mode": "workflow_trigger",
+      "expected_tool_name": "start_draft_section",
+      "required_argument_keys": ["project_id", "section_key"],
+      "expect_project_scope": true,
+      "expected_policy_outcome": "require_approval",
+      "expected_typed_confirmation": false
+    },
+    {
+      "id": "delete-current-project",
+      "message": "删除当前项目",
+      "project_id": "project-demo-smart-community",
+      "approval_mode": "full_access",
+      "expected_mode": "tool_action",
+      "expected_tool_name": "delete_project",
+      "required_argument_keys": ["project_id"],
+      "expect_project_scope": true,
+      "expected_policy_outcome": "require_approval",
+      "expected_typed_confirmation": true
+    },
+    {
+      "id": "delete-project-without-context",
+      "message": "删除当前项目",
+      "approval_mode": "risky_only",
+      "expected_mode": "needs_input",
+      "expected_tool_name": "delete_project",
+      "expected_missing_fields": ["project_id"],
+      "expect_project_scope": true
+    },
+    {
+      "id": "export-deliverable",
+      "message": "导出交付物 11111111-1111-1111-1111-111111111111 为 PDF",
+      "approval_mode": "risky_only",
+      "expected_mode": "tool_action",
+      "expected_tool_name": "export_deliverable",
+      "required_argument_keys": ["deliverable_id", "format"],
+      "expected_policy_outcome": "require_approval",
+      "expected_typed_confirmation": false
+    },
+    {
+      "id": "export-without-deliverable",
+      "message": "导出当前交付物",
+      "approval_mode": "risky_only",
+      "expected_mode": "needs_input",
+      "expected_tool_name": "export_deliverable",
+      "expected_missing_fields": ["deliverable_id"]
+    },
+    {
+      "id": "requirements-without-project",
+      "message": "查看项目需求",
+      "approval_mode": "risky_only",
+      "expected_mode": "needs_input",
+      "expected_tool_name": "list_requirements",
+      "expected_missing_fields": ["project_id"],
+      "expect_project_scope": true
+    },
+    {
+      "id": "open-provider-settings",
+      "message": "打开供应商设置页面",
+      "approval_mode": "risky_only",
+      "expected_mode": "tool_action",
+      "expected_tool_name": "open_page",
+      "expected_policy_outcome": "allow",
+      "expected_typed_confirmation": false
+    },
+    {
+      "id": "propose-memory-graph",
+      "message": "为知识记录 22222222-2222-2222-2222-222222222222 生成实体关系提案",
+      "project_id": "project-demo-smart-community",
+      "approval_mode": "risky_only",
+      "expected_mode": "workflow_trigger",
+      "expected_tool_name": "propose_memory_graph",
+      "required_argument_keys": ["memory_record_id", "project_id"],
+      "expect_project_scope": true,
+      "expected_policy_outcome": "require_approval",
+      "expected_typed_confirmation": false
+    },
+    {
+      "id": "forget-personal-memory",
+      "message": "忘记这条记忆 33333333-3333-3333-3333-333333333333",
+      "approval_mode": "risky_only",
+      "expected_mode": "tool_action",
+      "expected_tool_name": "forget_memory",
+      "required_argument_keys": ["memory_id"],
+      "expected_policy_outcome": "require_approval",
+      "expected_typed_confirmation": false
+    }
+  ]
+}

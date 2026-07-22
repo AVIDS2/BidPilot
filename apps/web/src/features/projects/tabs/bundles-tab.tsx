@@ -42,10 +42,12 @@ function DragDropUpload({
   bundleId,
   onUploadComplete,
   t,
+  disabled = false,
 }: {
   bundleId: string;
   onUploadComplete: (bundleId: string) => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
+  disabled?: boolean;
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadItems, setUploadItems] = useState<
@@ -58,7 +60,7 @@ function DragDropUpload({
   const handleUploadFiles = useCallback(
     async (fileList: FileList | File[]) => {
       const files = Array.from(fileList);
-      if (files.length === 0 || uploading) return;
+      if (files.length === 0 || uploading || disabled) return;
 
       const items = files.map((file) => ({
         id: `${file.name}-${file.lastModified}-${file.size}`,
@@ -106,7 +108,7 @@ function DragDropUpload({
         setUploadItems((current) => current.filter((item) => item.status === "failed"));
       }, 1800);
     },
-    [bundleId, onUploadComplete, t, uploading],
+    [bundleId, disabled, onUploadComplete, t, uploading],
   );
 
   const handleDrop = useCallback(
@@ -115,13 +117,13 @@ function DragDropUpload({
       setIsDragging(false);
       if (e.dataTransfer.files?.length) handleUploadFiles(e.dataTransfer.files);
     },
-    [handleUploadFiles],
+    [disabled, handleUploadFiles],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
-  }, []);
+    if (!disabled) setIsDragging(true);
+  }, [disabled]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
       e.preventDefault();
@@ -144,7 +146,7 @@ function DragDropUpload({
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        onClick={() => !uploading && fileInputRef.current?.click()}
+        onClick={() => !disabled && !uploading && fileInputRef.current?.click()}
         animate={isDragging ? { scale: 1.01 } : { scale: 1 }}
         transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
         className={cn(
@@ -152,7 +154,7 @@ function DragDropUpload({
           isDragging
             ? "border-primary bg-primary/10 shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_26%,transparent)]"
             : "border-muted-foreground/25 bg-muted/20 hover:border-primary/45 hover:bg-muted/35",
-          uploading && "cursor-wait",
+          (uploading || disabled) && "cursor-not-allowed opacity-60",
         )}
       >
         <div
@@ -161,7 +163,7 @@ function DragDropUpload({
             isDragging && "translate-x-full",
           )}
         />
-        <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
+        <input ref={fileInputRef} type="file" multiple disabled={disabled} className="hidden" onChange={handleFileSelect} />
         <div className="relative flex size-12 items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
           {uploading ? (
             <Loader2Icon className="size-5 animate-spin text-primary" />
@@ -171,7 +173,9 @@ function DragDropUpload({
         </div>
         <div className="relative space-y-1">
           <p className="text-sm font-medium text-foreground">
-            {uploading
+            {disabled
+              ? t("bundles.uploadLocked", { defaultValue: "Processing materials..." })
+              : uploading
               ? t("bundles.uploading", { defaultValue: "Uploading..." })
               : isDragging
                 ? t("bundles.dropHere", { defaultValue: "Drop files to upload" })
@@ -326,7 +330,7 @@ export function BundlesTab({ projectId, bundles, onReingest, onConfirm }: Bundle
                   <Badge variant={b.ingest_status === "ingested" ? "default" : "secondary"}>
                     {t(`statusValues.${b.ingest_status}`, { defaultValue: b.ingest_status })}
                   </Badge>
-                  {b.ingest_status !== "ingested" && (
+                  {(["ready_to_ingest", "failed"] as const).includes(b.ingest_status as "ready_to_ingest" | "failed") && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -342,12 +346,20 @@ export function BundlesTab({ projectId, bundles, onReingest, onConfirm }: Bundle
                       {t("bundles.reingest")}
                     </Button>
                   )}
+                  {b.ingest_status === "awaiting_upload" && (
+                    <span className="text-xs text-muted-foreground">{t("bundles.awaitingUpload")}</span>
+                  )}
                 </div>
               </AccordionTrigger>
               <AccordionContent>
                 <div className="flex flex-col gap-3">
                   {/* Drag-and-drop upload zone */}
-                  <DragDropUpload bundleId={b.id} onUploadComplete={invalidateDocuments} t={t} />
+                  <DragDropUpload
+                    bundleId={b.id}
+                    onUploadComplete={invalidateDocuments}
+                    t={t}
+                    disabled={["queued", "running", "indexing"].includes(b.ingest_status)}
+                  />
 
                   {/* Document list */}
                   <AnimatePresence>

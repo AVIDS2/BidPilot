@@ -9,9 +9,9 @@ from app.auth.schemas import CurrentUser
 from app.auth.service import _hash_password, require_auth
 from app.db import Base, get_db
 from app.main import app
-from app.models import Organization, Project, Subscription, User
+from app.models import Organization, OrganizationMembership, Project, ProjectMember, Subscription, User
 from app.usage.schemas import ProviderSource
-from app.usage.service import EMBEDDING_INDEX_STARTED, record_usage_event
+from app.usage.service import EMBEDDING_INDEX_STARTED, count_official_indexing_starts, record_usage_event
 
 
 def _make_db():
@@ -41,6 +41,7 @@ def _make_user_project(SessionLocal, plan: str = "starter") -> tuple[User, Proje
         )
         db.add(user)
         db.flush()
+        db.add(OrganizationMembership(org_id=org.id, user_id=user.id, role="owner"))
         db.add(Subscription(user_id=user.id, plan=plan, status="active"))
         project = Project(
             org_id=org.id,
@@ -49,6 +50,8 @@ def _make_user_project(SessionLocal, plan: str = "starter") -> tuple[User, Proje
             scenario_package="bidpilot",
         )
         db.add(project)
+        db.flush()
+        db.add(ProjectMember(project_id=project.id, user_id=user.id, role="contributor"))
         db.commit()
         db.refresh(user)
         db.refresh(project)
@@ -82,7 +85,7 @@ def _override_get_db(SessionLocal):
     return dependency
 
 
-def test_register_bundle_blocks_starter_after_indexing_limit(client):
+def test_register_bundle_does_not_consume_or_require_indexing_quota(client):
     SessionLocal = _make_db()
     user, project = _make_user_project(SessionLocal)
     with SessionLocal() as db:
@@ -106,7 +109,9 @@ def test_register_bundle_blocks_starter_after_indexing_limit(client):
                 json={"project_id": project.id, "label": "RFP Pack", "source_type": "upload"},
             )
 
-        assert response.status_code == 403
-        assert "starter indexing limit" in response.text
+        assert response.status_code == 201
+        assert response.json()["ingest_status"] == "awaiting_upload"
+        with SessionLocal() as db:
+            assert count_official_indexing_starts(db, user.org_id) == 5
     finally:
         app.dependency_overrides.clear()

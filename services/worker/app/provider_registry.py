@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProviderParams:
     provider_type: str  # "openai" or "anthropic"
+    provider_id: str
     api_key: str
     api_url: str | None
     model: str
@@ -38,7 +39,7 @@ def get_active_provider(user_id: str, provider_type: str = "openai") -> Provider
             .filter(
                 ProviderConfig.user_id == user_id,
                 ProviderConfig.provider_type == provider_type,
-                ProviderConfig.is_active == True,
+                ProviderConfig.is_active.is_(True),
             )
             .first()
         )
@@ -58,6 +59,7 @@ def get_active_provider(user_id: str, provider_type: str = "openai") -> Provider
 
         return ProviderParams(
             provider_type=config.provider_type,
+            provider_id=config.provider_id,
             api_key=decrypt_secret(config.api_key),
             api_url=config.api_url,
             model=config.model,
@@ -85,6 +87,7 @@ def get_provider_by_id(config_id: str) -> ProviderParams | None:
             return None
         return ProviderParams(
             provider_type=config.provider_type,
+            provider_id=config.provider_id,
             api_key=decrypt_secret(config.api_key),
             api_url=config.api_url,
             model=config.model,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .registry import ScenarioPackage, get_scenario_or_raise
+from .registry import get_scenario_or_raise
 
 
 def resolve_default_template(scenario_key: str) -> dict[str, str]:

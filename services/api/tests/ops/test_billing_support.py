@@ -10,7 +10,14 @@ from app.auth.schemas import CurrentUser
 from app.auth.service import _hash_password
 from app.db import Base, get_db
 from app.main import app
-from app.models import Organization, Project, Subscription, User
+from app.models import (
+    Organization,
+    OrganizationMembership,
+    Project,
+    StripeWebhookEvent,
+    Subscription,
+    User,
+)
 from app.usage.schemas import ProviderSource
 from app.usage.service import record_usage_event
 
@@ -40,6 +47,8 @@ def sqlite_session_factory():
             org_id=org.id,
         )
         db.add_all([org, admin])
+        db.flush()
+        db.add(OrganizationMembership(org_id=org.id, user_id=admin.id, role="owner"))
         db.commit()
     return SessionLocal
 
@@ -99,6 +108,7 @@ def _seed_billing_user(session, plan: str = "starter"):
     )
     session.add(user)
     session.flush()
+    session.add(OrganizationMembership(org_id=org.id, user_id=user.id, role="owner"))
     session.add(Subscription(user_id=user.id, plan=plan, status="active"))
     project = Project(org_id=org.id, slug=f"{plan}-project-{uuid.uuid4().hex[:8]}", name="Project", scenario_package="bidpilot")
     session.add(project)
@@ -142,3 +152,29 @@ def test_admin_can_read_billing_usage(client, test_db):
     data = resp.json()["data"]
     assert len(data) == 1
     assert data[0]["provider_source"] == ProviderSource.OFFICIAL.value
+
+
+def test_admin_can_read_billing_webhook_receipts(client, test_db):
+    user, _project = _seed_billing_user(test_db)
+    test_db.add(
+        StripeWebhookEvent(
+            event_id="evt_support_1",
+            event_type="invoice.payment_failed",
+            event_created_at=1_720_000_000,
+            livemode=False,
+            outcome="processed_invoice",
+            user_id=user.id,
+            stripe_customer_id="cus_support",
+            stripe_subscription_id="sub_support",
+        )
+    )
+    test_db.commit()
+
+    resp = client.get(f"/ops/billing/users/{user.id}/webhooks")
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert len(data) == 1
+    assert data[0]["event_id"] == "evt_support_1"
+    assert data[0]["outcome"] == "processed_invoice"
+    assert "raw_payload" not in data[0]

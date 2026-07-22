@@ -29,7 +29,6 @@ export function DeliverablesTab({
 }: DeliverablesTabProps) {
   const { t } = useTranslation("projects");
   const [deliverableTitle, setDeliverableTitle] = useState("");
-  const [selectedDeliverableId, setSelectedDeliverableId] = useState<string | null>(null);
 
   return (
     <Card>
@@ -68,7 +67,7 @@ export function DeliverablesTab({
             </EmptyHeader>
           </Empty>
         )}
-        <Accordion multiple onValueChange={(v) => setSelectedDeliverableId(v[v.length - 1] ?? null)}>
+        <Accordion multiple>
           {deliverables.map((d) => (
             <AccordionItem key={d.id} value={d.id}>
               <AccordionTrigger className="hover:no-underline">

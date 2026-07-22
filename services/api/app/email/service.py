@@ -26,11 +26,21 @@ SMTP_HOST = os.environ.get("DOCPILOT_SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("DOCPILOT_SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("DOCPILOT_SMTP_USER", "")
 SMTP_PASS = os.environ.get("DOCPILOT_SMTP_PASS", "")
-SMTP_FROM = os.environ.get("DOCPILOT_SMTP_FROM", "noreply@docpilot.local")
+SMTP_FROM = os.environ.get("DOCPILOT_SMTP_FROM", "")
 SMTP_FROM_NAME = os.environ.get("DOCPILOT_SMTP_FROM_NAME", "BidPilot")
 SMTP_USE_TLS = os.environ.get("DOCPILOT_SMTP_TLS", "true").lower() == "true"
 
-SMTP_CONFIGURED = bool(SMTP_HOST and SMTP_USER)
+
+def _smtp_is_configured(*, host: str, user: str, password: str, from_address: str) -> bool:
+    return bool(host and user and password and from_address)
+
+
+SMTP_CONFIGURED = _smtp_is_configured(
+    host=SMTP_HOST,
+    user=SMTP_USER,
+    password=SMTP_PASS,
+    from_address=SMTP_FROM,
+)
 PRODUCT_NAME = "BidPilot"
 BRAND_ACCENT = "#8bd84f"
 

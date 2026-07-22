@@ -14,6 +14,9 @@ vi.mock("@/lib/api", () => ({
   createBundle: vi.fn(),
   uploadDocument: vi.fn(),
   uploadAssistantAttachment: vi.fn(),
+  downloadAssistantArtifact: vi.fn(),
+  listRuntimeEvents: vi.fn().mockResolvedValue({ items: [] }),
+  cancelRuntimeWorkflow: vi.fn(),
 }));
 
 function streamFrom(text: string) {
@@ -90,6 +93,47 @@ describe("AIAssistantPanel", () => {
     expect(screen.getAllByText(/Acme Bid/).length).toBeGreaterThan(0);
   });
 
+  it("renders the workspace variant without opening the side panel", async () => {
+    render(
+      <AIAssistantProvider>
+        <AIAssistantPanel variant="workspace" />
+      </AIAssistantProvider>,
+    );
+
+    expect(await screen.findByText("Welcome to BidPilot!")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Ask me anything..." })).toBeInTheDocument();
+  });
+
+  it("opens the created workspace after a governed project action succeeds", async () => {
+    window.history.replaceState({}, "", "/dashboard");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"demo-conversation","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"create_demo_workspace","state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"create_demo_workspace","result":{"id":"demo-project-id"},"summary":"演示工作区已准备好。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"demo-conversation","state":"completed"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Create a demo workspace" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/projects/demo-project-id");
+    });
+    window.history.replaceState({}, "", "/");
+  });
+
   it("does not render intent trace cards in the default chat flow", async () => {
     vi.stubGlobal(
       "fetch",
@@ -120,6 +164,66 @@ describe("AIAssistantPanel", () => {
     expect(screen.queryByText("Intent detected")).not.toBeInTheDocument();
   });
 
+  it("replays durable runtime events after an assistant stream is interrupted", async () => {
+    const { listRuntimeEvents } = await import("@/lib/api");
+    vi.mocked(listRuntimeEvents).mockResolvedValue({
+      items: [
+        {
+          run_id: "runtime-replay-1",
+          sequence: 3,
+          type: "capability.succeeded",
+          public_summary: "找到 2 个项目。",
+          payload: { capability: "search_projects", count: 2 },
+          schema_version: "1.0",
+        },
+        {
+          run_id: "runtime-replay-1",
+          sequence: 4,
+          type: "message.completed",
+          public_summary: "当前共有 2 个项目。",
+          payload: {},
+          schema_version: "1.0",
+        },
+        {
+          run_id: "runtime-replay-1",
+          sequence: 5,
+          type: "run.completed",
+          public_summary: "任务已完成。",
+          payload: {},
+          schema_version: "1.0",
+        },
+      ],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-replay","runtime_run_id":"runtime-replay-1","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"runtime_run_id":"runtime-replay-1","runtime_sequence":2,"tool_name":"search_projects","state":"executing_tool"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Show my projects" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(listRuntimeEvents).toHaveBeenCalledWith("runtime-replay-1", 2);
+    });
+    expect(screen.getByText("当前共有 2 个项目。")).toBeInTheDocument();
+    expect(screen.queryByText("stream interrupted")).not.toBeInTheDocument();
+  });
+
   it("keeps the composer editable while the assistant is responding", async () => {
     const fetchMock = vi.fn().mockImplementation(
       () =>
@@ -143,13 +247,148 @@ describe("AIAssistantPanel", () => {
     expect(screen.getByPlaceholderText("Ask me anything...")).not.toBeDisabled();
   });
 
+  it("clears an unavailable selected provider without silently retrying on the platform model", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ detail: "Provider config not found" })),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Show my projects" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findAllByText("所选模型配置已不可用，已切回平台默认模型。请确认后重新发送。"),
+    ).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("requests cancellation only for a workflow that exposes its runtime bridge id", async () => {
+    const { cancelRuntimeWorkflow, listRuntimeEvents } = await import("@/lib/api");
+    vi.mocked(cancelRuntimeWorkflow).mockResolvedValue({
+      id: "workflow-runtime-1",
+      kind: "workflow_bridge",
+      status: "cancel_requested",
+      project_id: "project-1",
+      conversation_id: "conversation-1",
+      execution_run_id: "execution-run-1",
+      engine: "langgraph_workflow",
+      trace_id: "trace-1",
+      parent_run_id: null,
+    });
+    vi.mocked(listRuntimeEvents).mockImplementation(
+      () => new Promise(() => {
+        // Keep the durable workflow live while the cancellation affordance is exercised.
+      }),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          body: streamFrom(
+            [
+              'event: assistant.start\ndata: {"conversation_id":"conversation-1","state":"thinking"}',
+              'event: assistant.workflow_started\ndata: {"tool_name":"start_draft_section","result":{"run_id":"execution-run-1","runtime_run_id":"workflow-runtime-1"},"state":"running_workflow"}',
+            ].join("\n\n") + "\n\n",
+          ),
+        }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Generate the technical approach" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    const cancelButton = await screen.findByRole("button", { name: "Cancel workflow" });
+    fireEvent.click(cancelButton);
+
+    await waitFor(() => {
+      expect(cancelRuntimeWorkflow).toHaveBeenCalledWith("workflow-runtime-1");
+    });
+    expect(screen.getByText("Cancellation requested. Stopping at a safe boundary.")).toBeInTheDocument();
+  });
+
+  it("shows a safe provider recovery action when a workflow fails", async () => {
+    const { listRuntimeEvents } = await import("@/lib/api");
+    vi.mocked(listRuntimeEvents).mockResolvedValue({
+      items: [
+        {
+          run_id: "workflow-provider-error",
+          sequence: 1,
+          type: "capability.progressed",
+          public_summary: "模型服务暂时不可用，正在重试。",
+          payload: {
+            capability: "start_draft_section",
+            node: "section_drafter",
+            phase: "provider_retry",
+            error_code: "provider_rate_limited",
+            next_attempt: 2,
+            max_attempts: 3,
+          },
+          schema_version: "1.0",
+        },
+        {
+          run_id: "workflow-provider-error",
+          sequence: 2,
+          type: "run.failed",
+          public_summary: "Workflow step could not finish.",
+          payload: {
+            capability: "start_draft_section",
+            error_code: "provider_auth_failed",
+          },
+          schema_version: "1.0",
+        },
+      ],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          body: streamFrom(
+            [
+              'event: assistant.start\ndata: {"conversation_id":"conversation-provider-error","state":"thinking"}',
+              'event: assistant.workflow_started\ndata: {"tool_name":"start_draft_section","result":{"run_id":"execution-provider-error","runtime_run_id":"workflow-provider-error"},"state":"running_workflow"}',
+              'event: assistant.end\ndata: {"conversation_id":"conversation-provider-error","state":"completed"}',
+            ].join("\n\n") + "\n\n",
+          ),
+        }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Generate a technical approach" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findByText("Model service authentication failed. Check the key and permissions, then test the connection again."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open model settings" }));
+    expect(window.location.pathname).toBe("/settings/providers");
+    window.history.replaceState({}, "", "/");
+  });
+
   it("opens an attachment menu from the composer", async () => {
     renderPanel();
     fireEvent.click(screen.getByText("Open assistant"));
 
     fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
 
-    expect(screen.getByText("Upload file")).toBeInTheDocument();
+    expect(await screen.findByText("Upload file")).toBeInTheDocument();
     expect(screen.getByText("Upload image")).toBeInTheDocument();
     expect(screen.getByText("Add from project")).toBeInTheDocument();
   });
@@ -162,6 +401,7 @@ describe("AIAssistantPanel", () => {
           id: "provider-1",
           user_id: "u1",
           provider_type: "openai",
+          provider_id: "openai",
           api_key: "sk-****",
           api_url: "https://api.example.com/v1",
           model: "gpt-5.5",
@@ -716,6 +956,43 @@ describe("AIAssistantPanel", () => {
       expect(screen.getAllByText((_content, element) => element?.textContent === "Draft section · completed").length).toBeGreaterThan(0);
     });
     expect(screen.getByText("1 of 1 steps completed")).toBeInTheDocument();
+  });
+
+  it("offers authenticated downloads for Agent-generated artifacts", async () => {
+    const { downloadAssistantArtifact } = await import("@/lib/api");
+    vi.mocked(downloadAssistantArtifact).mockResolvedValue(undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-download","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"export_deliverable","state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"export_deliverable","result":{"format":"docx","status":"ready","download_path":"/export/deliverables/123e4567-e89b-12d3-a456-426614174000/docx"},"summary":"交付物已生成，可下载。","state":"completed"}',
+            'event: assistant.message\ndata: {"content":"交付物已生成，可下载。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-download","full_response":"交付物已生成，可下载。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Export the deliverable" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await expandActivityDetails();
+    const downloadButton = await screen.findByRole("button", { name: "Download DOCX" });
+    fireEvent.click(downloadButton);
+    await waitFor(() => {
+      expect(downloadAssistantArtifact).toHaveBeenCalledWith(
+        "/export/deliverables/123e4567-e89b-12d3-a456-426614174000/docx",
+        "bidpilot-docx.docx",
+      );
+    });
   });
 });
 

@@ -9,7 +9,8 @@ The data model is centered around durable business objects rather than prompt tr
 All tables use UUID string primary keys (VARCHAR(36)). The 19 tables are grouped into six domains:
 
 ### Organization & Users
-- **Organization** -- tenant root; owns projects, users, and teams
+- **Organization** -- tenant and commercial workspace root; owns projects, memberships, teams, and workspace subscription state
+- **OrganizationMembership** -- durable user-to-workspace membership; `User.org_id` is only the active context pointer
 - **Team** -- named group within an organization (scoped by org_id)
 - **TeamMember** -- many-to-many join between team and user, with role
 - **User** -- authenticated member of an organization
@@ -19,6 +20,7 @@ All tables use UUID string primary keys (VARCHAR(36)). The 19 tables are grouped
 - **Project** -- represents one working engagement (proposal, RFP response, etc.)
 - **Bundle** -- logical upload batch within a project
 - **SourceDocument** -- original uploaded or imported file
+- **AssistantAttachment** -- private, time-bounded file staged before Agent-approved project ingestion
 - **ParsedAsset** -- normalized output produced by a parser pipeline step
 
 ### Knowledge & Retrieval
@@ -38,7 +40,8 @@ All tables use UUID string primary keys (VARCHAR(36)). The 19 tables are grouped
 - **AuditEvent** -- append-only event log for security and traceability
 
 ### Subscription & Billing
-- **Subscription** -- per-user plan and Stripe integration
+- **OrganizationSubscription** -- organization-scoped plan, seat capacity, billing owner, and future Stripe reconciliation state
+- **Subscription** -- legacy per-user plan and Stripe integration used only during migration fallback
 - **ProviderConfig** -- per-user LLM provider credentials (OpenAI, Anthropic)
 - **RefreshToken** -- JWT refresh token tracking for authentication
 
@@ -52,9 +55,29 @@ All tables use UUID string primary keys (VARCHAR(36)). The 19 tables are grouped
 | name | VARCHAR(255) | NOT NULL |
 | created_at | TIMESTAMP | server default now() |
 
-**Purpose:** Root tenant entity. Every project, user, and team belongs to exactly one organization.
+**Purpose:** Root tenant and commercial workspace entity. Every project belongs
+to one organization; users may retain multiple durable memberships while
+`User.org_id` points to the selected workspace.
 
-**Relationships:** one-to-many with User, Project, Team (teams cascade delete with the organization).
+**Relationships:** one-to-many with User, OrganizationMembership, Project, and
+Team; one-to-one with OrganizationSubscription.
+
+---
+
+### OrganizationMembership
+| Column | Type | Notes |
+|---|---|---|
+| id | VARCHAR(36) | PK, UUID |
+| org_id | VARCHAR(36) | FK -> organization.id, NOT NULL |
+| user_id | VARCHAR(36) | FK -> user.id, NOT NULL |
+| role | VARCHAR(30) | `owner`, `admin`, or `member` |
+| status | VARCHAR(30) | `active` or `removed` |
+| created_at / updated_at | TIMESTAMP | lifecycle timestamps |
+| removed_at | TIMESTAMP | nullable removal timestamp |
+
+**Purpose:** Durable authorization and commercial-membership boundary. Unique
+on `(org_id, user_id)`; only active memberships can switch into or consume a
+workspace entitlement.
 
 ---
 
@@ -103,7 +126,8 @@ All tables use UUID string primary keys (VARCHAR(36)). The 19 tables are grouped
 | password_hash | VARCHAR(255) | NOT NULL |
 | created_at | TIMESTAMP | server default now() |
 
-**Purpose:** Authenticated user account scoped to an organization. Email is globally unique for cross-org uniqueness.
+**Purpose:** Authenticated user account. `org_id` is a compatibility pointer to
+the selected active organization; authorization uses OrganizationMembership.
 
 **Relationships:** Each user has exactly one Subscription (uselist=False), and may have multiple ProviderConfig records. Both cascade delete with the user.
 
@@ -173,6 +197,23 @@ All tables use UUID string primary keys (VARCHAR(36)). The 19 tables are grouped
 
 ---
 
+### AssistantAttachment
+| Column | Type | Notes |
+|---|---|---|
+| id | VARCHAR(36) | PK; opaque `att_` identifier |
+| user_id / org_id | VARCHAR(36) | immutable owner boundary for staged content |
+| project_id / bundle_id / document_id | VARCHAR(36) | nullable links written only after project ingestion |
+| storage_key | VARCHAR(500) | private staging object; cleared after deletion |
+| original_filename / mime_type / kind / size | metadata | browser-supplied values are replaced by server-side records on use |
+| checksum | VARCHAR(64) | SHA-256 integrity check for direct browser-to-project handoff |
+| extraction_status / extracted_text / extraction_error | metadata + bounded text | server-generated extraction context; never returned to the browser after upload |
+| status | VARCHAR(30) | `staged`, `attached`, or `expired` |
+| expires_at / attached_at | TIMESTAMP | 24-hour staging retention and handoff evidence |
+
+**Purpose:** Separates a conversational file upload from durable project evidence. A user may safely ask the Agent to inspect a newly uploaded file without granting it project access. The file is copied to a project-scoped `SourceDocument` only through the governed `attach_uploaded_documents` capability, which checks owner/org/project capability, quota, approval policy, and audit lineage. The staging copy is deleted immediately after a successful handoff; the Worker retries failed deletion and expires unused records.
+
+---
+
 ### ParsedAsset
 | Column | Type | Notes |
 |---|---|---|
@@ -198,10 +239,15 @@ All tables use UUID string primary keys (VARCHAR(36)). The 19 tables are grouped
 | content | TEXT | NOT NULL |
 | metadata_json | JSON | nullable |
 | embedding | VECTOR(1536) | nullable; pgvector column |
+| retrieval_text | TEXT | normalized lexical terms for FTS |
+| embedding_profile | VARCHAR(500) | nullable; immutable vector-space identifier |
+| embedding_status | VARCHAR(30) | pending, success, stale, or explicit failure state |
+| embedding_updated_at | TIMESTAMP | nullable |
+| embedding_error_code | VARCHAR(100) | nullable, safe provider error category |
 
-**Purpose:** The atomic retrieval unit for RAG. Text is split into chunks, each stored with a 1536-dimensional OpenAI embedding in a pgvector column. The vector index enables efficient ANN search. `metadata_json` stores per-chunk metadata (e.g., page number, heading hierarchy) without schema changes.
+**Purpose:** The atomic retrieval unit for project-scoped hybrid retrieval. Text is split into chunks, normalized into `retrieval_text` for lexical retrieval, and may be stored with a 1536-dimensional embedding. `metadata_json` stores structural location data such as page number, heading hierarchy, and table information without schema changes.
 
-**Design note:** This is the only table using `Vector` from pgvector. The dimension (1536) matches OpenAI's text-embedding-ada-002 model. There is no FK relationship to Project; data is denormalized at the chunk level for query performance (filtering by project_id avoids a join during search).
+**Design note:** This is the only table using `Vector` from pgvector. The current platform profile is `openrouter:qwen/qwen3-embedding-8b:1536:bidpilot-lexical-v1`; vectors from any other profile are never mixed into dense ranking. `project_id` remains a direct foreign key and a retrieval predicate, so tenant/project boundaries are enforced before candidate ranking.
 
 ---
 
@@ -349,7 +395,30 @@ All tables use UUID string primary keys (VARCHAR(36)). The 19 tables are grouped
 | created_at | TIMESTAMP | server default now() |
 | updated_at | TIMESTAMP | auto-updates on row change |
 
-**Purpose:** Per-user subscription plan with Stripe integration. One-to-one with User (enforced by unique FK). Cascade deletes with the parent user.
+**Purpose:** Legacy per-user subscription plan with Stripe integration. It is
+consulted only as a migration fallback for the user's selected workspace when
+that organization has no OrganizationSubscription.
+
+---
+
+### OrganizationSubscription
+| Column | Type | Notes |
+|---|---|---|
+| id | VARCHAR(36) | PK, UUID |
+| org_id | VARCHAR(36) | FK -> organization.id, UNIQUE, NOT NULL |
+| plan / status | VARCHAR(30) | normalized commercial lifecycle state |
+| seat_limit | INTEGER | purchased active-member capacity; at least 1 |
+| billable_seat_count | INTEGER | local Stripe quantity snapshot; non-negative |
+| billing_owner_user_id | VARCHAR(36) | FK -> user.id; must be an active org owner in service logic |
+| stripe_customer_id | VARCHAR(255) | nullable |
+| stripe_subscription_id | VARCHAR(255) | nullable, UNIQUE |
+| stripe_subscription_item_id | VARCHAR(255) | nullable, UNIQUE |
+| stripe_state_event_created_at | INTEGER | stale webhook protection |
+| created_at / updated_at | TIMESTAMP | lifecycle timestamps |
+
+**Purpose:** One organization-scoped commercial entitlement source. It wins over
+the legacy Subscription record; canceled or unpaid paid plans resolve to
+Starter capabilities server-side.
 
 ---
 
@@ -404,14 +473,18 @@ The Deliverable.current_version_id field (a soft pointer) determines which versi
 ### Soft-Referenced Actors (actor_id / actor_type)
 ReviewThread, ReviewComment, and AuditEvent all use a polymorphic actor pattern: an `actor_type` (or `author_type`) column discriminates the kind of actor ("user", "ai", "system"), and an `actor_id` column holds the ID of the record in the corresponding table. This avoids rigid foreign key constraints while preserving traceability. The application layer resolves the actual entity at query time.
 
-### pgvector Integration for Embeddings
-KnowledgeChunk.embedding uses pgvector's `VECTOR(1536)` type, enabling in-database nearest-neighbor search. The dimension matches OpenAI's text-embedding-ada-002 model. This avoids the operational complexity of a separate vector database while keeping vectors transactionally consistent with their source documents. An IVFFlat or HNSW index should be created on this column for production performance.
+### Hybrid Retrieval Integration
+KnowledgeChunk keeps vectors in pgvector's `VECTOR(1536)` type so embeddings remain transactionally consistent with their source documents. Dense candidates are queried only within one authorized project and one matching `embedding_profile`; a profile change marks older vectors stale rather than fabricating compatibility.
+
+The retrieval path also uses a GIN full-text index over normalized `retrieval_text` and a pg_trgm index over raw content for phrase and CJK fallback. These candidate lists are fused with deterministic reciprocal-rank fusion, optionally reranked by an explicitly configured provider, and emitted with validated citation locators. Retrieval scores are ranks, not evidence-confidence scores.
 
 ## Cascade Rules
 
 | Parent | Child | Cascade Behavior |
 |---|---|---|
 | Organization | Team | `all, delete-orphan` |
+| Organization | OrganizationMembership | `all, delete-orphan` |
+| Organization | OrganizationSubscription | `all, delete-orphan` |
 | Team | TeamMember | `all, delete-orphan` |
 | Organization | User | No cascade (users survive org deletion -- error expected if org is deleted with active users) |
 | User | Subscription | `all, delete-orphan` |

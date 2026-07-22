@@ -11,6 +11,7 @@ import AnimatedContent from "@/components/AnimatedContent";
 import { ProductGlareCard, ProductShinyText } from "@/components/reactbits-product";
 
 interface PricingTier {
+  id: "starter" | "professional" | "enterprise";
   name: string;
   price: string;
   period: string;
@@ -52,6 +53,20 @@ function TierCard({
   inPlatform: boolean;
 }) {
   const highlighted = tier.recommended && !current;
+  const ctaClassName = "block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98] mt-8";
+  const ctaStyle = {
+    background: highlighted ? (inPlatform ? "var(--primary)" : "var(--landing-accent)") : "transparent",
+    color: highlighted
+      ? (inPlatform ? "var(--primary-foreground)" : "var(--landing-canvas)")
+      : current
+        ? (inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)")
+        : (inPlatform ? "var(--foreground)" : "var(--landing-text-primary)"),
+    border: highlighted
+      ? "none"
+      : `1px solid ${inPlatform ? "var(--border)" : "var(--landing-hairline)"}`,
+    cursor: current ? "default" : "pointer",
+    opacity: current ? 0.6 : 1,
+  };
 
   return (
     <ProductGlareCard intense={highlighted}>
@@ -140,35 +155,31 @@ function TierCard({
       </ul>
 
       {/* 按钮 */}
-      <Link
-        to={current ? "#" : tier.name.toLowerCase() === "starter" ? "/login" : "/signup"}
-        className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98] mt-8"
-        style={{
-          background: highlighted ? (inPlatform ? "var(--primary)" : "var(--landing-accent)") : "transparent",
-          color: highlighted
-            ? (inPlatform ? "var(--primary-foreground)" : "var(--landing-canvas)")
-            : current
-              ? (inPlatform ? "var(--muted-foreground)" : "var(--landing-text-tertiary)")
-              : (inPlatform ? "var(--foreground)" : "var(--landing-text-primary)"),
-          border: highlighted
-            ? "none"
-            : current
-              ? `1px solid ${inPlatform ? "var(--border)" : "var(--landing-hairline)"}`
-              : `1px solid ${inPlatform ? "var(--border)" : "var(--landing-hairline)"}`,
-          cursor: current ? "default" : "pointer",
-          opacity: current ? 0.6 : 1,
-        }}
-        onClick={(e) => {
-          if (current) {
+      {tier.id === "enterprise" && !current ? (
+        <a
+          href="mailto:sales@bidpilot.ai?subject=BidPilot%20Enterprise%20Inquiry"
+          className={ctaClassName}
+          style={ctaStyle}
+        >
+          {tier.cta}
+        </a>
+      ) : (
+        <Link
+          to={current ? "#" : tier.id === "starter" ? "/login" : "/signup"}
+          className={ctaClassName}
+          style={ctaStyle}
+          onClick={(e) => {
+            if (current) {
+              e.preventDefault();
+              return;
+            }
             e.preventDefault();
-            return;
-          }
-          e.preventDefault();
-          onUpgrade(tier.name.toLowerCase());
-        }}
-      >
-        {current ? t("button.currentPlan") : tier.cta}
-      </Link>
+            onUpgrade(tier.id);
+          }}
+        >
+          {current ? t("button.currentPlan") : tier.cta}
+        </Link>
+      )}
       </div>
     </ProductGlareCard>
   );
@@ -184,6 +195,7 @@ export function PricingPage() {
   const TIERS: PricingTier[] = useMemo(
     () => [
       {
+        id: "starter",
         name: t("tiers.starter.name"),
         price: t("tiers.starter.price"),
         period: t("tiers.starter.period"),
@@ -194,6 +206,7 @@ export function PricingPage() {
         cta: t("tiers.starter.cta"),
       },
       {
+        id: "professional",
         name: t("tiers.professional.name"),
         price: t("tiers.professional.price"),
         period: t("tiers.professional.period"),
@@ -205,6 +218,7 @@ export function PricingPage() {
         cta: t("tiers.professional.cta"),
       },
       {
+        id: "enterprise",
         name: t("tiers.enterprise.name"),
         price: t("tiers.enterprise.price"),
         period: t("tiers.enterprise.period"),
@@ -326,9 +340,9 @@ export function PricingPage() {
         >
           {TIERS.map((tier) => (
             <TierCard
-              key={tier.name}
+              key={tier.id}
               tier={tier}
-              current={tier.name.toLowerCase() === currentPlan}
+              current={tier.id === currentPlan}
               onUpgrade={handleUpgrade}
               t={t}
               inPlatform={inPlatform}

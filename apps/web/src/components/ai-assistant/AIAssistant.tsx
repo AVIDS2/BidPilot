@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageCircleIcon, XIcon, SparklesIcon, SendIcon } from "lucide-react";
+import { XIcon, SparklesIcon, SendIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { getStoredValue } from "@/lib/browser-storage";

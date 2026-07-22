@@ -114,7 +114,7 @@ Each requirement should support:
 - requirement type: mandatory, scored, qualification, commercial, technical, delivery, formatting, submission;
 - source document, page, section, table, and bounding locator when available;
 - priority, score weight, deadline, and risk;
-- coverage state: uncovered, partial, covered, disputed, not applicable;
+- coverage state: uncovered, partial, covered, disputed, not applicable, accepted risk (only through an approved decision);
 - evidence readiness: missing, weak, sufficient, conflicting, expired;
 - owner, reviewer, due date, and escalation state;
 - linked evidence, claims, sections, deliverables, comments, approvals, and execution runs;

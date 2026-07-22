@@ -1,7 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { e2eAdminEmail, e2eAdminPassword, loginThroughUi, prepareE2EPage } from "./helpers";
 
 const runWithAPI = process.env.E2E_DEMO === "1";
-const demoEmail = process.env.E2E_DEMO_EMAIL ?? "demo@bidpilot.local";
+
+test.beforeEach(async ({ page }) => {
+  await prepareE2EPage(page);
+});
 
 test.describe("Account page", () => {
   test("redirects to login when unauthenticated", async ({ page }) => {
@@ -14,14 +18,10 @@ test.describe("Account page", () => {
   test("shows user profile after login", async ({ page }) => {
     test.skip(!runWithAPI, "Set E2E_DEMO=1 after starting the API with demo data");
 
-    await page.goto("/login");
-    await page.getByLabel("Email").fill(demoEmail);
-    await page.getByLabel("Password").fill("Demo1234");
-    await page.getByRole("button", { name: "Login" }).click();
-    await expect(page).toHaveURL(/\/projects$/);
+    await loginThroughUi(page, e2eAdminEmail, e2eAdminPassword);
 
     await page.goto("/account");
-    await expect(page.getByText(demoEmail, { exact: true })).toBeVisible();
+    await expect(page.getByText(e2eAdminEmail, { exact: true })).toBeVisible();
     await expect(page.getByText(/Plan|Starter|Professional|Enterprise/i).first()).toBeVisible();
   });
 });

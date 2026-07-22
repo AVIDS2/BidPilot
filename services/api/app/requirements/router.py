@@ -45,7 +45,7 @@ def create_requirement(
     return create_requirement_command(
         db,
         payload,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
     )
 
@@ -65,7 +65,7 @@ def list_requirements(
     return list_requirements_query(
         db,
         project_id,
-        org_id=current_user.org_id,
+        current_user=current_user,
         bid_category=bid_category,
         coverage_status=coverage_status,
         evidence_status=evidence_status,
@@ -84,7 +84,7 @@ def bulk_assign_requirements(
     return bulk_assign_requirements_command(
         db,
         payload,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
     )
 
@@ -95,7 +95,7 @@ def get_requirement(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> RequirementDetailRead:
-    return get_requirement_query(db, requirement_id, org_id=current_user.org_id)
+    return get_requirement_query(db, requirement_id, current_user=current_user)
 
 
 @router.post(
@@ -113,7 +113,7 @@ def link_requirement_evidence(
         db,
         requirement_id,
         payload,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
     )
 
@@ -134,7 +134,7 @@ def update_requirement_evidence_link(
         requirement_id,
         link_id,
         payload,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
     )
 
@@ -154,7 +154,7 @@ def create_requirement_decision(
         db,
         requirement_id,
         payload,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
     )
 
@@ -173,9 +173,8 @@ def approve_requirement_decision(
         db,
         requirement_id,
         decision_id,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
-        actor_role=current_user.role,
     )
 
 
@@ -194,7 +193,7 @@ def create_requirement_claim(
         db,
         requirement_id,
         payload,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
     )
 
@@ -213,9 +212,8 @@ def verify_requirement_claim(
         db,
         requirement_id,
         claim_id,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
-        actor_role=current_user.role,
     )
 
 
@@ -230,7 +228,7 @@ def patch_requirement(
         db,
         requirement_id,
         payload,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
     )
 
@@ -246,6 +244,6 @@ def update_requirement(
         db,
         requirement_id,
         payload,
-        org_id=current_user.org_id,
+        current_user=current_user,
         actor_id=current_user.id,
     )

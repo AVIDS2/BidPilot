@@ -32,6 +32,31 @@ function isRateLimitError(error: unknown): error is { status: number } {
   );
 }
 
+export interface ApiRequestError extends Error {
+  status: number;
+  body?: unknown;
+}
+
+function createApiError(status: number, bodyText: string): ApiRequestError {
+  const error = new Error(`API ${status}: ${bodyText}`) as ApiRequestError;
+  error.status = status;
+  if (bodyText) {
+    try {
+      error.body = JSON.parse(bodyText) as unknown;
+    } catch {
+      error.body = bodyText;
+    }
+  }
+  return error;
+}
+
+export function getApiErrorDetail(error: unknown): unknown {
+  if (typeof error !== "object" || error === null || !("body" in error)) return undefined;
+  const body = (error as { body?: unknown }).body;
+  if (typeof body !== "object" || body === null || !("detail" in body)) return undefined;
+  return (body as { detail?: unknown }).detail;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   let lastError: unknown;
 
@@ -64,11 +89,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
       if (!res.ok) {
         const body = await res.text().catch(() => "");
-        const error = new Error(`API ${res.status}: ${body}`) as Error & {
-          status: number;
-        };
-        error.status = res.status;
-        throw error;
+        throw createApiError(res.status, body);
       }
 
       if (res.status === 204) {
@@ -103,15 +124,62 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { ...getAuthHeaders(), ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${body}`);
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        headers: { ...getAuthHeaders(), ...options?.headers },
+        ...options,
+      });
+      if (res.status === 429 && attempt < RETRY_CONFIG.maxRetries) {
+        const retryAfter = res.headers.get("Retry-After");
+        const retryMs = retryAfter
+          ? parseInt(retryAfter, 10) * 1000
+          : Math.min(RETRY_CONFIG.baseDelay * Math.pow(2, attempt), RETRY_CONFIG.maxDelay);
+        await delay(retryMs);
+        continue;
+      }
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw createApiError(res.status, body);
+      }
+      return res.blob();
+    } catch (error) {
+      lastError = error;
+      if (isRateLimitError(error) && attempt < RETRY_CONFIG.maxRetries) {
+        const retryMs = Math.min(
+          RETRY_CONFIG.baseDelay * Math.pow(2, attempt),
+          RETRY_CONFIG.maxDelay,
+        );
+        await delay(retryMs);
+        continue;
+      }
+      throw error;
+    }
   }
-  return res.blob();
+
+  throw lastError;
+}
+
+const ASSISTANT_DOWNLOAD_PATH =
+  /^\/(?:export\/deliverables\/[0-9a-f-]{36}\/(?:docx|pdf)|readiness\/packs\/[0-9a-f-]{36}\/(?:xlsx|docx))$/i;
+
+/** Download a server-issued assistant artifact without exposing the bearer token in a URL. */
+export async function downloadAssistantArtifact(path: string, filename: string) {
+  if (!ASSISTANT_DOWNLOAD_PATH.test(path)) {
+    throw new Error("Unsupported assistant download path");
+  }
+
+  const blob = await requestBlob(path);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 // Project
@@ -133,6 +201,10 @@ export function createProject(data: { name: string; scenario_package: string }) 
   return request<ProjectRead>("/projects", { method: "POST", body: JSON.stringify(data) });
 }
 
+export function createDemoProject() {
+  return request<ProjectRead>("/projects/demo", { method: "POST" });
+}
+
 export function getProject(id: string) {
   return request<ProjectRead>(`/projects/${id}`);
 }
@@ -143,6 +215,37 @@ export function updateProjectStatus(id: string, status: string) {
 
 export function deleteProject(id: string) {
   return request<void>(`/projects/${id}`, { method: "DELETE" });
+}
+
+export type ProjectRole = "owner" | "manager" | "contributor" | "reviewer" | "viewer";
+
+export interface ProjectMemberRead {
+  user_id: string;
+  display_name: string;
+  role: ProjectRole;
+  source: "membership";
+}
+
+export function listProjectMembers(projectId: string) {
+  return request<ProjectMemberRead[]>(`/projects/${projectId}/members`);
+}
+
+export function addProjectMember(projectId: string, data: { user_id: string; role: ProjectRole }) {
+  return request<ProjectMemberRead>(`/projects/${projectId}/members`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateProjectMember(projectId: string, userId: string, data: { role: ProjectRole }) {
+  return request<ProjectMemberRead>(`/projects/${projectId}/members/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function removeProjectMember(projectId: string, userId: string) {
+  return request<void>(`/projects/${projectId}/members/${userId}`, { method: "DELETE" });
 }
 
 // Bundle
@@ -223,9 +326,11 @@ export async function uploadDocument(
   bundleId: string,
   file: File,
   onProgress?: (progress: number) => void,
+  assistantAttachmentId?: string,
 ): Promise<SourceDocumentRead> {
   const formData = new FormData();
   formData.append("file", file);
+  if (assistantAttachmentId) formData.append("assistant_attachment_id", assistantAttachmentId);
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -310,6 +415,9 @@ export interface ExecutionRunRead {
   project_id: string;
   run_type: string;
   status: string;
+  parent_execution_run_id: string | null;
+  attempt_number: number;
+  runtime_run_id: string | null;
   input_json: Record<string, unknown> | null;
   output_json: Record<string, unknown> | null;
 }
@@ -329,26 +437,334 @@ export function getRuntimeSummary() {
   return request<RuntimeSummary>("/ops/runtime-summary");
 }
 
+export interface RuntimeEventRead {
+  run_id: string;
+  sequence: number;
+  type: string;
+  public_summary: string;
+  payload: Record<string, unknown>;
+  schema_version: string;
+}
+
+export interface RuntimeEventsResponse {
+  items: RuntimeEventRead[];
+}
+
+export interface RuntimeRunRead {
+  id: string;
+  kind: string;
+  status: string;
+  project_id: string | null;
+  conversation_id: string | null;
+  execution_run_id: string | null;
+  engine: string;
+  trace_id: string;
+  parent_run_id: string | null;
+}
+
+export interface RuntimeRunListItem {
+  id: string;
+  kind: string;
+  status: string;
+  project_id: string | null;
+  project_name: string | null;
+  engine: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  latest_event_summary: string | null;
+}
+
+export function listRuntimeRuns(limit = 50) {
+  return request<RuntimeRunListItem[]>(`/runtime/runs?limit=${Math.min(Math.max(limit, 1), 100)}`);
+}
+
+export function listRuntimeEvents(runId: string, afterSequence = 0) {
+  return request<RuntimeEventsResponse>(
+    `/runtime/runs/${encodeURIComponent(runId)}/events?after_sequence=${afterSequence}`,
+  );
+}
+
+export function cancelRuntimeWorkflow(runId: string) {
+  return request<RuntimeRunRead>(`/runtime/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: "POST",
+  });
+}
+
 // Requirements
+export interface BidRequirementProfileRead {
+  id: string;
+  requirement_id: string;
+  bid_category: string;
+  is_mandatory: boolean;
+  score_weight: number | null;
+  risk_level: string;
+  coverage_status: string;
+  evidence_status: string;
+  deadline_at: string | null;
+  submission_metadata_json: Record<string, unknown> | null;
+  updated_at: string;
+}
+
 export interface RequirementItemRead {
   id: string;
   project_id: string;
   section_key: string;
   requirement_text: string;
+  original_text: string | null;
+  source_document_id: string | null;
+  source_document_name: string | null;
+  source_locator_json: Record<string, unknown> | null;
   priority: string;
   status: string;
+  owner_user_id: string | null;
+  reviewer_user_id: string | null;
+  due_at: string | null;
+  verification_status: string;
+  extraction_confidence: number | null;
+  lock_version: number;
+  updated_at: string;
+  bid_profile: BidRequirementProfileRead | null;
 }
 
-export function listRequirements(projectId: string) {
-  return request<RequirementItemRead[]>(`/requirements?project_id=${projectId}`);
+export interface RequirementEvidenceLinkRead {
+  id: string;
+  requirement_id: string;
+  evidence_id: string;
+  relation_type: string;
+  verification_status: string;
+  quote_text: string;
+  source_document_id: string | null;
+  source_document_name: string | null;
+  locator_json: Record<string, unknown> | null;
+  confidence: number | null;
+  created_at: string;
 }
 
-export function createRequirement(data: { project_id: string; section_key: string; requirement_text: string; priority?: string }) {
+export interface RequirementClaimRead {
+  id: string;
+  project_id: string;
+  requirement_id: string;
+  claim_text: string;
+  claim_type: string;
+  status: string;
+  coverage_role: string;
+  section_version_id: string | null;
+  generation_run_id: string | null;
+  created_by_actor: string;
+  created_by_user_id: string | null;
+  evidence_ids: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequirementDecisionRead {
+  id: string;
+  requirement_id: string;
+  decision_type: string;
+  rationale: string;
+  status: string;
+  requested_by_user_id: string;
+  approved_by_user_id: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface RequirementDetailRead extends RequirementItemRead {
+  evidence_links: RequirementEvidenceLinkRead[];
+  claims: RequirementClaimRead[];
+  decisions: RequirementDecisionRead[];
+}
+
+export interface RequirementFilters {
+  bid_category?: string;
+  coverage_status?: string;
+  evidence_status?: string;
+  risk_level?: string;
+  owner_user_id?: string;
+  verification_status?: string;
+}
+
+export interface RequirementCreateInput {
+  project_id: string;
+  section_key: string;
+  requirement_text: string;
+  original_text?: string | null;
+  source_document_id?: string | null;
+  source_locator_json?: Record<string, unknown> | null;
+  priority?: string;
+  owner_user_id?: string | null;
+  reviewer_user_id?: string | null;
+  due_at?: string | null;
+  extraction_confidence?: number | null;
+  bid_profile?: {
+    bid_category?: string;
+    is_mandatory?: boolean;
+    score_weight?: number | null;
+    risk_level?: string;
+    deadline_at?: string | null;
+    submission_metadata_json?: Record<string, unknown> | null;
+  } | null;
+}
+
+export interface RequirementUpdateInput {
+  lock_version?: number;
+  requirement_text?: string;
+  original_text?: string | null;
+  source_document_id?: string | null;
+  source_locator_json?: Record<string, unknown> | null;
+  priority?: string;
+  section_key?: string;
+  status?: string;
+  owner_user_id?: string | null;
+  reviewer_user_id?: string | null;
+  due_at?: string | null;
+  verification_status?: string;
+  extraction_confidence?: number | null;
+  bid_profile?: {
+    bid_category?: string;
+    is_mandatory?: boolean;
+    score_weight?: number | null;
+    risk_level?: string;
+    deadline_at?: string | null;
+    submission_metadata_json?: Record<string, unknown> | null;
+  } | null;
+}
+
+export function listRequirements(projectId: string, filters: RequirementFilters = {}) {
+  const params = new URLSearchParams({ project_id: projectId });
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  return request<RequirementItemRead[]>(`/requirements?${params.toString()}`);
+}
+
+export function getRequirement(id: string) {
+  return request<RequirementDetailRead>(`/requirements/${id}`);
+}
+
+export function createRequirement(data: RequirementCreateInput) {
   return request<RequirementItemRead>("/requirements", { method: "POST", body: JSON.stringify(data) });
 }
 
-export function updateRequirement(id: string, data: { requirement_text?: string; priority?: string; section_key?: string; status?: string }) {
-  return request<RequirementItemRead>(`/requirements/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export function updateRequirement(id: string, data: RequirementUpdateInput) {
+  return request<RequirementItemRead>(`/requirements/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function bulkAssignRequirements(data: {
+  requirement_ids: string[];
+  lock_versions: Record<string, number>;
+  owner_user_id?: string | null;
+  reviewer_user_id?: string | null;
+}) {
+  return request<RequirementItemRead[]>("/requirements/bulk-assign", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function verifyRequirementEvidenceLink(requirementId: string, linkId: string) {
+  return request<RequirementEvidenceLinkRead>(
+    `/requirements/${requirementId}/evidence/${linkId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ verification_status: "verified" }),
+    },
+  );
+}
+
+export function verifyRequirementClaim(requirementId: string, claimId: string) {
+  return request<RequirementClaimRead>(
+    `/requirements/${requirementId}/claims/${claimId}/verify`,
+    { method: "POST" },
+  );
+}
+
+export interface ReadinessRequirementRead {
+  id: string;
+  section_key: string;
+  requirement_text: string;
+  bid_category: string;
+  is_mandatory: boolean;
+  score_weight: number | null;
+  risk_level: string;
+  coverage_status: string;
+  evidence_status: string;
+  verification_status: string;
+  owner_user_id: string | null;
+  reviewer_user_id: string | null;
+  due_at: string | null;
+  source_locator_json: Record<string, unknown> | null;
+}
+
+export interface BidReadinessSummary {
+  formula_version: string;
+  project_id: string;
+  project_name: string;
+  generated_at: string;
+  source_fingerprint: string;
+  score_label: string;
+  readiness_score: number;
+  counts: {
+    total: number;
+    mandatory: number;
+    scored: number;
+    covered: number;
+    partial: number;
+    uncovered: number;
+    disputed: number;
+    not_applicable: number;
+    accepted_risk: number;
+    verified: number;
+    assigned: number;
+  };
+  scores: {
+    mandatory_closure: number;
+    scored_coverage: number;
+    verification: number;
+    assignment: number;
+  };
+  requirements: ReadinessRequirementRead[];
+  mandatory_gaps: ReadinessRequirementRead[];
+  evidence_gaps: ReadinessRequirementRead[];
+  contradictions: ReadinessRequirementRead[];
+  overdue: ReadinessRequirementRead[];
+  qualifications: ReadinessRequirementRead[];
+  workload: { unassigned: number; by_owner: Record<string, number> };
+}
+
+export interface ReadinessPackRead {
+  id: string;
+  project_id: string;
+  version_number: number;
+  formula_version: string;
+  source_fingerprint: string;
+  status: string;
+  summary_json: Record<string, unknown>;
+  xlsx_storage_key: string | null;
+  docx_storage_key: string | null;
+  generated_by_user_id: string | null;
+  created_at: string;
+}
+
+export function getReadinessSummary(projectId: string) {
+  return request<BidReadinessSummary>(`/readiness/projects/${projectId}`);
+}
+
+export function generateReadinessPack(projectId: string) {
+  return request<ReadinessPackRead>(`/readiness/projects/${projectId}/packs`, { method: "POST" });
+}
+
+export async function downloadReadinessPack(packId: string, format: "xlsx" | "docx") {
+  const blob = await requestBlob(`/readiness/packs/${packId}/${format}`);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `bid-readiness-${packId}.${format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 // Evidence
@@ -604,17 +1020,56 @@ export interface UsageQuotaRead {
   monthly_indexing_limit: number;
   monthly_indexing_used: number;
   monthly_indexing_remaining: number | null;
+  official_model_usage: ModelUsageSourceRead;
+  byok_model_usage: ModelUsageSourceRead;
   trial_window_start: string;
+}
+
+export interface ModelUsageSourceRead {
+  input_tokens: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  total_tokens: number;
+  reserved_tokens: number;
+  token_limit: number | null;
+  remaining_tokens: number | null;
+  cost_available: boolean;
+}
+
+export interface OrganizationUsageBudgetRead {
+  official_monthly_token_limit: number | null;
+  byok_monthly_token_limit: number | null;
+  official_platform_monthly_token_ceiling: number | null;
+  effective_official_monthly_token_limit: number | null;
+  can_manage: boolean;
 }
 
 export function getUsageQuota() {
   return request<{ data: UsageQuotaRead }>("/usage/quota");
 }
 
+export function getOrganizationUsageBudget() {
+  return request<OrganizationUsageBudgetRead>("/usage/budget");
+}
+
+export function updateOrganizationUsageBudget(
+  payload: Partial<Pick<OrganizationUsageBudgetRead, "official_monthly_token_limit" | "byok_monthly_token_limit">>,
+) {
+  return request<OrganizationUsageBudgetRead>("/usage/budget", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
 export interface BillingSummaryRead {
   plan: string;
   status: string;
   stripe_customer_id: string | null;
+  entitlement_source: "organization" | "legacy" | "starter";
+  seat_limit: number;
+  is_billing_owner: boolean;
   monthly_workflow_limit: number;
   monthly_workflow_used: number;
   monthly_workflow_remaining: number | null;
@@ -624,6 +1079,8 @@ export interface BillingSummaryRead {
   monthly_indexing_limit: number;
   monthly_indexing_used: number;
   monthly_indexing_remaining: number | null;
+  official_model_usage: ModelUsageSourceRead;
+  byok_model_usage: ModelUsageSourceRead;
   trial_window_start: string;
 }
 
@@ -635,10 +1092,15 @@ export function getBillingSummary() {
 export interface CheckoutResult {
   url: string;
   session_id: string;
+  mode?: "checkout" | "portal";
 }
 
 export function createCheckout(plan: string) {
   return request<CheckoutResult>(`/billing/checkout?plan=${plan}`, { method: "POST" });
+}
+
+export function createBillingPortal() {
+  return request<CheckoutResult>("/billing/portal", { method: "POST" });
 }
 
 export function updateSubscription(payload: { user_id: string; plan: string }) {
@@ -759,6 +1221,198 @@ export function listKnowledgeChunks(projectId: string) {
   return request<KnowledgeChunkRead[]>(`/evidence/chunks?project_id=${projectId}`);
 }
 
+// Governed Project Memory / Bid Wiki
+export type MemoryScope = "user_private" | "project_shared" | "org_shared";
+export type MemoryKind =
+  | "preference"
+  | "fact"
+  | "decision"
+  | "procedure"
+  | "risk"
+  | "summary"
+  | "entity_note";
+export type MemoryStatus = "proposed" | "active" | "superseded" | "rejected" | "deleted";
+
+export interface MemoryCitationRead {
+  source_type:
+    | "knowledge_chunk"
+    | "requirement_item"
+    | "evidence_item"
+    | "chat_message"
+    | "audit_event"
+    | "human_decision";
+  source_id: string;
+  label: string;
+  locator_json: Record<string, unknown> | null;
+}
+
+export interface MemoryGraphEntityProposalRead {
+  item_id: string;
+  canonical_name: string;
+  entity_type: string;
+  evidence_labels: string[];
+  review_status: "pending" | "accepted" | "rejected";
+  review_note: string | null;
+}
+
+export interface MemoryGraphRelationProposalRead {
+  item_id: string;
+  subject: string;
+  predicate: string;
+  object: string;
+  evidence_labels: string[];
+  review_status: "pending" | "accepted" | "rejected";
+  review_note: string | null;
+}
+
+export interface MemoryGraphProposalRead {
+  schema_version: string;
+  entities: MemoryGraphEntityProposalRead[];
+  relations: MemoryGraphRelationProposalRead[];
+}
+
+export interface MemoryRead {
+  id: string;
+  org_id: string;
+  project_id: string | null;
+  owner_user_id: string | null;
+  scope: MemoryScope;
+  kind: MemoryKind;
+  status: MemoryStatus;
+  title: string;
+  body_markdown: string;
+  citations: MemoryCitationRead[];
+  graph_proposal?: MemoryGraphProposalRead | null;
+  expires_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface MemoryPortfolioProjectRead {
+  project_id: string;
+  project_name: string;
+  active_shared_count: number;
+  proposed_shared_count: number | null;
+  latest_shared_memory_at: string | null;
+  latest_compilation_status: string | null;
+  latest_compilation_at: string | null;
+}
+
+export interface MemoryEvidenceMapNodeRead {
+  id: string;
+  node_type: "memory" | "source";
+  label: string;
+  memory_kind: string | null;
+  source_type: string | null;
+}
+
+export interface MemoryEvidenceMapEdgeRead {
+  id: string;
+  source: string;
+  target: string;
+  predicate: "cites";
+}
+
+export interface MemoryEvidenceMapRead {
+  project_id: string;
+  nodes: MemoryEvidenceMapNodeRead[];
+  edges: MemoryEvidenceMapEdgeRead[];
+  truncated: boolean;
+}
+
+export interface MemoryCompilationRead {
+  id: string;
+  project_id: string;
+  bundle_id: string | null;
+  status: string;
+  input_source_count: number;
+  result_json: Record<string, unknown> | null;
+  error_code: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface MemoryGraphExtractionRead {
+  run_id: string;
+  runtime_run_id: string;
+  project_id: string;
+  memory_record_id: string;
+  status: string;
+  reused: boolean;
+}
+
+export interface MemoryGraphReviewDecisionRead {
+  item_id: string;
+  item_type: "entity" | "relation";
+  decision: "accepted" | "rejected";
+  decision_note: string | null;
+  reviewed_at: string | null;
+}
+
+export function listProjectMemory(projectId: string, includeProposed = false) {
+  const params = new URLSearchParams({
+    project_id: projectId,
+    scope: "project_shared",
+  });
+  if (includeProposed) params.set("include_proposed", "true");
+  return request<MemoryRead[]>(`/memory?${params.toString()}`);
+}
+
+export function listKnowledgePortfolio(limit = 50) {
+  return request<MemoryPortfolioProjectRead[]>(`/memory/portfolio?limit=${limit}`);
+}
+
+export function getMemoryEvidenceMap(projectId: string, maxRecords = 40, maxSources = 80) {
+  const params = new URLSearchParams({
+    project_id: projectId,
+    max_records: String(maxRecords),
+    max_sources: String(maxSources),
+  });
+  return request<MemoryEvidenceMapRead>(`/memory/evidence-map?${params.toString()}`);
+}
+
+export function startMemoryCompilation(data: { project_id: string; bundle_id?: string }) {
+  return request<MemoryCompilationRead>("/memory/compile", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function startMemoryGraphExtraction(data: {
+  project_id: string;
+  memory_record_id: string;
+  provider_config_id?: string;
+  reasoning_effort?: "low" | "medium" | "high" | "extra" | "max";
+}) {
+  return request<MemoryGraphExtractionRead>("/memory/graph-extractions", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function getMemoryCompilation(compilationRunId: string) {
+  return request<MemoryCompilationRead>(`/memory/compilations/${compilationRunId}`);
+}
+
+export function approveMemory(memoryId: string) {
+  return request<MemoryRead>(`/memory/${memoryId}/approve`, { method: "POST" });
+}
+
+export function reviewMemoryGraphItem(
+  memoryId: string,
+  data: {
+    item_id: string;
+    decision: "accepted" | "rejected";
+    decision_note?: string;
+  },
+) {
+  return request<MemoryGraphReviewDecisionRead>(`/memory/${memoryId}/graph-review`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // Teams
 export interface TeamMemberRead {
   id: string;
@@ -816,12 +1470,74 @@ export interface OrganizationRead {
   name: string;
 }
 
+export interface OrganizationMemberRead {
+  id: string;
+  display_name: string;
+  email: string;
+  role: "owner" | "admin" | "member";
+  is_billing_owner: boolean;
+}
+
+export interface OrganizationMemberRemovalRead {
+  user_id: string;
+  active_org: OrganizationRead;
+  personal_workspace_created: boolean;
+}
+
+export interface OrganizationEntitlementRead {
+  org_id: string;
+  plan: string;
+  subscription_status: string;
+  source: "organization" | "legacy" | "starter";
+  seat_limit: number;
+  active_member_count: number;
+  available_seats: number;
+  seat_overage_count: number;
+  capacity_enforced: boolean;
+  project_limit: number;
+  monthly_workflow_limit: number;
+  monthly_assistant_limit: number;
+  monthly_indexing_limit: number;
+  is_billing_owner: boolean;
+}
+
 export function createOrganization(data: { name: string; slug: string }) {
   return request<OrganizationRead>("/organizations", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function listOrganizations() {
   return request<OrganizationRead[]>("/organizations");
+}
+
+export function listOrganizationMembers() {
+  return request<OrganizationMemberRead[]>("/organizations/current/members");
+}
+
+export function updateOrganizationMemberRole(
+  userId: string,
+  role: OrganizationMemberRead["role"],
+) {
+  return request<OrganizationMemberRead>(`/organizations/current/members/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function transferOrganizationBillingOwner(userId: string) {
+  return request<OrganizationMemberRead>("/organizations/current/billing-owner", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId }),
+  });
+}
+
+export function removeOrganizationMember(userId: string) {
+  return request<OrganizationMemberRemovalRead>(`/organizations/current/members/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+export function getOrganizationEntitlements() {
+  return request<OrganizationEntitlementRead>("/organizations/current/entitlements");
 }
 
 export function switchOrganization(orgId: string) {
@@ -833,6 +1549,7 @@ export interface ProviderConfig {
   id: string;
   user_id: string;
   provider_type: "openai" | "anthropic";
+  provider_id: string;
   api_key: string;
   api_url: string | null;
   model: string;
@@ -844,6 +1561,7 @@ export interface ProviderConfig {
 
 export interface ProviderConfigCreate {
   provider_type: "openai" | "anthropic";
+  provider_id?: string;
   api_key: string;
   api_url?: string;
   model: string;
@@ -855,6 +1573,7 @@ export interface TestConnectionResult {
   success: boolean;
   message: string;
   model: string | null;
+  code?: string | null;
 }
 
 export interface ProviderModelInfo {
@@ -865,6 +1584,8 @@ export interface ProviderModelInfo {
 
 export interface ProviderModelsResult {
   models: ProviderModelInfo[];
+  discovery_mode: "supported" | "manual" | "unsupported";
+  message?: string | null;
 }
 
 // Chat
@@ -925,7 +1646,7 @@ export function deleteProviderConfig(id: string) {
 
 export type TestProviderConnectionPayload =
   | { config_id: string }
-  | { provider_type: string; api_key: string; api_url?: string; model: string };
+  | { provider_type: string; provider_id?: string; api_key: string; api_url?: string; model: string };
 
 export function testProviderConnection(payload: TestProviderConnectionPayload) {
   if ("config_id" in payload) {
@@ -939,7 +1660,7 @@ export function testProviderConnection(payload: TestProviderConnectionPayload) {
 
 export type ListProviderModelsPayload =
   | { config_id: string }
-  | { provider_type: "openai" | "anthropic"; api_key: string; api_url?: string };
+  | { provider_type: "openai" | "anthropic"; provider_id?: string; api_key: string; api_url?: string };
 
 export function listProviderModels(payload: ListProviderModelsPayload) {
   return request<{ data: ProviderModelsResult }>("/auth/me/providers/models", {

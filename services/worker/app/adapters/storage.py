@@ -7,8 +7,6 @@ source documents in a project-scoped bucket layout.
 import io
 import logging
 import os
-from urllib.parse import urlparse
-
 logger = logging.getLogger(__name__)
 
 MINIO_ENDPOINT = os.environ.get("DOCPILOT_MINIO_ENDPOINT", "localhost:9000")
@@ -94,3 +92,9 @@ def delete_document(project_id: str, object_name: str) -> None:
     bucket = _bucket_name(project_id)
     client.remove_object(bucket, object_name)
     logger.info("Deleted %s/%s", bucket, object_name)
+
+
+def delete_storage_key(storage_key: str) -> None:
+    """Delete an internal object addressed by its persisted bucket/key value."""
+    bucket, object_name = storage_key.split("/", 1)
+    _get_client().remove_object(bucket, object_name)

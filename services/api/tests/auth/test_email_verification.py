@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.auth.service import resend_rate_limiter
-from app.models import User, Subscription
 
 
 @pytest.fixture(autouse=True)

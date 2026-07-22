@@ -2,9 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
-from app.auth.service import require_auth, require_admin
+from app.auth.service import require_auth
 from app.db import get_db
 from app.models import User
+from app.organizations.service import (
+    MEMBERSHIP_MANAGERS,
+    MEMBERSHIP_ROLES,
+    require_organization_role,
+)
 
 from .schemas import TeamCreate, TeamUpdate, TeamMemberAdd, TeamRead, TeamMemberRead, TeamListResponse
 from .service import (
@@ -14,6 +19,22 @@ from .service import (
 )
 
 router = APIRouter(prefix="/teams", tags=["teams"])
+
+
+def _require_workspace_role(
+    db: Session,
+    current_user: CurrentUser,
+    allowed_roles: set[str],
+) -> None:
+    try:
+        require_organization_role(
+            db,
+            org_id=current_user.org_id,
+            user_id=current_user.id,
+            allowed_roles=allowed_roles,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Workspace role required") from exc
 
 
 def _team_to_read(team, members: list) -> TeamRead:
@@ -40,10 +61,11 @@ def _team_to_read(team, members: list) -> TeamRead:
 @router.post("", response_model=TeamRead, status_code=201)
 def create_team(
     payload: TeamCreate,
-    current_user: CurrentUser = Depends(require_admin),
+    current_user: CurrentUser = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> TeamRead:
     try:
+        _require_workspace_role(db, current_user, MEMBERSHIP_MANAGERS)
         team = create_team_command(db, current_user.org_id, payload.name, payload.slug)
         return _team_to_read(team, [])
     except ValueError as e:
@@ -55,6 +77,7 @@ def list_teams(
     current_user: CurrentUser = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> TeamListResponse:
+    _require_workspace_role(db, current_user, MEMBERSHIP_ROLES)
     teams = list_teams_query(db, current_user.org_id)
     items = []
     for t in teams:
@@ -69,6 +92,7 @@ def get_team(
     current_user: CurrentUser = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> TeamRead:
+    _require_workspace_role(db, current_user, MEMBERSHIP_ROLES)
     team = get_team_by_id(db, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
@@ -82,9 +106,10 @@ def get_team(
 def update_team(
     team_id: str,
     payload: TeamUpdate,
-    current_user: CurrentUser = Depends(require_admin),
+    current_user: CurrentUser = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> TeamRead:
+    _require_workspace_role(db, current_user, MEMBERSHIP_MANAGERS)
     team = get_team_by_id(db, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
@@ -101,9 +126,10 @@ def update_team(
 @router.delete("/{team_id}", status_code=204)
 def delete_team(
     team_id: str,
-    current_user: CurrentUser = Depends(require_admin),
+    current_user: CurrentUser = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> None:
+    _require_workspace_role(db, current_user, MEMBERSHIP_MANAGERS)
     team = get_team_by_id(db, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
@@ -119,9 +145,10 @@ def delete_team(
 def add_member(
     team_id: str,
     payload: TeamMemberAdd,
-    current_user: CurrentUser = Depends(require_admin),
+    current_user: CurrentUser = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> TeamMemberRead:
+    _require_workspace_role(db, current_user, MEMBERSHIP_MANAGERS)
     team = get_team_by_id(db, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")
@@ -146,9 +173,10 @@ def add_member(
 def remove_member(
     team_id: str,
     user_id: str,
-    current_user: CurrentUser = Depends(require_admin),
+    current_user: CurrentUser = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> None:
+    _require_workspace_role(db, current_user, MEMBERSHIP_MANAGERS)
     team = get_team_by_id(db, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found")

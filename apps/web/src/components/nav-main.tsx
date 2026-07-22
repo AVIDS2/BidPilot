@@ -31,7 +31,7 @@ export function NavMain({
               style={{
                 color: isActive ? "var(--primary)" : "var(--muted-foreground)",
                 background: isActive ? "rgba(132, 204, 22, 0.08)" : "transparent",
-                boxShadow: isActive ? "inset 2px 0 0 var(--primary)" : "inset 2px 0 0 transparent",
+                boxShadow: "none",
               }}
             >
               {item.icon}

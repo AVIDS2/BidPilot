@@ -15,6 +15,7 @@ Stack:
 - web
 - api
 - worker
+- worker-beat (scheduled retention and maintenance tasks)
 - postgres
 - redis
 - minio
@@ -56,6 +57,16 @@ Requirements:
 5. run smoke and migration checks
 6. promote to production
 
+The VPS `deploy.sh` uses the repository's versioned
+`docker-compose.production.yml` as the source for `/app/bidpilot/docker-compose.yml`.
+It writes a temporary sibling file, validates it with the existing server `.env`,
+then atomically replaces the outer Compose file before rebuilding containers.
+This prevents application code and production topology from silently diverging;
+the outer `.env` is never copied, committed, or changed by the script.
+
+For an existing pilot that still has the older deploy script, update that script
+once from the reviewed repository version before using the new release path.
+
 Run the local release-candidate rehearsal before staging promotion:
 
 ```powershell
@@ -73,26 +84,60 @@ python scripts/production_readiness.py --target production
 ```
 
 The checker validates that required deployment variables are present, auth is enforced, localhost endpoints are not used, and known development defaults are not promoted.
+The production Compose deployment runs the same check as a one-shot `readiness`
+service before migrations; a failed gate blocks API and Worker startup.
 
 Required secret-backed values:
 
 - `DOCPILOT_DATABASE_URL`
+- `DOCPILOT_POSTGRES_DB`
+- `DOCPILOT_POSTGRES_USER`
+- `DOCPILOT_POSTGRES_PASSWORD`
 - `DOCPILOT_REDIS_URL`
+- `DOCPILOT_REDIS_PASSWORD`
 - `DOCPILOT_MINIO_ENDPOINT`
 - `DOCPILOT_MINIO_ACCESS_KEY`
 - `DOCPILOT_MINIO_SECRET_KEY`
 - `DOCPILOT_JWT_SECRET`
+- `DOCPILOT_SMTP_HOST`, `DOCPILOT_SMTP_USER`, `DOCPILOT_SMTP_PASS`, and `DOCPILOT_SMTP_FROM`
 - one workflow LLM provider API key such as `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `DOCPILOT_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY`, or `LLM_API_KEY`
 - `OPENROUTER_API_KEY` for official embeddings, with `OPENROUTER_EMBEDDING_MODEL=qwen/qwen3-embedding-8b` and `OPENROUTER_EMBEDDING_DIMENSIONS=1536`
+- `DOCPILOT_ENV=production`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres`
+- `DOCPILOT_AGENT_CHECKPOINTER=postgres`
+- `DOCPILOT_ASSISTANT_ENGINE=operator`
 
 `DOCPILOT_AUTH_REQUIRED` must be `true`.
+
+The production Compose file intentionally has no hard-coded PostgreSQL or
+MinIO root credentials. Its PostgreSQL service reads the three
+`DOCPILOT_POSTGRES_*` values, and its MinIO service reuses
+`DOCPILOT_MINIO_ACCESS_KEY` and `DOCPILOT_MINIO_SECRET_KEY` from the untracked
+server `.env`. The database URL must use the same credentials with a
+URL-encoded password.
+
+For an existing VPS volume, do not simply change these values and restart:
+PostgreSQL and MinIO preserve identities inside their data volumes. Plan a
+maintenance window, rotate the database role and object-storage credentials
+through their respective administration interfaces, update the server `.env`,
+then run the readiness gate before bringing the stack back up. A deployment
+that still uses repository defaults is intentionally blocked.
+
+Redis is private to Docker and loopback-bound for diagnostics, but production
+still requires `DOCPILOT_REDIS_PASSWORD`. Set the same value in the Redis URL
+as a URL-encoded password, for example
+`redis://:encoded-password@redis:6379/0`; Compose passes the unencoded value to
+Redis at runtime and waits for an authenticated `PONG` before starting API or
+Worker services.
 
 For Aliyun Bailian/DashScope, configure API key IP allowlists to the staging/production egress IPs before enabling official-provider workflow trials. Remove wildcard allowlist entries such as `0.0.0.0/0` and `::/0`.
 
 ## Migration policy
 
 - schema changes are applied through Alembic
+- production Compose runs the `readiness` gate, then the `migrate` one-shot service before API or Worker starts
+- the `checkpoints` one-shot service runs only after migration succeeds and prepares LangGraph checkpoint tables
+- a failed migration or checkpoint setup blocks API and Worker startup; do not bypass it with manual application restarts
 - destructive migrations require backup confirmation
 - application code must support a short rolling window when possible
 

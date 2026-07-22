@@ -1,6 +1,7 @@
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 
 REDIS_URL = os.environ.get("DOCPILOT_REDIS_URL", "redis://localhost:6379/0")
 
@@ -36,9 +37,15 @@ celery_app.conf.update(
     ),
 )
 
-from celery.schedules import crontab
-
 celery_app.conf.beat_schedule = {
+    "recover-workflow-task-outbox-minutely": {
+        "task": "worker.recover_task_outbox_events",
+        "schedule": crontab(minute="*"),
+    },
+    "cleanup-assistant-attachments-hourly": {
+        "task": "worker.cleanup_assistant_attachments",
+        "schedule": crontab(minute=17),
+    },
     "backup-daily": {
         "task": "worker.backup_database",
         "schedule": crontab(hour=3, minute=0),

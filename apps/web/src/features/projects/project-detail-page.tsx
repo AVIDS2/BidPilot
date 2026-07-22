@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,18 +20,29 @@ import {
   getProject, listBundles, createDeliverable, reingestBundle, listDeliverables,
   listDeliverableSections, listExecutionRuns, retryExecutionRun, listEvidence,
   getRuntimeSummary, listSectionVersions, listRequirements, createRequirement,
-  updateRequirement, listReviewThreads, listReviewComments, createReviewComment,
+  updateRequirement, bulkAssignRequirements, getReadinessSummary, generateReadinessPack,
+  downloadReadinessPack, verifyRequirementEvidenceLink, verifyRequirementClaim,
+  listOrganizationMembers, listProjectMembers, addProjectMember, updateProjectMember, removeProjectMember, listReviewThreads, listReviewComments, createReviewComment,
   submitReviewDecision, listAuditEvents, listKnowledgeChunks, draftSection, redraftSection,
+  getApiErrorDetail,
   type BundleRead, type DeliverableRead, type DeliverableSectionRead,
   type ExecutionRunRead, type EvidenceRead, type RuntimeSummary,
   type SectionVersionRead, type RequirementItemRead, type ReviewThreadRead,
-  type ReviewCommentRead, type AuditEventRead, type KnowledgeChunkRead,
+  type ReviewCommentRead, type AuditEventRead, type KnowledgeChunkRead, type ProjectMemberRead,
 } from "@/lib/api";
-import { BotIcon, MoreHorizontalIcon, RefreshCwIcon, PackageIcon, PenToolIcon, SearchIcon, MessageSquareIcon, DownloadIcon, CheckCircle2Icon } from "lucide-react";
-import { useState, useMemo } from "react";
+import { BotIcon, MoreHorizontalIcon, RefreshCwIcon, PackageIcon, PenToolIcon, SearchIcon, MessageSquareIcon, DownloadIcon, CheckCircle2Icon, ShieldCheckIcon } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth";
 import { canViewGovernance } from "@/lib/permissions";
+
+function getRequirementConflictIds(error: unknown): string[] {
+  const detail = getApiErrorDetail(error);
+  if (typeof detail !== "object" || detail === null) return [];
+  if (!("code" in detail) || detail.code !== "requirements_changed") return [];
+  if (!("requirement_ids" in detail) || !Array.isArray(detail.requirement_ids)) return [];
+  return detail.requirement_ids.filter((value): value is string => typeof value === "string");
+}
 
 // Tab components
 import { BundlesTab } from "./tabs/bundles-tab";
@@ -46,6 +57,8 @@ import { ReviewTab } from "./tabs/review-tab";
 import { AuditTab } from "./tabs/audit-tab";
 import { ExportTab } from "./tabs/export-tab";
 import { OpsTab } from "./tabs/ops-tab";
+import { ProjectAccessTab } from "./tabs/project-access-tab";
+import { KnowledgeTab } from "./tabs/knowledge-tab";
 
 // Workflow step configuration
 const WORKFLOW_STEPS = [
@@ -60,12 +73,33 @@ type WorkflowStep = typeof WORKFLOW_STEPS[number]["key"];
 
 // Tab group definitions
 const TAB_GROUPS: Record<WorkflowStep, string[]> = {
-  prepare: ["bundles", "deliverables", "requirements"],
+  prepare: ["bundles", "deliverables", "requirements", "knowledge"],
   generate: ["drafting", "agent", "evidence", "search"],
   verify: ["runs"],
-  review: ["review"],
+  review: ["review", "access"],
   export: ["export"],
 };
+
+const PROJECT_TABS = new Set([
+  "bundles",
+  "deliverables",
+  "requirements",
+  "knowledge",
+  "drafting",
+  "agent",
+  "evidence",
+  "search",
+  "runs",
+  "review",
+  "export",
+  "access",
+  "audit",
+  "ops",
+]);
+
+function resolveProjectTab(value: string | null) {
+  return value && PROJECT_TABS.has(value) ? value : "bundles";
+}
 
 function WorkflowStepper({
   currentStep,
@@ -144,6 +178,8 @@ function AnimatedTabContent({ value, children, currentValue }: { value: string; 
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const showGovernance = canViewGovernance(user);
@@ -151,11 +187,26 @@ export function ProjectDetailPage() {
 
   // Shared state
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
-  const [selectedDeliverableId] = useState<string | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ title: string; description: string; onConfirm: () => void } | null>(null);
-  const [activeTab, setActiveTab] = useState("bundles");
+  const [activeTab, setActiveTab] = useState(() => resolveProjectTab(requestedTab));
+
+  useEffect(() => {
+    const nextTab = resolveProjectTab(requestedTab);
+    setActiveTab((current) => (current === nextTab ? current : nextTab));
+  }, [requestedTab]);
+
+  const selectTab = (nextTab: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (nextTab === "bundles") {
+      params.delete("tab");
+    } else {
+      params.set("tab", nextTab);
+    }
+    setActiveTab(nextTab);
+    setSearchParams(params, { replace: true });
+  };
 
   const showConfirm = (action: { title: string; description: string; onConfirm: () => void }) => {
     setConfirmAction(action);
@@ -166,6 +217,7 @@ export function ProjectDetailPage() {
   const { data: project } = useQuery({ queryKey: ["project", id], queryFn: () => getProject(id!), enabled: !!id, staleTime: 60_000 });
   const { data: bundles } = useQuery<BundleRead[]>({ queryKey: ["bundles", id], queryFn: () => listBundles(id!), enabled: !!id, staleTime: 30_000 });
   const { data: deliverables } = useQuery<DeliverableRead[]>({ queryKey: ["deliverables", id], queryFn: () => listDeliverables(id!), enabled: !!id, staleTime: 30_000 });
+  const selectedDeliverableId = deliverables?.[0]?.id;
   const { data: runs } = useQuery<ExecutionRunRead[]>({ queryKey: ["runs", id], queryFn: () => listExecutionRuns(id!), enabled: !!id, staleTime: 15_000 });
   const { data: evidence } = useQuery<EvidenceRead[]>({ queryKey: ["evidence", id], queryFn: () => listEvidence(id!), enabled: !!id, staleTime: 30_000 });
   const { data: ops } = useQuery<RuntimeSummary>({ queryKey: ["ops"], queryFn: getRuntimeSummary, enabled: showGovernance, staleTime: 15_000 });
@@ -175,18 +227,129 @@ export function ProjectDetailPage() {
   const { data: knowledgeChunks } = useQuery<KnowledgeChunkRead[]>({ queryKey: ["knowledge-chunks", id], queryFn: () => listKnowledgeChunks(id!), enabled: !!id, staleTime: 30_000 });
   const { data: sectionVersions } = useQuery<SectionVersionRead[]>({ queryKey: ["versions", selectedSectionId], queryFn: () => listSectionVersions(selectedSectionId!), enabled: !!selectedSectionId, staleTime: 15_000 });
   const { data: sections } = useQuery<DeliverableSectionRead[]>({ queryKey: ["sections", selectedDeliverableId], queryFn: () => listDeliverableSections(selectedDeliverableId!), enabled: !!selectedDeliverableId, staleTime: 30_000 });
-  const { data: requirements } = useQuery<RequirementItemRead[]>({ queryKey: ["requirements", id], queryFn: () => listRequirements(id!), enabled: !!id, staleTime: 30_000 });
+  const { data: requirements, isLoading: requirementsLoading, isError: requirementsError } = useQuery<RequirementItemRead[]>({ queryKey: ["requirements", id], queryFn: () => listRequirements(id!), enabled: !!id, staleTime: 30_000 });
+  const { data: readiness, isLoading: readinessLoading, isError: readinessError } = useQuery({ queryKey: ["readiness", id], queryFn: () => getReadinessSummary(id!), enabled: !!id, staleTime: 15_000 });
+  const { data: organizationMembers } = useQuery({ queryKey: ["organization-members"], queryFn: listOrganizationMembers, enabled: !!id, staleTime: 60_000 });
+  const { data: projectMembers } = useQuery<ProjectMemberRead[]>({ queryKey: ["project-members", id], queryFn: () => listProjectMembers(id!), enabled: !!id, staleTime: 30_000 });
+
+  const requirementPeople = useMemo(() => {
+    const people = new Map<string, {
+      id: string;
+      displayName: string;
+      role?: "owner" | "manager" | "contributor" | "reviewer" | "viewer" | "admin";
+    }>();
+    projectMembers?.forEach((member) => {
+      people.set(member.user_id, {
+        id: member.user_id,
+        displayName: member.display_name || member.user_id,
+        role: member.role,
+      });
+    });
+    if (user && !people.has(user.id)) {
+      people.set(user.id, {
+        id: user.id,
+        displayName: user.display_name || user.email,
+        role: user.role === "admin" ? "admin" : undefined,
+      });
+    }
+    return Array.from(people.values()).sort((left, right) => left.displayName.localeCompare(right.displayName));
+  }, [projectMembers, user]);
+
+  const canManageProjectMembers = user?.role === "admin"
+    || projectMembers?.some((member) => member.user_id === user?.id && member.role === "owner")
+    || false;
+  const canApproveProjectMemory = user?.role === "admin"
+    || projectMembers?.some(
+      (member) => member.user_id === user?.id && (member.role === "owner" || member.role === "manager"),
+    )
+    || false;
 
   // Mutations
   const reingestMut = useMutation({ mutationFn: reingestBundle, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["bundles", id] }); toast.success(t("bundles.reingestStarted")); }, onError: () => toast.error(t("bundles.reingestFailed")) });
   const createDeliverableMut = useMutation({ mutationFn: createDeliverable, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["deliverables", id] }); toast.success(t("deliverables.created")); }, onError: () => toast.error(t("deliverables.createFailed")) });
   const draftMut = useMutation({ mutationFn: draftSection, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["runs", id] }); toast.success(t("drafting.draftRequested")); }, onError: () => toast.error(t("drafting.draftFailed")) });
   const redraftMut = useMutation({ mutationFn: redraftSection, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["runs", id] }); queryClient.invalidateQueries({ queryKey: ["versions", selectedSectionId] }); toast.success(t("drafting.redraftRequested")); }, onError: () => toast.error(t("drafting.redraftFailed")) });
-  const createReqMut = useMutation({ mutationFn: createRequirement, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["requirements", id] }); toast.success(t("requirements.added")); }, onError: () => toast.error(t("requirements.addFailed")) });
-  const updateReqMut = useMutation({ mutationFn: ({ id: rid, data }: { id: string; data: Parameters<typeof updateRequirement>[1] }) => updateRequirement(rid, data), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["requirements", id] }); toast.success(t("requirements.updated")); }, onError: () => toast.error(t("requirements.updateFailed")) });
+  const invalidateLedger = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["requirements", id] }),
+      queryClient.invalidateQueries({ queryKey: ["readiness", id] }),
+      queryClient.invalidateQueries({ queryKey: ["requirement-detail", id] }),
+    ]);
+  };
+  const createReqMut = useMutation({ mutationFn: createRequirement, onSuccess: async () => { await invalidateLedger(); toast.success(t("requirements.added")); }, onError: () => toast.error(t("requirements.addFailed")) });
+  const updateReqMut = useMutation({ mutationFn: ({ id: rid, data }: { id: string; data: Parameters<typeof updateRequirement>[1] }) => updateRequirement(rid, data), onSuccess: async () => { await invalidateLedger(); toast.success(t("requirements.updated")); }, onError: async () => { await invalidateLedger(); toast.error(t("requirements.updateFailed")); } });
+  const bulkAssignReqMut = useMutation({
+    mutationFn: bulkAssignRequirements,
+    onSuccess: async () => {
+      await invalidateLedger();
+      toast.success(t("requirements.ledger.assignmentUpdated"));
+    },
+    onError: async (error) => {
+      await invalidateLedger();
+      const conflictIds = getRequirementConflictIds(error);
+      if (conflictIds.length > 0) {
+        const conflictNames = conflictIds
+          .map((requirementId) => requirements?.find((item) => item.id === requirementId)?.requirement_text ?? requirementId)
+          .slice(0, 3)
+          .join(", ");
+        toast.error(t("requirements.ledger.assignmentConflict", { items: conflictNames }));
+        return;
+      }
+      toast.error(t("requirements.ledger.assignmentFailed"));
+    },
+  });
+  const verifyEvidenceMut = useMutation({
+    mutationFn: ({ requirementId, linkId }: { requirementId: string; linkId: string }) => (
+      verifyRequirementEvidenceLink(requirementId, linkId)
+    ),
+    onSuccess: async () => {
+      await invalidateLedger();
+      toast.success(t("requirements.ledger.evidenceVerified"));
+    },
+    onError: async () => {
+      await invalidateLedger();
+      toast.error(t("requirements.ledger.evidenceVerifyFailed"));
+    },
+  });
+  const verifyClaimMut = useMutation({
+    mutationFn: ({ requirementId, claimId }: { requirementId: string; claimId: string }) => (
+      verifyRequirementClaim(requirementId, claimId)
+    ),
+    onSuccess: async () => {
+      await invalidateLedger();
+      toast.success(t("requirements.ledger.claimVerified"));
+    },
+    onError: async () => {
+      await invalidateLedger();
+      toast.error(t("requirements.ledger.claimVerifyFailed"));
+    },
+  });
+  const generateReadinessPackMut = useMutation({ mutationFn: () => generateReadinessPack(id!), onSuccess: () => toast.success(t("requirements.ledger.packGenerated")), onError: () => toast.error(t("requirements.ledger.packFailed")) });
   const retryMut = useMutation({ mutationFn: retryExecutionRun, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["runs", id] }); toast.success(t("runs.retryStarted")); }, onError: () => toast.error(t("runs.retryFailed")) });
   const addCommentMut = useMutation({ mutationFn: createReviewComment, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["review-comments", selectedThreadId] }); toast.success(t("review.commentAdded")); }, onError: () => toast.error(t("review.commentFailed")) });
   const submitDecisionMut = useMutation({ mutationFn: submitReviewDecision, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["review-threads", selectedSectionId] }); toast.success(t("review.decisionSubmitted")); }, onError: () => toast.error(t("review.decisionFailed")) });
+  const invalidateProjectMembers = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["project-members", id] }),
+      queryClient.invalidateQueries({ queryKey: ["requirements", id] }),
+      queryClient.invalidateQueries({ queryKey: ["project", id] }),
+    ]);
+  };
+  const addProjectMemberMut = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: ProjectMemberRead["role"] }) => addProjectMember(id!, { user_id: userId, role }),
+    onSuccess: async () => { await invalidateProjectMembers(); toast.success(t("access.memberAdded")); },
+    onError: () => toast.error(t("access.memberAddFailed")),
+  });
+  const updateProjectMemberMut = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: ProjectMemberRead["role"] }) => updateProjectMember(id!, userId, { role }),
+    onSuccess: async () => { await invalidateProjectMembers(); toast.success(t("access.roleUpdated")); },
+    onError: () => toast.error(t("access.roleUpdateFailed")),
+  });
+  const removeProjectMemberMut = useMutation({
+    mutationFn: (userId: string) => removeProjectMember(id!, userId),
+    onSuccess: async () => { await invalidateProjectMembers(); toast.success(t("access.memberRemoved")); },
+    onError: () => toast.error(t("access.memberRemoveFailed")),
+  });
 
   // Workflow progress calculation
   const workflowProgress = useMemo(() => ({
@@ -239,7 +402,7 @@ export function ProjectDetailPage() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>{t("detail.projectActions")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => showConfirm({ title: t("detail.reingestAllTitle"), description: t("detail.reingestAllDesc"), onConfirm: () => bundles?.filter((b) => b.ingest_status !== "ingested").forEach((b) => reingestMut.mutate(b.id)) })}>
+            <DropdownMenuItem onClick={() => showConfirm({ title: t("detail.reingestAllTitle"), description: t("detail.reingestAllDesc"), onConfirm: () => bundles?.filter((b) => ["ready_to_ingest", "failed"].includes(b.ingest_status)).forEach((b) => reingestMut.mutate(b.id)) })}>
               <RefreshCwIcon className="mr-2 size-4" />{t("detail.reingestAll")}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -290,7 +453,7 @@ export function ProjectDetailPage() {
               currentStep={currentStep}
               onStepClick={(step) => {
                 const firstTab = TAB_GROUPS[step][0];
-                if (firstTab) setActiveTab(firstTab);
+                if (firstTab) selectTab(firstTab);
               }}
               progress={workflowProgress}
               t={t}
@@ -300,13 +463,14 @@ export function ProjectDetailPage() {
       </motion.div>
 
       {/* Tabs - grouped with separators */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
+      <Tabs value={activeTab} onValueChange={selectTab} className="min-w-0">
         <ScrollArea className="w-full">
           <TabsList className="w-max min-w-full justify-start">
             {/* Prepare group */}
             <TabsTrigger value="bundles">{t("tabs.bundles")}</TabsTrigger>
             <TabsTrigger value="deliverables">{t("tabs.deliverables")}</TabsTrigger>
             <TabsTrigger value="requirements">{t("tabs.requirements")}</TabsTrigger>
+            <TabsTrigger value="knowledge">{t("tabs.knowledge")}</TabsTrigger>
             {/* Separator */}
             <div className="mx-1 self-stretch w-px bg-border" aria-hidden />
             {/* Generate group */}
@@ -324,7 +488,8 @@ export function ProjectDetailPage() {
             {/* Output */}
             <TabsTrigger value="export">{t("tabs.export")}</TabsTrigger>
             {/* Governance */}
-            {showGovernance && <div className="mx-1 self-stretch w-px bg-border" aria-hidden />}
+            <div className="mx-1 self-stretch w-px bg-border" aria-hidden />
+            <TabsTrigger value="access"><span className="flex items-center gap-1.5"><ShieldCheckIcon className="size-3.5" />{t("tabs.access")}</span></TabsTrigger>
             {showGovernance && <TabsTrigger value="audit">{t("tabs.audit")}</TabsTrigger>}
             {showGovernance && <TabsTrigger value="ops">{t("tabs.system")}</TabsTrigger>}
           </TabsList>
@@ -337,7 +502,43 @@ export function ProjectDetailPage() {
           <DeliverablesTab projectId={id!} deliverables={deliverables ?? []} sections={sections} selectedSectionId={selectedSectionId} onSelectSection={setSelectedSectionId} onCreateDeliverable={(title) => createDeliverableMut.mutate({ project_id: id!, type: "proposal", title })} />
         </AnimatedTabContent>
         <AnimatedTabContent value="requirements" currentValue={activeTab}>
-          <RequirementsTab requirements={requirements ?? []} onCreateRequirement={(data) => createReqMut.mutate({ project_id: id!, ...data })} onUpdateRequirement={(rid, data) => updateReqMut.mutate({ id: rid, data })} />
+          <RequirementsTab
+            projectId={id!}
+            requirements={requirements ?? []}
+            readiness={readiness}
+            loading={requirementsLoading}
+            loadError={requirementsError}
+            readinessLoading={readinessLoading}
+            readinessError={readinessError}
+            people={requirementPeople}
+            currentUserId={user?.id}
+            onCreateRequirement={(data) => createReqMut.mutateAsync({ project_id: id!, ...data })}
+            onUpdateRequirement={(rid, data) => updateReqMut.mutateAsync({ id: rid, data }).then(() => undefined)}
+            onBulkAssign={(data) => {
+              const payload: Parameters<typeof bulkAssignRequirements>[0] = {
+                requirement_ids: data.requirementIds,
+                lock_versions: data.lockVersions,
+              };
+              if (data.ownerUserId !== undefined) payload.owner_user_id = data.ownerUserId;
+              if (data.reviewerUserId !== undefined) payload.reviewer_user_id = data.reviewerUserId;
+              return bulkAssignReqMut.mutateAsync(payload).then(() => undefined);
+            }}
+            onVerifyEvidence={(requirementId, linkId) => (
+              verifyEvidenceMut.mutateAsync({ requirementId, linkId }).then(() => undefined)
+            )}
+            onVerifyClaim={(requirementId, claimId) => (
+              verifyClaimMut.mutateAsync({ requirementId, claimId }).then(() => undefined)
+            )}
+            onGeneratePack={() => generateReadinessPackMut.mutateAsync()}
+            onDownloadPack={downloadReadinessPack}
+            creating={createReqMut.isPending}
+            updating={updateReqMut.isPending}
+            bulkAssigning={bulkAssignReqMut.isPending}
+            reviewing={verifyEvidenceMut.isPending || verifyClaimMut.isPending}
+          />
+        </AnimatedTabContent>
+        <AnimatedTabContent value="knowledge" currentValue={activeTab}>
+          <KnowledgeTab projectId={id!} canApprove={canApproveProjectMemory} />
         </AnimatedTabContent>
         <AnimatedTabContent value="drafting" currentValue={activeTab}>
           <DraftingTab projectId={id!} sectionVersions={sectionVersions} sections={sections} selectedSectionId={selectedSectionId} evidence={evidence} onDraft={(sk) => draftMut.mutate({ project_id: id!, section_key: sk })} onRedraft={(sk) => redraftMut.mutate({ project_id: id!, section_key: sk, review_feedback: "Revise based on review" })} draftPending={draftMut.isPending} redraftPending={redraftMut.isPending} />
@@ -359,6 +560,20 @@ export function ProjectDetailPage() {
         </AnimatedTabContent>
         <AnimatedTabContent value="export" currentValue={activeTab}>
           <ExportTab deliverables={deliverables ?? []} />
+        </AnimatedTabContent>
+        <AnimatedTabContent value="access" currentValue={activeTab}>
+          <ProjectAccessTab
+            projectId={id!}
+            members={projectMembers ?? []}
+            organizationMembers={organizationMembers ?? []}
+            canManageMembers={canManageProjectMembers}
+            onAddMember={({ user_id, role }) => addProjectMemberMut.mutateAsync({ userId: user_id, role })}
+            onUpdateMember={(userId, role) => updateProjectMemberMut.mutateAsync({ userId, role })}
+            onRemoveMember={(userId) => removeProjectMemberMut.mutateAsync(userId)}
+            adding={addProjectMemberMut.isPending}
+            updating={updateProjectMemberMut.isPending}
+            removing={removeProjectMemberMut.isPending}
+          />
         </AnimatedTabContent>
         {showGovernance && (
           <AnimatedTabContent value="audit" currentValue={activeTab}>

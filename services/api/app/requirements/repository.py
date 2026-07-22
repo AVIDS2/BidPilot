@@ -11,6 +11,7 @@ from app.models import (
     RequirementClaimLink,
     RequirementEvidenceLink,
     RequirementItem,
+    OrganizationMembership,
     SourceDocument,
     Bundle,
     User,
@@ -18,7 +19,13 @@ from app.models import (
 
 
 def get_project_for_org(db: Session, project_id: str, org_id: str) -> Project | None:
-    return db.scalar(select(Project).where(Project.id == project_id, Project.org_id == org_id))
+    return db.scalar(
+        select(Project).where(
+            Project.id == project_id,
+            Project.org_id == org_id,
+            Project.status != "deleted",
+        )
+    )
 
 
 def create_requirement(db: Session, item: RequirementItem) -> RequirementItem:
@@ -43,8 +50,15 @@ def list_requirements_by_project(
         select(RequirementItem)
         .join(Project, Project.id == RequirementItem.project_id)
         .outerjoin(BidRequirementProfile, BidRequirementProfile.requirement_id == RequirementItem.id)
-        .options(selectinload(RequirementItem.bid_profile))
-        .where(RequirementItem.project_id == project_id, Project.org_id == org_id)
+        .options(
+            selectinload(RequirementItem.bid_profile),
+            selectinload(RequirementItem.source_document),
+        )
+        .where(
+            RequirementItem.project_id == project_id,
+            Project.org_id == org_id,
+            Project.status != "deleted",
+        )
     )
     if bid_category:
         stmt = stmt.where(BidRequirementProfile.bid_category == bid_category)
@@ -72,21 +86,35 @@ def get_requirement_for_org(
         .join(Project, Project.id == RequirementItem.project_id)
         .options(
             selectinload(RequirementItem.bid_profile),
+            selectinload(RequirementItem.source_document),
             selectinload(RequirementItem.evidence_links).selectinload(
                 RequirementEvidenceLink.evidence
-            ),
+            ).selectinload(Evidence.source_document),
             selectinload(RequirementItem.claim_links)
             .selectinload(RequirementClaimLink.claim)
             .selectinload(Claim.evidence_links),
             selectinload(RequirementItem.decisions),
         )
-        .where(RequirementItem.id == requirement_id, Project.org_id == org_id)
+        .where(
+            RequirementItem.id == requirement_id,
+            Project.org_id == org_id,
+            Project.status != "deleted",
+        )
     )
     return db.scalar(stmt)
 
 
 def get_user_for_org(db: Session, user_id: str, org_id: str) -> User | None:
-    return db.scalar(select(User).where(User.id == user_id, User.org_id == org_id))
+    return db.scalar(
+        select(User)
+        .join(OrganizationMembership, OrganizationMembership.user_id == User.id)
+        .where(
+            User.id == user_id,
+            OrganizationMembership.org_id == org_id,
+            OrganizationMembership.status == "active",
+            User.disabled.is_(False),
+        )
+    )
 
 
 def get_source_document_for_project(
@@ -157,7 +185,10 @@ def get_requirement_claim(
     stmt = (
         select(Claim)
         .join(RequirementClaimLink, RequirementClaimLink.claim_id == Claim.id)
-        .options(selectinload(Claim.evidence_links))
+        .options(
+            selectinload(Claim.evidence_links),
+            selectinload(Claim.requirement_links),
+        )
         .where(
             Claim.id == claim_id,
             RequirementClaimLink.requirement_id == requirement_id,

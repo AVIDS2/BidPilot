@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 
 from app.db import SessionLocal
 from app.models import Bundle, KnowledgeChunk, SourceDocument
+from app.retrieval.normalization import normalize_retrieval_text
+from sqlalchemy import func, select
 
 logger = logging.getLogger(__name__)
 
@@ -305,9 +307,16 @@ def parse_bundle_documents(bundle_id: str) -> list[ParsedChunk]:
             return []
 
         all_chunks: list[ParsedChunk] = []
-        global_idx = 0
+        existing_max_index = db.scalar(
+            select(func.max(KnowledgeChunk.chunk_index))
+            .join(SourceDocument, SourceDocument.id == KnowledgeChunk.source_document_id)
+            .where(SourceDocument.bundle_id == bundle_id)
+        )
+        global_idx = 0 if existing_max_index is None else int(existing_max_index) + 1
 
         for doc in bundle.source_documents:
+            if doc.parse_status == "parsed":
+                continue
             text = _extract_text(doc.storage_key, doc.mime_type)
             if not text.strip():
                 logger.info("No text extracted from %s", doc.original_filename)
@@ -353,6 +362,7 @@ def store_chunks(bundle_id: str, chunks: list[ParsedChunk]) -> int:
                 chunk_index=chunk.chunk_index,
                 content=chunk.content,
                 metadata_json=chunk.metadata,
+                retrieval_text=normalize_retrieval_text(chunk.content),
             )
             db.add(kc)
             count += 1

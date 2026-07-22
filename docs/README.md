@@ -31,6 +31,8 @@ It is organized to support three goals:
   - the primary stack and architecture decision record
 - `docs/adr/0002-workflow-and-execution-architecture.md`
   - the workflow engine decision, durable run model, and queue/orchestration split
+- `docs/adr/0009-reviewed-memory-graph-projection.md`
+  - the evidence, review, and evaluation gate required before graph proposals become persistent facts
 - `docs/development/final-technology-baseline.md`
   - one-sheet implementation baseline summarizing the accepted stack and default choices
 

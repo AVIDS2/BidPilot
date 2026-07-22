@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import Base
 from app.auth.service import _hash_password
-from app.models import Organization, Project, Subscription, User, UsageEvent
+from app.models import Organization, OrganizationMembership, Project, Subscription, User, UsageEvent
 from app.usage.schemas import ProviderSource
 from app.usage.service import (
     ASSISTANT_MESSAGE_STARTED,
@@ -31,6 +31,7 @@ def _make_user_project(db: Session, plan: str = "starter"):
     )
     db.add(user)
     db.flush()
+    db.add(OrganizationMembership(org_id=org.id, user_id=user.id, role="owner"))
     db.add(Subscription(user_id=user.id, plan=plan, status="active"))
     project = Project(
         org_id=org.id,

@@ -18,6 +18,8 @@ def test_cors_origins_include_local_defaults(monkeypatch):
 
     assert "http://localhost:5173" in settings.get_cors_origins()
     assert "http://127.0.0.1:5173" in settings.get_cors_origins()
+    assert "http://localhost:5174" in settings.get_cors_origins()
+    assert "http://127.0.0.1:5174" in settings.get_cors_origins()
 
 
 def test_cors_origins_parse_comma_list(monkeypatch):

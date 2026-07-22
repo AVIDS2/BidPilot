@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field";
-import { listProjects, createProject, updateProjectStatus, deleteProject, type ProjectRead } from "@/lib/api";
+import { listProjects, createDemoProject, createProject, updateProjectStatus, deleteProject, type ProjectRead } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser-storage";
 import { ScenarioSelector } from "@/features/scenarios/scenario-selector";
@@ -80,7 +80,7 @@ function ProjectListSkeleton() {
 }
 
 export function ProjectListPage() {
-  const { t } = useTranslation(["projects", "common"]);
+  const { t } = useTranslation(["projects", "common", "onboarding"]);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -128,6 +128,19 @@ export function ProjectListPage() {
       } else {
         toast.error(t("create.createFailed"));
       }
+    },
+  });
+
+  const demoMut = useMutation({
+    mutationFn: createDemoProject,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      finishOnboarding();
+      toast.success(t("onboarding:demoCreated"));
+      navigate(`/projects/${data.id}`);
+    },
+    onError: () => {
+      toast.error(t("onboarding:demoCreateFailed"));
     },
   });
 
@@ -229,7 +242,12 @@ export function ProjectListPage() {
       {!isLoading && showOnboarding && (projects ?? []).length === 0 && (
         <div className="flex justify-center py-8">
           <div className="w-full max-w-md">
-            <OnboardingWizard onFinish={finishOnboarding} />
+            <OnboardingWizard
+              onFinish={finishOnboarding}
+              onCreateOwnProject={() => setShowForm(true)}
+              onCreateDemo={() => demoMut.mutate()}
+              isCreatingDemo={demoMut.isPending}
+            />
           </div>
         </div>
       )}

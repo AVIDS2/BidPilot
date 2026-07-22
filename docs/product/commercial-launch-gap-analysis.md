@@ -83,7 +83,7 @@ Current state:
 
 Remaining work:
 
-- durable usage ledger and quota enforcement;
+- retain production usage evidence and enforce explicit hard cost ceilings;
 - payment productionization;
 - stronger rate limiting and abuse controls;
 - production observability and alerting;
@@ -139,12 +139,19 @@ What exists:
 
 - LangGraph-based worker workflow;
 - server-side provider adapter strategy;
-- Aliyun DashScope-compatible environment key support;
+- server-side official-provider and BYOK configuration paths;
 - assistant harness endpoint with structured SSE events;
 - assistant confirmation cards and execution cards;
 - assistant conversation history;
 - generated conversation titles and manual rename;
 - markdown and math rendering work in the assistant UI.
+- typed provider failures, bounded transient retry, and redacted runtime events
+  with user-facing recovery guidance;
+- governed lifecycle capabilities for project creation, attachment ingestion,
+  readiness, drafting, human review decisions, readiness-pack generation,
+  approved export, and typed-confirmation deletion;
+- durable Runtime events, replayable SSE progress, approval interrupts, and
+  authenticated artifact downloads.
 
 Strength:
 
@@ -152,16 +159,23 @@ Strength:
 
 Gaps:
 
-- assistant tool coverage is still limited;
-- assistant workflow progress is not yet fully tied into live LangGraph run progress;
-- official-provider usage is not metered through a durable ledger;
-- quality, cost, and error traces are not surfaced enough for a user to trust failed/partial AI operations;
-- no commercial-grade fallback or retry policy for provider outages.
+- organization security, membership, billing, provider credentials, and
+  infrastructure controls intentionally remain human-only rather than being
+  exposed as Agent tools;
+- quality, cost, and error traces still need a production operations surface
+  and measured user-facing explanations for partial/failing AI work;
+- the four-report quality gate now includes AssistantBench routing/policy
+  safety and can capture redacted Operator traces, but it still has only
+  development fixtures rather than frozen regression/hidden release evidence;
+- no approved cross-provider failover policy, vendor contract probe suite, or
+  production provider-failure evidence.
 
 Launch implication:
 
-- assistant can be positioned as a beta productivity layer;
-- workflow generation must be quota-limited before public launch.
+- assistant can be positioned as a governed pilot operator, not yet as a
+  hands-off autonomous bid writer;
+- workflow generation is quota-limited server-side, but commercial billing and
+  full entitlement enforcement still need production completion.
 
 ### User, organization, and access control
 
@@ -190,7 +204,7 @@ Strength:
 
 Gaps:
 
-- login and email resend rate limiters are in-memory;
+- production login, registration, password-reset, and email-resend limits plus the shared client-IP API budget now require Redis and fail closed on limiter outage; forwarded headers are trusted only from configured proxies, but IP reputation, WAF policy, account-takeover telemetry, and broader abuse detection still need public-launch controls;
 - production auth depends heavily on `DOCPILOT_AUTH_REQUIRED=true`;
 - tenant model is still effectively early-stage;
 - project-level membership and access policy need a stricter audit before unknown customers use the system;
@@ -224,7 +238,8 @@ Strength:
 
 Gaps:
 
-- invitation link currently uses localhost in code;
+- deployment URL configuration exists, but every email link still needs a
+  deployed-domain verification and delivery evidence;
 - templates are basic and still branded like engineering emails;
 - bounce handling, delivery monitoring, and sender reputation are not addressed;
 - no async email job queue;
@@ -240,34 +255,51 @@ Launch implication:
 
 Status:
 
-- scaffolded, not production-ready.
+- code-level reconciliation is substantially hardened; live commercial launch
+  remains unproven until a real Stripe test/live environment is rehearsed.
 
 What exists:
 
-- Stripe checkout endpoint;
-- Stripe webhook handler;
+- Stripe Checkout endpoint with deployment-configured return URLs;
+- signed Stripe webhook handler with durable event-ID receipts and stale-event
+  protection;
 - subscription table;
+- Stripe customer/subscription mappings and Customer Portal redirect for an
+  existing billing customer;
+- admin-safe webhook receipt lookup for customer-support reconciliation;
 - starter/professional/enterprise plan states;
-- basic project-count plan limit.
+- durable official-provider usage ledger and server-side starter quotas for
+  workflows, Assistant messages, and indexing.
 
 Strength:
 
-- Enough exists to wire a simple upgrade flow after production configuration.
+- The backend now keeps subscription truth on the server, makes duplicate or
+  delayed webhooks safe, and prevents a second Checkout subscription for a
+  customer who should use the hosted portal.
 
 Gaps:
 
-- checkout success and cancel URLs are hardcoded to localhost;
-- no durable AI usage ledger;
-- no trial credit enforcement for workflow runs;
-- no billing portal;
-- no invoice, receipt, cancellation, failed-payment, renewal, or refund handling;
-- subscription metadata and webhook reconciliation are minimal;
-- no pricing-to-feature entitlement matrix beyond project count.
+- no real Stripe test-mode or live-mode rehearsal has been retained as release
+  evidence;
+- Stripe Dashboard configuration (prices, webhook destination, Customer Portal
+  capabilities) remains an operator task;
+- invoices and receipts are visible through Stripe-hosted surfaces rather than
+  an in-product invoice archive;
+- refunds, disputes, tax, accounting exports, and payment settlement
+  reconciliation are not implemented;
+- organization subscription and Stripe seat-quantity foundations exist, but
+  customer-facing seat remediation and the complete entitlement matrix are
+  still unfinished;
+- no complete pricing-to-feature entitlement matrix for seats, exports, BYOK,
+  storage, and collaboration.
 
 Launch implication:
 
-- do not turn on paid public billing yet;
-- use free controlled pilot or manually upgraded plans until billing is hardened.
+- do not turn on paid public billing until the Stripe production configuration,
+  controlled test-mode rehearsal, support runbook, and retained evidence are
+  complete;
+- free controlled pilot or manually upgraded plans remain the honest default
+  until then.
 
 ### Provider keys and AI cost control
 
@@ -282,7 +314,17 @@ What exists:
 - encrypted provider key storage using `DOCPILOT_SECRETS_KEY`;
 - masked key display;
 - provider connection testing;
-- Aliyun/DashScope env fallback for worker adapters.
+- Aliyun/DashScope env fallback for worker adapters;
+- durable organization-scoped official usage records and starter quotas for
+  workflow, Assistant, and indexing operations;
+- provider-reported token ledger records for successful OpenAI-compatible,
+  Anthropic, and LangChain operator calls, with official and BYOK separation;
+- a mandatory staging/production platform-funded LLM token ceiling, combined
+  with optional lower organization caps, conservative pre-dispatch
+  reservations, settlement/release handling, and billing-owner-only change
+  audit evidence;
+- typed provider errors, bounded retry for transient failures, and redacted
+  runtime/SSE recovery events.
 
 Strength:
 
@@ -290,16 +332,21 @@ Strength:
 
 Gaps:
 
-- no durable per-user/per-org AI usage ledger;
-- no official-provider trial run counter;
-- no hard backend cost ceiling;
-- provider error categories are not yet surfaced enough for support/debugging;
-- no per-provider spend dashboard.
+- the LLM token ceiling is now a default platform policy, but currency caps
+  remain unavailable until a reviewed provider/model price catalog exists;
+- server-owned embedding requests now share the same token ledger and platform
+  ceiling as official LLM calls; currency reconciliation still needs a reviewed
+  provider/model price catalogue and retained invoice evidence;
+- no per-provider spend dashboard or provider invoice reconciliation;
+- no retained production contract probes across every configured provider;
+- no approved automatic cross-provider failover policy.
 
 Launch implication:
 
 - platform-owned official provider can be used for demo and limited pilot;
-- public launch requires quota enforcement before any AI model call that costs money.
+- public launch still requires a reviewed price policy, production telemetry,
+  and real-provider release evidence before the platform funds unknown-user AI
+  traffic.
 
 ### Deployment and operations
 
@@ -343,8 +390,8 @@ Launch implication:
 | Authentication | 65-75% | durable rate limits, stricter access audit |
 | Organizations and teams | 55-65% | clearer tenant/project permission model |
 | Email | 55-65% | production URLs, SMTP verification, delivery monitoring |
-| Billing | 35-45% | real checkout URLs, billing portal, usage entitlements |
-| AI cost control | 35-45% | durable usage ledger and hard limits |
+| Billing | 60-70% code / 0% live evidence | Stripe rehearsal, organization seats, refunds/support operations |
+| AI cost control | 65-75% | default token policy, reviewed price catalog, spend alerts, production telemetry |
 | Deployment | 40-50% | VPS rehearsal, HTTPS, backups, monitoring |
 | Observability | 35-45% | dashboards, alerts, trace correlation |
 | Customer data governance | 40-50% | retention, deletion, export access, audit policy |
@@ -368,22 +415,24 @@ These items block even a controlled external pilot unless explicitly waived.
 7. Create the first admin through the documented bootstrap flow.
 8. Run one full project workflow on the VPS: create project, upload, parse, draft, review, export.
 9. Confirm backup and restore procedure against the deployed database and storage.
-10. Add a hard server-side workflow usage limit for starter/free users or manually restrict pilot accounts.
+10. Configure an explicit official-token cap for every pilot organization and
+    verify its pre-dispatch rejection path.
 
 ## Must-fix before paid public launch
 
 These items block commercial self-serve payment and broad public access.
 
-1. Add durable `usage_ledger` or equivalent accounting for AI workflow runs, assistant requests, provider tokens, and export jobs.
-2. Enforce trial limits server-side before starting any official-provider workflow run.
-3. Add paid entitlement checks for workflow generation, project count, export, BYOK, and team seats.
-4. Replace in-memory auth/email rate limiting with Redis or database-backed limits.
-5. Finish Stripe production configuration: success/cancel URLs, billing portal, webhook event coverage, subscription reconciliation, failed payment handling, and cancellation.
-6. Add customer-facing account/billing pages that reflect real subscription state.
-7. Add production observability dashboards for API errors, queue depth, job duration, provider failures, export failures, and AI cost.
-8. Run release rehearsal and production readiness checks against the real deployment environment.
-9. Add deletion/retention behavior that matches the written data policy.
-10. Run a security review of project/org access paths and provider key handling.
+1. Add paid entitlement checks for export, BYOK, storage, collaboration, and team seats.
+2. Finish Stripe production configuration and retain a controlled test-mode
+   checkout/portal/cancellation/failed-payment/retry rehearsal.
+3. Add organization/seat billing before selling team plans.
+4. Add production observability dashboards for API errors, queue depth, job duration, provider failures, export failures, AI cost, and billing outcomes.
+5. Run release rehearsal and production readiness checks against the real deployment environment.
+6. Add deletion/retention behavior that matches the written data policy,
+   including a reviewed Stripe webhook receipt retention policy.
+7. Run a security review of project/org access paths and provider key handling.
+8. Introduce a reviewed provider/model price catalog, currency-cap policy, and
+   spend/anomaly alerting before funding unknown-user AI traffic.
 
 ## Recommended first productionization spec
 

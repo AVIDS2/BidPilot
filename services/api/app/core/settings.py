@@ -5,7 +5,12 @@ import os
 
 LOCAL_APP_URL = "http://localhost:5173"
 LOCAL_API_URL = "http://localhost:8000"
-LOCAL_CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+LOCAL_CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+]
 
 
 def _clean_origin(value: str) -> str:

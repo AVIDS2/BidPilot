@@ -28,7 +28,6 @@ export function SignupPage() {
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [loading, setLoading] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
   const { register } = useAuth();
@@ -77,7 +76,6 @@ export function SignupPage() {
       toast.error(t(getRegistrationErrorKey(err)));
     } finally {
       resetTurnstile(turnstileWidgetId);
-      setTurnstileToken(null);
       setLoading(false);
     }
   };
@@ -318,7 +316,6 @@ export function SignupPage() {
             <TurnstileWidget
               ref={turnstileRef}
               action="signup"
-              onTokenChange={setTurnstileToken}
               onWidgetIdChange={setTurnstileWidgetId}
               className="min-h-[65px]"
             />

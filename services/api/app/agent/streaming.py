@@ -214,8 +214,20 @@ def _extract_summary(tool_name: str, result: dict) -> str:
     if "error" in result:
         return f"操作失败：{result['error']}"
     if "count" in result:
+        if tool_name == "search_bid_wiki":
+            return f"找到 {result['count']} 条可用记忆。"
         entity = tool_name.replace("list_", "").replace("search_", "")
         return f"找到 {result['count']} 条{entity}记录。"
+    if tool_name == "propose_memory" and isinstance(result.get("id"), str):
+        return "已保存为个人工作偏好。"
+    if tool_name == "forget_memory" and result.get("deleted") is True:
+        return "这条记忆已遗忘。"
+    if tool_name == "create_demo_workspace" and isinstance(result.get("name"), str):
+        return (
+            f"演示工作区「{result['name']}」已准备好。"
+            if result.get("created") is not False
+            else f"已打开现有演示工作区「{result['name']}」。"
+        )
     if "name" in result and "status" in result:
         return f"项目「{result['name']}」{result['status']}。"
     if "title" in result and "status" in result:

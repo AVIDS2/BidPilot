@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "memory-graph-development-v1",
+  "title": "BidPilot synthetic MemoryGraphBench development fixture",
+  "dataset_role": "development",
+  "description": "Synthetic entity and relation expectations only. It contains no customer document bodies, prompts, provider payloads, or credentials.",
+  "cases": [
+    {
+      "id": "private-deployment-requirement",
+      "org_id": "org-demo",
+      "project_id": "project-demo-smart-community",
+      "memory_record_id": "memory-deployment-requirement",
+      "available_evidence_refs": [
+        {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-privacy-03"},
+        {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-delivery-08"}
+      ],
+      "expected_entities": [
+        {
+          "canonical_name": "私有化部署",
+          "entity_type": "requirement"
+        },
+        {
+          "canonical_name": "投标方案",
+          "entity_type": "deliverable"
+        }
+      ],
+      "expected_relations": [
+        {
+          "subject": {
+            "canonical_name": "私有化部署",
+            "entity_type": "requirement"
+          },
+          "predicate": "requires",
+          "object": {
+            "canonical_name": "投标方案",
+            "entity_type": "deliverable"
+          },
+          "expected_evidence_refs": [
+            {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-privacy-03"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "delivery-deadline",
+      "org_id": "org-demo",
+      "project_id": "project-demo-smart-community",
+      "memory_record_id": "memory-delivery-deadline",
+      "available_evidence_refs": [
+        {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-delivery-08"}
+      ],
+      "expected_entities": [
+        {
+          "canonical_name": "项目交付日期",
+          "entity_type": "deadline"
+        },
+        {
+          "canonical_name": "投标方案",
+          "entity_type": "deliverable"
+        }
+      ],
+      "expected_relations": [
+        {
+          "subject": {
+            "canonical_name": "投标方案",
+            "entity_type": "deliverable"
+          },
+          "predicate": "has_deadline",
+          "object": {
+            "canonical_name": "项目交付日期",
+            "entity_type": "deadline"
+          },
+          "expected_evidence_refs": [
+            {"source_type": "knowledge_chunk", "source_id": "chunk-rfp-delivery-08"}
+          ]
+        }
+      ]
+    }
+  ]
+}

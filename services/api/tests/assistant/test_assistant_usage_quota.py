@@ -8,7 +8,7 @@ from app.auth.schemas import CurrentUser
 from app.auth.service import _hash_password, require_auth
 from app.db import Base, get_db
 from app.main import app
-from app.models import Organization, Subscription, UsageEvent, User
+from app.models import Organization, OrganizationMembership, Subscription, UsageEvent, User
 from app.usage.schemas import ProviderSource
 from app.usage.service import ASSISTANT_MESSAGE_STARTED, record_usage_event
 
@@ -40,6 +40,7 @@ def _make_user(SessionLocal, plan: str = "starter") -> User:
         )
         db.add(user)
         db.flush()
+        db.add(OrganizationMembership(org_id=org.id, user_id=user.id, role="owner"))
         db.add(Subscription(user_id=user.id, plan=plan, status="active"))
         db.commit()
         db.refresh(user)

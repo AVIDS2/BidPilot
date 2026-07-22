@@ -3,7 +3,6 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from contracts.db import Base
 
 
 DATABASE_URL = os.environ.get(

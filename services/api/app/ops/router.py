@@ -1,13 +1,12 @@
-import os
-
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.service import require_admin
 from app.db import get_db
-from app.billing.service import get_billing_summary
+from app.billing.service import get_billing_summary, list_stripe_webhook_receipts
 from app.models import ExecutionRun, User
+from app.ops.health import collect_dependency_checks, dependencies_are_ready
 from app.usage.service import list_usage_events_for_user
 
 router = APIRouter(prefix="/ops", tags=["ops"])
@@ -35,53 +34,11 @@ def runtime_summary(db: Session = Depends(get_db)) -> dict[str, object]:
 
 @router.get("/health-detailed")
 def health_detailed(db: Session = Depends(get_db)) -> dict[str, object]:
-    """Detailed health check for all infrastructure dependencies."""
-    checks: dict[str, object] = {}
-
-    # Postgres
-    try:
-        db.scalar(text("SELECT 1"))
-        checks["postgres"] = {"status": "ok"}
-    except Exception as exc:
-        checks["postgres"] = {"status": "error", "detail": str(exc)[:200]}
-
-    # Redis
-    try:
-        import redis as redis_lib
-        redis_url = os.environ.get("DOCPILOT_REDIS_URL", "redis://localhost:6379/0")
-        r = redis_lib.from_url(redis_url)
-        r.ping()
-        checks["redis"] = {"status": "ok"}
-    except Exception as exc:
-        checks["redis"] = {"status": "error", "detail": str(exc)[:200]}
-
-    # MinIO
-    try:
-        from app.adapters.storage import _get_client
-        client = _get_client()
-        # Just check we can connect
-        client.list_buckets()
-        checks["minio"] = {"status": "ok"}
-    except Exception as exc:
-        checks["minio"] = {"status": "error", "detail": str(exc)[:200]}
-
-    # Celery Worker
-    try:
-        from celery import Celery
-        redis_url = os.environ.get("DOCPILOT_REDIS_URL", "redis://localhost:6379/0")
-        app = Celery("docpilot-check", broker=redis_url)
-        insp = app.control.inspect()
-        stats = insp.stats()
-        if stats:
-            checks["worker"] = {"status": "ok", "active_workers": len(stats)}
-        else:
-            checks["worker"] = {"status": "degraded", "detail": "No workers responding"}
-    except Exception as exc:
-        checks["worker"] = {"status": "error", "detail": str(exc)[:200]}
-
-    all_ok = all(v.get("status") == "ok" for v in checks.values())
+    """Detailed health without returning backend errors or connection data."""
+    check_states = collect_dependency_checks(db, include_worker=True)
+    checks = {name: {"status": state} for name, state in check_states.items()}
     return {
-        "status": "ok" if all_ok else "degraded",
+        "status": "ok" if dependencies_are_ready(check_states) else "degraded",
         "checks": checks,
     }
 
@@ -116,3 +73,17 @@ def billing_user_usage(
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return {"data": list_usage_events_for_user(db, user_id)}
+
+
+@router.get("/billing/users/{user_id}/webhooks")
+def billing_user_webhooks(
+    user_id: str,
+    limit: int = 100,
+    admin=Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Show safe Stripe receipt outcomes for a customer support investigation."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"data": list_stripe_webhook_receipts(db, user_id=user_id, limit=limit)}

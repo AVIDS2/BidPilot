@@ -1,6 +1,5 @@
 """Tests for BidPilotState TypedDict validation."""
 
-import pytest
 from app.graph.state import BidPilotState
 
 
@@ -11,7 +10,8 @@ def test_state_has_all_required_fields():
         "input_review_feedback", "human_feedback", "requirements", "requirements_parsed",
         "evidence_chunks", "evidence_retrieved", "draft_markdown",
         "draft_model_used", "draft_created", "review_result",
-        "review_passed", "section_version_id", "persisted",
+        "review_passed", "claim_candidates", "claim_integrity_status",
+        "section_version_id", "persisted",
         "human_decision", "human_feedback",
         "iteration", "max_iterations", "error",
     ]
@@ -37,6 +37,8 @@ def test_state_initial_values():
         "draft_created": False,
         "review_result": None,
         "review_passed": False,
+        "claim_candidates": [],
+        "claim_integrity_status": "not_assessed",
         "section_version_id": None,
         "persisted": False,
         "iteration": 0,

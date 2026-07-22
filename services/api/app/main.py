@@ -1,4 +1,5 @@
 from pathlib import Path
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -7,17 +8,11 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-import os
 import uuid
 import time
 import structlog
-import traceback
 
 logger = structlog.get_logger()
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 
 from app.audit.router import router as audit_router
 from app.assistant.router import router as assistant_router
@@ -35,6 +30,7 @@ from app.projects.router import router as projects_router
 from app.requirements.router import router as requirements_router
 from app.readiness.router import router as readiness_router
 from app.retrieval.router import router as retrieval_router
+from app.runtime.router import router as runtime_router
 from app.review.router import router as review_router
 from app.scenarios.router import router as scenarios_router
 from app.parsed_assets.router import router as parsed_assets_router
@@ -48,7 +44,10 @@ from app.providers.router import router as providers_router
 from app.invitations.router import router as invitations_router
 from app.usage.router import router as usage_router
 from app.notifications.router import router as notifications_router
+from app.memory.router import router as memory_router
 from app.logging import setup_logging
+from app.health import router as health_router
+from app.security.api_rate_limiter import GlobalApiRateLimitMiddleware, create_api_rate_limiter
 
 setup_logging()
 
@@ -63,15 +62,29 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         return response
 
 
-app = FastAPI(title="DocPilot API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    close_runtime_resources()
 
+
+def close_runtime_resources() -> None:
+    """Release all long-lived LangGraph checkpointer connections on shutdown."""
+    from app.agent.graph import close_checkpointer
+    from app.runtime.operator_graph import close_operator_checkpointer
+
+    close_checkpointer()
+    close_operator_checkpointer()
+
+
+app = FastAPI(title="DocPilot API", lifespan=lifespan)
+
+# The limiter is created during startup so production cannot silently fall
+# back to per-process memory when Redis or trusted proxy configuration is bad.
+api_rate_limiter = create_api_rate_limiter()
+app.state.api_rate_limiter = api_rate_limiter
+app.add_middleware(GlobalApiRateLimitMiddleware, limiter=api_rate_limiter)
 app.add_middleware(RequestContextMiddleware)
-
-rate_limit = "1000/minute"
-limiter = Limiter(key_func=get_remote_address, default_limits=[rate_limit])
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
 
 
 @app.exception_handler(HTTPException)
@@ -119,6 +132,7 @@ app.add_middleware(
 )
 
 # Public routes (no auth required)
+app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(scenarios_router)
 
@@ -133,6 +147,7 @@ app.include_router(evidence_router, dependencies=_protected)
 app.include_router(execution_router, dependencies=_protected)
 app.include_router(requirements_router, dependencies=_protected)
 app.include_router(readiness_router, dependencies=_protected)
+app.include_router(memory_router, dependencies=_protected)
 app.include_router(retrieval_router, dependencies=_protected)
 app.include_router(review_router, dependencies=_protected)
 app.include_router(audit_router, dependencies=[Depends(require_admin)])
@@ -149,6 +164,7 @@ app.include_router(notifications_router, dependencies=_protected)
 app.include_router(chat_router, dependencies=_protected)
 app.include_router(assistant_router, dependencies=_protected)
 app.include_router(usage_router, dependencies=_protected)
+app.include_router(runtime_router, dependencies=_protected)
 
 
 @app.get("/health")

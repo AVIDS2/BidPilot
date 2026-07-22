@@ -1,8 +1,6 @@
 """Test all API errors follow consistent format."""
 
-from fastapi.testclient import TestClient
 
-from app.main import app
 
 
 def test_404_has_consistent_format(client):

@@ -55,7 +55,7 @@ class AssistantAttachmentUploadResponse(BaseModel):
 
 
 class AssistantRequest(BaseModel):
-    message: str
+    message: str = Field(max_length=4_000)
     project_id: str | None = None
     conversation_id: str | None = None
     provider_config_id: str | None = None

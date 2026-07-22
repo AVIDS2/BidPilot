@@ -9,8 +9,10 @@ from datetime import UTC, datetime
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.access.service import require_project_capability
 from app.adapters.storage import download_bytes, upload_bytes
 from app.audit.service import record_audit_event
+from app.auth.schemas import CurrentUser
 from app.models import ReadinessPack, RequirementItem
 
 from .exporters import render_readiness_docx, render_readiness_xlsx
@@ -31,29 +33,90 @@ from .schemas import (
 
 
 FORMULA_VERSION = "1.0"
+READINESS_GAP_KINDS = frozenset(
+    {"all", "high_risk", "mandatory", "evidence", "contradictions", "overdue", "uncovered"}
+)
 
 
 def get_readiness_summary_query(
     db: Session,
     project_id: str,
     *,
-    org_id: str,
+    current_user: CurrentUser,
 ) -> BidReadinessSummary:
-    project = get_project_for_org(db, project_id, org_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
+    access = require_project_capability(
+        db,
+        current_user=current_user,
+        project_id=project_id,
+        capability="project.read",
+    )
+    project = access.project
     requirements = list_project_requirements(db, project_id)
     return _build_summary(project.id, project.name, requirements)
+
+
+def select_readiness_gaps(
+    summary: BidReadinessSummary,
+    *,
+    kind: str = "all",
+) -> list[ReadinessRequirementRead]:
+    """Select a stable, user-facing subset of readiness blockers."""
+
+    if kind not in READINESS_GAP_KINDS:
+        raise ValueError(f"Unsupported readiness gap kind: {kind}")
+    if kind == "mandatory":
+        rows = summary.mandatory_gaps
+    elif kind == "evidence":
+        rows = summary.evidence_gaps
+    elif kind == "contradictions":
+        rows = summary.contradictions
+    elif kind == "overdue":
+        rows = summary.overdue
+    elif kind == "uncovered":
+        rows = [row for row in summary.requirements if row.coverage_status == "uncovered"]
+    elif kind == "high_risk":
+        rows = [
+            row
+            for row in summary.requirements
+            if row.risk_level in {"high", "critical"}
+            and row.coverage_status not in {"covered", "not_applicable"}
+        ]
+    else:
+        rows = [
+            *summary.mandatory_gaps,
+            *summary.evidence_gaps,
+            *summary.contradictions,
+            *summary.overdue,
+        ]
+
+    selected: list[ReadinessRequirementRead] = []
+    selected_ids: set[str] = set()
+    for row in rows:
+        if row.id not in selected_ids:
+            selected.append(row)
+            selected_ids.add(row.id)
+    return selected
 
 
 def generate_readiness_pack_command(
     db: Session,
     project_id: str,
     *,
-    org_id: str,
+    current_user: CurrentUser,
     actor_id: str,
 ) -> ReadinessPackRead:
-    project = get_project_for_org(db, project_id, org_id, for_update=True)
+    access = require_project_capability(
+        db,
+        current_user=current_user,
+        project_id=project_id,
+        capability="deliverables.export",
+    )
+    project = get_project_for_org(
+        db,
+        project_id,
+        access.project.org_id,
+        for_update=True,
+    )
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     requirements = list_project_requirements(db, project_id)
@@ -117,11 +180,17 @@ def download_readiness_pack_query(
     pack_id: str,
     artifact_format: str,
     *,
-    org_id: str,
+    current_user: CurrentUser,
 ) -> tuple[bytes, str, str]:
-    pack = get_pack_for_org(db, pack_id, org_id)
+    pack = get_pack_for_org(db, pack_id, current_user.org_id or "default")
     if pack is None:
         raise HTTPException(status_code=404, detail="Readiness pack not found")
+    require_project_capability(
+        db,
+        current_user=current_user,
+        project_id=pack.project_id,
+        capability="project.read",
+    )
     if artifact_format == "xlsx":
         storage_key = pack.xlsx_storage_key
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -180,9 +249,25 @@ def _build_summary(
         {
             "id": requirement.id,
             "lock_version": requirement.lock_version,
+            "section_key": requirement.section_key,
+            "requirement_text": requirement.requirement_text,
+            "original_text": requirement.original_text,
+            "source_document_id": requirement.source_document_id,
+            "source_locator_json": requirement.source_locator_json,
+            "priority": requirement.priority,
+            "status": requirement.status,
             "verification_status": requirement.verification_status,
             "owner_user_id": requirement.owner_user_id,
+            "reviewer_user_id": requirement.reviewer_user_id,
+            "due_at": requirement.due_at,
+            "extraction_confidence": requirement.extraction_confidence,
             "profile": {
+                "bid_category": requirement.bid_profile.bid_category
+                if requirement.bid_profile
+                else "unclassified",
+                "is_mandatory": requirement.bid_profile.is_mandatory
+                if requirement.bid_profile
+                else False,
                 "coverage_status": requirement.bid_profile.coverage_status
                 if requirement.bid_profile
                 else "uncovered",
@@ -195,12 +280,23 @@ def _build_summary(
                 "score_weight": requirement.bid_profile.score_weight
                 if requirement.bid_profile
                 else None,
+                "deadline_at": requirement.bid_profile.deadline_at
+                if requirement.bid_profile
+                else None,
+                "submission_metadata_json": requirement.bid_profile.submission_metadata_json
+                if requirement.bid_profile
+                else None,
             },
         }
         for requirement in requirements
     ]
     source_fingerprint = hashlib.sha256(
-        json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(
+            fingerprint_payload,
+            default=str,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
     ).hexdigest()
 
     by_owner = Counter(row.owner_user_id for row in rows if row.owner_user_id)
@@ -301,5 +397,5 @@ __all__ = [
     "download_readiness_pack_query",
     "generate_readiness_pack_command",
     "get_readiness_summary_query",
+    "select_readiness_gaps",
 ]
-

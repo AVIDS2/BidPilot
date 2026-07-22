@@ -67,7 +67,8 @@
       "pending": "等待中",
       "running": "运行中",
       "succeeded": "已成功",
-      "failed": "失败"
+      "failed": "失败",
+      "cancelled": "已取消"
     },
     "nodeStatus": {
       "pending": "等待中",
@@ -82,6 +83,8 @@
     "summarySingleRunning": "正在{{label}}",
     "summarySingleDone": "{{label}}已完成",
     "summarySingleFailed": "{{label}}失败",
+    "summarySingleCancelled": "{{label}}已取消",
+    "summaryCancelled": "工作流已取消",
     "summaryDone": "已处理 {{tools}} 项操作",
     "summaryDoneWithWorkflows": "已处理 {{tools}} 项操作，启动 {{workflows}} 个工作流",
     "summaryDoneWorkflowsOnly": "已启动 {{workflows}} 个工作流",
@@ -94,11 +97,13 @@
       "pending": "等待中",
       "running": "运行中",
       "succeeded": "已完成",
-      "failed": "失败"
+      "failed": "失败",
+      "cancelled": "已取消"
     },
     "tool": {
       "default": "平台操作",
       "search_projects": "搜索项目",
+      "create_demo_workspace": "创建演示工作区",
       "get_runtime_status": "读取执行状态",
       "open_page": "打开页面",
       "create_project": "创建项目",
@@ -106,17 +111,29 @@
       "list_project_bundles": "查看资料包",
       "list_sections": "查看章节",
       "list_pending_reviews": "查看待审核项",
+      "submit_review_decision": "提交章节审核决定",
       "list_requirements": "查看需求",
+      "list_claim_review_queue": "查看待核验主张",
+      "get_readiness_summary": "查看投标准备度",
+      "list_readiness_gaps": "查看就绪缺口",
+      "open_requirement_source": "定位需求来源",
       "list_evidence": "查看证据",
       "list_deliverables": "查看交付物",
       "list_documents": "查看文档",
+      "attach_uploaded_documents": "将附件加入资料包",
       "get_section_versions": "查看章节版本",
       "create_deliverable": "创建交付物",
       "start_draft_section": "启动章节起草",
       "start_redraft_section": "重新起草章节",
+      "propose_memory_graph": "生成实体关系提案",
       "retry_run": "重试任务",
       "export_deliverable": "导出交付物",
+      "generate_readiness_pack": "生成投标准备度包",
       "semantic_search": "检索资料",
+      "search_bid_wiki": "查询 Bid Wiki",
+      "list_knowledge_portfolio": "查看知识资产概览",
+      "propose_memory": "保存个人偏好",
+      "forget_memory": "遗忘记忆",
       "search_knowledge": "检索知识库",
       "upload_document": "上传文档",
       "delete_project": "删除项目"
@@ -131,6 +148,7 @@
       "section_drafter": "章节起草",
       "quality_review": "质量审核",
       "redrafter": "重新起草",
+      "memory_graph_extraction": "实体关系提取",
       "exporter": "生成交付物"
     },
     "field": {
@@ -147,7 +165,37 @@
       "status": "状态：{{status}}",
       "runCreated": "运行已创建",
       "completed": "已完成",
-      "processing": "处理中"
+      "processing": "处理中",
+      "cancelled": "工作流已取消",
+      "cancellationRequested": "已收到取消请求"
+    },
+    "download": {
+      "docx": "下载 DOCX",
+      "pdf": "下载 PDF",
+      "xlsx": "下载 XLSX",
+      "failed": "下载失败，请重试。"
+    },
+    "cancelWorkflow": "取消工作流",
+    "cancelling": "正在取消...",
+    "cancelFailed": "暂时无法取消工作流，请重试。",
+    "cancellationRequested": "已收到取消请求，将在安全边界停止工作流。",
+    "providerRetry": "模型服务暂时不可用，正在进行第 {{attempt}}/{{maxAttempts}} 次重试。",
+    "openProviderSettings": "打开模型服务设置",
+    "failure": {
+      "provider_not_configured": "未配置可用的模型服务。请配置模型服务后再试。",
+      "provider_config_missing": "所选模型服务配置已不可用。请重新选择或配置后再试。",
+      "provider_auth_failed": "模型服务认证失败。请检查密钥和权限后重新测试连接。",
+      "provider_model_unavailable": "所选模型或服务端点不可用。请检查模型名称与服务商地址。",
+      "provider_request_invalid": "所选模型不支持本次请求，或服务配置不匹配。请调整配置后重试。",
+      "provider_response_invalid": "模型没有返回可用结果。请切换模型或稍后重试。",
+      "provider_rate_limited": "模型服务当前限流。请稍后重新运行该工作流。",
+      "provider_timeout": "模型服务请求超时。请稍后重试，或检查服务商状态。",
+      "provider_unavailable": "模型服务暂时不可用。请稍后重试，或检查服务商状态。",
+      "workflow_internal_error": "工作流未能安全完成。请稍后重试。",
+      "workflow_node_failed": "工作流步骤未能完成。请检查输入后重试。",
+      "workflow_node_exception": "工作流步骤遇到内部错误。请稍后重试。",
+      "workflow_graph_exception": "工作流遇到内部错误。请稍后重试。",
+      "workflow_resume_exception": "工作流恢复时遇到内部错误。请稍后重试。"
     }
   },
   "welcome": {

@@ -7,7 +7,12 @@ from app.db import get_db
 from app.usage.service import UsageLimitExceeded
 
 from .schemas import BundleCreate, BundleRead
-from .service import list_bundles_query, reingest_bundle_command, register_bundle_command
+from .service import (
+    list_bundles_query,
+    reindex_bundle_command,
+    reingest_bundle_command,
+    register_bundle_command,
+)
 
 router = APIRouter(prefix="/bundles", tags=["bundles"])
 
@@ -25,8 +30,12 @@ def register_bundle(
 
 
 @router.get("", response_model=list[BundleRead])
-def list_bundles(project_id: str, db: Session = Depends(get_db)) -> list[BundleRead]:
-    return list_bundles_query(db, project_id)
+def list_bundles(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> list[BundleRead]:
+    return list_bundles_query(db, project_id, current_user=current_user)
 
 
 @router.post("/{bundle_id}/reingest", response_model=BundleRead)
@@ -37,5 +46,17 @@ def reingest_bundle(
 ) -> BundleRead:
     try:
         return reingest_bundle_command(db, bundle_id, current_user)
+    except UsageLimitExceeded as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+
+@router.post("/{bundle_id}/reindex", response_model=BundleRead)
+def reindex_bundle(
+    bundle_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> BundleRead:
+    try:
+        return reindex_bundle_command(db, bundle_id, current_user)
     except UsageLimitExceeded as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))

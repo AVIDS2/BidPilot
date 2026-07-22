@@ -75,6 +75,7 @@
     "emailPlaceholder": "colleague@example.com",
     "inviteSent": "邀请已发送",
     "inviteFailed": "邀请发送失败",
+    "workspaceManagerRequired": "需要当前工作区的负责人或管理员角色。",
     "revoked": "邀请已撤销",
     "revokeFailed": "撤销邀请失败",
     "expiresIn": "{{days}} 天后过期",
@@ -83,5 +84,27 @@
     "accepted": "已接受",
     "expired": "已过期",
     "revoked": "已撤销"
+  },
+  "workspaceMembers": {
+    "title": "工作区成员",
+    "hint": "成员占用工作区席位；移出后将撤销本工作区的项目和团队权限。",
+    "membersCount": "{{count}} 名成员",
+    "you": "你",
+    "billingOwner": "账单负责人",
+    "transferBillingOwner": "转移账单责任",
+    "billingOwnerTransferred": "账单负责人已转移",
+    "roleUpdated": "工作区角色已更新",
+    "removeMember": "移出工作区",
+    "removeTitle": "移出该成员？",
+    "removeDescription": "将撤销 {{name}} 在当前工作区的项目和团队权限；若对方是某项目唯一负责人，责任会转交给你。对方会保留一个可用的个人或其他工作区。",
+    "memberRemoved": "成员已移出工作区",
+    "memberRemovedWithPersonalWorkspace": "成员已移出，系统已为对方准备个人工作区",
+    "operationFailed": "工作区成员操作失败",
+    "cancel": "取消",
+    "roles": {
+      "owner": "负责人",
+      "admin": "管理员",
+      "member": "成员"
+    }
   }
 }

@@ -1,89 +1,112 @@
-"""Drafting execution logic: retrieve evidence via pgvector, call LLM, write section version, link evidence."""
+"""Drafting execution logic: retrieve validated evidence, call LLM, and persist a section."""
 
 import logging
 from datetime import UTC, datetime
+from typing import Sequence
 
-from app.adapters.embedding import generate_embedding
 from app.adapters.llm import draft_section as draft_section_openai
 from app.adapters.anthropic_llm import draft_section as draft_section_anthropic
+from app.adapters.provider_errors import ProviderInvocationError
 from app.db import SessionLocal
+from app.execution.embedding_capacity import generate_metered_embedding
 from app.provider_registry import get_provider_by_id
+from app.execution.model_usage import record_workflow_model_usage
+from app.retrieval.reranker import rerank_candidates
 from app.models import (
+    Deliverable,
     DeliverableSection,
     Evidence,
     ExecutionRun,
-    KnowledgeChunk,
     Project,
+    RuntimeRun,
     SectionVersion,
+    User,
 )
 from sqlalchemy import select
+
+from contracts import EmbeddingOutcome, EmbeddingOutcomeStatus, RetrievalCandidate
+from contracts.retrieval_service import retrieve_project_evidence
 
 logger = logging.getLogger(__name__)
 
 
-def _retrieve_evidence(project_id: str, section_key: str, top_k: int = 5) -> list[KnowledgeChunk]:
-    """Retrieve relevant knowledge chunks for a section.
-
-    Uses pgvector cosine similarity when embeddings are available,
-    falls back to ILIKE text search otherwise.
-    Returns chunk objects (with id, content, source_document_id) for evidence linking.
-    """
-    # Generate embedding for the section key as query
-    query_embedding = generate_embedding(section_key)
-
+def _retrieve_evidence(
+    project_id: str,
+    section_key: str,
+    top_k: int = 5,
+    *,
+    run_id: str | None = None,
+) -> tuple[RetrievalCandidate, ...]:
+    """Retrieve profile-safe, citation-validated evidence for a draft section."""
+    query = section_key.replace("-", " ")
     db = SessionLocal()
     try:
-        # Try vector search first when we have a real embedding
-        if query_embedding.model != "stub":
-            stmt = (
-                select(KnowledgeChunk)
-                .where(
-                    KnowledgeChunk.project_id == project_id,
-                    KnowledgeChunk.embedding.isnot(None),
-                )
-                .order_by(KnowledgeChunk.embedding.cosine_distance(query_embedding.embedding))
-                .limit(top_k)
+        project = db.get(Project, project_id)
+        runtime_run = (
+            db.scalar(
+                select(RuntimeRun)
+                .where(RuntimeRun.execution_run_id == run_id)
+                .order_by(RuntimeRun.created_at.desc())
+                .limit(1)
             )
-            chunks = list(db.scalars(stmt).all())
-            if chunks:
-                return chunks
-
-        # Fallback: text search
-        stmt = (
-            select(KnowledgeChunk)
-            .where(
-                KnowledgeChunk.project_id == project_id,
-                KnowledgeChunk.content.ilike(f"%{section_key.replace('-', '%')}%"),
+            if run_id
+            else None
+        )
+        user = db.get(User, runtime_run.user_id) if runtime_run is not None else None
+        if (
+            project is None
+            or runtime_run is None
+            or runtime_run.project_id != project.id
+            or runtime_run.org_id != project.org_id
+            or user is None
+            or user.org_id != project.org_id
+            or user.disabled
+        ):
+            query_embedding = EmbeddingOutcome(
+                status=EmbeddingOutcomeStatus.NOT_CONFIGURED,
+                error_code="invalid_runtime_principal",
             )
-            .limit(top_k)
+        else:
+            query_embedding = generate_metered_embedding(
+                db,
+                org_id=project.org_id,
+                user_id=user.id,
+                project_id=project.id,
+                workload="embedding_legacy_workflow_evidence_query",
+                text=query,
+                execution_run_id=run_id,
+                runtime_run_id=runtime_run.id,
+            )
+        result = retrieve_project_evidence(
+            db,
+            project_id=project_id,
+            raw_query=query,
+            profile_id=query_embedding.profile_id if query_embedding.is_success else None,
+            query_embedding=query_embedding.embedding if query_embedding.is_success else None,
+            top_k=top_k,
+            reranker=rerank_candidates,
         )
-        chunks = list(db.scalars(stmt).all())
-        if chunks:
-            return chunks
-
-        # Final fallback: any chunks in project
-        stmt = (
-            select(KnowledgeChunk)
-            .where(KnowledgeChunk.project_id == project_id)
-            .limit(top_k)
-        )
-        chunks = list(db.scalars(stmt).all())
-        return chunks
+        return result.candidates
     finally:
         db.close()
 
 
-def _link_evidence(db, project_id: str, section_version_id: str, chunks: list[KnowledgeChunk]) -> None:
-    """Create Evidence records linking each chunk to the section version."""
-    for i, chunk in enumerate(chunks):
+def _link_evidence(
+    db,
+    project_id: str,
+    section_version_id: str,
+    candidates: Sequence[RetrievalCandidate],
+) -> None:
+    """Create evidence records from validated retrieval candidates."""
+    for candidate in candidates:
         ev = Evidence(
             project_id=project_id,
             section_version_id=section_version_id,
-            source_document_id=chunk.source_document_id,
-            chunk_id=chunk.id,
-            quote_text=chunk.content[:500],
-            locator_json={"chunk_index": chunk.chunk_index},
-            confidence=1.0 - (i * 0.1),  # Simple descending confidence
+            source_document_id=candidate.source_document_id,
+            chunk_id=candidate.chunk_id,
+            quote_text=candidate.content[:500],
+            locator_json=candidate.locator.model_dump(exclude_none=True),
+            confidence=None,
         )
         db.add(ev)
 
@@ -115,8 +138,8 @@ def run_draft(
         db.close()
 
     # Retrieve evidence
-    chunks = _retrieve_evidence(project_id, section_key)
-    evidence_texts = [c.content for c in chunks]
+    evidence_candidates = _retrieve_evidence(project_id, section_key, run_id=run_id)
+    evidence_texts = [candidate.content for candidate in evidence_candidates]
 
     # Look up scenario-specific system prompt
     system_prompt = None
@@ -134,6 +157,12 @@ def run_draft(
     provider_params = None
     if provider_config_id:
         provider_params = get_provider_by_id(provider_config_id)
+        if provider_params is None:
+            raise ProviderInvocationError(
+                "provider_config_missing",
+                "所选模型提供商配置已不可用，请重新选择后再试。",
+                retryable=False,
+            )
 
     provider_config_dict = None
     if provider_params:
@@ -161,12 +190,25 @@ def run_draft(
             reasoning_effort=reasoning_effort,
         )
 
+    record_workflow_model_usage(
+        run_id=run_id,
+        provider_type=provider_params.provider_type if provider_params else "openai",
+        model_name=result.model_used,
+        measurement=result.usage,
+    )
+
     # Write section version if a matching section exists
     section_version_id = None
     db = SessionLocal()
     try:
         section = db.scalar(
-            select(DeliverableSection).where(DeliverableSection.section_key == section_key).limit(1)
+            select(DeliverableSection)
+            .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
+            .where(
+                Deliverable.project_id == project_id,
+                DeliverableSection.section_key == section_key,
+            )
+            .limit(1)
         )
         if section is not None:
             # Determine next version number
@@ -189,11 +231,11 @@ def run_draft(
             section_version_id = sv.id
 
             # Link evidence to this section version
-            if chunks:
-                _link_evidence(db, project_id, section_version_id, chunks)
+            if evidence_candidates:
+                _link_evidence(db, project_id, section_version_id, evidence_candidates)
 
             # If no evidence found, add a missing-evidence marker
-            if not chunks:
+            if not evidence_candidates:
                 ev = Evidence(
                     project_id=project_id,
                     section_version_id=section_version_id,
@@ -217,7 +259,7 @@ def run_draft(
             run.output_json = {
                 "section_key": section_key,
                 "model_used": result.model_used,
-                "evidence_count": len(chunks),
+                "evidence_count": len(evidence_candidates),
                 "section_version_id": section_version_id,
             }
             db.commit()

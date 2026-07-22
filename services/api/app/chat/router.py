@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
 from app.db import get_db
-from app.models import ChatConversation, ChatMessage as ChatMessageModel
+from app.models import ChatMessage as ChatMessageModel
 
 from .schemas import ChatConversationRead, ChatConversationUpdate, ChatHistoryRead, ChatMessage, ChatRequest
 from .service import (
@@ -17,6 +17,7 @@ from .service import (
     get_conversation_messages,
     list_conversations,
     rename_conversation,
+    resolve_conversation_project_context,
     stream_chat_response,
 )
 
@@ -63,14 +64,20 @@ async def chat_stream(
     appended to an existing conversation.  Otherwise a new conversation
     is created.
     """
+    project_id = resolve_conversation_project_context(
+        db,
+        user,
+        conversation_id=payload.conversation_id,
+        requested_project_id=payload.project_id,
+    )
     history = [{"role": m.role, "content": m.content} for m in payload.conversation_history]
 
     return StreamingResponse(
         stream_chat_response(
             db=db,
-            user_id=user.id,
+            user=user,
             message=payload.message,
-            project_id=payload.project_id,
+            project_id=project_id,
             conversation_history=history,
             provider_config_id=payload.provider_config_id,
             conversation_id=payload.conversation_id,
@@ -94,6 +101,13 @@ def list_chat_conversations(
 
     Optionally filter by project_id.
     """
+    if project_id:
+        resolve_conversation_project_context(
+            db,
+            user,
+            conversation_id=None,
+            requested_project_id=project_id,
+        )
     conversations = list_conversations(db, user.id, project_id)
     return [
         ChatConversationRead(
@@ -116,6 +130,12 @@ def get_chat_history(
     conversation = get_conversation(db, conversation_id, user.id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    resolve_conversation_project_context(
+        db,
+        user,
+        conversation_id=conversation_id,
+        requested_project_id=None,
+    )
 
     messages = get_conversation_messages(db, conversation_id)
     return ChatHistoryRead(
@@ -133,6 +153,12 @@ def update_chat_conversation(
 ):
     """Rename a chat conversation."""
     try:
+        resolve_conversation_project_context(
+            db,
+            user,
+            conversation_id=conversation_id,
+            requested_project_id=None,
+        )
         conversation = rename_conversation(db, conversation_id, user.id, payload.title)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -158,5 +184,11 @@ def delete_chat_conversation(
     conversation = get_conversation(db, conversation_id, user.id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    resolve_conversation_project_context(
+        db,
+        user,
+        conversation_id=conversation_id,
+        requested_project_id=None,
+    )
     db.delete(conversation)
     db.commit()

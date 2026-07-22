@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
@@ -9,12 +9,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/lib/auth";
+import { toast } from "sonner";
 import CountUp from "@/components/CountUp";
 import { ProductReveal, ProductShinyText } from "@/components/reactbits-product";
 import {
-  listProjects, listExecutionRuns, listProviderConfigs,
-  type ProjectRead, type ExecutionRunRead,
+  createDemoProject, listProjects, listProviderConfigs, listRuntimeRuns,
+  type ProjectRead, type RuntimeRunListItem,
 } from "@/lib/api";
 import {
   FolderIcon, FileTextIcon, ClipboardCheckIcon, CheckCircleIcon,
@@ -27,19 +29,13 @@ function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       <Skeleton className="h-8 w-64" />
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 12rem), 1fr))" }}
-      >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Card key={i}><CardHeader><Skeleton className="h-4 w-24" /><Skeleton className="h-7 w-16 mt-1" /></CardHeader></Card>
         ))}
       </div>
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
-      >
-        <Card className="lg:col-span-2"><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent>{Array.from({ length: 4 }).map((_, i) => (<Skeleton key={i} className="h-10 w-full mb-2" />))}</CardContent></Card>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent>{Array.from({ length: 4 }).map((_, i) => (<Skeleton key={i} className="h-10 w-full mb-2" />))}</CardContent></Card>
         <Card><CardHeader><Skeleton className="h-5 w-32" /></CardHeader><CardContent>{Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-10 w-full mb-2" />))}</CardContent></Card>
       </div>
     </div>
@@ -91,8 +87,9 @@ function RecentActivityItem({
 }
 
 export function DashboardPage() {
-  const { t } = useTranslation(["dashboard", "common"]);
+  const { t } = useTranslation(["dashboard", "common", "runs"]);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
 
   const { data: projects, isLoading: projectsLoading } = useQuery<ProjectRead[]>({
@@ -102,26 +99,9 @@ export function DashboardPage() {
     retry: 2,
   });
 
-  const { data: allRuns } = useQuery<ExecutionRunRead[]>({
+  const { data: allRuns } = useQuery<RuntimeRunListItem[]>({
     queryKey: ["dashboard-runs"],
-    queryFn: async () => {
-      if (!projects || projects.length === 0) return [];
-      const results: ExecutionRunRead[][] = [];
-      for (const project of projects) {
-        try {
-          const runs = await listExecutionRuns(project.id);
-          results.push(runs);
-        } catch (error) {
-          console.warn(`Failed to fetch runs for project ${project.id}:`, error);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      return results
-        .flatMap((r) => r)
-        .sort((a, b) => new Date(b.output_json?.created_at as string ?? 0).getTime() - new Date(a.output_json?.created_at as string ?? 0).getTime())
-        .slice(0, 10);
-    },
-    enabled: !!projects && projects.length > 0,
+    queryFn: () => listRuntimeRuns(10),
     staleTime: 2 * 60 * 1000,
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
@@ -131,6 +111,18 @@ export function DashboardPage() {
     queryKey: ["provider-configs"],
     queryFn: listProviderConfigs,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const demoMut = useMutation({
+    mutationFn: createDemoProject,
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success(t("dashboard:empty.demoCreated"));
+      navigate(`/projects/${project.id}`);
+    },
+    onError: () => {
+      toast.error(t("dashboard:empty.demoCreateFailed"));
+    },
   });
 
   const statusCounts = projects?.reduce(
@@ -157,7 +149,7 @@ export function DashboardPage() {
 
   const activeProviders = providerData?.data?.filter((p) => p.is_active).length ?? 0;
   const totalProviders = providerData?.data?.length ?? 0;
-  const totalDrafts = allRuns?.filter((r) => r.run_type === "draft").length ?? 0;
+  const totalDrafts = allRuns?.filter((run) => run.kind === "workflow_bridge").length ?? 0;
 
   // Plan limits for progress bar
   const planLimit = user?.plan === "starter" ? 3 : -1;
@@ -202,14 +194,10 @@ export function DashboardPage() {
           </div>
         </ProductReveal>
 
-        <div
-          className="grid gap-4"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 22rem), 1fr))" }}
-        >
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
           <Card className="h-full min-w-0 overflow-hidden border-primary/20 bg-gradient-to-br from-sky-500/10 via-indigo-500/5 to-background shadow-[0_24px_90px_rgba(79,70,229,0.12)]">
               <CardContent
-                className="grid gap-6 p-5 sm:p-6"
-                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))" }}
+                className="grid grid-cols-1 gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_16rem]"
               >
                 <div className="min-w-0">
                   <Badge variant="secondary" className="mb-4 w-fit">
@@ -226,6 +214,10 @@ export function DashboardPage() {
                     <Button onClick={() => navigate("/projects")} className="group">
                       {t("dashboard:empty.primaryCta", { defaultValue: "Create workspace" })}
                       <ArrowRightIcon className="ml-2 size-4 transition-transform group-hover:translate-x-0.5" />
+                    </Button>
+                    <Button variant="outline" onClick={() => demoMut.mutate()} disabled={demoMut.isPending}>
+                      {demoMut.isPending && <Spinner data-icon="inline-start" />}
+                      {t("dashboard:empty.demoCta", { defaultValue: "Explore a demo workspace" })}
                     </Button>
                     <Button variant="outline" onClick={() => navigate("/settings/providers")}>
                       <SettingsIcon className="mr-2 size-4" />
@@ -273,7 +265,7 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))" }}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {emptySteps.map((step, index) => {
             const Icon = step.icon;
             return (
@@ -282,6 +274,7 @@ export function DashboardPage() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, delay: index * 0.08, ease: [0.32, 0.72, 0, 1] }}
+                className="min-w-0"
               >
                   <Card className="h-full transition-shadow hover:shadow-[0_18px_55px_rgba(79,70,229,0.10)]">
                     <CardHeader>
@@ -318,10 +311,7 @@ export function DashboardPage() {
       </ProductReveal>
 
       {/* Stats cards - stagger入场 + CountUp数字动画 */}
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 12rem), 1fr))" }}
-      >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((stat, i) => {
           const { Icon, bg, color } = STAT_ICONS[i];
           return (
@@ -330,6 +320,7 @@ export function DashboardPage() {
               initial={{ opacity: 0, y: 16, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.5, delay: i * 0.08, ease: [0.32, 0.72, 0, 1] }}
+              className="min-w-0"
             >
                 <Card className="h-full w-full transition-shadow hover:shadow-md">
                   <CardHeader className="pb-2">
@@ -384,16 +375,13 @@ export function DashboardPage() {
       )}
 
       {/* Main content: activity + quick actions */}
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
-      >
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]">
         {/* Recent Activity with timeline */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.4, ease: [0.32, 0.72, 0, 1] }}
-          className="lg:col-span-2"
+          className="min-w-0"
         >
             <Card className="h-full w-full">
               <CardHeader>
@@ -420,7 +408,7 @@ export function DashboardPage() {
                     <div className="flex flex-wrap gap-2">
                       {allRuns.slice(0, 5).map((run) => (
                         <Badge key={run.id} variant="secondary" className="text-xs">
-                          {run.run_type} &middot; {run.status}
+                          {t(`runs:kinds.${run.kind}`, { defaultValue: run.kind })} &middot; {t(`statusValues.${run.status}`, { defaultValue: run.status })}
                         </Badge>
                       ))}
                     </div>
@@ -431,7 +419,7 @@ export function DashboardPage() {
         </motion.div>
 
         {/* Right column: Quick Actions + AI Usage */}
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}

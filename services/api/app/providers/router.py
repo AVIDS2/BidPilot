@@ -30,7 +30,7 @@ def create_provider(payload: ProviderConfigCreate, user=Depends(require_auth), d
     """Create a new provider configuration."""
     try:
         config = create_provider_config(db, user.id, payload)
-    except SecretConfigurationError as exc:
+    except (SecretConfigurationError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"data": mask_read_config(config)}
 
@@ -49,7 +49,7 @@ def update_provider(config_id: str, payload: ProviderConfigUpdate, user=Depends(
     """Update a provider configuration."""
     try:
         config = update_provider_config(db, config_id, user.id, payload)
-    except SecretConfigurationError as exc:
+    except (SecretConfigurationError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if config is None:
         raise HTTPException(status_code=404, detail="Provider config not found")

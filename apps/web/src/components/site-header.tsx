@@ -14,6 +14,9 @@ export function SiteHeader() {
 
   const title = (() => {
     if (location.pathname === "/dashboard") return t("nav.dashboard");
+    if (location.pathname === "/agent") return t("nav.agent", { defaultValue: "智能体" });
+    if (location.pathname === "/knowledge") return t("nav.knowledge", { defaultValue: "知识资产" });
+    if (location.pathname === "/runs") return t("nav.runs", { defaultValue: "运行" });
     if (location.pathname === "/projects") return t("nav.projects");
     if (location.pathname.startsWith("/projects/")) return t("nav.projects");
     if (location.pathname === "/pricing") return t("nav.pricing", { defaultValue: "定价" });

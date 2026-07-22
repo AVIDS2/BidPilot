@@ -18,6 +18,7 @@ import time
 
 from langgraph.types import interrupt
 
+from app.runtime.events import publish_human_approval_requested, publish_human_approval_resolved
 from ..state import BidPilotState
 from ._history import record_agent_call
 
@@ -60,6 +61,12 @@ def human_approval_node(state: BidPilotState) -> dict:
         ),
     }
 
+    publish_human_approval_requested(
+        state.get("runtime_run_id"),
+        section_key=section_key,
+        review_score=review_result.get("overall_score") if review_result else None,
+    )
+
     # This pauses the graph.  On resume it returns the caller-supplied value.
     human_response = interrupt(interrupt_payload)
 
@@ -80,6 +87,8 @@ def human_approval_node(state: BidPilotState) -> dict:
         decision,
         feedback is not None,
     )
+
+    publish_human_approval_resolved(state.get("runtime_run_id"), decision=str(decision))
 
     history = record_agent_call(
         agent="human_approval",

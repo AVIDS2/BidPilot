@@ -4,6 +4,23 @@ from pathlib import Path
 
 import pytest
 
+
+# Configure a dedicated test database before any application module can create
+# an engine. CI already supplies docpilot_test; local runs must opt in.
+api_root = Path(__file__).resolve().parent.parent
+repo_root = api_root.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+from scripts.test_database_safety import UnsafeTestDatabaseError, resolve_test_database_url  # noqa: E402
+
+try:
+    _test_database_url = resolve_test_database_url(os.environ)
+except UnsafeTestDatabaseError as exc:
+    pytest.exit(str(exc), returncode=2)
+os.environ["DOCPILOT_DATABASE_URL"] = _test_database_url
+os.environ["DOCPILOT_TEST_DATABASE_URL"] = _test_database_url
+
 # Disable structlog JSON output during tests
 os.environ["DOCPILOT_LOGGING"] = "off"
 
@@ -22,16 +39,22 @@ os.environ["DOCPILOT_ASSISTANT_ENGINE"] = "deterministic"
 os.environ.pop("DOCPILOT_AUTH_REQUIRED", None)
 
 # Force console email backend in tests (don't hit real SMTP)
-os.environ.pop("DOCPILOT_SMTP_HOST", None)
-os.environ.pop("DOCPILOT_SMTP_USER", None)
+for _smtp_env_name in (
+    "DOCPILOT_SMTP_HOST",
+    "DOCPILOT_SMTP_USER",
+    "DOCPILOT_SMTP_PASS",
+    "DOCPILOT_SMTP_FROM",
+    "DOCPILOT_SMTP_FROM_NAME",
+    "DOCPILOT_SMTP_PORT",
+    "DOCPILOT_SMTP_TLS",
+):
+    os.environ.pop(_smtp_env_name, None)
 
 # Ensure the app package is importable from the services/api root
-api_root = Path(__file__).resolve().parent.parent
 if str(api_root) not in sys.path:
     sys.path.insert(0, str(api_root))
 
 # Ensure shared packages are importable
-repo_root = api_root.parent.parent
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
@@ -60,33 +83,59 @@ def client():
     return TestClient(app)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def ensure_recent_tables():
-    """Keep route-level tests independent from local migration state."""
-    from app.db import engine
-    from app.models import Notification, UsageEvent
-
-    Notification.__table__.create(bind=engine, checkfirst=True)
-    UsageEvent.__table__.create(bind=engine, checkfirst=True)
-
-
 @pytest.fixture(autouse=True)
 def reset_usage_events():
     """Prevent shared dev-user quota counters from leaking across tests."""
     from sqlalchemy import delete
 
     from app.db import SessionLocal
-    from app.models import UsageEvent
+    from app.models import (
+        ModelUsageRecord,
+        ModelUsageReservation,
+        OrganizationUsageBudget,
+        OrganizationUsageBudgetEvent,
+        UsageEvent,
+    )
 
     db = SessionLocal()
     try:
+        db.execute(delete(ModelUsageRecord))
+        db.execute(delete(ModelUsageReservation))
+        db.execute(delete(OrganizationUsageBudgetEvent))
+        db.execute(delete(OrganizationUsageBudget))
         db.execute(delete(UsageEvent))
         db.commit()
         yield
     finally:
+        db.execute(delete(ModelUsageRecord))
+        db.execute(delete(ModelUsageReservation))
+        db.execute(delete(OrganizationUsageBudgetEvent))
+        db.execute(delete(OrganizationUsageBudget))
         db.execute(delete(UsageEvent))
         db.commit()
         db.close()
+
+
+@pytest.fixture(autouse=True)
+def reset_auth_rate_limiter_state():
+    """Keep local in-memory auth budgets isolated between test cases."""
+    from app.auth import service as auth_service
+
+    limiters = (
+        auth_service.login_rate_limiter,
+        auth_service.resend_rate_limiter,
+        auth_service.registration_rate_limiter,
+        auth_service.password_reset_rate_limiter,
+    )
+    for limiter in limiters:
+        attempts = getattr(limiter, "_attempts", None)
+        if attempts is not None:
+            attempts.clear()
+    yield
+    for limiter in limiters:
+        attempts = getattr(limiter, "_attempts", None)
+        if attempts is not None:
+            attempts.clear()
 
 
 @pytest.fixture
@@ -130,7 +179,7 @@ def default_user_id(default_org_id: str) -> str:
     This fixture creates a matching User row so FK constraints (e.g. provider_config.user_id) pass.
     """
     from app.db import SessionLocal
-    from app.models import User
+    from app.models import OrganizationMembership, User
     import bcrypt
 
     db = SessionLocal()
@@ -146,8 +195,24 @@ def default_user_id(default_org_id: str) -> str:
                 password_hash=bcrypt.hashpw(b"dummy", bcrypt.gensalt()).decode(),
             )
             db.add(user)
-            db.commit()
-            db.refresh(user)
+            db.flush()
+        membership = db.query(OrganizationMembership).filter_by(
+            org_id=default_org_id,
+            user_id=user.id,
+        ).first()
+        if membership is None:
+            db.add(
+                OrganizationMembership(
+                    org_id=default_org_id,
+                    user_id=user.id,
+                    role="owner",
+                )
+            )
+        elif membership.status != "active":
+            membership.status = "active"
+            membership.removed_at = None
+        db.commit()
+        db.refresh(user)
         return user.id
     finally:
         db.close()

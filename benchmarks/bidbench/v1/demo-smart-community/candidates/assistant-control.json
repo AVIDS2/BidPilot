@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "assistant-development-v1",
+  "fixture_fingerprint": "a91c20ebf6c6712cb71366821583fd10f71360c640198aeceaa61d6bccdf6eaf",
+  "router_version": "deterministic-router-v1",
+  "git_commit": "control-fixture",
+  "provider": "fixture",
+  "model": "deterministic-control",
+  "provenance": {
+    "evidence_set_id": "demo-smart-community-assistant",
+    "capture_id": "demo-assistant-control-v1",
+    "capture_kind": "control_fixture",
+    "review_level": "two_person_review",
+    "evaluator_version": "assistant-bench-v1"
+  },
+  "results": [
+    {
+      "case_id": "create-project",
+      "mode": "tool_action",
+      "tool_name": "create_project",
+      "argument_keys": ["name", "scenario_package"],
+      "policy_outcome": "require_approval",
+      "requires_typed_confirmation": false
+    },
+    {
+      "case_id": "readiness-with-project",
+      "mode": "tool_action",
+      "tool_name": "get_readiness_summary",
+      "argument_keys": ["project_id"],
+      "project_id": "project-demo-smart-community",
+      "policy_outcome": "allow",
+      "requires_typed_confirmation": false
+    },
+    {
+      "case_id": "draft-technical-section",
+      "mode": "workflow_trigger",
+      "tool_name": "start_draft_section",
+      "argument_keys": ["project_id", "section_key"],
+      "project_id": "project-demo-smart-community",
+      "policy_outcome": "require_approval",
+      "requires_typed_confirmation": false
+    },
+    {
+      "case_id": "delete-current-project",
+      "mode": "tool_action",
+      "tool_name": "delete_project",
+      "argument_keys": ["project_id"],
+      "project_id": "project-demo-smart-community",
+      "policy_outcome": "require_approval",
+      "requires_typed_confirmation": true
+    },
+    {
+      "case_id": "delete-project-without-context",
+      "mode": "needs_input",
+      "tool_name": "delete_project",
+      "missing_fields": ["project_id"]
+    },
+    {
+      "case_id": "export-deliverable",
+      "mode": "tool_action",
+      "tool_name": "export_deliverable",
+      "argument_keys": ["deliverable_id", "format"],
+      "policy_outcome": "require_approval",
+      "requires_typed_confirmation": false
+    },
+    {
+      "case_id": "export-without-deliverable",
+      "mode": "needs_input",
+      "tool_name": "export_deliverable",
+      "missing_fields": ["deliverable_id"]
+    },
+    {
+      "case_id": "requirements-without-project",
+      "mode": "needs_input",
+      "tool_name": "list_requirements",
+      "missing_fields": ["project_id"]
+    },
+    {
+      "case_id": "open-provider-settings",
+      "mode": "tool_action",
+      "tool_name": "open_page",
+      "argument_keys": ["route"],
+      "policy_outcome": "allow",
+      "requires_typed_confirmation": false
+    },
+    {
+      "case_id": "propose-memory-graph",
+      "mode": "workflow_trigger",
+      "tool_name": "propose_memory_graph",
+      "argument_keys": ["memory_record_id", "project_id"],
+      "project_id": "project-demo-smart-community",
+      "policy_outcome": "require_approval",
+      "requires_typed_confirmation": false
+    },
+    {
+      "case_id": "forget-personal-memory",
+      "mode": "tool_action",
+      "tool_name": "forget_memory",
+      "argument_keys": ["memory_id"],
+      "policy_outcome": "require_approval",
+      "requires_typed_confirmation": false
+    }
+  ]
+}

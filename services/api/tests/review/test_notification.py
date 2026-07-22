@@ -2,6 +2,7 @@
 import uuid
 from unittest.mock import patch
 
+from app.auth.schemas import CurrentUser
 from app.review.schemas import ReviewDecisionCreate
 from app.review.service import submit_review_decision_command
 from app.models import Project, Deliverable, DeliverableSection, ReviewThread, ReviewComment, AuditEvent
@@ -9,6 +10,20 @@ from app.models import Project, Deliverable, DeliverableSection, ReviewThread, R
 
 def _unique_id() -> str:
     return uuid.uuid4().hex[:8]
+
+
+def _admin_user() -> CurrentUser:
+    return CurrentUser(
+        id="dev-user",
+        email="dev@docpilot.local",
+        display_name="Dev User",
+        role="admin",
+        plan="professional",
+        email_verified=True,
+        disabled=False,
+        org_id="00000000-0000-0000-0000-000000000001",
+        org_slug="default",
+    )
 
 
 def test_approve_sends_notification(test_db):
@@ -30,7 +45,7 @@ def test_approve_sends_notification(test_db):
 
     payload = ReviewDecisionCreate(section_id=sid, decision="approved", comment="Looks good")
     with patch("app.review.service.send_review_notification_email") as mock_send:
-        result = submit_review_decision_command(test_db, payload)
+        result = submit_review_decision_command(test_db, payload, _admin_user())
 
     assert result.decision == "approved"
     mock_send.assert_called_once()
@@ -71,7 +86,7 @@ def test_reject_sends_notification(test_db):
 
     payload = ReviewDecisionCreate(section_id=sid, decision="rejected", comment="Needs work")
     with patch("app.review.service.send_review_notification_email") as mock_send:
-        submit_review_decision_command(test_db, payload)
+        submit_review_decision_command(test_db, payload, _admin_user())
 
     mock_send.assert_called_once()
 

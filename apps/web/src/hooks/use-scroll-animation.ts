@@ -63,7 +63,7 @@ export function useScrollAnimation(options: ScrollAnimationOptions = {}) {
  * Stagger-aware variant: returns a function that returns a delay for each child index.
  */
 export function useStaggerAnimation(
-  count: number,
+  _count: number,
   baseDelay = 80,
   options: Omit<ScrollAnimationOptions, "delay"> = {},
 ) {

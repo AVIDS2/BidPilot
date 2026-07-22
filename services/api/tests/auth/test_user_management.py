@@ -27,7 +27,6 @@ def _register_and_login(email: str | None = None) -> tuple[str, str]:
 
 def _admin_token() -> str:
     """Get an admin token using dev fallback."""
-    resp = client.get("/auth/me")
     return ""  # dev mode doesn't need token
 
 
@@ -288,6 +287,76 @@ def test_delete_account():
 def test_delete_account_requires_auth():
     resp = client.delete("/auth/me")
     assert resp.status_code == 401
+
+
+def test_delete_account_rejects_team_owner_until_ownership_is_transferred():
+    email, token = _register_and_login()
+
+    from app.db import get_db
+    from app.models import Organization, OrganizationMembership, User
+
+    db = next(get_db())
+    user = db.query(User).filter_by(email=email).one()
+    team_workspace = Organization(
+        slug=f"team-delete-{uuid.uuid4().hex[:8]}",
+        name="Deletion Guard Team",
+        workspace_kind="team",
+    )
+    db.add(team_workspace)
+    db.flush()
+    db.add(
+        OrganizationMembership(
+            org_id=team_workspace.id,
+            user_id=user.id,
+            role="owner",
+            status="active",
+        )
+    )
+    db.commit()
+
+    resp = client.delete("/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert resp.status_code == 409
+    assert "ownership" in resp.json()["detail"].lower()
+    assert db.get(User, user.id) is not None
+
+
+def test_delete_account_rejects_team_billing_owner_until_transfer():
+    email, token = _register_and_login()
+
+    from app.db import get_db
+    from app.models import Organization, OrganizationMembership, OrganizationSubscription, User
+
+    db = next(get_db())
+    user = db.query(User).filter_by(email=email).one()
+    team_workspace = Organization(
+        slug=f"billing-delete-{uuid.uuid4().hex[:8]}",
+        name="Billing Guard Team",
+        workspace_kind="team",
+    )
+    db.add(team_workspace)
+    db.flush()
+    db.add(
+        OrganizationMembership(
+            org_id=team_workspace.id,
+            user_id=user.id,
+            role="member",
+            status="active",
+        )
+    )
+    db.add(
+        OrganizationSubscription(
+            org_id=team_workspace.id,
+            billing_owner_user_id=user.id,
+        )
+    )
+    db.commit()
+
+    resp = client.delete("/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert resp.status_code == 409
+    assert "billing" in resp.json()["detail"].lower()
+    assert db.get(User, user.id) is not None
 
 
 # --- Data export ---

@@ -7,9 +7,8 @@ Each node receives the full state and returns a partial update.
 from __future__ import annotations
 
 import operator
-from typing import Annotated, TypedDict
+from typing import Annotated, NotRequired, TypedDict
 
-from langgraph.graph import add_messages
 
 
 class AgentCall(TypedDict):
@@ -25,18 +24,31 @@ class AgentCall(TypedDict):
 
 
 class EvidenceChunk(TypedDict):
-    """A single retrieved knowledge chunk with its similarity score."""
+    """A single retrieved chunk with ranking signals and validated locator metadata."""
 
     chunk_id: str
     source_document_id: str
     content: str
-    cosine_distance: float
+    retrieval_score: float
+    retrieval_methods: list[str]
+    locator_json: dict
     chunk_index: int
 
 
-class Requirement(TypedDict):
-    """A single extracted requirement from the RFP."""
+class MemoryContextEntry(TypedDict):
+    """A compact, provenance-preserving memory excerpt safe for one workflow."""
 
+    title: str
+    body_markdown: str
+    scope: str
+    kind: str
+    citations: list[str]
+
+
+class Requirement(TypedDict):
+    """A requirement before or after it receives a durable ledger identifier."""
+
+    id: NotRequired[str]
     section_key: str
     requirement_text: str
     priority: str  # "high" | "normal" | "low"
@@ -51,6 +63,15 @@ class ReviewResult(TypedDict):
     overall_score: float
 
 
+class ClaimCandidate(TypedDict):
+    """A server-validated draft assertion awaiting human verification."""
+
+    claim_text: str
+    claim_type: str
+    requirement_ids: list[str]
+    evidence_chunk_ids: list[str]
+
+
 class BidPilotState(TypedDict):
     """Shared state for the BidPilot LangGraph agent.
 
@@ -63,6 +84,7 @@ class BidPilotState(TypedDict):
     project_id: str
     section_key: str
     run_id: str
+    runtime_run_id: str | None
     provider_config_id: str | None
     reasoning_effort: str | None
     input_review_feedback: str | None  # feedback from prior review round (redraft input)
@@ -75,14 +97,24 @@ class BidPilotState(TypedDict):
     evidence_chunks: list[EvidenceChunk]
     evidence_retrieved: bool
 
+    # ── Governed memory context ───────────────────────────────────────
+    memory_context_loaded: bool
+    memory_context_items: list[MemoryContextEntry]
+    memory_context_version: str | None
+    memory_context_degraded_reasons: list[str]
+    memory_proposal_ids: list[str]
+
     # ── Section drafter output ─────────────────────────────────────────
     draft_markdown: str
     draft_model_used: str
     draft_created: bool
+    provider_error_code: str | None
 
     # ── Quality reviewer output ────────────────────────────────────────
     review_result: ReviewResult
     review_passed: bool
+    claim_candidates: list[ClaimCandidate]
+    claim_integrity_status: str
 
     # ── Persist output ─────────────────────────────────────────────────
     section_version_id: str | None

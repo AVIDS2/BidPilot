@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from contracts.db import Base
 
+__all__ = ["Base", "DATABASE_URL", "SessionLocal", "engine", "get_db"]
 
 DATABASE_URL = os.environ.get(
     "DOCPILOT_DATABASE_URL",

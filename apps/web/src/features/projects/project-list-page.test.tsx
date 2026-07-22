@@ -25,6 +25,7 @@ vi.mock("sonner", () => ({
 // Mock the API module - individual test callbacks override behavior via vi.mocked
 vi.mock("@/lib/api", () => ({
   listProjects: vi.fn(),
+  createDemoProject: vi.fn(),
   createProject: vi.fn(),
   updateProjectStatus: vi.fn(),
   deleteProject: vi.fn(),

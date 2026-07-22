@@ -111,7 +111,7 @@ Organization (租户根)
 | **LangGraph** | 0.4+ | 多Agent工作流编排 |
 | **pgvector** | - | PostgreSQL向量检索扩展 |
 | **structlog** | - | 结构化日志 |
-| **slowapi** | - | API速率限制 |
+| **Redis 固定窗口限流器** | - | 生产级全局 API 与认证入口限流 |
 | **bcrypt** | - | 密码哈希 |
 | **PyJWT** | - | JWT认证 |
 

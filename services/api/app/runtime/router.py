@@ -1,0 +1,156 @@
+"""Read-only runtime run and event replay endpoints."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.auth.schemas import CurrentUser
+from app.auth.service import require_auth
+from app.db import get_db
+from app.models import RuntimeAction, RuntimeApproval, RuntimeRun
+
+from .events import list_events_after
+from .repository import get_visible_runtime_run
+from .schemas import (
+    RuntimeActionResolutionRead,
+    RuntimeApprovalResolveRequest,
+    RuntimeEventRead,
+    RuntimeEventsResponse,
+    RuntimeRunListItem,
+    RuntimeRunRead,
+)
+from .service import (
+    RuntimeApprovalExpiredError,
+    RuntimeApprovalResolvedError,
+    list_runtime_runs_query,
+    request_workflow_cancellation,
+    resolve_approval,
+)
+
+
+router = APIRouter(prefix="/runtime", tags=["runtime"])
+
+
+@router.get("/runs", response_model=list[RuntimeRunListItem])
+def list_runtime_runs(
+    limit: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> list[RuntimeRunListItem]:
+    return [
+        RuntimeRunListItem(
+            id=row.run.id,
+            kind=row.run.kind,
+            status=row.run.status,
+            project_id=row.run.project_id,
+            project_name=row.project_name,
+            engine=row.run.engine,
+            created_at=row.run.created_at,
+            started_at=row.run.started_at,
+            finished_at=row.run.finished_at,
+            latest_event_summary=row.latest_event_summary,
+        )
+        for row in list_runtime_runs_query(db, current_user, limit=limit)
+    ]
+
+
+@router.get("/runs/{run_id}", response_model=RuntimeRunRead)
+def get_runtime_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> RuntimeRunRead:
+    run = get_visible_runtime_run(db, run_id, current_user)
+    return RuntimeRunRead(
+        id=run.id,
+        kind=run.kind,
+        status=run.status,
+        project_id=run.project_id,
+        conversation_id=run.conversation_id,
+        execution_run_id=run.execution_run_id,
+        engine=run.engine,
+        trace_id=run.trace_id,
+        parent_run_id=run.parent_run_id,
+    )
+
+
+@router.get("/runs/{run_id}/events", response_model=RuntimeEventsResponse)
+def replay_runtime_events(
+    run_id: str,
+    after_sequence: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> RuntimeEventsResponse:
+    get_visible_runtime_run(db, run_id, current_user)
+    events = list_events_after(db, run_id, after_sequence=after_sequence)
+    return RuntimeEventsResponse(
+        items=[
+            RuntimeEventRead(
+                run_id=event.run_id,
+                sequence=event.sequence,
+                type=event.event_type,
+                public_summary=event.public_summary,
+                payload=event.payload_json or {},
+                schema_version=event.schema_version,
+            )
+            for event in events
+        ]
+    )
+
+
+@router.post("/runs/{run_id}/cancel", response_model=RuntimeRunRead)
+def cancel_runtime_workflow(
+    run_id: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> RuntimeRunRead:
+    try:
+        run = request_workflow_cancellation(db, current_user, run_id=run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RuntimeRunRead(
+        id=run.id,
+        kind=run.kind,
+        status=run.status,
+        project_id=run.project_id,
+        conversation_id=run.conversation_id,
+        execution_run_id=run.execution_run_id,
+        engine=run.engine,
+        trace_id=run.trace_id,
+        parent_run_id=run.parent_run_id,
+    )
+
+
+@router.post("/approvals/{approval_id}/resolve", response_model=RuntimeActionResolutionRead)
+def resolve_runtime_approval(
+    approval_id: str,
+    payload: RuntimeApprovalResolveRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> RuntimeActionResolutionRead:
+    approval = db.get(RuntimeApproval, approval_id)
+    if approval is not None and approval.user_id == current_user.id and approval.org_id == current_user.org_id:
+        action = db.get(RuntimeAction, approval.action_id)
+        run = db.get(RuntimeRun, action.run_id) if action is not None else None
+        if run is not None and run.engine == "langgraph_operator":
+            raise HTTPException(
+                status_code=409,
+                detail="This approval must be resumed through the assistant runtime.",
+            )
+    try:
+        result = resolve_approval(
+            db,
+            current_user,
+            approval_id=approval_id,
+            decision=payload.decision,
+            edited_arguments=payload.edited_arguments,
+        )
+    except (RuntimeApprovalExpiredError, RuntimeApprovalResolvedError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return RuntimeActionResolutionRead(
+        action_id=result.action.id,
+        status=result.action.status,
+        public_summary=result.action.public_summary,
+        approval_status=result.approval.status if result.approval is not None else None,
+    )

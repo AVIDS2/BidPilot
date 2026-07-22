@@ -1,0 +1,39 @@
+{
+  "title": "Knowledge Portfolio",
+  "subtitle": "See where evidence-backed Bid Wiki knowledge is ready, waiting for review, or needs source material.",
+  "refresh": "Refresh",
+  "metrics": {
+    "projects": "Visible projects",
+    "sharedKnowledge": "Shared records",
+    "reviewQueue": "Review queue"
+  },
+  "filters": {
+    "all": "All",
+    "ready": "Knowledge ready",
+    "review": "Needs review",
+    "empty": "No shared knowledge"
+  },
+  "projectsTitle": "Project knowledge",
+  "projectsDescription": "{{count}} accessible project{{count, plural, one {} other {s}}}; open a project to inspect evidence and proposals.",
+  "sharedCount_one": "{{count}} shared record",
+  "sharedCount_other": "{{count}} shared records",
+  "proposalCount_one": "{{count}} proposal awaiting review",
+  "proposalCount_other": "{{count}} proposals awaiting review",
+  "notCompiled": "Not compiled",
+  "noSharedKnowledge": "No shared knowledge compiled yet",
+  "updatedAt": "Updated {{date}}",
+  "compiledAt": "Compiled {{date}}",
+  "openBidWiki": "Open Bid Wiki",
+  "openProjects": "Open projects",
+  "emptyTitle": "No project knowledge is visible yet",
+  "emptyDescription": "Create or open a project, ingest source material, then compile the project Bid Wiki for review.",
+  "emptyFilterTitle": "No projects match this filter",
+  "emptyFilterDescription": "Choose another portfolio filter or open a project to build governed knowledge.",
+  "compilationStatuses": {
+    "queued": "Compilation queued",
+    "running": "Compiling",
+    "succeeded": "Compiled",
+    "failed": "Compilation failed",
+    "dispatch_failed": "Compilation unavailable"
+  }
+}

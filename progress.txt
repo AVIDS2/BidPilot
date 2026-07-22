@@ -1,29 +1,339 @@
 # BidPilot Development and Learning Progress
 
-Updated: 2026-07-14
+Updated: 2026-07-22
 
 ## Current State
 
+- The core local source-release rehearsal now passes end to end against the
+  dedicated `_test` database: migrations, API `666 passed`, Worker `127
+  passed`, API/Worker Ruff, frontend TypeScript, frontend `28 files / 106
+  tests`, and production web build. The rehearsal exposed one stale Platform
+  Shell test mock after the Assistant context added `dispatch`; the mock now
+  mirrors the production hook contract. This is reproducible source evidence,
+  not a substitute for a real VPS deployment, authenticated browser golden
+  path, provider trace, backup/restore drill, or retained CI artifact.
+- Public Playwright smoke is now deterministic: it starts an isolated Vite
+  server on port `5174` and only reuses a server when explicitly requested.
+  The current desktop and Pixel 7 unauthenticated suites pass `18` checks;
+  `22` API/demo-dependent cases remain deliberately skipped until a seeded
+  environment is supplied. This verifies current source routes rather than an
+  arbitrary developer process, but is not yet an authenticated deployed
+  golden-path artifact.
+- `scripts/release_rehearsal.py` can now retain a redacted JSON evidence
+  artifact through `--output-file`: Git commit metadata, tracked-worktree
+  state, gate names, return codes, durations, and result only. It intentionally
+  excludes environment variables, database URLs, command output, provider
+  diagnostics, and source content. The locally generated artifact has eight
+  passing gates and no sensitive markers, but marks the current dirty worktree
+  and therefore cannot stand in for a clean-release artifact.
+- Untrusted Context Defense v1 is now applied across the model paths that
+  consume business-originated text: drafting, structured requirement/review
+  extraction, memory-graph extraction, the production LangGraph Operator, and
+  legacy chat/title generation. Evidence, document text, memory, attachments,
+  review feedback, and history are serialized as explicitly labelled
+  untrusted user-data packets rather than concatenated into system prompts.
+  A static guard, bounded risk markers, schema validation, capability policy,
+  approval, authorization, tenant scope, and audit remain complementary
+  controls; this is not a claim that prompt injection is solved by prompting.
+  Current local evidence: shared-contract `4 passed`, Worker `127 passed`, API
+  `665 passed`, Assistant/runtime UI `29 passed`, and production web build
+  passed. API/Worker Ruff, touched Python compilation, and frontend TypeScript
+  checks also pass. Real-provider red-team traces and retained CI evidence
+  remain open release requirements.
+- Claim Integrity v1 now closes the first durable response-trace loop in the
+  governed drafting graph: the existing quality-review model call can propose
+  only bounded verbatim draft assertions through local R/E aliases; the Worker
+  validates the aliases and persists draft `Claim`, requirement-claim,
+  requirement-evidence, and claim-evidence links transactionally with the
+  generated section version. The Requirement Ledger now lets a human reviewer
+  verify linked evidence before verifying an AI-proposed factual claim. No
+  model-generated claim is automatically trusted, no raw model result is
+  retained, and export remains intentionally ungated until controlled BidBench
+  and reviewer evidence justify a version-level policy. A Claim linked to
+  multiple requirements now stays unverified until the supporting evidence is
+  verified for every linked requirement; a successful review recomputes all
+  affected readiness profiles atomically.
+- The Agent now exposes a read-only Claim Review Queue through both the
+  production LangGraph Operator and the legacy compatibility path. It reports
+  only safe aggregate progress for AI-created draft claims; it never verifies
+  a claim, mutates evidence, or transmits draft claim text. An explicit
+  stale/deleted BYOK provider selection now fails safely instead of silently
+  falling back to a platform-funded model; only an absent selection can use the
+  governed official provider.
+- BidBench v2.1 now separates coarse unsupported-claim detection from
+  `claim_trace_integrity_rate`: accepted claims must map through matched
+  requirements and a frozen requirement/evidence support matrix. The metric is
+  optional for historic reports and only fails a gate when a reviewed policy
+  explicitly requires it. It is structural provenance evidence, not an
+  automatic semantic-truth judgment or a product export blocker.
+- Claim Integrity now has an offline runtime-capture adapter for controlled
+  BidBench evidence. A reviewed private manifest must exactly map one successful
+  drafting run, generated version, workflow bridge, and its current trace
+  topology before a candidate can be emitted. The candidate retains only frozen
+  benchmark references and opaque IDs; it excludes project/customer data,
+  durable IDs, text, locators, raw provider payloads, and reasoning. It remains
+  a manual two-person-reviewed release-evidence path, not a browser feature,
+  automatic approval, export gate, or production threshold.
+- Platform-funded LLM cost now has a hard staging/production boundary:
+  `DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING` is required by production
+  readiness, API workflow/Operator preflight, and Worker-owned physical model
+  dispatch. The durable ledger takes the stricter of that server ceiling and a
+  billing-owner's optional organization cap, locks the organization to prevent
+  concurrent first-request overspend, and keeps BYOK usage independent. The
+  same ledger now covers server-owned embeddings for indexing, retrieval, and
+  governed-memory recall: each request reserves before provider I/O, settles
+  provider-reported usage once, and retains ambiguous outcomes conservatively.
+  Indexing-job quotas remain a separate product limit; currency reconciliation
+  and a reviewed price catalogue are still open commercial work.
 - Production deployment is at commit `72593b2`.
+- Authenticated information architecture now foregrounds Workbench (Dashboard,
+  Agent, Projects), Execution (Knowledge Portfolio, Run Center), and Administration instead of
+  treating public Docs/Pricing and settings as peer work surfaces. `/agent`
+  reuses the governed Assistant state rather than creating a second chat.
+- The first cross-project Execution surface is implemented at `/runs`.
+  `GET /runtime/runs` is bounded, project-capability-scoped, and exposes only
+  safe RuntimeRun metadata plus the latest redacted event summary. It excludes
+  deleted-project runs, hides other users' non-project conversations from
+  non-admin callers, and reuses the exact durable event stream rendered by the
+  Assistant. The dashboard no longer performs an N-plus-one query for project
+  runs. Current targeted evidence: API Runtime/Assistant regression `77
+  passed`, web Agent/Run Center component coverage `27 passed`, TypeScript,
+  targeted Ruff, and production web build passed. An authenticated deployed
+  browser trace remains intentional release evidence.
+- Project Wiki scope hardening now separates SQL queries for project-shared
+  knowledge and the requesting user's own project-private preferences. A
+  teammate can no longer receive another member's private record through the
+  default project memory listing. Targeted memory command and Agent-tool tests
+  pass (`12 passed`) on an isolated SQLite `_test` database; PostgreSQL-only
+  dense/FTS context-pack coverage still needs the configured `docpilot_test`
+  database in this session.
+- The bounded Knowledge Portfolio is now delivered at `/knowledge`. Its one
+  aggregate API starts from project capability access and returns only
+  project-shared health, permission-aware proposal counts, and safe compilation
+  state. It deep-links to the project Bid Wiki rather than becoming global RAG
+  or a cross-project graph. The Assistant and LangGraph Operator share the
+  same read-only `list_knowledge_portfolio` capability; it can help select a
+  project but cannot return memory bodies, citations, private records, or a
+  context pack.
+- The project Knowledge tab now uses a separate bounded Evidence Map API
+  rather than joining browser-loaded memory records and citations. The server
+  returns only active, non-expired, project-shared record/source provenance
+  nodes and opaque `cites` edges after exact project capability checks. It is
+  deliberately not yet an LLM-derived entity graph, a global graph, or Agent
+  context; the follow-up requires reviewed entity/relation proposals plus
+  frozen graph-quality evaluation gates.
+- The next graph foundation is now implemented without enabling model graph
+  writes: `MemoryGraphProposal` constrains bid-domain entities, predicates,
+  canonicalization, endpoints, and typed source references; the API rejects a
+  graph proposal that points outside server-canonicalized memory evidence.
+  The new offline MemoryGraphBench measures schema validity, project scope
+  isolation, entity/relation precision and recall, and evidence grounding from
+  synthetic or controlled captures. Persistence/materialization remains gated
+  behind reviewed fixtures and a human-value experiment.
+- Controlled graph-extraction capture now has one source-bound, billable,
+  idempotent request path: its ExecutionRun, Runtime bridge, model reservation,
+  usage/audit record, and Outbox delivery commit together; repeated clicks
+  reuse a live/completed source snapshot instead of spending again, while a
+  terminal failure creates an auditable child retry with fresh capacity. The
+  Worker revalidates the source snapshot after model dispatch and stores only
+  a proposed, evidence-bound `entity_note`. The Knowledge tab renders safe
+  typed entities, relations, and source labels for approval; it never writes
+  `MemoryEntity`/`MemoryRelation`, injects graph claims into Agent context, or
+  exposes raw provider output. Controlled corpus capture, reviewer decisions,
+  relation edit/reject design, and measured GraphBench release gates remain
+  required before materialization.
+- MemoryGraphBench now has a private-manifest capture adapter that validates a
+  current source snapshot, successful execution/runtime bridge, scoped
+  per-item review ledger, and exact evidence mapping before exporting a
+  redacted candidate run. The generated artifact uses only frozen benchmark
+  identifiers and mapped evidence references; it never contains durable IDs,
+  source text, labels, locators, provider payloads, or reasoning. A real
+  controlled capture still requires reviewed synthetic/public source material,
+  an out-of-repository manifest, reviewer attestation, and retained release
+  evidence before the graph-materialization gate can advance.
 - The product has a real bid-domain control plane: projects, bundles, parsed assets, requirements, evidence, deliverables, reviews, execution runs, providers, quotas, and audit records.
 - LangGraph is present for workflow execution and the assistant operator path.
 - The assistant UI and workflow UI exist, but the agent runtime is not yet a single coherent production architecture.
-- Current retrieval is primarily vector search with lexical fallback; hybrid retrieval and reranking are not implemented as a measured pipeline.
-- Long-term semantic, episodic, and procedural memory are not yet implemented as governed product capabilities.
-- Systematic agent quality evaluation and production trace correlation are still missing.
+- Retrieval 2.0 core is implemented: profile-safe dense candidates, normalized FTS/trigram sparse candidates, deterministic RRF, explicit optional reranking, citation validation, safe server-side query embedding, and development-only RetrievalBench metrics. Source-bundle reindex operations are now incremental and preserve working vectors on provider failure; production trace correlation and frozen/hidden evaluation runs remain outstanding.
+- Governed long-term memory and Bid Wiki are now implemented as product capabilities: PostgreSQL memory records, evidence links, append-only memory events, scoped retrieval, explicit compilation, approval-gated project sharing, controlled vector indexing, and a project knowledge ledger UI. The Assistant and response workflow receive only bounded, authorized memory context; they can propose but never silently activate shared knowledge. MemoryBench now scores redacted context packs for expected recall, isolation, provenance, ownership, budget, and degraded-mode behavior.
+- Direct memory writes now resolve every supplied evidence identifier in the caller's authorized project scope and replace client-supplied labels/locators with server-derived values. Project-scoped private memory is unavailable from unscoped reads, so a former member cannot retain project-source references through a personal-memory listing.
+- A development-only BidBench harness now scores requirement, locator, evidence, and claim outputs offline; frozen/hidden datasets, live general-AI baselines, and production trace correlation are still missing.
 - The approved product category is now AI bid compliance and response execution, with the Requirement Ledger as the commercial spine.
 - The final quality standard requires table-stakes parity or better and measured leadership in completeness, traceability, collaboration, and governed execution.
+- Project-level capability access is now implemented across project resources, Agent tools, requirement assignments, and the project workspace. It uses explicit `ProjectMember` roles, hides inaccessible projects as `404`, preserves audit history through soft deletion, and has migration plus cross-role coverage.
+- Requirement Ledger readiness is now available to the Assistant as project-scoped, safe read-only tools: readiness summary, gap inspection, and requirement source lookup. Mutations and readiness-pack export remain deferred to the unified policy runtime.
+- Backend tests now require an Alembic-migrated database rather than creating ORM tables directly, keeping development and CI schema provenance consistent.
+- Unified Runtime v1 now has a product-owned control plane (`RuntimeRun`, `RuntimeEvent`, `RuntimeAction`, and `RuntimeApproval`), one capability/policy boundary, an explicit bounded LangGraph operator adapter, and a deterministic compatibility adapter.
+- Assistant and drafting workflow paths now emit redacted, ordered runtime events. The worker writes node lifecycle and approval evidence directly; product streaming no longer scrapes LangGraph checkpoint tables.
+- The web Assistant tracks runtime event sequence cursors and recovers an interrupted assistant stream from durable event replay without resubmitting the user request.
+- Production operator checkpointing is explicit PostgreSQL by default. In-memory persistence is only an explicit test/local choice. Generic REST approval resolution refuses to bypass a paused LangGraph operator graph; user-facing confirmation resumes through the graph's `Command(resume=...)` path.
+- Workflow cancellation is now durable and user-visible: queued/paused jobs cancel immediately; running jobs stop at a Worker graph-node safe boundary. The assistant receives a bridge-runtime id, renders a cancellation control only for eligible workflows, and distinguishes cancellation from failure in its event timeline.
+- Workflow retry now creates an independently auditable child attempt instead of rewriting a failed record. Each retry gets fresh quota and usage evidence, a linked child runtime run, and a parent pointer for both execution and runtime history. The retry must start from a leaf attempt with matching terminal execution/runtime states; active children are reused idempotently. A BYOK configuration can be inherited only by its owner, and unknown/deleted BYOK sources are denied instead of silently using another member's key or the platform key.
+- Retrieval 2.0 implementation follows ADR 0005: PostgreSQL plus pgvector remains the single retrieval store; Qwen3 Embedding 8B is verified at 1536 dimensions; all embeddings require a versioned retrieval profile; no browser can submit vectors; API, drafting, LangGraph, and Assistant semantic search share one retrieval contract. BidBench RetrievalBench tracks recall, MRR, locator validity, mandatory evidence, scope isolation, and degraded behavior.
+- Production LangGraph persistence now has a deployment gate: API and Worker require PostgreSQL checkpointers outside local development, a one-shot setup service initializes checkpoint tables after PostgreSQL becomes healthy, and production readiness rejects missing or in-memory Assistant/workflow checkpointer configuration.
+- Production readiness now also rejects placeholder or development infrastructure credentials, unauthenticated Redis, incomplete SMTP configuration, and insecure provider/email defaults. The existing VPS must be prepared through an intentional credential-rotation and migration window before this gate can be deployed.
+- The governed LangGraph Operator is now the production Assistant engine: it uses one policy/runtime boundary, stable conversation threads, bounded durable chat context, approved long-term memory context, and interrupt-resume approvals. The deterministic harness remains for local testing; legacy ReAct is no longer an approved production route.
+- Public pages now lazy-load independently from the authenticated workspace shell, while the assistant panel remains a secondary lazy boundary. Browser code highlighting uses a cached, fine-grained Shiki JavaScript engine with only product-relevant grammars/themes; the production Vite build no longer reports a large-chunk warning.
+- Assistant attachments are now a governed data path rather than an in-memory chat cache. Files are privately staged in object storage with database ownership, SHA-256, bounded extracted context, and 24-hour retention. The production Operator preserves the attachment IDs through LangGraph interrupt/resume, requires approval before copying files into a project bundle, queues standard ingestion, audits the handoff, and deletes staging objects. Browser uploads can consume the same staged object without duplicate retention. A Worker Beat task retries failed staging-object cleanup and expires unused content.
+- The Agent lifecycle is now explicitly bounded and documented: it can create a project, govern attachment ingestion, inspect the Requirement Ledger, start/retry drafting, submit a reviewer decision, produce a readiness pack, export approved deliverables, and delete a project with typed confirmation. Artifact results render as authenticated user-facing downloads rather than raw storage keys or tool output. Organization security, billing, provider credentials, and deployment remain intentionally human-only control-plane operations.
+- Current regression evidence: API `530` tests, Worker `78` tests, and Web `25` Vitest files / `89` tests pass on a dedicated `_test` database; the full local release rehearsal (migrations, API/Worker Ruff checks, API/Worker suites, frontend typecheck, unit suite, and production build) passes. Chromium plus Pixel 7 smoke coverage verifies sixteen public auth/pricing scenarios. Authenticated deployed routes and visual assertions beyond semantic browser checks remain open release evidence.
+- Release-quality evidence now carries redacted capture provenance. Release mode requires a current-pipeline or reviewed-snapshot capture, a shared evidence-set id, two-person review, an attestation pointer, fresh timestamps, and BidBench provider/model/prompt metadata. This blocks easy false-green JSON, but does not replace retained CI artifacts or actual reviewed regression/hidden runs.
+- Production login, registration, password-reset, and verification-email resend limits now require Redis and fail closed on limiter failure. A global API budget uses the same Redis-backed pattern in production and hashes client identities; forwarding headers are accepted only from an explicit trusted-proxy CIDR. Development keeps the in-memory fallback only for local usability; public-launch abuse control still needs IP reputation, WAF policy, account-takeover telemetry, and distributed abuse detection.
+- Deployment load smoke can now emit a redacted, HTTPS-enforced JSON artifact for release evidence; it refuses credential-bearing URLs and records only endpoint outcomes and latency thresholds.
+- `docs/ops/production-release-evidence-matrix.md` now distinguishes code-backed gates from evidence that must be produced on CI/VPS with a real reviewer. It is the source of truth for controlled-pilot promotion until actual deployment artifacts exist.
+- API liveness and readiness are now distinct: `/health` remains available to report a live process even if Redis is down, while `/health/ready` safely checks PostgreSQL, Redis, and object storage and drives the production Docker health check. Admin health no longer returns raw dependency exception text.
+- Stripe billing reconciliation now has a real control-plane baseline: organization Checkout is owner-authorized, writes session and Subscription metadata, initializes licensed seat quantity from active members, and existing workspace Stripe customers go to the hosted Billing Portal instead of a second subscription Checkout. Signed webhooks receive durable event-ID receipts, resolve only pre-existing owner-validated organizations, persist Stripe subscription-item seat quantities, and reject stale/mismatched events. The remaining commercial blocker is real Stripe Test/Live configuration, retained rehearsal evidence, historic user-billing migration, seat-overage remediation, and support/finance operations.
+- Billing support can now inspect safe per-user webhook receipt outcomes via the admin-only Ops API. Receipts retain only event timing/type/outcome plus local and Stripe correlation identifiers, never raw webhook bodies or payment data.
+- Organization membership safety is now explicit: a user can retain multiple active organization memberships, `User.org_id` is only the active-context compatibility pointer, organization listing is membership-backed, and switching to an organization without membership is denied before state changes. Registration, bootstrap-admin creation, organization creation, and invitation acceptance create the corresponding membership atomically.
+- Organization entitlement foundation is now implemented: `OrganizationSubscription` is the preferred workspace plan source; the legacy user subscription applies only to its selected workspace during migration. Project limits plus official workflow, Assistant, and indexing quotas resolve through active workspace membership and aggregate usage by organization. Workspace seat capacity is enforced for direct membership changes and invitation acceptance, and a safe read-only workspace entitlement summary is available in account settings. It derives visible seat overage without removing users automatically. Organization-level billing authorization and Stripe reconciliation are implemented in code, but Test Mode evidence and a complete owner remediation workflow remain open.
+- Collaboration administration now follows the active workspace role rather than the unrelated global platform-admin flag: all members can reach the collaboration entry, while only active workspace owners and admins can load or mutate invitations. The remaining seat-overage remediation must preserve a valid active workspace for the person being offboarded; a superficial membership-delete endpoint would violate that invariant.
+- API tests and local release rehearsals now refuse a database whose name does not end in `_test`. CI uses `docpilot_test`; the local helper prepares the same isolated database shape, preventing test fixtures from polluting the development workspace database. The latest organization-entitlement and seat-governance full API regression passed `545` tests on that isolated database.
+- New standalone registrations now receive an isolated personal workspace instead of joining the legacy shared Default Organization. Invited users still join the intended team workspace, while owner-managed offboarding atomically revokes project/team access, preserves a valid fallback workspace, transfers deterministic sole project ownership, protects the final owner and billing owner, and records an organization membership event.
+- Platform user administration and workspace collaboration are now intentionally separate: `/auth/users` remains the global operator directory, while workspace members are exposed only through the organization API. Account deletion now rejects unresolved team ownership, team billing responsibility, sole project ownership, non-empty personal workspaces, and paid personal subscriptions before any mutation; an empty free personal workspace is deleted in the same transaction as the account. Unexpected retained operational records return a safe conflict rather than a raw foreign-key failure.
+- Current regression evidence after the personal-workspace and account-deletion hardening: API `567 passed`, Worker `78 passed`, frontend production build passed, and relevant API Ruff checks passed on the dedicated `_test` database. This is implementation evidence only; Stripe Test/Live rehearsal, retained CI artifacts, credential rotation, and authenticated production smoke evidence remain required before a commercial release.
+- Provider reliability is now explicit end to end: real OpenAI-compatible and Anthropic failures are typed, bounded retries apply only to transient errors, deleted BYOK configuration cannot fall through to a platform key, and failed LangGraph drafts terminate before persistence. Durable runtime events, drafting SSE, and the Assistant timeline carry only stable error codes and localized recovery guidance; no raw provider diagnostics are rendered to users.
+- Worker tests now enforce the same `_test`-database isolation as API tests. Current local evidence after provider-reliability hardening: API `569 passed`, Worker `88 passed`, Web `25` Vitest files / `91` tests, TypeScript check, production web build, and touched Ruff checks pass on isolated local infrastructure. This does not replace real provider/VPS trace evidence or a retained external code review.
+- The dedicated Worker CI job now provisions a migrated `docpilot_test` database and Redis before executing tests, so the test-isolation guard is enforced in CI rather than only on developer machines.
+- Model usage governance now has a durable organization-scoped token ledger:
+  successful OpenAI-compatible, Anthropic, and LangChain Operator calls record
+  only provider-reported numeric usage; optional official/BYOK monthly token
+  caps reserve capacity before each physical provider dispatch, mark the hold
+  `dispatched` before network I/O, settle actual usage on success, and
+  conservatively retain unknown calls until expiry. The API preflight hold is
+  claimed by the first real workflow model call; parsing, drafting, review,
+  retries, and checkpoint replays get separate holds, so a later success
+  cannot erase an earlier timed-out attempt. Requirement extraction and
+  quality review now share the governed OpenAI-compatible/Anthropic adapter,
+  while graph routing is deterministic and does not spend model capacity. Budget
+  changes are
+  billing-owner-only and append a before/after token-limit audit row. Cost is
+  intentionally unavailable until a reviewed price catalog exists; no prompt,
+  completion, raw Provider payload, URL, or key is retained in this ledger.
+- Current model-usage verification includes adapter and ledger unit coverage,
+  API/Worker compile/Ruff checks, frontend typecheck/account tests/build, and
+  Alembic-head validation. A freshly prepared local `docpilot_test` database
+  now runs the full PostgreSQL regression successfully: API `583 passed` and
+  Worker `110 passed`. The repository core release rehearsal also passes its
+  migrations, static checks, backend suites, frontend typecheck, Vitest, and
+  production build. Authenticated browser, real-provider/VPS, and quality-gate
+  evidence remain separate release requirements.
+- Billable drafting delivery now uses a transactional Outbox: normal draft,
+  redraft, retry, and human-resume commands commit their execution/runtime/
+  budget/audit state alongside a durable task event before sending a best-effort
+  Worker wake-up. Worker Beat recovers pending or expired leases, consumers
+  reject active duplicate deliveries, and human resumes use a per-run sequence
+  so repeated browser requests cannot schedule the same pause twice. This is
+  at-least-once internal task delivery, not exactly-once external model calls;
+  the model-usage lifecycle preserves ambiguity conservatively. Isolated SQLite
+  checks, targeted Ruff/compile checks, Alembic-head validation, and full
+  PostgreSQL regression now pass on the dedicated `_test` database.
+- BYOK provider configuration is now a real protocol contract rather than a
+  brand-only form preset. `provider_type` remains the OpenAI-compatible or
+  Anthropic transport, while a persisted, server-validated `provider_id`
+  selects a shared Provider Profile. The same resolver now governs provider
+  URL expansion, request authentication headers, connection tests, model
+  discovery, Assistant clients, legacy chat streaming, and Workflow Worker
+  adapters. This fixes the prior base-URL-as-final-endpoint defect and enables
+  documented special cases such as DeepSeek Anthropic Messages and MiMo
+  `api-key` authentication. Profile-aware model discovery explicitly reports
+  manual configuration for providers whose control planes do not document a
+  safe standard model-list endpoint; it no longer guesses `/models` and leaks
+  raw provider responses. Existing credentials remain encrypted and are never
+  returned to the browser. Current full local evidence after the Provider
+  Profile migration: API `591 passed`, Worker `113 passed`, Web `25` Vitest
+  files / `91` tests, TypeScript, production build, Alembic head, and the full
+  release rehearsal all pass on the dedicated `_test` database. Real
+  low-token provider probes and authenticated VPS/browser traces remain
+  intentional controlled-pilot release evidence, not claimed by unit tests.
+- The guided first-run path now includes a user-owned, project-quota-governed
+  built-in demo workspace. It seeds transparent markdown sources, Requirement
+  Ledger entries, evidence links, default sections, and a durable audit event
+  without calling a provider, Worker, object storage, or AI usage ledger. The
+  dashboard, onboarding wizard, and Agent capability registry all expose the
+  same `create_demo_workspace` domain operation; it remains approval-gated in
+  the default policy mode and is never represented as a completed AI run.
+  Current local evidence after this integrated change: API `594 passed`,
+  Worker `113 passed`, Web `25` Vitest files / `92` tests, Alembic head, Ruff,
+  TypeScript, and production web build all pass on the dedicated `_test`
+  database. The production-default Operator now routes only this no-model
+  first-run capability through a provider-free deterministic Runtime fast
+  path; it remains approval-gated, resumes the same durable run, and no stale
+  provider configuration can block it. Targeted API coverage (`37 passed`) and
+  Assistant panel coverage (`22 passed`) validate that path and navigation to
+  the created workspace. Authenticated local browser traces now cover the
+  empty dashboard, demo materials, Requirement Ledger, evidence, approval,
+  and completion. A deployed-candidate trace remains explicit release evidence
+  still to collect.
+- Controlled memory graph extraction now has a reviewable per-item lifecycle:
+  Worker results remain proposed `entity_note` records; approvers accept or
+  reject opaque, evidence-labelled entity/relation items through a durable
+  PostgreSQL review ledger. Overall activation is blocked until every item is
+  decided, then frozen. Worker-originated proposals revalidate their active
+  source-memory and evidence snapshot at activation, so a changed/deleted/
+  expired source cannot become a stale reviewed artifact. `MemoryEntity` and
+  `MemoryRelation` remain intentionally unwritten: materialization, graph
+  retrieval, and visual graph facts require measured MemoryGraphBench capture
+  evidence plus a reviewed provenance migration.
+- Graph-proposal activation now serializes per-proposal decisions and rechecks
+  both the proposal evidence envelope and the locked Worker source snapshot.
+  MemoryGraphBench carries redacted provider/model/provenance and reviewer
+  summary metadata; its opt-in controlled-capture check rejects missing
+  metadata, incomplete reviews, and any schema/scope/evidence safety miss
+  without inventing production thresholds from the development fixture.
+- AssistantBench now provides a parallel offline safety baseline for the Agent
+  router and Runtime policy: it evaluates structured intent selection, missing
+  scope, required argument keys, policy parity, typed confirmation, and unknown
+  capabilities. The deterministic fixture is explicitly control-only and fails
+  the controlled-capture gate, while the local router now recognizes governed
+  project deletion and requires a concrete deliverable ID for export.
+- The unified release quality gate now requires a fourth, provenance-linked
+  AssistantBench report alongside BidBench, RetrievalBench, and MemoryBench.
+  Its versioned policy explicitly blocks routing, missing-input, required-
+  argument, policy, typed-confirmation, project-scope, and unknown-capability
+  regressions. Development or control captures remain incapable of producing a
+  release-eligible artifact.
+- The production LangGraph Operator now has a durable `needs_input` plan state
+  rather than reducing missing data to generic prose. It emits a redacted plan
+  event, renders the existing `assistant.missing_input` SSE contract, and
+  carries a bounded continuation context into the next turn. An offline-only
+  AssistantBench capture command can derive a redacted candidate from approved
+  Operator plan/action/approval records via a private case-to-run manifest;
+  actual reviewed regression/hidden traces remain required before promotion.
+- GitHub CI now runs for both the repository's active `master` branch and the
+  future-compatible `main` branch, avoiding a silent loss of regression
+  evidence on the normal push path.
 
 ## Active Learning Focus
 
-1. Execute `docs/superpowers/specs/2026-07-14-bidpilot-product-agent-refoundation-v2-design.md`.
-2. Build BidBench and record the current/general-AI quality baseline.
-3. Implement the Requirement Ledger and Bid Readiness Pack.
-4. Unify assistant and workflow runtime contracts, policy, events, usage, audit, and recovery.
-5. Implement retrieval 2.0: sparse + dense + fusion + rerank + citation checks.
-6. Implement governed memory, Bid Wiki, and evidence graph write-back.
-7. Close enterprise security, observability, cost, commercial, UX, and release evidence.
+1. Build BidBench and record the current/general-AI quality baseline.
+2. Implement the Requirement Ledger and Bid Readiness Pack.
+3. Finish runtime v1 rollout defaulting, legacy retirement, project-history retry UX, and release evidence. Cancellation and backend/Agent retry lineage are complete.
+4. Operationalize Retrieval 2.0: measured four-strategy baselines, trace correlation, and release gates.
+5. Extend governed memory with measured retrieval, proposal-approval, and
+   entity/relation graph-quality gates. Knowledge Portfolio Index, the bounded
+   project Evidence Map, controlled extraction, and per-item review are
+   complete; the next slice is reviewed public/synthetic capture evidence and
+   a provenance-preserving persistence design, not raw model extraction
+   directly into graph rows.
+6. Close enterprise security, observability, cost, commercial, UX, and release evidence.
+7. Produce reviewed release-quality reports from frozen/hidden fixtures with retained CI evidence, rotate production credentials, and run authenticated production smoke checks before deployment.
+8. Run explicit, opt-in low-token connection probes against every advertised Provider Profile using separate test credentials, then retain safe outcome evidence without storing provider payloads.
 
 ## Working Rule
 
 Do not add another visible feature until the relevant concept, architecture decision, success metric, tests, and production failure modes are documented. Overlapping competitor capabilities must not be accepted at demo quality merely because they are not differentiators.
+
+## 2026-07-22 Controlled Pilot Closeout
+
+- The controlled-pilot closeout spec now fixes BidPilot's public claim to a
+  verifiable portfolio release rather than an unproven commercial SaaS claim.
+- A local isolated API backed by `docpilot_test` verified the guided user path
+  in Chromium and Pixel 7: registration, administrator verification, sign-in,
+  user-owned demo workspace creation, and source-bundle/Requirement Ledger/
+  evidence trace inspection.
+- The final source release rehearsal passed on the dedicated test database:
+  Alembic head, API Ruff and `666` tests, Worker Ruff and `127` tests,
+  frontend typecheck, `29` Vitest files / `107` tests, and production build.
+- Remaining release work is intentionally operational only: review the staged
+  change set, push the controlled-pilot branch, deploy through the existing
+  `/app/bidpilot/deploy.sh` flow, and retain post-deploy health/HTTPS evidence.

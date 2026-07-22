@@ -1,0 +1,58 @@
+{
+  "title": "Run Center",
+  "subtitle": "Trace governed Agent and workflow activity across the projects you can access.",
+  "refresh": "Refresh",
+  "recent": "Recent runs",
+  "recentCount": "Latest {{count}} visible tasks",
+  "details": "Run details",
+  "emptyTitle": "No visible runs yet",
+  "emptyDescription": "Create a project, ask the Agent to take an action, or start a drafting workflow to see its durable run here.",
+  "noSelection": "Select a run to inspect its safe event replay.",
+  "events": "Activity log",
+  "noEvents": "This run does not have any displayable events yet.",
+  "project": "Project",
+  "noProject": "General Agent task",
+  "engine": "Runtime",
+  "openProject": "Open project",
+  "continueWithAgent": "Continue with Agent",
+  "lastUpdate": "Latest update",
+  "startedAt": "Started",
+  "completedAt": "Finished",
+  "filters": {
+    "all": "All",
+    "active": "Active",
+    "approval": "Approval",
+    "failed": "Needs attention",
+    "completed": "Completed"
+  },
+  "counts": {
+    "active": "Active",
+    "approval": "Awaiting approval",
+    "failed": "Needs attention"
+  },
+  "kinds": {
+    "assistant_turn": "Agent task",
+    "workflow_bridge": "Workflow run",
+    "system_recovery": "System recovery"
+  },
+  "engines": {
+    "deterministic": "Governed execution",
+    "langgraph_operator": "Agent runtime",
+    "langgraph_workflow": "Workflow runtime"
+  },
+  "eventTypes": {
+    "run.started": "Task started",
+    "plan.proposed": "Plan prepared",
+    "capability.started": "Action started",
+    "capability.progressed": "Action progressed",
+    "capability.succeeded": "Action completed",
+    "capability.failed": "Action did not complete",
+    "approval.requested": "Awaiting approval",
+    "approval.resolved": "Approval resolved",
+    "workflow.linked": "Workflow linked",
+    "message.completed": "Agent replied",
+    "run.completed": "Task completed",
+    "run.failed": "Task failed",
+    "run.cancelled": "Task cancelled"
+  }
+}

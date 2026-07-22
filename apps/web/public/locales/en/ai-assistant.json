@@ -67,7 +67,8 @@
       "pending": "pending",
       "running": "running",
       "succeeded": "succeeded",
-      "failed": "failed"
+      "failed": "failed",
+      "cancelled": "cancelled"
     },
     "nodeStatus": {
       "pending": "pending",
@@ -82,6 +83,8 @@
     "summarySingleRunning": "{{label}} running",
     "summarySingleDone": "{{label}} completed",
     "summarySingleFailed": "{{label}} failed",
+    "summarySingleCancelled": "{{label}} cancelled",
+    "summaryCancelled": "Workflow cancelled",
     "summaryDone": "Processed {{tools}} actions",
     "summaryDoneWithWorkflows": "Processed {{tools}} actions, started {{workflows}} workflows",
     "summaryDoneWorkflowsOnly": "Started {{workflows}} workflows",
@@ -94,11 +97,13 @@
       "pending": "pending",
       "running": "running",
       "succeeded": "done",
-      "failed": "failed"
+      "failed": "failed",
+      "cancelled": "cancelled"
     },
     "tool": {
       "default": "Platform action",
       "search_projects": "Search projects",
+      "create_demo_workspace": "Create demo workspace",
       "get_runtime_status": "Read execution status",
       "open_page": "Open page",
       "create_project": "Create project",
@@ -106,17 +111,29 @@
       "list_project_bundles": "Check material bundles",
       "list_sections": "Check sections",
       "list_pending_reviews": "Check pending reviews",
+      "submit_review_decision": "Submit section review decision",
       "list_requirements": "Check requirements",
+      "list_claim_review_queue": "Check claims awaiting review",
+      "get_readiness_summary": "Check bid readiness",
+      "list_readiness_gaps": "Check readiness gaps",
+      "open_requirement_source": "Open requirement source",
       "list_evidence": "Check evidence",
       "list_deliverables": "Check deliverables",
       "list_documents": "Check documents",
+      "attach_uploaded_documents": "Add attachments to bundle",
       "get_section_versions": "Check section versions",
       "create_deliverable": "Create deliverable",
       "start_draft_section": "Start section draft",
       "start_redraft_section": "Redraft section",
+      "propose_memory_graph": "Generate entity-relation proposal",
       "retry_run": "Retry task",
       "export_deliverable": "Export deliverable",
+      "generate_readiness_pack": "Generate bid readiness pack",
       "semantic_search": "Search materials",
+      "search_bid_wiki": "Search Bid Wiki",
+      "list_knowledge_portfolio": "View knowledge portfolio",
+      "propose_memory": "Save personal preference",
+      "forget_memory": "Forget memory",
       "search_knowledge": "Search knowledge base",
       "upload_document": "Upload document",
       "delete_project": "Delete project"
@@ -131,6 +148,7 @@
       "section_drafter": "Draft section",
       "quality_review": "Quality review",
       "redrafter": "Redraft",
+      "memory_graph_extraction": "Extract entities and relations",
       "exporter": "Generate deliverable"
     },
     "field": {
@@ -147,7 +165,37 @@
       "status": "Status: {{status}}",
       "runCreated": "Run created",
       "completed": "Completed",
-      "processing": "Processing"
+      "processing": "Processing",
+      "cancelled": "Workflow cancelled",
+      "cancellationRequested": "Cancellation requested"
+    },
+    "download": {
+      "docx": "Download DOCX",
+      "pdf": "Download PDF",
+      "xlsx": "Download XLSX",
+      "failed": "Download failed. Please try again."
+    },
+    "cancelWorkflow": "Cancel workflow",
+    "cancelling": "Cancelling...",
+    "cancelFailed": "Unable to request cancellation. Please try again.",
+    "cancellationRequested": "Cancellation requested. Stopping at a safe boundary.",
+    "providerRetry": "The model service is temporarily unavailable. Retrying {{attempt}}/{{maxAttempts}}.",
+    "openProviderSettings": "Open model settings",
+    "failure": {
+      "provider_not_configured": "No usable model service is configured. Configure a model service and try again.",
+      "provider_config_missing": "The selected model service configuration is no longer available. Select or configure one and try again.",
+      "provider_auth_failed": "Model service authentication failed. Check the key and permissions, then test the connection again.",
+      "provider_model_unavailable": "The selected model or endpoint is unavailable. Check the model name and provider URL.",
+      "provider_request_invalid": "The selected model cannot handle this request, or the service configuration does not match. Update the configuration and retry.",
+      "provider_response_invalid": "The model did not return a usable result. Switch models or try again later.",
+      "provider_rate_limited": "The model service is rate limited. Run the workflow again later.",
+      "provider_timeout": "The model service request timed out. Try again later or check the provider status.",
+      "provider_unavailable": "The model service is temporarily unavailable. Try again later or check the provider status.",
+      "workflow_internal_error": "The workflow could not finish safely. Please try again later.",
+      "workflow_node_failed": "A workflow step could not finish. Check the input and try again.",
+      "workflow_node_exception": "A workflow step encountered an internal error. Please try again later.",
+      "workflow_graph_exception": "The workflow encountered an internal error. Please try again later.",
+      "workflow_resume_exception": "The resumed workflow encountered an internal error. Please try again later."
     }
   },
   "welcome": {

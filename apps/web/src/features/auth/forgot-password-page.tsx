@@ -22,7 +22,6 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null)
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null)
   const navigate = useNavigate()
@@ -45,7 +44,6 @@ export function ForgotPasswordPage() {
       toast.error(t("forgotPassword.error"))
     } finally {
       resetTurnstile(turnstileWidgetId)
-      setTurnstileToken(null)
       setLoading(false)
     }
   }
@@ -109,7 +107,6 @@ export function ForgotPasswordPage() {
             <TurnstileWidget
               ref={turnstileRef}
               action="password_reset"
-              onTokenChange={setTurnstileToken}
               onWidgetIdChange={setTurnstileWidgetId}
               className="min-h-[65px]"
             />

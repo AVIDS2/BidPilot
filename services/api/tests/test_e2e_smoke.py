@@ -21,7 +21,7 @@ def test_full_e2e_flow() -> None:
     bundle = client.post("/bundles", json={"project_id": project_id, "label": "RFP Pack", "source_type": "upload"})
     assert bundle.status_code == 201
     bundle_id = bundle.json()["id"]
-    assert bundle.json()["ingest_status"] == "queued"
+    assert bundle.json()["ingest_status"] == "awaiting_upload"
 
     # 3. Upload a document to the bundle
     doc = client.post(
@@ -30,6 +30,9 @@ def test_full_e2e_flow() -> None:
         files={"file": ("rfp.txt", b"The system shall provide SSO authentication.\nThe system shall support role-based access control.", "text/plain")},
     )
     assert doc.status_code == 201
+    bundles_after_upload = client.get(f"/bundles?project_id={project_id}")
+    assert bundles_after_upload.status_code == 200
+    assert next(item for item in bundles_after_upload.json() if item["id"] == bundle_id)["ingest_status"] == "ready_to_ingest"
 
     # 4. Create deliverable
     dlv = client.post("/deliverables", json={"project_id": project_id, "type": "proposal", "title": "Technical Proposal"})

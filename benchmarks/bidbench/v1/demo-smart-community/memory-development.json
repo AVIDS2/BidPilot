@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "demo-smart-community-memory-dev",
+  "title": "Demo Smart Community Memory Development Fixture",
+  "dataset_role": "development",
+  "description": "Synthetic development-only cases for governed memory recall, provenance, deletion, isolation, and degradation checks.",
+  "cases": [
+    {
+      "id": "shared-deployment-constraint",
+      "query": "当前项目的部署约束是什么？",
+      "org_id": "fixture-org",
+      "user_id": "fixture-user-a",
+      "project_id": "fixture-project-a",
+      "expected_record_ids": ["memory-project-deployment"],
+      "forbidden_record_ids": ["memory-project-superseded", "memory-project-deleted", "memory-user-b-private"],
+      "max_items": 4,
+      "max_characters": 1800
+    },
+    {
+      "id": "private-writing-preference",
+      "query": "按我的写作偏好整理项目摘要。",
+      "org_id": "fixture-org",
+      "user_id": "fixture-user-a",
+      "expected_record_ids": ["memory-user-a-style"],
+      "forbidden_record_ids": ["memory-user-b-private"],
+      "max_items": 4,
+      "max_characters": 1800
+    },
+    {
+      "id": "project-isolation",
+      "query": "查看本项目的离线交付流程。",
+      "org_id": "fixture-org",
+      "user_id": "fixture-user-a",
+      "project_id": "fixture-project-a",
+      "expected_record_ids": ["memory-project-offline-delivery"],
+      "forbidden_record_ids": ["memory-project-b-delivery"],
+      "max_items": 4,
+      "max_characters": 1800
+    },
+    {
+      "id": "embedding-degraded",
+      "query": "离线交付需要哪些材料？",
+      "org_id": "fixture-org",
+      "user_id": "fixture-user-a",
+      "project_id": "fixture-project-a",
+      "expected_record_ids": ["memory-project-offline-delivery"],
+      "forbidden_record_ids": ["memory-project-deleted"],
+      "max_items": 4,
+      "max_characters": 1800,
+      "required_degraded_reasons": ["dense_unavailable"]
+    }
+  ]
+}

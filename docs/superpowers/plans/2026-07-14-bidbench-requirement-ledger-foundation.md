@@ -281,6 +281,8 @@ Steps:
 
 Expected: the Agent can explain and navigate the first-day readiness flow without bypassing project authorization. Assignment and closure remain conventional UI actions until Phase 2 activates the unified write policy.
 
+> **Implementation status (2026-07-14):** The safe read-only portion is delivered: readiness summary, targeted gap inspection, and requirement source lookup run through both Assistant runtimes with project capability checks and user-facing streamed labels. Readiness-pack export is intentionally deferred with other output/write operations to the unified policy and approval runtime; it is not represented as a second Agent mutation path.
+
 ## Task 10: Phase Verification and Evidence
 
 Files:

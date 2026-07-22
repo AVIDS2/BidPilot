@@ -15,7 +15,6 @@ export function VerifyEmailPromptPage() {
   const email = (location.state as { email?: string } | null)?.email || ""
   const [resending, setResending] = useState(false)
   const [resent, setResent] = useState(false)
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null)
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null)
   const { t } = useTranslation("auth")
@@ -38,7 +37,6 @@ export function VerifyEmailPromptPage() {
       toast.error(t("verifyEmail.resendFailed"))
     } finally {
       resetTurnstile(turnstileWidgetId)
-      setTurnstileToken(null)
       setResending(false)
     }
   }
@@ -79,7 +77,6 @@ export function VerifyEmailPromptPage() {
             <TurnstileWidget
               ref={turnstileRef}
               action="resend_verification"
-              onTokenChange={setTurnstileToken}
               onWidgetIdChange={setTurnstileWidgetId}
               className="mb-3 min-h-[65px]"
             />

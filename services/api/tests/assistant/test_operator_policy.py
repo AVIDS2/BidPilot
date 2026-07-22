@@ -24,6 +24,18 @@ def test_operator_metadata_marks_delete_project_destructive() -> None:
     assert tool_requires_approval("delete_project", "full_access") is True
 
 
+def test_demo_workspace_is_a_governed_low_risk_capability() -> None:
+    from app.agent.policy import get_tool_policy, tool_requires_approval
+
+    policy = get_tool_policy("create_demo_workspace")
+
+    assert policy is not None
+    assert policy.label_zh == "创建演示工作区"
+    assert policy.risk_level == "low_risk_write"
+    assert tool_requires_approval("create_demo_workspace", "risky_only") is True
+    assert tool_requires_approval("create_demo_workspace", "full_access") is False
+
+
 def test_tool_confirmation_payload_is_user_facing() -> None:
     from app.agent.streaming import _extract_confirmation_request
 
@@ -65,6 +77,7 @@ def test_langgraph_agent_exposes_delete_project_tool_without_db_calls() -> None:
     tool_names = {tool.name for tool in tools}
 
     assert "delete_project" in tool_names
+    assert "list_claim_review_queue" in tool_names
 
 
 def test_delete_project_tool_summary_is_user_facing() -> None:
@@ -142,4 +155,6 @@ def test_delete_project_requires_typed_confirmation(
 
     assert result.tool_name == "delete_project"
     assert result.result["deleted"] is True
-    assert test_db.get(Project, project.id) is None
+    deleted_project = test_db.get(Project, project.id)
+    assert deleted_project is not None
+    assert deleted_project.status == "deleted"

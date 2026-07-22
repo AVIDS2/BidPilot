@@ -1,140 +1,46 @@
 import { expect, test } from "@playwright/test";
+import {
+  createE2EWorkspaceUser,
+  loginThroughUi,
+  prepareE2EPage,
+  registerWorkspaceUser,
+  verifyEmailAsAdmin,
+} from "./helpers";
 
 const runDemo = process.env.E2E_DEMO === "1";
-const demoEmail = process.env.E2E_DEMO_EMAIL ?? "demo@bidpilot.local";
-const demoPassword = process.env.E2E_DEMO_PASSWORD ?? "Demo1234";
-const demoProjectName = process.env.E2E_DEMO_PROJECT ?? "Acme Corp RFP Response";
+const DEMO_PROJECT_NAME = "演示 · 智慧社区 AI 治理平台投标";
 
-test.describe("seeded BidPilot demo flow @demo", () => {
-  test.skip(!runDemo, "Set E2E_DEMO=1 after starting the API and seeding demo data.");
-
-  test("logs in and opens the seeded project detail workflow", async ({ page }) => {
-    await page.goto("/login");
-    await page.getByLabel("Email").fill(demoEmail);
-    await page.getByLabel("Password").fill(demoPassword);
-    await page.getByRole("button", { name: "Login" }).click();
-
-    await expect(page).toHaveURL(/\/projects$/);
-    await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
-    await page.getByPlaceholder("Search projects...").fill(demoProjectName);
-    const projectLink = page.getByRole("link", { name: demoProjectName, exact: true });
-    await expect(projectLink).toBeVisible();
-
-    await projectLink.click();
-
-    await expect(page.getByRole("heading", { name: demoProjectName })).toBeVisible();
-    await expect(page.getByLabel("breadcrumb")).toContainText("Projects");
-    await expect(page.getByLabel("breadcrumb")).toContainText(demoProjectName);
-
-    for (const tabName of ["Bundles", "Deliverables", "Requirements", "Review", "Export"]) {
-      await expect(page.getByRole("tab", { name: tabName })).toBeVisible();
-    }
-
-    await page.getByRole("tab", { name: "Review" }).click();
-    await expect(page.getByRole("tabpanel")).toContainText(/Review|section|thread|comment/i);
-
-    await page.getByRole("tab", { name: "Audit" }).click();
-    await expect(page.getByRole("tabpanel")).toContainText(/Audit|event|No audit events/i);
-
-    await page.getByRole("tab", { name: "System" }).click();
-    await expect(page.getByRole("tabpanel")).toContainText("System Status");
-  });
+test.beforeEach(async ({ page }) => {
+  await prepareE2EPage(page);
 });
 
-test.describe("full MVP end-to-end flow @e2e-full", () => {
-  test.skip(!runDemo, "Set E2E_DEMO=1 after starting the API and seeding demo data.");
+test.describe("guided BidPilot demo workspace @demo", () => {
+  test.skip(!runDemo, "Set E2E_DEMO=1 after starting an isolated API and bootstrapping its E2E admin.");
 
-  test("create project → upload → review → export → audit trail", async ({ page }) => {
-    // 1. Login
-    await page.goto("/login");
-    await page.getByLabel("Email").fill(demoEmail);
-    await page.getByLabel("Password").fill(demoPassword);
-    await page.getByRole("button", { name: "Login" }).click();
-    await expect(page).toHaveURL(/\/projects$/);
+  test("registers an isolated workspace, creates the built-in demo, and reads its governed source trace", async ({ page }) => {
+    const user = createE2EWorkspaceUser("guided-demo");
+    const password = "TestPass123";
 
-    // 2. Create project
-    const projectName = `E2E Test ${Date.now()}`;
-    await page.getByRole("button", { name: /New Project/i }).click();
-    await page.getByLabel("Project Name").fill(projectName);
-    await page.getByRole("button", { name: "Create" }).click();
-    await expect(page.getByRole("heading", { name: projectName })).toBeVisible({ timeout: 15000 });
+    await registerWorkspaceUser(page, user, password);
+    await verifyEmailAsAdmin(user.email);
+    await loginThroughUi(page, user.email, password);
 
-    // 3. Verify all tabs are present
-    for (const tabName of ["Bundles", "Deliverables", "Requirements", "Review", "Export"]) {
+    await page.goto("/dashboard");
+    await page.getByRole("button", { name: "Explore a demo workspace" }).click();
+    await expect(page).toHaveURL(/\/projects\//, { timeout: 10_000 });
+    await expect(page.getByRole("heading", { name: DEMO_PROJECT_NAME })).toBeVisible();
+
+    for (const tabName of ["Bundles", "Requirements", "Project knowledge", "Evidence", "Runs"]) {
       await expect(page.getByRole("tab", { name: tabName })).toBeVisible();
     }
 
-    // 4. Register a bundle, then upload a document
+    await page.getByRole("tab", { name: "Requirements" }).click();
+    await expect(page.getByText("Requirement Ledger", { exact: true })).toBeVisible();
+
+    await page.getByRole("tab", { name: "Evidence" }).click();
+    await expect(page.getByText("Citation Evidence", { exact: true })).toBeVisible();
+
     await page.getByRole("tab", { name: "Bundles" }).click();
-    await page.getByLabel("Bundle Label").fill("Test RFP Bundle");
-    await page.getByRole("button", { name: "Register Bundle" }).click();
-    await expect(page.getByText("Test RFP Bundle")).toBeVisible({ timeout: 15000 });
-
-    // Expand the bundle accordion to reveal the file input
-    await page.getByText("Test RFP Bundle").click();
-    const fileInput = page.locator('input[type="file"]').first();
-    await expect(fileInput).toBeVisible({ timeout: 10000 });
-    await fileInput.setInputFiles({
-      name: "test-rfp.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("This is a test RFP document for E2E testing.\n\nRequirements:\n1. System must support user authentication\n2. System must provide audit logging"),
-    });
-
-    // 5. Check deliverables tab
-    await page.getByRole("tab", { name: "Deliverables" }).click();
-    await expect(page.getByRole("tabpanel")).toBeVisible();
-
-    // 6. Review tab
-    await page.getByRole("tab", { name: "Review" }).click();
-    await expect(page.getByRole("tabpanel")).toContainText(/Review|section|thread/i);
-
-    // 7. Export tab
-    await page.getByRole("tab", { name: "Export" }).click();
-    await expect(page.getByRole("tabpanel")).toBeVisible();
-
-    // 8. Audit tab (admin user)
-    await page.getByRole("tab", { name: "Audit" }).click();
-    await expect(page.getByRole("tabpanel")).toContainText(/Audit|event|No audit events/i);
-
-    // 9. System tab (admin user)
-    await page.getByRole("tab", { name: "System" }).click();
-    await expect(page.getByRole("tabpanel")).toContainText("System Status");
-  });
-});
-
-test.describe("review reject → redraft → approve → export cycle @reject-redraft", () => {
-  test.skip(!runDemo, "Set E2E_DEMO=1 after starting the API with demo data");
-
-  test("review reject → redraft → approve → export cycle", async ({ page }) => {
-    // 1. Login
-    await page.goto("/login");
-    await page.getByLabel("Email").fill(demoEmail);
-    await page.getByLabel("Password").fill(demoPassword);
-    await page.getByRole("button", { name: "Login" }).click();
-    await expect(page).toHaveURL(/\/projects$/);
-
-    // 2. Open a project with deliverables
-    await page.getByPlaceholder("Search projects...").fill(demoProjectName);
-    await page.getByRole("link", { name: demoProjectName, exact: true }).click();
-
-    // 3. Navigate to Review tab
-    await page.getByRole("tab", { name: "Review" }).click();
-
-    // 4. Reject a section
-    await page.getByRole("button", { name: "Reject" }).first().click();
-    await expect(page.getByText(/rejected/i).first()).toBeVisible({ timeout: 10000 });
-
-    // 5. Navigate to Drafting tab and redraft
-    await page.getByRole("tab", { name: "Drafting" }).click();
-    await page.getByRole("button", { name: /Generate/i }).click();
-
-    // 6. Back to Review, approve the section
-    await page.getByRole("tab", { name: "Review" }).click();
-    await page.getByRole("button", { name: "Approve" }).first().click();
-    await expect(page.getByText(/approved/i).first()).toBeVisible({ timeout: 10000 });
-
-    // 7. Export
-    await page.getByRole("tab", { name: "Export" }).click();
-    await page.getByRole("button", { name: "Export DOCX" }).first().click();
+    await expect(page.getByText("内置演示资料包", { exact: true })).toBeVisible();
   });
 });

@@ -56,7 +56,7 @@ def mark_all_notifications_read(
 ) -> Response:
     db.execute(
         update(Notification)
-        .where(Notification.user_id == user.id, Notification.read == False)
+        .where(Notification.user_id == user.id, Notification.read.is_(False))
         .values(read=True)
     )
     db.commit()

@@ -15,6 +15,7 @@ Owns:
 - requirement matrix view
 - section drafting and review
 - audit and observability surfaces
+- governed Assistant operator with approval-aware execution status
 
 ### API application
 
@@ -72,6 +73,14 @@ The operations plane handles deployment, tracing, alerts, and runbooks.
 8. worker runs drafting graph and writes outputs and evidence links
 9. reviewer comments, rejects, or approves
 10. approved content is exported into a deliverable package
+
+## Governed Agent Interface
+
+The Assistant is a bounded operator over the product control plane. It can
+initiate and inspect the documented bid lifecycle, but every action is
+authorized, policy-checked, auditable, and persisted before any model output is
+presented as complete. The complete lifecycle, public-result, and human-only
+boundaries are defined in [agent-capability-matrix.md](agent-capability-matrix.md).
 
 ## Deployment evolution
 

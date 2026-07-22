@@ -8,13 +8,6 @@ from app.chat.service import create_conversation
 from app.models import AssistantActionAudit, AssistantApproval
 
 
-def _ensure_assistant_audit_tables() -> None:
-    from app.db import engine
-
-    AssistantActionAudit.__table__.create(bind=engine, checkfirst=True)
-    AssistantApproval.__table__.create(bind=engine, checkfirst=True)
-
-
 class FakeAgent:
     def __init__(self, events: list[dict]):
         self.events = events
@@ -62,7 +55,6 @@ def test_langgraph_stream_records_tool_success_audit(
     default_user_id: str,
     default_org_id: str,
 ) -> None:
-    _ensure_assistant_audit_tables()
     conversation = create_conversation(test_db, default_user_id, None)
     user = CurrentUser(
         id=default_user_id,
@@ -108,7 +100,6 @@ def test_langgraph_stream_records_pending_approval(
     default_user_id: str,
     default_org_id: str,
 ) -> None:
-    _ensure_assistant_audit_tables()
     conversation = create_conversation(test_db, default_user_id, None)
     user = CurrentUser(
         id=default_user_id,
@@ -171,7 +162,6 @@ def test_langgraph_stream_records_tool_error_as_failed_audit(
     default_user_id: str,
     default_org_id: str,
 ) -> None:
-    _ensure_assistant_audit_tables()
     conversation = create_conversation(test_db, default_user_id, None)
     user = CurrentUser(
         id=default_user_id,
@@ -219,7 +209,6 @@ def test_langgraph_stream_redacts_success_summary_in_sse_and_audit(
     default_user_id: str,
     default_org_id: str,
 ) -> None:
-    _ensure_assistant_audit_tables()
     conversation = create_conversation(test_db, default_user_id, None)
     user = CurrentUser(
         id=default_user_id,

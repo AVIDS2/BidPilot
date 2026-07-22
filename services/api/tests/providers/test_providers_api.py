@@ -19,6 +19,7 @@ def test_create_provider_config(client, default_org_id, default_user_id):
     assert resp.status_code == 201
     data = resp.json()["data"]
     assert data["provider_type"] == "openai"
+    assert data["provider_id"] == "openai"
     assert "****" in data["api_key"]  # Masked
 
 
@@ -165,3 +166,56 @@ def test_list_models_uses_stored_encrypted_config(client, default_org_id, defaul
     assert data["models"][0]["name"] == "Claude Sonnet 4"
     assert captured["url"] == "https://api.anthropic.com/v1/models"
     assert captured["headers"]["x-api-key"] == "sk-ant-stored"
+
+
+def test_test_connection_uses_provider_specific_mimo_header(client, default_org_id, default_user_id, monkeypatch):
+    class FakeResponse:
+        status_code = 200
+
+    captured = {}
+
+    def fake_post(url, headers, json, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        return FakeResponse()
+
+    monkeypatch.setattr("app.providers.service.httpx.post", fake_post)
+
+    resp = client.post(
+        "/auth/me/providers/test",
+        json={
+            "provider_type": "openai",
+            "provider_id": "mimo",
+            "api_key": "test-mimo-key",
+            "api_url": "https://mimo.example.test/v1",
+            "model": "mimo-v2.5-pro",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["data"]["success"] is True
+    assert captured["url"] == "https://mimo.example.test/v1/chat/completions"
+    assert captured["headers"] == {"api-key": "test-mimo-key", "content-type": "application/json"}
+
+
+def test_manual_model_provider_returns_manual_discovery_state(client, default_org_id, default_user_id, monkeypatch):
+    def should_not_call(*_args, **_kwargs):
+        raise AssertionError("manual model discovery must not issue an undocumented request")
+
+    monkeypatch.setattr("app.providers.service.httpx.get", should_not_call)
+
+    resp = client.post(
+        "/auth/me/providers/models",
+        json={
+            "provider_type": "openai",
+            "provider_id": "dashscope",
+            "api_key": "test-key",
+            "api_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["models"] == []
+    assert data["discovery_mode"] == "manual"

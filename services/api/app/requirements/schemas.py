@@ -78,6 +78,7 @@ class RequirementItemRead(BaseModel):
     requirement_text: str
     original_text: str | None
     source_document_id: str | None
+    source_document_name: str | None
     source_locator_json: dict | None
     priority: str
     status: str
@@ -104,6 +105,7 @@ class RequirementEvidenceLinkRead(BaseModel):
     verification_status: str
     quote_text: str
     source_document_id: str | None
+    source_document_name: str | None
     locator_json: dict | None
     confidence: float | None
     created_at: datetime
@@ -154,6 +156,29 @@ class RequirementClaimRead(BaseModel):
     evidence_ids: list[str]
     created_at: datetime
     updated_at: datetime
+
+
+class ClaimReviewQueueItemRead(BaseModel):
+    """A review target without exposing the underlying draft claim text."""
+
+    id: str
+    claim_type: str
+    status: str
+    created_by_actor: str
+    section_version_id: str | None
+    requirement_ids: list[str]
+    evidence_count: int
+    blocked_evidence_count: int
+    ready_to_verify: bool
+
+
+class ClaimReviewQueueRead(BaseModel):
+    project_id: str
+    count: int
+    ready_to_verify_count: int
+    blocked_by_evidence_count: int
+    items: list[ClaimReviewQueueItemRead] = Field(default_factory=list)
+    truncated: bool = False
 
 
 class RequirementDetailRead(RequirementItemRead):

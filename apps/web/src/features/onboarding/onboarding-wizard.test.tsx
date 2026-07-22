@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { OnboardingWizard } from "./onboarding-wizard";
 
@@ -22,5 +22,16 @@ describe("OnboardingWizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Next/i }));
     fireEvent.click(screen.getByRole("button", { name: /Next/i }));
     expect(screen.getByText(/You're All Set/i)).not.toBeNull();
+  });
+
+  it("offers the opt-in demo workspace action on the final step", () => {
+    const onCreateDemo = vi.fn();
+    render(<OnboardingWizard onCreateDemo={onCreateDemo} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Next/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Next/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Explore demo workspace/i }));
+
+    expect(onCreateDemo).toHaveBeenCalledOnce();
   });
 });

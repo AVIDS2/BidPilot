@@ -9,19 +9,17 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
 import { useNavigate, Link } from "react-router-dom"
-import { UserIcon, ShieldIcon, BellIcon, KeyIcon, LogOutIcon, MailIcon, CreditCardIcon } from "lucide-react"
+import { UserIcon, ShieldIcon, BellIcon, KeyIcon, LogOutIcon, MailIcon, CreditCardIcon, UsersRoundIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { getBillingSummary, updateCurrentUser, updateSubscription } from "@/lib/api"
-import { toast } from "sonner"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  createBillingPortal,
+  getBillingSummary,
+  getOrganizationEntitlements,
+  updateCurrentUser,
+} from "@/lib/api"
+import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import { isStrongPassword } from "@/lib/password"
 
@@ -85,19 +83,6 @@ function getPlanLabel(plan: string | undefined, t: (key: string) => string): str
   }
 }
 
-function getPlanSelectLabel(plan: string, t: (key: string) => string): string {
-  switch (plan) {
-    case "starter":
-      return t("plan.starter");
-    case "professional":
-      return t("plan.professional");
-    case "enterprise":
-      return t("plan.enterprise");
-    default:
-      return plan;
-  }
-}
-
 function quotaText(
   t: (key: string, options?: Record<string, unknown>) => string,
   limit: number,
@@ -112,6 +97,23 @@ function quotaText(
   });
 }
 
+function formatTokenCount(value: number): string {
+  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value)
+}
+
+function tokenBudgetText(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  remaining: number | null,
+): string {
+  if (remaining === null) {
+    return t("usage.tokenBudgetNotSet", { defaultValue: "No additional token cap configured" })
+  }
+  return t("usage.tokenRemaining", {
+    defaultValue: "{{count}} tokens protected by the workspace cap",
+    count: formatTokenCount(remaining),
+  })
+}
+
 export function AccountPage() {
   const { user, logout, setUser } = useAuth()
   const navigate = useNavigate()
@@ -123,6 +125,11 @@ export function AccountPage() {
   const { data: billingSummary } = useQuery({
     queryKey: ["billing-summary"],
     queryFn: getBillingSummary,
+    enabled: !!user,
+  })
+  const { data: organizationEntitlements } = useQuery({
+    queryKey: ["organization-entitlements", user?.org_id],
+    queryFn: getOrganizationEntitlements,
     enabled: !!user,
   })
 
@@ -141,6 +148,21 @@ export function AccountPage() {
       } else {
         toast.error(t("profile.updateFailed"))
       }
+    },
+  })
+
+  const billingPortalMut = useMutation({
+    mutationFn: createBillingPortal,
+    onSuccess: (result) => {
+      window.location.assign(result.url)
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err)
+      if (message.includes("409")) {
+        navigate("/pricing")
+        return
+      }
+      toast.error(t("billing.manageFailed", { defaultValue: "Unable to open billing management right now." }))
     },
   })
 
@@ -313,6 +335,59 @@ export function AccountPage() {
                           </p>
                         </div>
                       ))}
+                      <div className="rounded-md border border-border/60 px-3 py-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-sm font-medium">
+                              {t("usage.modelMetering", { defaultValue: "Model token metering" })}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {t("usage.modelMeteringDescription", {
+                                defaultValue: "Provider-reported tokens only. Monetary cost appears after a reviewed price catalog is configured.",
+                              })}
+                            </p>
+                          </div>
+                          <Badge variant="outline">
+                            {t("usage.costUnavailable", { defaultValue: "Cost unavailable" })}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {[
+                            {
+                              label: t("usage.officialModel", { defaultValue: "Platform model capacity" }),
+                              value: billingSummary.data.official_model_usage,
+                            },
+                            {
+                              label: t("usage.byokModel", { defaultValue: "Your provider key" }),
+                              value: billingSummary.data.byok_model_usage,
+                            },
+                          ].map(({ label, value }) => (
+                            <div key={label} className="rounded-md bg-muted/40 px-3 py-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-xs font-medium">{label}</p>
+                                <p className="text-xs font-semibold tabular-nums">
+                                  {formatTokenCount(value.total_tokens)}
+                                </p>
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {t("usage.tokenBreakdown", {
+                                  defaultValue: "In {{input}} · Out {{output}}",
+                                  input: formatTokenCount(value.input_tokens),
+                                  output: formatTokenCount(value.output_tokens),
+                                })}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {value.reserved_tokens > 0
+                                  ? t("usage.tokenReserved", {
+                                      defaultValue: "{{count}} held for in-flight work",
+                                      count: formatTokenCount(value.reserved_tokens),
+                                    })
+                                  : tokenBudgetText(t, value.remaining_tokens)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                       <Link to="/pricing">
                         <Button variant="outline" size="sm">
                           {t("upgrade.viewPlans")}
@@ -340,46 +415,76 @@ export function AccountPage() {
                         <p>{t("billing.plan", { plan: getPlanLabel(billingSummary.data.plan, t) })}</p>
                         <p>{t("billing.customer", { status: billingSummary.data.stripe_customer_id ? t("billing.connected") : t("billing.notConnected") })}</p>
                       </div>
-                      <Link to="/pricing">
-                        <Button size="sm">{t("billing.manage")}</Button>
-                      </Link>
+                      {billingSummary.data.is_billing_owner && billingSummary.data.stripe_customer_id ? (
+                        <Button
+                          size="sm"
+                          disabled={billingPortalMut.isPending}
+                          onClick={() => billingPortalMut.mutate()}
+                        >
+                          {billingPortalMut.isPending
+                            ? t("billing.opening", { defaultValue: "Opening…" })
+                            : t("billing.manage")}
+                        </Button>
+                      ) : billingSummary.data.is_billing_owner ? (
+                        <Link to="/pricing">
+                          <Button size="sm">{t("billing.manage")}</Button>
+                        </Link>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          {t("billing.ownerOnly")}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 )}
 
-                {user?.role === "admin" && (
-                  <div className="rounded-md p-4 space-y-3" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
-                    <div>
-                      <p className="text-sm font-medium">{t("admin.changePlan")}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("admin.changePlanDesc")}
+                {organizationEntitlements && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-medium">{t("workspace.title")}</p>
+                          <p className="text-xs text-muted-foreground">{t("workspace.description")}</p>
+                        </div>
+                        <Badge variant="outline">
+                          {getPlanLabel(organizationEntitlements.plan, t)}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-3 pt-0 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                          <UsersRoundIcon className="size-4" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium tabular-nums">
+                            {t("workspace.seats", {
+                              used: organizationEntitlements.active_member_count,
+                              limit: organizationEntitlements.seat_limit,
+                            })}
+                          </p>
+                          {organizationEntitlements.seat_overage_count > 0 ? (
+                            <p className="text-xs text-destructive">
+                              {t("workspace.overCapacity", {
+                                count: organizationEntitlements.seat_overage_count,
+                              })}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              {organizationEntitlements.capacity_enforced
+                                ? t("workspace.available", { count: organizationEntitlements.available_seats })
+                                : t("workspace.compatibility")}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground sm:max-w-56 sm:text-right">
+                        {organizationEntitlements.is_billing_owner
+                          ? t("workspace.billingOwner")
+                          : t("workspace.member")}
                       </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Select
-                        value={user?.plan ?? "starter"}
-                        onValueChange={(newPlan) => {
-                          if (user && newPlan) {
-                            updateSubscription({ user_id: user.id ?? "", plan: newPlan })
-                              .then(() => {
-                                toast.success(t("admin.planUpdated", { plan: getPlanSelectLabel(newPlan, t) }));
-                                window.location.reload();
-                              })
-                              .catch(() => toast.error(t("admin.planUpdateFailed")));
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="w-48">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="starter">{t("plan.starter")}</SelectItem>
-                          <SelectItem value="professional">{t("plan.professional")}</SelectItem>
-                          <SelectItem value="enterprise">{t("plan.enterprise")}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                    </CardContent>
+                  </Card>
                 )}
 
                 <div className="grid gap-4 md:grid-cols-2">

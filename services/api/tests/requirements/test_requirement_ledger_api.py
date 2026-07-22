@@ -1,7 +1,23 @@
 import uuid
 
 from app.db import SessionLocal
-from app.models import Bundle, Evidence, Organization, Project, RequirementItem, SourceDocument, User
+from app.models import (
+    Bundle,
+    Evidence,
+    Organization,
+    OrganizationMembership,
+    Project,
+    ProjectMember,
+    RequirementItem,
+    RequirementClaimLink,
+    SourceDocument,
+    User,
+)
+from app.requirements.repository import (
+    get_project_for_org as get_requirement_project_for_org,
+    get_requirement_for_org as get_requirement_for_org_repository,
+    list_requirements_by_project,
+)
 
 
 def _create_project(client, name: str = "Ledger Project") -> str:
@@ -15,6 +31,24 @@ def _create_project(client, name: str = "Ledger Project") -> str:
 
 def test_create_filter_and_inspect_bid_requirement(client) -> None:
     project_id = _create_project(client)
+    db = SessionLocal()
+    try:
+        bundle = Bundle(project_id=project_id, label="Tender package", source_type="upload")
+        db.add(bundle)
+        db.flush()
+        source = SourceDocument(
+            bundle_id=bundle.id,
+            storage_key="tests/tender.pdf",
+            mime_type="application/pdf",
+            checksum="c" * 64,
+            original_filename="smart-community-tender.pdf",
+        )
+        db.add(source)
+        db.commit()
+        source_document_id = source.id
+    finally:
+        db.close()
+
     created = client.post(
         "/requirements",
         json={
@@ -23,6 +57,7 @@ def test_create_filter_and_inspect_bid_requirement(client) -> None:
             "requirement_text": "提供信息安全管理体系认证",
             "original_text": "投标人须提供有效的信息安全管理体系认证。",
             "priority": "high",
+            "source_document_id": source_document_id,
             "source_locator_json": {"section": "3.2", "text_anchor": "信息安全管理体系认证"},
             "bid_profile": {
                 "bid_category": "qualification",
@@ -37,6 +72,7 @@ def test_create_filter_and_inspect_bid_requirement(client) -> None:
     body = created.json()
     assert body["lock_version"] == 1
     assert body["verification_status"] == "unverified"
+    assert body["source_document_name"] == "smart-community-tender.pdf"
     assert body["bid_profile"]["bid_category"] == "qualification"
     assert body["bid_profile"]["coverage_status"] == "uncovered"
     requirement_id = body["id"]
@@ -55,6 +91,7 @@ def test_create_filter_and_inspect_bid_requirement(client) -> None:
 
     detail = client.get(f"/requirements/{requirement_id}")
     assert detail.status_code == 200, detail.text
+    assert detail.json()["source_document_name"] == "smart-community-tender.pdf"
     assert detail.json()["source_locator_json"]["section"] == "3.2"
 
 
@@ -88,6 +125,47 @@ def test_requirement_patch_uses_optimistic_lock(client, default_user_id: str) ->
     )
     assert stale.status_code == 409
     assert "changed" in stale.json()["detail"].lower()
+
+
+def test_profile_only_update_advances_lock_and_invalidates_readiness_fingerprint(client) -> None:
+    project_id = _create_project(client, "Profile Version Project")
+    created = client.post(
+        "/requirements",
+        json={
+            "project_id": project_id,
+            "section_key": "qualification",
+            "requirement_text": "Provide a current ISO 27001 certificate",
+            "bid_profile": {"is_mandatory": False},
+        },
+    ).json()
+
+    before = client.get(f"/readiness/projects/{project_id}")
+    assert before.status_code == 200, before.text
+    assert before.json()["counts"]["mandatory"] == 0
+
+    updated = client.patch(
+        f"/requirements/{created['id']}",
+        json={
+            "lock_version": created["lock_version"],
+            "bid_profile": {"is_mandatory": True},
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["lock_version"] == created["lock_version"] + 1
+
+    after = client.get(f"/readiness/projects/{project_id}")
+    assert after.status_code == 200, after.text
+    assert after.json()["counts"]["mandatory"] == 1
+    assert after.json()["source_fingerprint"] != before.json()["source_fingerprint"]
+
+    stale = client.patch(
+        f"/requirements/{created['id']}",
+        json={
+            "lock_version": created["lock_version"],
+            "bid_profile": {"risk_level": "critical"},
+        },
+    )
+    assert stale.status_code == 409
 
 
 def test_requirement_routes_hide_other_organization_projects(client) -> None:
@@ -129,6 +207,36 @@ def test_requirement_routes_hide_other_organization_projects(client) -> None:
     assert listed.status_code == 404
     assert detail.status_code == 404
     assert updated.status_code == 404
+
+
+def test_requirement_repository_hides_soft_deleted_projects(
+    client,
+    default_org_id: str,
+) -> None:
+    project_id = _create_project(client, "Soft Deleted Requirement Project")
+    created = client.post(
+        "/requirements",
+        json={
+            "project_id": project_id,
+            "section_key": "scope",
+            "requirement_text": "This requirement must remain hidden after deletion.",
+        },
+    )
+    assert created.status_code == 201, created.text
+    requirement_id = created.json()["id"]
+
+    db = SessionLocal()
+    try:
+        project = db.get(Project, project_id)
+        assert project is not None
+        project.status = "deleted"
+        db.commit()
+
+        assert get_requirement_project_for_org(db, project_id, default_org_id) is None
+        assert list_requirements_by_project(db, project_id, default_org_id) == []
+        assert get_requirement_for_org_repository(db, requirement_id, default_org_id) is None
+    finally:
+        db.close()
 
 
 def test_evidence_link_updates_derived_readiness_state(client, default_user_id: str) -> None:
@@ -182,6 +290,7 @@ def test_evidence_link_updates_derived_readiness_state(client, default_user_id: 
     assert detail["bid_profile"]["coverage_status"] == "partial"
     assert detail["bid_profile"]["evidence_status"] == "weak"
     assert detail["evidence_links"][0]["quote_text"] == "ISO 27001 certification"
+    assert detail["evidence_links"][0]["source_document_name"] == "certificate.pdf"
 
     verified = client.patch(
         f"/requirements/{requirement['id']}/evidence/{link_id}",
@@ -211,12 +320,26 @@ def test_admin_can_approve_not_applicable_decision(
             email_verified=True,
         )
         db.add(reviewer)
+        db.flush()
+        db.add(
+            OrganizationMembership(
+                org_id=default_org_id,
+                user_id=reviewer.id,
+                role="member",
+            )
+        )
         db.commit()
         reviewer_id = reviewer.id
     finally:
         db.close()
 
     project_id = _create_project(client, "Decision Project")
+    db = SessionLocal()
+    try:
+        db.add(ProjectMember(project_id=project_id, user_id=reviewer_id, role="reviewer"))
+        db.commit()
+    finally:
+        db.close()
     requirement = client.post(
         "/requirements",
         json={
@@ -261,12 +384,26 @@ def test_bulk_assignment_validates_versions_and_organization(
             email_verified=True,
         )
         db.add(assignee)
+        db.flush()
+        db.add(
+            OrganizationMembership(
+                org_id=default_org_id,
+                user_id=assignee.id,
+                role="member",
+            )
+        )
         db.commit()
         assignee_id = assignee.id
     finally:
         db.close()
 
     project_id = _create_project(client, "Bulk Assignment Project")
+    db = SessionLocal()
+    try:
+        db.add(ProjectMember(project_id=project_id, user_id=assignee_id, role="contributor"))
+        db.commit()
+    finally:
+        db.close()
     requirements = [
         client.post(
             "/requirements",
@@ -299,6 +436,23 @@ def test_bulk_assignment_validates_versions_and_organization(
         },
     )
     assert stale.status_code == 409
+    assert stale.json()["detail"] == {
+        "code": "requirements_changed",
+        "requirement_ids": [requirements[0]["id"]],
+    }
+
+    unassigned = client.post(
+        "/requirements/bulk-assign",
+        json={
+            "requirement_ids": [item["id"] for item in assigned.json()],
+            "lock_versions": {
+                item["id"]: item["lock_version"] for item in assigned.json()
+            },
+            "owner_user_id": None,
+        },
+    )
+    assert unassigned.status_code == 200, unassigned.text
+    assert {item["owner_user_id"] for item in unassigned.json()} == {None}
 
 
 def test_verified_evidence_backed_claim_closes_requirement(
@@ -407,3 +561,105 @@ def test_factual_claim_cannot_be_verified_without_evidence(
     )
     assert verified.status_code == 409
     assert "evidence" in verified.json()["detail"].lower()
+
+
+def test_multi_requirement_claim_requires_verified_evidence_for_every_requirement(
+    client,
+    default_user_id: str,
+) -> None:
+    project_id = _create_project(client, "Shared Claim Verification Project")
+    requirement_one = client.post(
+        "/requirements",
+        json={
+            "project_id": project_id,
+            "section_key": "security",
+            "requirement_text": "Sensitive data must be encrypted at rest.",
+            "reviewer_user_id": default_user_id,
+            "bid_profile": {"is_mandatory": True},
+        },
+    ).json()
+    requirement_two = client.post(
+        "/requirements",
+        json={
+            "project_id": project_id,
+            "section_key": "security",
+            "requirement_text": "Stored data must use approved encryption controls.",
+            "reviewer_user_id": default_user_id,
+            "bid_profile": {"is_mandatory": True},
+        },
+    ).json()
+
+    db = SessionLocal()
+    try:
+        bundle = Bundle(project_id=project_id, label="Shared security evidence", source_type="upload")
+        db.add(bundle)
+        db.flush()
+        source = SourceDocument(
+            bundle_id=bundle.id,
+            storage_key="tests/shared-security.md",
+            mime_type="text/markdown",
+            checksum="d" * 64,
+            original_filename="shared-security.md",
+        )
+        db.add(source)
+        db.flush()
+        evidence = Evidence(
+            project_id=project_id,
+            source_document_id=source.id,
+            quote_text="AES-256 encryption is enabled for all stored data.",
+            locator_json={"section": "Encryption"},
+        )
+        db.add(evidence)
+        db.commit()
+        evidence_id = evidence.id
+    finally:
+        db.close()
+
+    link_one = client.post(
+        f"/requirements/{requirement_one['id']}/evidence",
+        json={"evidence_id": evidence_id},
+    ).json()
+    link_two = client.post(
+        f"/requirements/{requirement_two['id']}/evidence",
+        json={"evidence_id": evidence_id},
+    ).json()
+    first_verified = client.patch(
+        f"/requirements/{requirement_one['id']}/evidence/{link_one['id']}",
+        json={"verification_status": "verified"},
+    )
+    assert first_verified.status_code == 200, first_verified.text
+
+    created_claim = client.post(
+        f"/requirements/{requirement_one['id']}/claims",
+        json={
+            "claim_text": "All stored data uses AES-256 encryption.",
+            "claim_type": "factual",
+            "evidence_ids": [evidence_id],
+        },
+    )
+    assert created_claim.status_code == 201, created_claim.text
+    claim_id = created_claim.json()["id"]
+
+    db = SessionLocal()
+    try:
+        db.add(RequirementClaimLink(requirement_id=requirement_two["id"], claim_id=claim_id))
+        db.commit()
+    finally:
+        db.close()
+
+    premature = client.post(f"/requirements/{requirement_one['id']}/claims/{claim_id}/verify")
+    assert premature.status_code == 409
+    assert "every linked requirement" in premature.json()["detail"]
+
+    second_verified = client.patch(
+        f"/requirements/{requirement_two['id']}/evidence/{link_two['id']}",
+        json={"verification_status": "verified"},
+    )
+    assert second_verified.status_code == 200, second_verified.text
+    verified = client.post(f"/requirements/{requirement_one['id']}/claims/{claim_id}/verify")
+    assert verified.status_code == 200, verified.text
+
+    for requirement_id in (requirement_one["id"], requirement_two["id"]):
+        detail = client.get(f"/requirements/{requirement_id}").json()
+        assert detail["bid_profile"]["coverage_status"] == "covered"
+        assert detail["claims"][0]["status"] == "verified"

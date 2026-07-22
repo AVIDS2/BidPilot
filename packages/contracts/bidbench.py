@@ -9,6 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .evaluation import EvaluationEvidenceProvenance
+
 
 _SAFE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]*$"
 
@@ -30,6 +32,7 @@ class CoverageStatus(StrEnum):
     COVERED = "covered"
     DISPUTED = "disputed"
     NOT_APPLICABLE = "not_applicable"
+    ACCEPTED_RISK = "accepted_risk"
 
 
 class DatasetRole(StrEnum):
@@ -214,6 +217,7 @@ class BidBenchCandidate(_ContractModel):
     generated_at: datetime | None = None
     latency_ms: int | None = Field(default=None, ge=0)
     estimated_cost_usd: float | None = Field(default=None, ge=0)
+    provenance: EvaluationEvidenceProvenance | None = None
     requirements: list[BidBenchCandidateRequirement] = Field(default_factory=list)
     claims: list[BidBenchCandidateClaim] = Field(default_factory=list)
 

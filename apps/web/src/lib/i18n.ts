@@ -14,7 +14,7 @@ i18n
   .init({
     fallbackLng: "en",
     supportedLngs: ["en", "zh-CN"],
-    ns: ["common", "admin", "auth", "projects", "landing", "account", "pricing", "onboarding", "dashboard", "docs", "settings", "ai-assistant"],
+    ns: ["common", "admin", "auth", "projects", "landing", "account", "pricing", "onboarding", "dashboard", "docs", "settings", "runs", "knowledge-portfolio", "ai-assistant"],
     defaultNS: "common",
     interpolation: { escapeValue: false },
     detection: {

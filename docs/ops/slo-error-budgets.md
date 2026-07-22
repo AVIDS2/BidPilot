@@ -54,4 +54,4 @@ Use `scripts/load_smoke.py` for a lightweight local API pressure check before re
 python scripts/load_smoke.py --base-url http://localhost:8000 --requests 20 --concurrency 4 --max-error-rate 0 --max-p95-ms 1000
 ```
 
-The default endpoints are `/health` and `/openapi.json`. Add additional `--endpoint` values for targeted readiness or export checks.
+The default endpoints are `/health` and `/openapi.json`. Add additional `--endpoint` values for targeted readiness or export checks. For a deployed target, add `--require-https --output-file output/release-evidence/api-load-smoke.json` so the result can be retained without recording credentials.

@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [master, main]
   pull_request:
 
 jobs:
@@ -33,6 +33,7 @@ jobs:
           --health-retries 5
     env:
       DOCPILOT_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
+      DOCPILOT_TEST_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
       DOCPILOT_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
@@ -53,14 +54,45 @@ jobs:
 
   worker-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: docpilot_test
+          POSTGRES_USER: docpilot
+          POSTGRES_PASSWORD: docpilot123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DOCPILOT_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
+      DOCPILOT_TEST_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
+      DOCPILOT_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - run: pip install uv
+      - name: Install API migration deps
+        run: uv sync --directory services/api
       - name: Install Worker deps
         run: uv sync --directory services/worker
+      - name: Run migrations
+        run: uv run --directory services/api alembic upgrade head
       - name: Lint
         run: uv run --directory services/worker ruff check app/ tests/
       - name: Test

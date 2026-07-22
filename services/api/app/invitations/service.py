@@ -2,9 +2,14 @@ import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Invitation, Organization, User
+from app.models import Invitation, OrganizationMembership, User
+from app.organizations.service import (
+    ACTIVE_MEMBERSHIP_STATUS,
+    create_organization_membership_command,
+)
 
 INVITATION_EXPIRES_DAYS = 7
 
@@ -23,8 +28,16 @@ def create_invitation_command(db: Session, org_id: str, email: str, invited_by_i
         raise ValueError("An active invitation already exists for this email")
 
     # Check if user is already in the org
-    user = db.query(User).filter_by(email=email, org_id=org_id).first()
-    if user is not None:
+    member_user_id = db.scalar(
+        select(OrganizationMembership.user_id)
+        .join(User, User.id == OrganizationMembership.user_id)
+        .where(
+            User.email == email,
+            OrganizationMembership.org_id == org_id,
+            OrganizationMembership.status == ACTIVE_MEMBERSHIP_STATUS,
+        )
+    )
+    if member_user_id is not None:
         raise ValueError("User is already a member of this organization")
 
     token = _make_token()
@@ -46,9 +59,14 @@ def list_invitations_query(db: Session, org_id: str) -> list[Invitation]:
     return db.query(Invitation).filter_by(org_id=org_id, status="pending").order_by(Invitation.created_at.desc()).all()
 
 
-def revoke_invitation_command(db: Session, invitation_id: str) -> None:
+def revoke_invitation_command(
+    db: Session,
+    invitation_id: str,
+    *,
+    org_id: str | None = None,
+) -> None:
     invitation = db.get(Invitation, invitation_id)
-    if invitation is None:
+    if invitation is None or (org_id is not None and invitation.org_id != org_id):
         raise ValueError("Invitation not found")
     invitation.status = "revoked"
     db.commit()
@@ -66,11 +84,31 @@ def validate_invitation_token(db: Session, token: str) -> Invitation | None:
     return invitation
 
 
-def accept_invitation_command(db: Session, token: str, user_id: str) -> Invitation | None:
+def accept_invitation_command(
+    db: Session,
+    token: str,
+    user_id: str,
+    *,
+    commit: bool = True,
+) -> Invitation | None:
     """Mark an invitation as accepted. Returns the invitation or None."""
     invitation = validate_invitation_token(db, token)
     if invitation is None:
         return None
+    user = db.get(User, user_id)
+    if user is None:
+        raise ValueError("User not found")
+    if user.email.casefold() != invitation.email.casefold():
+        raise ValueError("Invitation email does not match user email")
+    create_organization_membership_command(
+        db,
+        org_id=invitation.org_id,
+        user_id=user_id,
+        role="member",
+        commit=False,
+    )
     invitation.status = "accepted"
-    db.commit()
+    if commit:
+        db.commit()
+        db.refresh(invitation)
     return invitation

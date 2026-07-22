@@ -112,33 +112,10 @@ export function CinematicHero({
         }}
       />
 
-      {/* 层7: 极简角标（仅保留品牌标识，去掉技术参数） */}
-      <MinimalGuide />
-
-      {/* 层8: 内容 */}
+      {/* 层7: 内容 */}
       <div className="relative z-20 mx-auto flex min-h-[100dvh] w-full max-w-7xl flex-col justify-center px-5 py-28 sm:px-8 sm:py-32">
         {children}
       </div>
-    </div>
-  );
-}
-
-// 极简角标 — 只保留品牌定位，去掉开发者技术参数
-function MinimalGuide() {
-  return (
-    <div className="absolute inset-0 pointer-events-none z-10">
-      {/* 左上角：品牌标识 */}
-      <span className="absolute top-5 left-5 text-[10px] text-white/20 font-mono tracking-widest uppercase sm:top-6 sm:left-6">
-        BidPilot
-      </span>
-
-      {/* 右上角：行业定位 */}
-      <span className="absolute top-5 right-5 text-[10px] text-white/20 font-mono tracking-widest uppercase sm:top-6 sm:right-6">
-        Bid Intelligence
-      </span>
-
-      {/* 极淡的边框线 — 仅在大屏显示，增加电影感 */}
-      <div className="hidden sm:block absolute inset-x-8 inset-y-20 border border-white/[0.03]" />
     </div>
   );
 }
