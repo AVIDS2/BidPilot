@@ -345,3 +345,19 @@ Do not add another visible feature until the relevant concept, architecture deci
   The production configuration was aligned with the existing MinIO service
   without placing any credential in Git; PostgreSQL, Redis, and MinIO now all
   report `ok` from `/health/ready`.
+
+## 2026-07-23 Operator Conversation Scope Repair
+
+- Operator-created projects now bind durably to their originating chat
+  conversation. Follow-up turns inherit that project scope rather than
+  replanning a creation action, and the completion message moves on to the
+  next useful task instead of duplicating the tool result card.
+- Legacy conversations created before this binding are recovered lazily and
+  safely from their own successful Runtime action, scoped to the same user and
+  organization. This preserves authorization boundaries and avoids requiring a
+  user to restart an existing conversation.
+- Failed first assistant replies no longer become generated conversation
+  titles; an existing failure-like automatic title can be repaired on the next
+  successful reply. Targeted API regression coverage passed (`52 passed`),
+  Ruff passed, and production commit `c980545` returned ready with PostgreSQL,
+  Redis, and MinIO checks all `ok`.
