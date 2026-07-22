@@ -23,6 +23,8 @@
     "@langchain/langgraph-sdk": "^0.0.70",
     "@radix-ui/react-use-controllable-state": "^1.2.3",
     "@rive-app/react-webgl2": "^4.29.0",
+    "@shikijs/langs": "^4.2.0",
+    "@shikijs/themes": "^4.2.0",
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
