@@ -31,6 +31,7 @@ from .registry import (
     format_approval_request,
     format_public_result,
     get_capability_definition,
+    missing_required_capability_arguments,
 )
 from .repository import (
     RuntimeRunListRow,
@@ -415,6 +416,9 @@ def execute_capability(
     """Execute one capability at most once for a runtime action key."""
     run = get_visible_runtime_run(db, run_id, user)
     definition = get_capability_definition(capability_name)
+    missing_fields = missing_required_capability_arguments(definition.name, arguments)
+    if missing_fields:
+        raise ValueError(f"{definition.label_zh}缺少必填信息：{'、'.join(missing_fields)}")
     policy = evaluate_policy(definition, approval_mode=run.policy_snapshot_json.get("approval_mode", "risky_only"))
 
     action = db.scalar(

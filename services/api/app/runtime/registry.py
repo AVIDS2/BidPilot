@@ -178,6 +178,26 @@ WORKFLOW_CAPABILITY_NAMES = frozenset(
 )
 
 
+_REQUIRED_ARGUMENT_FIELDS: dict[str, tuple[str, ...]] = {
+    "create_project": ("name",),
+}
+
+
+def missing_required_capability_arguments(capability_name: str, arguments: dict[str, Any]) -> tuple[str, ...]:
+    """Return required action arguments that are absent or blank.
+
+    This is a control-plane guard, not a prompt instruction: a model may plan a
+    valid capability while omitting an argument, but it must never create an
+    approval or reach a domain command with incomplete data.
+    """
+    missing: list[str] = []
+    for field in _REQUIRED_ARGUMENT_FIELDS.get(capability_name, ()):
+        value = arguments.get(field)
+        if not isinstance(value, str) or not value.strip():
+            missing.append(field)
+    return tuple(missing)
+
+
 def get_capability_definition(name: str) -> CapabilityDefinition:
     try:
         return CAPABILITY_REGISTRY[name]

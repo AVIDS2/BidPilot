@@ -18,6 +18,7 @@ from app.models import (
     ModelUsageReservation,
     OrganizationUsageBudget,
     Project,
+    RuntimeAction,
     RuntimeRun,
 )
 from app.runtime.events import list_events_after
@@ -371,6 +372,67 @@ def test_operator_graph_keeps_missing_input_as_a_durable_plan(
         "capability": "create_project",
         "missing_fields": ["name"],
     }
+
+
+def test_operator_graph_binds_an_explicit_project_name_before_requesting_approval(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr("app.assistant.tools.check_plan_limit", lambda *_args, **_kwargs: None)
+    user = _user(default_org_id, default_user_id)
+    run = create_runtime_run(
+        test_db,
+        user,
+        kind="assistant_turn",
+        engine="langgraph_operator",
+        input_json={"message": "帮我创建一个项目，叫AI kimi投资"},
+    )
+    graph = build_operator_graph(
+        test_db,
+        user,
+        planner=lambda _context: OperatorPlan(mode="tool", capability_name="create_project"),
+        checkpointer=InMemorySaver(),
+    )
+
+    result = graph.invoke(
+        {"user_message": "帮我创建一个项目，叫AI kimi投资", "runtime_run_id": run.id, "calls_made": 0},
+        config={"configurable": {"thread_id": run.id}},
+    )
+
+    assert result.get("__interrupt__")
+    action = test_db.query(RuntimeAction).filter_by(run_id=run.id).one()
+    assert action.arguments_json == {"name": "AI kimi投资", "scenario_package": "bidpilot"}
+
+
+def test_operator_graph_never_requests_approval_for_an_unnamed_project(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = _user(default_org_id, default_user_id)
+    run = create_runtime_run(
+        test_db,
+        user,
+        kind="assistant_turn",
+        engine="langgraph_operator",
+        input_json={"message": "帮我创建一个项目"},
+    )
+    graph = build_operator_graph(
+        test_db,
+        user,
+        planner=lambda _context: OperatorPlan(mode="tool", capability_name="create_project"),
+        checkpointer=InMemorySaver(),
+    )
+
+    result = graph.invoke(
+        {"user_message": "帮我创建一个项目", "runtime_run_id": run.id, "calls_made": 0},
+        config={"configurable": {"thread_id": run.id}},
+    )
+
+    assert result["final_message"] == "请告诉我项目名称。"
+    assert test_db.query(RuntimeAction).filter_by(run_id=run.id).count() == 0
 
 
 def test_operator_graph_interrupt_resume_executes_one_approved_mutation(
