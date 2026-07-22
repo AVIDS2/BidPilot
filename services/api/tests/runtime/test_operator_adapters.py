@@ -177,6 +177,25 @@ def test_planner_reports_only_normalized_model_usage_when_raw_metadata_is_availa
     assert observed[0].cache_read_tokens == 5
 
 
+def test_planner_prefers_function_calling_for_openai_compatible_models() -> None:
+    captured: dict[str, object] = {}
+
+    class FakeStructuredPlanner:
+        def invoke(self, _messages):
+            return {"parsed": OperatorPlan(mode="answer", message="已完成。"), "raw": None}
+
+    class FakeLLM:
+        def with_structured_output(self, _schema, **kwargs):
+            captured.update(kwargs)
+            return FakeStructuredPlanner()
+
+    planner = build_langchain_planner(FakeLLM())
+    plan = planner(OperatorPlanningContext(user_message="查看项目", calls_made=0))
+
+    assert plan.message == "已完成。"
+    assert captured == {"method": "function_calling", "include_raw": True}
+
+
 def test_planner_runs_pre_dispatch_hook_before_model_invocation() -> None:
     events: list[str] = []
 

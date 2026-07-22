@@ -206,11 +206,29 @@ def build_langchain_planner(
 ) -> OperatorPlanner:
     """Adapt a structured-output LangChain model to the bounded planner port."""
     try:
-        structured_model = llm.with_structured_output(OperatorPlan, include_raw=True)
+        # ChatOpenAI 1.x defaults to ``json_schema``. DeepSeek's compatible
+        # endpoint currently rejects that response_format, while its forced
+        # tool-calling path returns the same validated OperatorPlan shape.
+        structured_model = llm.with_structured_output(
+            OperatorPlan,
+            method="function_calling",
+            include_raw=True,
+        )
     except TypeError:
-        # Older test doubles and LangChain integrations may not expose the raw
-        # message. They remain functional but cannot provide token telemetry.
-        structured_model = llm.with_structured_output(OperatorPlan)
+        try:
+            # Some older integrations support raw telemetry but not the
+            # explicit method parameter.
+            structured_model = llm.with_structured_output(OperatorPlan, include_raw=True)
+        except TypeError:
+            try:
+                structured_model = llm.with_structured_output(
+                    OperatorPlan,
+                    method="function_calling",
+                )
+            except TypeError:
+                # Older test doubles and integrations may not expose either
+                # keyword. They remain functional without raw telemetry.
+                structured_model = llm.with_structured_output(OperatorPlan)
     capability_list = "、".join(
         f"{definition.name}（{definition.label_zh}）"
         for definition in sorted(CAPABILITY_REGISTRY.values(), key=lambda item: item.name)
