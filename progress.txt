@@ -337,3 +337,11 @@ Do not add another visible feature until the relevant concept, architecture deci
 - Remaining release work is intentionally operational only: review the staged
   change set, push the controlled-pilot branch, deploy through the existing
   `/app/bidpilot/deploy.sh` flow, and retain post-deploy health/HTTPS evidence.
+- The controlled-pilot release was pushed to GitHub and deployed through
+  `/app/bidpilot/deploy.sh`. Production migrations are at Alembic head, and
+  the public Web endpoint plus the public API readiness endpoint both return
+  HTTPS `200`.
+- Post-deploy readiness exposed a stale server-only MinIO credential setting.
+  The production configuration was aligned with the existing MinIO service
+  without placing any credential in Git; PostgreSQL, Redis, and MinIO now all
+  report `ok` from `/health/ready`.
