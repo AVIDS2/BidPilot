@@ -200,6 +200,7 @@ type Action =
   | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
   | { type: "UPDATE_LAST_ASSISTANT"; content: string }
   | { type: "ENSURE_TRANSCRIPT_TURN"; turnId: string }
+  | { type: "FINALIZE_OPEN_EXECUTION_ITEMS"; runtimeRunId?: string; failed?: boolean }
   | { type: "FLUSH_READY_ASSISTANT_CONTENT" }
   | { type: "SET_ACTIVE_ASSISTANT_MESSAGE"; messageId: string | null }
   | { type: "SET_STATUS"; status: AssistantStatus }
@@ -275,6 +276,10 @@ function createExecutionId(prefix: string, key?: string) {
   return `${prefix}${safeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function isOpenExecutionStatus(status: AssistantExecutionItem["status"]) {
+  return status === "running" || status === "pending";
+}
+
 function matchExecutionItem(
   item: AssistantExecutionItem,
   action: {
@@ -287,17 +292,37 @@ function matchExecutionItem(
   activeAssistantMessageId: string | null,
 ): boolean {
   // Prefer stable tool_call_id so concurrent tools never clobber each other.
-  if (action.toolCallId) {
+  if (action.toolCallId && item.toolCallId) {
     return item.toolCallId === action.toolCallId;
   }
-  if (action.runtimeRunId && item.runtimeRunId === action.runtimeRunId && item.toolName === action.toolName) {
-    if (action.turnId && item.turnId) return item.turnId === action.turnId;
+  if (action.runId && item.runId === action.runId) {
     return true;
   }
-  if (action.runId) {
-    return item.runId === action.runId;
+
+  const sameTool = item.toolName === action.toolName;
+  const sameMessage =
+    !item.messageId || !activeAssistantMessageId || item.messageId === activeAssistantMessageId;
+  const sameRuntime =
+    !action.runtimeRunId || !item.runtimeRunId || item.runtimeRunId === action.runtimeRunId;
+
+  // Live harness emits tool_started with tool_call_id; durable CAPABILITY_*
+  // events often omit it (or the reverse order). Always merge onto the open
+  // card for the same tool in the active message/run so we never leave a
+  // ghost "running" card beside the completed one.
+  if (sameTool && sameMessage && sameRuntime && isOpenExecutionStatus(item.status)) {
+    return true;
   }
-  return item.toolName === action.toolName && item.messageId === activeAssistantMessageId;
+
+  if (
+    action.runtimeRunId &&
+    item.runtimeRunId === action.runtimeRunId &&
+    sameTool
+  ) {
+    if (action.turnId && item.turnId && action.turnId === item.turnId) return true;
+    if (!action.toolCallId || !item.toolCallId) return true;
+  }
+
+  return sameTool && item.messageId === activeAssistantMessageId && !action.toolCallId;
 }
 
 function getLastAssistantMessageId(state: AIAssistantState) {
@@ -419,6 +444,31 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     }
     case "ENSURE_TRANSCRIPT_TURN":
       return ensureAssistantTurnPart(state, action.turnId);
+    case "FINALIZE_OPEN_EXECUTION_ITEMS": {
+      const executionItems = state.executionItems.map((item) => {
+        if (!isOpenExecutionStatus(item.status)) return item;
+        if (action.runtimeRunId && item.runtimeRunId && item.runtimeRunId !== action.runtimeRunId) {
+          return item;
+        }
+        if (
+          !action.runtimeRunId &&
+          item.messageId &&
+          state.activeAssistantMessageId &&
+          item.messageId !== state.activeAssistantMessageId
+        ) {
+          return item;
+        }
+        return {
+          ...item,
+          status: action.failed ? "failed" : "succeeded",
+          isRunning: false,
+          summary:
+            item.summary ||
+            (action.failed ? "本轮已结束（工具未收到完成事件）" : "本轮已结束"),
+        };
+      });
+      return flushReadyAssistantBuffers({ ...state, executionItems });
+    }
     case "FLUSH_READY_ASSISTANT_CONTENT":
       return flushReadyAssistantBuffers(state);
     case "SET_ACTIVE_ASSISTANT_MESSAGE":
@@ -439,7 +489,16 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         const matches = matchExecutionItem(item, action, state.activeAssistantMessageId);
         if (matches) {
           updated = true;
-          return { ...item, ...action.patch };
+          // Preserve the first stable ids when later durable events omit them.
+          return {
+            ...item,
+            ...action.patch,
+            toolCallId: action.patch.toolCallId ?? item.toolCallId,
+            turnId: item.turnId ?? action.patch.turnId ?? action.turnId,
+            runtimeRunId: item.runtimeRunId ?? action.patch.runtimeRunId ?? action.runtimeRunId,
+            runId: item.runId ?? action.patch.runId ?? action.runId,
+            messageId: item.messageId ?? state.activeAssistantMessageId ?? undefined,
+          };
         }
         return item;
       });
@@ -649,14 +708,8 @@ function handleAssistantSseEvent(
     if (turnId) {
       dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
     }
-    if (runtimeRunId && !toolCallId) {
-      dispatch({
-        type: "MERGE_WORKFLOW_NODE",
-        runtimeRunId,
-        node: { name: toolName, status: "running", startedAt: new Date().toISOString() },
-        currentNode: toolName,
-      });
-    }
+    // Only workflow capabilities own node progress. Read tools like
+    // search_projects must not become "0/1 steps" cards.
     dispatch({
       type: "UPDATE_EXECUTION_ITEM",
       toolName,
@@ -669,7 +722,9 @@ function handleAssistantSseEvent(
         title,
         toolCallId,
         turnId,
+        runtimeRunId,
         arguments: asRecord(parsed.arguments),
+        isRunning: true,
       },
     });
     return;
@@ -915,6 +970,10 @@ function handleAssistantSseEvent(
       dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
       options?.onConversation?.(conversationId);
     }
+    // Close any tool cards still "running" after the stream ends. Duplicate
+    // CAPABILITY_* events previously left a ghost running card beside the
+    // completed one.
+    dispatch({ type: "FINALIZE_OPEN_EXECUTION_ITEMS", runtimeRunId, failed: parsed.state === "failed" });
     options?.onTerminal?.();
   }
 }

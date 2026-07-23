@@ -394,8 +394,11 @@ function ActivityDetail({
   const label = getAssistantToolLabel(item.toolName, t);
   const safeSummary = sanitizeToolText(item.summary);
   const failureGuidance = item.status === "failed" ? getFailureGuidance(item.errorCode, t) : null;
-  const completedNodes = item.nodes?.filter((node) => node.status === "completed").length ?? 0;
-  const totalNodes = item.nodes?.length ?? 0;
+  // Only real workflow cards own node progress. Plain tools must never show
+  // "0/1 steps" just because a stale nodes array leaked onto the item.
+  const workflowNodes = item.kind === "workflow" ? item.nodes ?? [] : [];
+  const completedNodes = workflowNodes.filter((node) => node.status === "completed").length;
+  const totalNodes = workflowNodes.length;
   const detailRows = [
     ...Object.entries(item.arguments ?? {})
       .filter(([key, value]) => !isLowSignalField(key, value))
@@ -459,9 +462,9 @@ function ActivityDetail({
           </div>
         )}
         <ResultDownloadActions result={item.result} t={t} />
-        {item.nodes && item.nodes.length > 0 && (
+        {workflowNodes.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1">
-            {item.nodes.map((node) => (
+            {workflowNodes.map((node) => (
               <span key={node.name} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                 {getWorkflowNodeLabel(node.name, t)} · {t(`execution.nodeStatus.${node.status}`, { defaultValue: node.status })}
               </span>
