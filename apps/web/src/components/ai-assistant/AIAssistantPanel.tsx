@@ -444,20 +444,29 @@ function MessageBubble({
   // turn_id keep tools-on-top so completed cards still precede the summary.
   const parts = msg.transcriptParts ?? [];
   const hasTurnParts = parts.some((part) => part.kind === "turn");
+  const turnIds = useMemo(
+    () => new Set(parts.filter((part) => part.kind === "turn").map((part) => part.turnId)),
+    [parts],
+  );
   const toolsByTurn = useMemo(() => {
     const map = new Map<string, AssistantExecutionItem[]>();
     for (const item of activityItems) {
-      const key =
-        item.turnId ||
-        (item.runtimeRunId ? `run:${item.runtimeRunId}` : undefined) ||
-        item.toolCallId ||
-        item.id;
-      const list = map.get(key) ?? [];
+      if (!item.turnId) continue;
+      const list = map.get(item.turnId) ?? [];
       list.push(item);
-      map.set(key, list);
+      map.set(item.turnId, list);
     }
     return map;
   }, [activityItems]);
+  // Events without turn_id (durable CAPABILITY_*) must still render.
+  const orphanTools = useMemo(
+    () =>
+      activityItems.filter((item) => {
+        if (!item.turnId) return true;
+        return !turnIds.has(item.turnId);
+      }),
+    [activityItems, turnIds],
+  );
 
   const renderNarrative = (text: string, key: string) =>
     text ? (
@@ -475,26 +484,15 @@ function MessageBubble({
   );
 
   return (
-    <FadeContent duration={280} threshold={0.02} className="flex flex-col items-start gap-2 animate-fade-in">
-      <div
-        className="w-full max-w-full space-y-3 px-1 py-1 text-[14px] leading-7 break-words sm:max-w-[92%]"
-        style={{
-          background: "transparent",
-          color: "var(--foreground)",
-          borderColor: "transparent",
-        }}
-      >
+    <div className="flex w-full max-w-full flex-col items-start gap-2 animate-fade-in sm:max-w-[92%]">
+      <div className="w-full space-y-3 px-1 py-1 text-[14px] leading-7 break-words text-foreground">
         {hasTurnParts ? (
           <>
             {parts.map((part) => {
               if (part.kind === "narrative") {
                 return renderNarrative(part.text, part.id);
               }
-              const turnItems = toolsByTurn.get(part.turnId) ?? [];
-              const items =
-                turnItems.length > 0
-                  ? turnItems
-                  : activityItems.filter((item) => item.turnId === part.turnId);
+              const items = toolsByTurn.get(part.turnId) ?? [];
               if (items.length === 0) return null;
               return (
                 <AssistantActivityTimeline
@@ -505,6 +503,13 @@ function MessageBubble({
                 />
               );
             })}
+            {orphanTools.length > 0 && (
+              <AssistantActivityTimeline
+                items={orphanTools}
+                onCancelWorkflow={onCancelWorkflow}
+                onConfigureProvider={onConfigureProvider}
+              />
+            )}
             {!msg.content && parts.every((part) => part.kind !== "narrative") && thinkingDots}
           </>
         ) : (
@@ -526,7 +531,7 @@ function MessageBubble({
           </>
         )}
       </div>
-    </FadeContent>
+    </div>
   );
 }
 
@@ -1152,8 +1157,10 @@ export function AIAssistantPanel({
       className={cn(
         "flex flex-col overflow-hidden",
         isWorkspace
-          ? "relative h-[calc(100dvh-8rem)] min-h-[32rem] w-full rounded-2xl border"
-          : "fixed inset-0 z-40 h-[100dvh] w-full animate-slide-in border-l sm:left-auto sm:w-[390px] md:w-[500px] xl:w-[560px]",
+          ? // Fill the shell content area; avoid magic 8rem that leaves dead space
+            // and misaligns when switching between /agent and side panel.
+            "relative flex h-[calc(100dvh-var(--header-height,3rem)-2.5rem)] min-h-0 w-full min-w-0 flex-1 flex-col rounded-2xl border"
+          : "fixed inset-0 z-40 h-[100dvh] w-full animate-slide-in border-l sm:left-auto sm:w-[min(100vw,390px)] md:w-[500px] xl:w-[560px]",
       )}
       style={{
         background: "color-mix(in oklch, var(--background) 94%, transparent)",
@@ -1264,9 +1271,9 @@ export function AIAssistantPanel({
           onScroll={handleMessagesScroll}
           className="h-full overflow-y-auto"
         >
-          <div className="flex flex-col gap-5 px-3 py-4 sm:px-4 sm:py-5">
+          <div className="flex min-h-full flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4">
             {state.messages.length === 0 ? (
-              <FadeContent blur duration={420} threshold={0.02} className="flex min-h-[55vh] flex-col items-center justify-center text-center">
+              <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                 <AgentMark decorative className="mx-auto mb-4 size-14 drop-shadow-[0_18px_50px_oklch(0_0_0/0.16)]" />
                 <h3 className="mb-1 text-base font-semibold text-foreground">
                   <ShinyText
@@ -1279,7 +1286,7 @@ export function AIAssistantPanel({
                 </h3>
                 <p className="mb-6 max-w-[28ch] text-sm leading-6 text-muted-foreground">{t("welcome.description")}</p>
                 <QuickActions onSelect={handleQuickAction} />
-              </FadeContent>
+              </div>
             ) : (
               <>
                 {state.messages.map((msg) => {
@@ -1319,7 +1326,7 @@ export function AIAssistantPanel({
                     onCancel={() => void confirmAssistantAction(false)}
                   />
                 )}
-                <div ref={messagesEndRef} />
+                <div ref={messagesEndRef} className="h-px w-full shrink-0" />
               </>
             )}
           </div>

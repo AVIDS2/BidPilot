@@ -121,15 +121,21 @@ function PlatformShellContent() {
       <AppSidebar navGroups={visibleNavGroups} teams={teams} user={sidebarUser} />
       <SidebarInset
         className={cn(
-          "min-w-0 overflow-x-hidden transition-[margin] duration-200 ease-out",
+          "min-h-0 min-w-0 overflow-x-hidden transition-[margin] duration-200 ease-out",
           assistantPanelOpen && "xl:mr-[560px]",
         )}
       >
         <SiteHeader />
         <InlineSuggestionBar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="@container/main flex min-w-0 flex-1 flex-col gap-2">
-            <div className="flex min-w-0 flex-col gap-4 px-3 py-4 sm:px-4 md:gap-6 md:py-6 lg:px-6">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="@container/main flex min-h-0 min-w-0 flex-1 flex-col">
+            <div
+              className={cn(
+                "flex min-h-0 min-w-0 flex-1 flex-col px-3 py-4 sm:px-4 lg:px-6",
+                // Agent workspace owns its own padding/height; keep shell tight.
+                isAgentWorkspace ? "md:py-3" : "gap-4 md:gap-6 md:py-6",
+              )}
+            >
               <ErrorBoundary>
                 <Outlet />
               </ErrorBoundary>

@@ -640,7 +640,11 @@ function handleAssistantSseEvent(
   if (eventType === "assistant.tool_started") {
     const toolName = String(parsed.tool_name ?? "");
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
-    const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
+    // Durable CAPABILITY_STARTED events often omit turn_id. Fall back to
+    // runtime_run_id so tools still group and render as a turn block.
+    const turnId =
+      (typeof parsed.turn_id === "string" && parsed.turn_id) ||
+      (runtimeRunId ? `run:${runtimeRunId}` : undefined);
     const title = typeof parsed.title === "string" && parsed.title ? parsed.title : toolName;
     if (turnId) {
       dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
@@ -730,8 +734,13 @@ function handleAssistantSseEvent(
   if (eventType === "assistant.tool_succeeded") {
     const toolName = String(parsed.tool_name ?? "");
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
-    const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
+    const turnId =
+      (typeof parsed.turn_id === "string" && parsed.turn_id) ||
+      (runtimeRunId ? `run:${runtimeRunId}` : undefined);
     const result = asRecord(parsed.result);
+    if (turnId) {
+      dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
+    }
     if (runtimeRunId) {
       // This is the parent runtime capability completing. A workflow capability
       // creates and tracks its child runtime separately in `workflow_started`.
@@ -750,6 +759,7 @@ function handleAssistantSseEvent(
           isRunning: false,
           toolCallId,
           turnId,
+          title: typeof parsed.title === "string" && parsed.title ? parsed.title : toolName,
         },
       });
       return;
@@ -806,7 +816,9 @@ function handleAssistantSseEvent(
   if (eventType === "assistant.tool_failed") {
     const toolName = String(parsed.tool_name ?? "");
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
-    const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
+    const turnId =
+      (typeof parsed.turn_id === "string" && parsed.turn_id) ||
+      (runtimeRunId ? `run:${runtimeRunId}` : undefined);
     dispatch({
       type: "UPDATE_EXECUTION_ITEM",
       toolName,

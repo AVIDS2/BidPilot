@@ -382,90 +382,95 @@ export function ProjectListPage() {
       )}
 
       {filtered.length > 0 && (
-        <Card className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("list.name")}</TableHead>
-                <TableHead>{t("list.scenario")}</TableHead>
-                <TableHead>{t("list.status")}</TableHead>
-                <TableHead className="hidden md:table-cell">{t("list.slug")}</TableHead>
-                <TableHead className="w-10">
-                  <span className="sr-only">{t("list.actions")}</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.slice(0, 50).map((p) => (
-                <TableRow
-                  key={p.id}
-                  className="cursor-pointer hover:bg-accent/50"
-                  role="link"
-                  tabIndex={0}
-                  aria-label={t("list.openProject", { name: p.name })}
-                  onClick={() => navigate(`/projects/${p.id}`)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      navigate(`/projects/${p.id}`);
-                    }
-                  }}
-                >
-                  <TableCell>
-                    <Link
-                      to={`/projects/${p.id}`}
-                      className="font-medium hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {p.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{p.scenario_package}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={
-                        p.status === "active"
-                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                          : p.status === "completed"
-                            ? "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                            : p.status === "archived"
-                              ? "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
-                              : p.status === "draft"
-                                ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                : ""
-                      }
-                    >
-                      {t(`statusValues.${p.status}`, { defaultValue: p.status })}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground text-xs">
-                    {p.slug}
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="size-7" aria-label={t("list.projectActions", { name: p.name })} />}>
-                        <MoreHorizontalIcon className="size-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => statusMut.mutate({ id: p.id, status: "completed" })}>
-                          <CheckCircleIcon className="size-4 mr-2" /> {t("list.markCompleted")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => statusMut.mutate({ id: p.id, status: "archived" })}>
-                          <ArchiveIcon className="size-4 mr-2" /> {t("list.archive")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setDeleteTarget(p)} className="text-destructive">
-                          <TrashIcon className="size-4 mr-2" /> {t("list.delete")}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+        <Card className="w-full min-w-0 overflow-hidden">
+          <div className="w-full min-w-0 overflow-x-auto">
+            <Table className="min-w-[36rem] w-full table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[40%] min-w-[10rem]">{t("list.name")}</TableHead>
+                  <TableHead className="w-[18%]">{t("list.scenario")}</TableHead>
+                  <TableHead className="w-[16%]">{t("list.status")}</TableHead>
+                  <TableHead className="hidden w-[18%] md:table-cell">{t("list.slug")}</TableHead>
+                  <TableHead className="w-12">
+                    <span className="sr-only">{t("list.actions")}</span>
+                  </TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filtered.slice(0, 50).map((p) => (
+                  <TableRow
+                    key={p.id}
+                    className="cursor-pointer hover:bg-accent/50"
+                    role="link"
+                    tabIndex={0}
+                    aria-label={t("list.openProject", { name: p.name })}
+                    onClick={() => navigate(`/projects/${p.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        navigate(`/projects/${p.id}`);
+                      }
+                    }}
+                  >
+                    <TableCell className="max-w-0 whitespace-normal">
+                      <Link
+                        to={`/projects/${p.id}`}
+                        className="block truncate font-medium hover:underline"
+                        title={p.name}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {p.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="max-w-full truncate">
+                        {p.scenario_package}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          p.status === "active"
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : p.status === "completed"
+                              ? "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                              : p.status === "archived"
+                                ? "border-muted-foreground/30 bg-muted/50 text-muted-foreground"
+                                : p.status === "draft"
+                                  ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                  : ""
+                        }
+                      >
+                        {t(`statusValues.${p.status}`, { defaultValue: p.status })}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden max-w-0 truncate text-xs text-muted-foreground md:table-cell" title={p.slug}>
+                      {p.slug}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="size-7" aria-label={t("list.projectActions", { name: p.name })} />}>
+                          <MoreHorizontalIcon className="size-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => statusMut.mutate({ id: p.id, status: "completed" })}>
+                            <CheckCircleIcon className="size-4 mr-2" /> {t("list.markCompleted")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => statusMut.mutate({ id: p.id, status: "archived" })}>
+                            <ArchiveIcon className="size-4 mr-2" /> {t("list.archive")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setDeleteTarget(p)} className="text-destructive">
+                            <TrashIcon className="size-4 mr-2" /> {t("list.delete")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
           {filtered.length > 50 && (
             <CardContent className="pt-4 text-center text-sm text-muted-foreground">
               {t("list.showingCount", { count: filtered.length })}

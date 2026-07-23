@@ -25,7 +25,7 @@ from app.models import RuntimeAction, RuntimeApproval, RuntimeEvent, RuntimeRun
 from contracts.runtime import RuntimeApprovalDecisionType, RuntimeEventType
 
 from .events import latest_event_sequence, list_events_after
-from .registry import is_workflow_capability
+from .registry import get_capability_definition, is_workflow_capability
 from .service import (
     RuntimeApprovalExpiredError,
     RuntimeApprovalResolvedError,
@@ -294,10 +294,19 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
             )
         return events
     if event.event_type == RuntimeEventType.CAPABILITY_STARTED.value:
+        try:
+            title = get_capability_definition(capability).label_zh if capability else capability
+        except Exception:
+            title = capability
         return [
             _sse(
                 "assistant.tool_started",
-                {**runtime_metadata, "tool_name": capability, "state": "executing_tool"},
+                {
+                    **runtime_metadata,
+                    "tool_name": capability,
+                    "title": title,
+                    "state": "executing_tool",
+                },
             )
         ]
     if event.event_type == RuntimeEventType.CAPABILITY_SUCCEEDED.value:
