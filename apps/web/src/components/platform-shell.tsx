@@ -105,6 +105,9 @@ function PlatformShellContent() {
 
   return (
     <SidebarProvider
+      // Lock the authenticated shell to the viewport. Nested surfaces choose
+      // their own scroll (chat: internal; project list: main pane).
+      className="h-svh overflow-hidden"
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 72)",
@@ -121,19 +124,23 @@ function PlatformShellContent() {
       <AppSidebar navGroups={visibleNavGroups} teams={teams} user={sidebarUser} />
       <SidebarInset
         className={cn(
-          "min-h-0 min-w-0 overflow-x-hidden transition-[margin] duration-200 ease-out",
+          // Bound the shell to the viewport so nested chat surfaces can use
+          // internal scroll instead of stretching the whole page.
+          "min-h-0 min-w-0 overflow-x-hidden overflow-y-hidden transition-[margin] duration-200 ease-out",
           assistantPanelOpen && "xl:mr-[560px]",
         )}
       >
         <SiteHeader />
         <InlineSuggestionBar />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="@container/main flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="@container/main flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div
               className={cn(
-                "flex min-h-0 min-w-0 flex-1 flex-col px-3 py-4 sm:px-4 lg:px-6",
-                // Agent workspace owns its own padding/height; keep shell tight.
-                isAgentWorkspace ? "md:py-3" : "gap-4 md:gap-6 md:py-6",
+                "flex min-h-0 min-w-0 flex-1 flex-col px-3 sm:px-4 lg:px-6",
+                // Agent workspace is a fixed chat surface; other pages scroll.
+                isAgentWorkspace
+                  ? "overflow-hidden py-2 md:py-3"
+                  : "gap-4 overflow-y-auto py-4 md:gap-6 md:py-6",
               )}
             >
               <ErrorBoundary>

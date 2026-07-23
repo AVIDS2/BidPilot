@@ -1157,9 +1157,8 @@ export function AIAssistantPanel({
       className={cn(
         "flex flex-col overflow-hidden",
         isWorkspace
-          ? // Fill the shell content area; avoid magic 8rem that leaves dead space
-            // and misaligns when switching between /agent and side panel.
-            "relative flex h-[calc(100dvh-var(--header-height,3rem)-2.5rem)] min-h-0 w-full min-w-0 flex-1 flex-col rounded-2xl border"
+          ? // Parent shell is viewport-bounded; fill it and keep composer pinned.
+            "relative flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border"
           : "fixed inset-0 z-40 h-[100dvh] w-full animate-slide-in border-l sm:left-auto sm:w-[min(100vw,390px)] md:w-[500px] xl:w-[560px]",
       )}
       style={{
