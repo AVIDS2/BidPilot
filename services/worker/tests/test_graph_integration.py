@@ -14,8 +14,15 @@ class TestGraphCompilation:
     def test_graph_has_expected_nodes(self):
         """Verify all expected nodes are registered."""
         nodes = list(graph.get_graph().nodes)
-        expected = {"supervisor", "rfp_parser", "knowledge_retriever",
-                    "section_drafter", "quality_reviewer", "persist_result"}
+        expected = {
+            "supervisor",
+            "rfp_parser",
+            "knowledge_retriever",
+            "content_plan",
+            "section_drafter",
+            "quality_reviewer",
+            "persist_result",
+        }
         assert expected.issubset(set(nodes))
 
 

@@ -94,6 +94,8 @@ export interface AssistantExecutionItem {
   messageId?: string;
   kind: "intent" | "tool" | "workflow";
   toolName?: string;
+  toolCallId?: string;
+  turnId?: string;
   runId?: string;
   runtimeRunId?: string;
   status: "pending" | "running" | "succeeded" | "failed" | "cancelled";
@@ -196,6 +198,8 @@ type Action =
   | {
       type: "UPDATE_EXECUTION_ITEM";
       toolName: string;
+      toolCallId?: string;
+      turnId?: string;
       runId?: string;
       runtimeRunId?: string;
       patch: Partial<AssistantExecutionItem>;
@@ -262,6 +266,31 @@ function createExecutionId(prefix: string, key?: string) {
   return `${prefix}${safeKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function matchExecutionItem(
+  item: AssistantExecutionItem,
+  action: {
+    toolName: string;
+    toolCallId?: string;
+    turnId?: string;
+    runId?: string;
+    runtimeRunId?: string;
+  },
+  activeAssistantMessageId: string | null,
+): boolean {
+  // Prefer stable tool_call_id so concurrent tools never clobber each other.
+  if (action.toolCallId) {
+    return item.toolCallId === action.toolCallId;
+  }
+  if (action.runtimeRunId && item.runtimeRunId === action.runtimeRunId && item.toolName === action.toolName) {
+    if (action.turnId && item.turnId) return item.turnId === action.turnId;
+    return true;
+  }
+  if (action.runId) {
+    return item.runId === action.runId;
+  }
+  return item.toolName === action.toolName && item.messageId === activeAssistantMessageId;
+}
+
 function getLastAssistantMessageId(state: AIAssistantState) {
   for (let i = state.messages.length - 1; i >= 0; i--) {
     if (state.messages[i].role === "assistant") return state.messages[i].id;
@@ -289,16 +318,9 @@ function appendAssistantContent(state: AIAssistantState, messageId: string, cont
 function appendOrBufferAssistantContent(state: AIAssistantState, content: string): AIAssistantState {
   const messageId = state.activeAssistantMessageId ?? getLastAssistantMessageId(state);
   if (!messageId) return state;
-  if (!hasOpenActivity(state, messageId)) {
-    return appendAssistantContent(state, messageId, content);
-  }
-  return {
-    ...state,
-    assistantContentBuffers: {
-      ...state.assistantContentBuffers,
-      [messageId]: `${state.assistantContentBuffers[messageId] ?? ""}${content}`,
-    },
-  };
+  // Streaming harness interleaves narrative with tools. Always surface text
+  // immediately so the UI does not look frozen while tools execute.
+  return appendAssistantContent(state, messageId, content);
 }
 
 function flushAssistantBuffer(state: AIAssistantState, messageId: string): AIAssistantState {
@@ -385,11 +407,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "UPDATE_EXECUTION_ITEM": {
       let updated = false;
       const executionItems = state.executionItems.map((item) => {
-        const matches = action.runtimeRunId
-          ? item.runtimeRunId === action.runtimeRunId
-          : action.runId
-          ? item.runId === action.runId
-          : item.toolName === action.toolName && item.messageId === state.activeAssistantMessageId;
+        const matches = matchExecutionItem(item, action, state.activeAssistantMessageId);
         if (matches) {
           updated = true;
           return { ...item, ...action.patch };
@@ -398,10 +416,12 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       });
       if (!updated) {
         executionItems.push({
-          id: createExecutionId("exec", action.runId ?? action.toolName),
+          id: createExecutionId("exec", action.toolCallId ?? action.runId ?? action.toolName),
           messageId: state.activeAssistantMessageId ?? undefined,
           kind: "tool",
           toolName: action.toolName,
+          toolCallId: action.toolCallId,
+          turnId: action.turnId,
           runId: action.runId,
           runtimeRunId: action.runtimeRunId,
           status: action.patch.status ?? "pending",
@@ -578,7 +598,10 @@ function handleAssistantSseEvent(
 
   if (eventType === "assistant.tool_started") {
     const toolName = String(parsed.tool_name ?? "");
-    if (runtimeRunId) {
+    const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
+    const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
+    const title = typeof parsed.title === "string" && parsed.title ? parsed.title : toolName;
+    if (runtimeRunId && !toolCallId) {
       dispatch({
         type: "MERGE_WORKFLOW_NODE",
         runtimeRunId,
@@ -589,11 +612,15 @@ function handleAssistantSseEvent(
     dispatch({
       type: "UPDATE_EXECUTION_ITEM",
       toolName,
+      toolCallId,
+      turnId,
       runtimeRunId,
       patch: {
-        ...(runtimeRunId ? {} : { kind: "tool" as const }),
+        kind: "tool",
         status: "running",
-        title: toolName,
+        title,
+        toolCallId,
+        turnId,
         arguments: asRecord(parsed.arguments),
       },
     });
@@ -658,6 +685,8 @@ function handleAssistantSseEvent(
 
   if (eventType === "assistant.tool_succeeded") {
     const toolName = String(parsed.tool_name ?? "");
+    const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
+    const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
     const result = asRecord(parsed.result);
     if (runtimeRunId) {
       // This is the parent runtime capability completing. A workflow capability
@@ -667,29 +696,37 @@ function handleAssistantSseEvent(
       dispatch({
         type: "UPDATE_EXECUTION_ITEM",
         toolName,
+        toolCallId,
+        turnId,
         runtimeRunId,
         patch: {
           status: "succeeded",
           result,
           summary: String(parsed.summary ?? ""),
           isRunning: false,
+          toolCallId,
+          turnId,
         },
       });
       return;
     }
     if (typeof result.run_id === "string") {
-      const runtimeRunId = typeof result.runtime_run_id === "string" ? result.runtime_run_id : undefined;
+      const childRuntimeRunId = typeof result.runtime_run_id === "string" ? result.runtime_run_id : undefined;
       dispatch({
         type: "UPDATE_EXECUTION_ITEM",
         toolName,
+        toolCallId,
+        turnId,
         runId: result.run_id,
-        runtimeRunId,
+        runtimeRunId: childRuntimeRunId,
         patch: {
           status: "running",
           result,
-          runtimeRunId,
+          runtimeRunId: childRuntimeRunId,
           summary: String(parsed.summary ?? ""),
           isRunning: true,
+          toolCallId,
+          turnId,
         },
       });
       dispatch({ type: "SET_STATUS", status: "running_workflow" });
@@ -698,10 +735,14 @@ function handleAssistantSseEvent(
     dispatch({
       type: "UPDATE_EXECUTION_ITEM",
       toolName,
+      toolCallId,
+      turnId,
       patch: {
         status: "succeeded",
         result,
         summary: String(parsed.summary ?? ""),
+        toolCallId,
+        turnId,
       },
     });
     if (toolName === "open_page" && typeof result.route === "string") {
@@ -720,13 +761,20 @@ function handleAssistantSseEvent(
 
   if (eventType === "assistant.tool_failed") {
     const toolName = String(parsed.tool_name ?? "");
+    const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
+    const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
     dispatch({
       type: "UPDATE_EXECUTION_ITEM",
       toolName,
+      toolCallId,
+      turnId,
+      runtimeRunId,
       patch: {
         status: "failed",
         errorMessage: String(parsed.error_message ?? "Tool failed"),
         errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
+        toolCallId,
+        turnId,
       },
     });
     return;

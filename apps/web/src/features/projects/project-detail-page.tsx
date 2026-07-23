@@ -47,6 +47,7 @@ function getRequirementConflictIds(error: unknown): string[] {
 // Tab components
 import { BundlesTab } from "./tabs/bundles-tab";
 import { DeliverablesTab } from "./tabs/deliverables-tab";
+import { OutlineEditorTab } from "./tabs/outline-editor-tab";
 import { RequirementsTab } from "./tabs/requirements-tab";
 import { DraftingTab } from "./tabs/drafting-tab";
 import { AgentTab } from "./tabs/agent-tab";
@@ -73,7 +74,7 @@ type WorkflowStep = typeof WORKFLOW_STEPS[number]["key"];
 
 // Tab group definitions
 const TAB_GROUPS: Record<WorkflowStep, string[]> = {
-  prepare: ["bundles", "deliverables", "requirements", "knowledge"],
+  prepare: ["bundles", "deliverables", "outline", "requirements", "knowledge"],
   generate: ["drafting", "agent", "evidence", "search"],
   verify: ["runs"],
   review: ["review", "access"],
@@ -83,6 +84,7 @@ const TAB_GROUPS: Record<WorkflowStep, string[]> = {
 const PROJECT_TABS = new Set([
   "bundles",
   "deliverables",
+  "outline",
   "requirements",
   "knowledge",
   "drafting",
@@ -469,6 +471,7 @@ export function ProjectDetailPage() {
             {/* Prepare group */}
             <TabsTrigger value="bundles">{t("tabs.bundles")}</TabsTrigger>
             <TabsTrigger value="deliverables">{t("tabs.deliverables")}</TabsTrigger>
+            <TabsTrigger value="outline">{t("tabs.outline", { defaultValue: "大纲" })}</TabsTrigger>
             <TabsTrigger value="requirements">{t("tabs.requirements")}</TabsTrigger>
             <TabsTrigger value="knowledge">{t("tabs.knowledge")}</TabsTrigger>
             {/* Separator */}
@@ -500,6 +503,14 @@ export function ProjectDetailPage() {
         </AnimatedTabContent>
         <AnimatedTabContent value="deliverables" currentValue={activeTab}>
           <DeliverablesTab projectId={id!} deliverables={deliverables ?? []} sections={sections} selectedSectionId={selectedSectionId} onSelectSection={setSelectedSectionId} onCreateDeliverable={(title) => createDeliverableMut.mutate({ project_id: id!, type: "proposal", title })} />
+        </AnimatedTabContent>
+        <AnimatedTabContent value="outline" currentValue={activeTab}>
+          <OutlineEditorTab
+            projectId={id!}
+            deliverableId={selectedDeliverableId ?? null}
+            deliverables={deliverables ?? []}
+            sections={sections}
+          />
         </AnimatedTabContent>
         <AnimatedTabContent value="requirements" currentValue={activeTab}>
           <RequirementsTab

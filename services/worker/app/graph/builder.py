@@ -31,6 +31,7 @@ from .nodes.supervisor import (
     route_initial,
     route_after_rfp,
     route_after_retrieval,
+    route_after_content_plan,
     route_after_draft,
     route_after_review,
     route_after_human_approval,
@@ -39,6 +40,7 @@ from .nodes.rfp_parser import rfp_parser_node
 from .nodes.memory_context import load_memory_context_node
 from .nodes.memory_proposals import propose_memory_updates_node
 from .nodes.knowledge_retriever import knowledge_retriever_node
+from .nodes.content_plan import content_plan_node
 from .nodes.section_drafter import section_drafter_node
 from .nodes.quality_reviewer import quality_reviewer_node
 from .nodes.human_approval import human_approval_node
@@ -121,6 +123,12 @@ def _node_summary(node_name: str, result: dict) -> str:
         return f"已识别 {len(result.get('requirements', []))} 条招标需求。"
     if node_name == "knowledge_retriever":
         return f"已检索到 {len(result.get('evidence_chunks', []))} 条相关证据。"
+    if node_name == "content_plan":
+        plan = result.get("content_plan") or {}
+        return (
+            f"内容计划已生成：{len(plan.get('key_points') or [])} 个要点，"
+            f"{len(plan.get('tables') or [])} 个表格建议。"
+        )
     if node_name == "memory_context":
         return f"已加载 {len(result.get('memory_context_items', []))} 条授权记忆。"
     if node_name == "section_drafter":
@@ -142,6 +150,14 @@ def _node_payload(node_name: str, result: dict) -> dict:
         return {"requirement_count": len(result.get("requirements", []))}
     if node_name == "knowledge_retriever":
         return {"evidence_count": len(result.get("evidence_chunks", []))}
+    if node_name == "content_plan":
+        plan = result.get("content_plan") or {}
+        return {
+            "key_point_count": len(plan.get("key_points") or []),
+            "table_count": len(plan.get("tables") or []),
+            "figure_count": len(plan.get("figures") or []),
+            "gap_count": len(plan.get("gaps") or []),
+        }
     if node_name == "memory_context":
         return {
             "memory_count": len(result.get("memory_context_items", [])),
@@ -174,21 +190,23 @@ def _build_graph() -> StateGraph:
         __start__ -> supervisor
         supervisor -> rfp_parser        (if requirements not parsed)
         supervisor -> knowledge_retriever (if evidence not retrieved)
-        supervisor -> section_drafter    (if draft not created)
+        supervisor -> content_plan       (if evidence ready, plan missing)
+        supervisor -> section_drafter    (if plan ready, draft missing)
         supervisor -> quality_reviewer   (if draft exists, no review)
         supervisor -> human_approval     (if review passed, HITL pause)
         supervisor -> persist_result     (if human approved or max iterations)
 
         rfp_parser -> knowledge_retriever
-        knowledge_retriever -> section_drafter
+        knowledge_retriever -> content_plan
+        content_plan -> section_drafter
         section_drafter -> quality_reviewer
 
         quality_reviewer -> human_approval   (review passed)
-        quality_reviewer -> section_drafter  (review failed, iteration < max)
+        quality_reviewer -> content_plan     (review failed, iteration < max)
         quality_reviewer -> persist_result   (review failed, iteration >= max)
 
         human_approval -> persist_result     (human approved)
-        human_approval -> section_drafter    (human rejected with feedback)
+        human_approval -> content_plan       (human rejected with feedback)
 
         persist_result -> __end__
     """
@@ -199,6 +217,7 @@ def _build_graph() -> StateGraph:
     sg.add_node("rfp_parser", _instrument_node("rfp_parser", rfp_parser_node))
     sg.add_node("memory_context", _instrument_node("memory_context", load_memory_context_node))
     sg.add_node("knowledge_retriever", _instrument_node("knowledge_retriever", knowledge_retriever_node))
+    sg.add_node("content_plan", _instrument_node("content_plan", content_plan_node))
     sg.add_node("section_drafter", _instrument_node("section_drafter", section_drafter_node))
     sg.add_node("quality_reviewer", _instrument_node("quality_reviewer", quality_reviewer_node))
     sg.add_node("human_approval", _instrument_node("human_approval", human_approval_node))
@@ -216,6 +235,7 @@ def _build_graph() -> StateGraph:
             "rfp_parser": "rfp_parser",
             "memory_context": "memory_context",
             "knowledge_retriever": "knowledge_retriever",
+            "content_plan": "content_plan",
             "section_drafter": "section_drafter",
             "quality_reviewer": "quality_reviewer",
             "human_approval": "human_approval",
@@ -226,7 +246,16 @@ def _build_graph() -> StateGraph:
     # ── Linear edges ──────────────────────────────────────────────────
     sg.add_conditional_edges("rfp_parser", route_after_rfp, {"memory_context": "memory_context"})
     sg.add_edge("memory_context", "knowledge_retriever")
-    sg.add_conditional_edges("knowledge_retriever", route_after_retrieval, {"section_drafter": "section_drafter"})
+    sg.add_conditional_edges(
+        "knowledge_retriever",
+        route_after_retrieval,
+        {"content_plan": "content_plan"},
+    )
+    sg.add_conditional_edges(
+        "content_plan",
+        route_after_content_plan,
+        {"section_drafter": "section_drafter"},
+    )
     sg.add_conditional_edges(
         "section_drafter",
         route_after_draft,
@@ -240,7 +269,7 @@ def _build_graph() -> StateGraph:
         {
             "human_approval": "human_approval",
             "persist_result": "persist_result",
-            "section_drafter": "section_drafter",
+            "content_plan": "content_plan",
         },
     )
 
@@ -250,7 +279,7 @@ def _build_graph() -> StateGraph:
         route_after_human_approval,
         {
             "persist_result": "persist_result",
-            "section_drafter": "section_drafter",
+            "content_plan": "content_plan",
         },
     )
 
@@ -431,6 +460,8 @@ def invoke_graph(
         "memory_proposal_ids": [],
         "evidence_chunks": [],
         "evidence_retrieved": False,
+        "content_plan": None,
+        "content_plan_ready": False,
         "draft_markdown": "",
         "draft_model_used": "",
         "draft_created": False,
@@ -481,7 +512,8 @@ def resume_graph(
 ) -> dict:
     """Resume an interrupted LangGraph graph after human approval.
 
-    The graph pauses at the ``human_approval`` node via ``interrupt_before``.
+    The graph pauses inside ``human_approval_node`` via dynamic ``interrupt()``
+    (LangGraph's recommended HITL pattern, not static interrupt_before).
     This function sends a ``Command(resume=...)`` to continue execution.
 
     Args:

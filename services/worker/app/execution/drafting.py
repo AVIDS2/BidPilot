@@ -24,6 +24,7 @@ from app.models import (
 )
 from sqlalchemy import select
 
+from app.retrieval.section_query import expand_section_retrieval_query, section_fallback_query
 from contracts import EmbeddingOutcome, EmbeddingOutcomeStatus, RetrievalCandidate
 from contracts.retrieval_service import retrieve_project_evidence
 
@@ -38,7 +39,7 @@ def _retrieve_evidence(
     run_id: str | None = None,
 ) -> tuple[RetrievalCandidate, ...]:
     """Retrieve profile-safe, citation-validated evidence for a draft section."""
-    query = section_key.replace("-", " ")
+    query = expand_section_retrieval_query(section_key)
     db = SessionLocal()
     try:
         project = db.get(Project, project_id)
@@ -86,6 +87,18 @@ def _retrieve_evidence(
             top_k=top_k,
             reranker=rerank_candidates,
         )
+        if not result.candidates:
+            fallback = section_fallback_query(section_key)
+            if fallback and fallback != query:
+                result = retrieve_project_evidence(
+                    db,
+                    project_id=project_id,
+                    raw_query=fallback,
+                    profile_id=None,
+                    query_embedding=None,
+                    top_k=top_k,
+                    reranker=rerank_candidates,
+                )
         return result.candidates
     finally:
         db.close()

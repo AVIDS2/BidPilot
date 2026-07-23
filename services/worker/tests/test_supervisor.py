@@ -25,6 +25,8 @@ def _make_state(**overrides) -> BidPilotState:
         "memory_proposal_ids": [],
         "evidence_chunks": [],
         "evidence_retrieved": False,
+        "content_plan": None,
+        "content_plan_ready": False,
         "draft_markdown": "",
         "draft_model_used": "",
         "draft_created": False,
@@ -57,13 +59,28 @@ class TestRouteInitial:
         state = _make_state(requirements_parsed=True, evidence_retrieved=False)
         assert route_initial(state) == "knowledge_retriever"
 
+    def test_no_content_plan_goes_to_content_plan(self):
+        state = _make_state(
+            requirements_parsed=True,
+            evidence_retrieved=True,
+            content_plan_ready=False,
+            draft_created=False,
+        )
+        assert route_initial(state) == "content_plan"
+
     def test_no_draft_goes_to_section_drafter(self):
-        state = _make_state(requirements_parsed=True, evidence_retrieved=True, draft_created=False)
+        state = _make_state(
+            requirements_parsed=True,
+            evidence_retrieved=True,
+            content_plan_ready=True,
+            draft_created=False,
+        )
         assert route_initial(state) == "section_drafter"
 
     def test_no_review_goes_to_quality_reviewer(self):
         state = _make_state(
             requirements_parsed=True, evidence_retrieved=True,
+            content_plan_ready=True,
             draft_created=True, review_result=None,
         )
         assert route_initial(state) == "quality_reviewer"
@@ -71,6 +88,7 @@ class TestRouteInitial:
     def test_review_passed_goes_to_persist(self):
         state = _make_state(
             requirements_parsed=True, evidence_retrieved=True,
+            content_plan_ready=True,
             draft_created=True, review_result={"passed": True},
             review_passed=True,
         )
@@ -86,9 +104,9 @@ class TestRouteAfterReview:
         state = _make_state(review_passed=True)
         assert route_after_review(state) == "human_approval"
 
-    def test_review_failed_iteration_below_max_goes_to_drafter(self):
+    def test_review_failed_iteration_below_max_goes_to_content_plan(self):
         state = _make_state(review_passed=False, iteration=1, max_iterations=3)
-        assert route_after_review(state) == "section_drafter"
+        assert route_after_review(state) == "content_plan"
 
     def test_review_failed_iteration_at_max_goes_to_persist(self):
         state = _make_state(review_passed=False, iteration=3, max_iterations=3)

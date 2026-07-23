@@ -290,11 +290,48 @@ export interface DeliverableSectionRead {
   section_key: string;
   title: string;
   status: string;
-  assignee_type: string;
+  assignee_type?: string;
+  sort_order?: number;
 }
 
 export function listDeliverableSections(deliverableId: string) {
   return request<DeliverableSectionRead[]>(`/deliverables/${deliverableId}/sections`);
+}
+
+export function createDeliverableSection(data: {
+  deliverable_id: string;
+  section_key: string;
+  title: string;
+  sort_order?: number;
+}) {
+  return request<DeliverableSectionRead>("/deliverables/sections", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateDeliverableSection(
+  sectionId: string,
+  data: { title?: string; section_key?: string; sort_order?: number },
+) {
+  return request<DeliverableSectionRead>(`/deliverables/sections/${sectionId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function reorderDeliverableSections(deliverableId: string, sectionIds: string[]) {
+  return request<DeliverableSectionRead[]>(`/deliverables/${deliverableId}/sections/reorder`, {
+    method: "PUT",
+    body: JSON.stringify({ section_ids: sectionIds }),
+  });
+}
+
+export function deleteDeliverableSection(sectionId: string, force = false) {
+  const qs = force ? "?force=true" : "";
+  return request<{ deleted: boolean; section_id: string }>(`/deliverables/sections/${sectionId}${qs}`, {
+    method: "DELETE",
+  });
 }
 
 // Documents

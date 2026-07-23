@@ -174,6 +174,44 @@ def _append_memory_context(system_prompt: str | None, state: BidPilotState) -> s
     return "\n".join(lines)
 
 
+def _append_content_plan(system_prompt: str | None, state: BidPilotState) -> str | None:
+    """Inject the pre-draft content plan as trusted writing structure."""
+    plan = state.get("content_plan")
+    if not isinstance(plan, dict) or not plan:
+        return system_prompt
+    base = system_prompt or "你是投标方案起草助手。"
+    lines = [
+        base,
+        "\n请严格按以下内容计划组织章节（计划由系统根据证据生成，不得编造未列证据）：",
+        f"摘要：{plan.get('summary') or ''}",
+    ]
+    outline = plan.get("outline") or []
+    if outline:
+        lines.append("结构大纲：")
+        lines.extend(f"- {item}" for item in outline[:8] if isinstance(item, str))
+    key_points = plan.get("key_points") or []
+    if key_points:
+        lines.append("必须覆盖的要点：")
+        lines.extend(f"- {item}" for item in key_points[:8] if isinstance(item, str))
+    tables = plan.get("tables") or []
+    if tables:
+        lines.append("建议表格：")
+        for item in tables[:4]:
+            if isinstance(item, dict):
+                lines.append(f"- {item.get('title')}: {item.get('detail')}")
+    figures = plan.get("figures") or []
+    if figures:
+        lines.append("建议附图：")
+        for item in figures[:3]:
+            if isinstance(item, dict):
+                lines.append(f"- {item.get('title')}: {item.get('detail')}")
+    gaps = plan.get("gaps") or []
+    if gaps:
+        lines.append("已知缺口（需在正文中诚实标注）：")
+        lines.extend(f"- {item}" for item in gaps[:4] if isinstance(item, str))
+    return "\n".join(lines)
+
+
 def section_drafter_node(state: BidPilotState) -> dict:
     """LangGraph node: draft a section using evidence and LLM.
 
@@ -209,7 +247,10 @@ def section_drafter_node(state: BidPilotState) -> dict:
 
     try:
         provider_config_dict, provider_type = _resolve_provider(provider_config_id)
-        system_prompt = _append_memory_context(_load_system_prompt(project_id), state)
+        system_prompt = _append_content_plan(
+            _append_memory_context(_load_system_prompt(project_id), state),
+            state,
+        )
         result = _draft_with_retry(
             section_key=section_key,
             evidence_texts=evidence_texts,
@@ -268,6 +309,12 @@ def section_drafter_node(state: BidPilotState) -> dict:
             "draft_model_used": result.model_used,
             "draft_created": True,
             "iteration": iteration + 1,
+            # Clear stale review/HITL fields whenever a new draft revision starts.
+            # Otherwise resume/retry can keep a previous review_passed=True and
+            # skip quality review or re-enter human approval incorrectly.
+            "review_result": None,
+            "review_passed": False,
+            "human_decision": None,
             "agent_history": history,
         }
     except ProviderInvocationError as exc:

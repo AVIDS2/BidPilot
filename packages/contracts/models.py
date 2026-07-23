@@ -870,6 +870,8 @@ class DeliverableSection(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
     assignee_type: Mapped[str] = mapped_column(String(30), nullable=False, default="ai")
+    # Outline editor order (OpenBidKit-style chapter board). Lower = earlier.
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     deliverable: Mapped["Deliverable"] = relationship(back_populates="sections")
     versions: Mapped[list["SectionVersion"]] = relationship(back_populates="section", cascade="all, delete-orphan")

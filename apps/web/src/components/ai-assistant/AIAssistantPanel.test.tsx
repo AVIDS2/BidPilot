@@ -710,7 +710,7 @@ describe("AIAssistantPanel", () => {
     expect(firstTool.compareDocumentPosition(secondUserMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("buffers assistant text until running tool activity finishes", async () => {
+  it("streams assistant text while tool activity is still running", async () => {
     let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
     const encoder = new TextEncoder();
     vi.stubGlobal(
@@ -740,21 +740,22 @@ describe("AIAssistantPanel", () => {
       encoder.encode(
         [
           'event: assistant.start\ndata: {"conversation_id":"c-buffer","state":"thinking"}',
-          'event: assistant.tool_started\ndata: {"tool_name":"search_projects","arguments":{"query":"test"},"state":"executing_tool"}',
-          'event: assistant.message\ndata: {"content":"找到 test 项目。","state":"completed"}',
+          'event: assistant.tool_started\ndata: {"tool_name":"search_projects","tool_call_id":"call-1","arguments":{"query":"test"},"state":"executing_tool"}',
+          'event: assistant.message\ndata: {"content":"找到 test 项目。","state":"thinking"}',
         ].join("\n\n") + "\n\n",
       ),
     );
 
     await waitFor(() => {
       expect(screen.getByText("Search projects running")).toBeInTheDocument();
+      // Streaming harness interleaves narrative with tools; text must not wait.
+      expect(screen.getByText("找到 test 项目。")).toBeInTheDocument();
     });
-    expect(screen.queryByText("找到 test 项目。")).not.toBeInTheDocument();
 
     controller!.enqueue(
       encoder.encode(
         [
-          'event: assistant.tool_succeeded\ndata: {"tool_name":"search_projects","result":{"count":1},"summary":"找到 1 个项目。","state":"completed"}',
+          'event: assistant.tool_succeeded\ndata: {"tool_name":"search_projects","tool_call_id":"call-1","result":{"count":1},"summary":"找到 1 个项目。","state":"completed"}',
           'event: assistant.end\ndata: {"conversation_id":"c-buffer","full_response":"找到 test 项目。"}',
         ].join("\n\n") + "\n\n",
       ),
@@ -762,12 +763,9 @@ describe("AIAssistantPanel", () => {
     controller!.close();
 
     await waitFor(() => {
+      expect(screen.getByText("Search projects completed")).toBeInTheDocument();
       expect(screen.getByText("找到 test 项目。")).toBeInTheDocument();
     });
-    expect(
-      screen.getByText("Search projects completed").compareDocumentPosition(screen.getByText("找到 test 项目。")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 
   it("supports renaming a conversation from history", async () => {

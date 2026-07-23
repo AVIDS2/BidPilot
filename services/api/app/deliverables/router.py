@@ -1,12 +1,27 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
 from app.db import get_db
 
-from .schemas import DeliverableCreate, DeliverableRead, DeliverableSectionCreate, DeliverableSectionRead
-from .service import create_deliverable_command, create_section_command, list_deliverables_query, list_sections_query
+from .schemas import (
+    DeliverableCreate,
+    DeliverableRead,
+    DeliverableSectionCreate,
+    DeliverableSectionRead,
+    DeliverableSectionReorder,
+    DeliverableSectionUpdate,
+)
+from .service import (
+    create_deliverable_command,
+    create_section_command,
+    delete_section_command,
+    list_deliverables_query,
+    list_sections_query,
+    reorder_sections_command,
+    update_section_command,
+)
 
 router = APIRouter(prefix="/deliverables", tags=["deliverables"])
 
@@ -45,3 +60,36 @@ def list_deliverable_sections(
     current_user: CurrentUser = Depends(require_auth),
 ) -> list[DeliverableSectionRead]:
     return list_sections_query(db, deliverable_id, current_user)
+
+
+@router.patch("/sections/{section_id}", response_model=DeliverableSectionRead)
+def update_deliverable_section(
+    section_id: str,
+    payload: DeliverableSectionUpdate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> DeliverableSectionRead:
+    return update_section_command(db, section_id, payload, current_user)
+
+
+@router.put(
+    "/{deliverable_id}/sections/reorder",
+    response_model=list[DeliverableSectionRead],
+)
+def reorder_deliverable_sections(
+    deliverable_id: str,
+    payload: DeliverableSectionReorder,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> list[DeliverableSectionRead]:
+    return reorder_sections_command(db, deliverable_id, payload, current_user)
+
+
+@router.delete("/sections/{section_id}")
+def delete_deliverable_section(
+    section_id: str,
+    force: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> dict:
+    return delete_section_command(db, section_id, current_user, force=force)

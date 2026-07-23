@@ -122,12 +122,15 @@ def generate_deliverable_export_command(
         deliverable_id=deliverable_id,
         capability="deliverables.export",
     )
-    if require_approved and deliverable.status != "approved":
-        raise HTTPException(status_code=409, detail="Deliverable must be approved before export")
-
+    # OpenBidKit-style partial package: export any approved section bodies even
+    # when the full outline is unfinished. require_approved only means "must
+    # have approved section content", not "whole deliverable must be sealed".
     sections = get_deliverable_sections_with_versions(db, deliverable_id)
     if not sections:
-        raise HTTPException(status_code=404, detail="Deliverable not found or has no approved sections")
+        raise HTTPException(
+            status_code=409 if require_approved else 404,
+            detail="No approved sections with content are available to export",
+        )
 
     if artifact_format == "docx":
         from app.adapters.export import render_markdown_to_docx

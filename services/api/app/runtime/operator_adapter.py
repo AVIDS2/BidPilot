@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 import logging
+import os
 from typing import Any
 from uuid import uuid4
 
@@ -49,6 +50,7 @@ from .assistant_adapter import (
     _sse,
 )
 from .events import latest_event_sequence
+from .harness_loop import StreamingHarness, stream_harness_assistant_response
 from .operator_graph import (
     OperatorPlanningContext,
     OperatorPlan,
@@ -66,6 +68,11 @@ from .service import (
     fail_runtime_run,
     find_pending_approval_for_conversation,
 )
+
+
+def _use_streaming_harness() -> bool:
+    """Prefer the thin streaming tool loop unless explicitly disabled."""
+    return os.getenv("DOCPILOT_ASSISTANT_STREAMING_HARNESS", "true").lower() == "true"
 
 logger = logging.getLogger(__name__)
 
@@ -141,11 +148,12 @@ async def stream_operator_assistant_response(
     pending_input = pending_input_context(db, conversation_id)
     memory_context = _load_authorized_memory_context(db, user, payload, project_id=active_project_id)
     save_message(db, conversation_id, "user", payload.message)
+    engine = "streaming_harness" if _use_streaming_harness() else "langgraph_operator"
     run = create_runtime_run(
         db,
         user,
         kind="assistant_turn",
-        engine="langgraph_operator",
+        engine=engine,
         project_id=active_project_id,
         conversation_id=conversation_id,
         provider_config_id=payload.provider_config_id,
@@ -162,6 +170,42 @@ async def stream_operator_assistant_response(
         "assistant.start",
         {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "thinking"},
     )
+    if engine == "streaming_harness":
+        llm = get_agent_llm(
+            provider_type=provider_type,
+            provider_id=provider_id,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            reasoning_effort=payload.reasoning_effort,  # type: ignore[arg-type]
+        )
+        memory_records = []
+        if memory_context is not None:
+            from .operator_graph import _memory_context_records
+
+            memory_records = _memory_context_records(memory_context)
+        async for event in stream_harness_assistant_response(
+            db,
+            user,
+            run=run,
+            conversation_id=conversation_id,
+            llm=llm,
+            provider_type=provider_type,
+            provider_source=provider_source,
+            model=model,
+            user_message=build_attachment_context(payload.message, payload.attachments),
+            conversation_context=conversation_context,
+            memory_context_records=memory_records,
+            available_attachments=attachment_planner_context(payload.attachments),
+            active_project_id=active_project_id,
+            pending_input=pending_input,
+            provider_config_id=payload.provider_config_id,
+            reasoning_effort=payload.reasoning_effort,
+            after_sequence=1,
+        ):
+            yield event
+        return
+
     async for event in _invoke_operator_graph(
         db,
         user,
@@ -208,7 +252,7 @@ async def _resume_operator_approval(
         or approval.user_id != user.id
         or approval.org_id != user.org_id
         or run.conversation_id != conversation_id
-        or run.engine != "langgraph_operator"
+        or run.engine not in {"langgraph_operator", "streaming_harness"}
     ):
         yield _sse(
             "assistant.tool_failed",
@@ -222,6 +266,33 @@ async def _resume_operator_approval(
         "assistant.start",
         {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "thinking"},
     )
+    if run.engine == "streaming_harness":
+        harness = StreamingHarness(
+            db=db,
+            user=user,
+            run=run,
+            conversation_id=conversation_id,
+            llm=None,
+            provider_type=provider_type,
+            provider_source=provider_source,
+            model=model,
+            user_message="",
+            after_sequence=before_sequence,
+        )
+        edited_arguments = (
+            dict(confirmation.arguments)
+            if confirmation.approved and confirmation.arguments
+            else None
+        )
+        async for event in harness.resume_approval(
+            approval_id=approval.id,
+            approved=bool(confirmation.approved),
+            tool_name=confirmation.tool_name or action.capability_name,
+            edited_arguments=edited_arguments,
+        ):
+            yield event
+        return
+
     decision = "approve" if confirmation.approved else "reject"
     async for event in _invoke_operator_graph(
         db,

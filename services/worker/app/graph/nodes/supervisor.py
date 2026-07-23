@@ -19,6 +19,8 @@ def _deterministic_routing(state: BidPilotState) -> str:
         return "memory_context"
     if not state.get("evidence_retrieved"):
         return "knowledge_retriever"
+    if not state.get("content_plan_ready"):
+        return "content_plan"
     if not state.get("draft_created"):
         return "section_drafter"
     if not state.get("review_passed") and state.get("review_result") is None:
@@ -26,7 +28,8 @@ def _deterministic_routing(state: BidPilotState) -> str:
     if state.get("review_passed") and state.get("human_decision") is None:
         return "human_approval"
     if state.get("human_decision") == "rejected_with_feedback":
-        return "section_drafter"
+        # Re-plan on human rejection so feedback can reshape the outline.
+        return "content_plan"
     return "persist_result"
 
 
@@ -69,8 +72,12 @@ def route_after_review(state: BidPilotState) -> str:
         logger.info("Review passed on iteration %d — routing to human approval", iteration)
         return "human_approval"
     if iteration < max_iterations:
-        logger.info("Review failed on iteration %d/%d — retrying draft", iteration, max_iterations)
-        return "section_drafter"
+        logger.info(
+            "Review failed on iteration %d/%d — re-planning then redrafting",
+            iteration,
+            max_iterations,
+        )
+        return "content_plan"
     logger.warning("Review failed after %d iterations - persisting draft as-is", iteration)
     return "persist_result"
 
@@ -85,11 +92,11 @@ def route_after_human_approval(state: BidPilotState) -> str:
     if decision == "rejected_with_feedback":
         feedback = state.get("human_feedback", "")
         logger.info(
-            "Human rejected draft for %s — re-drafting with feedback (%d chars)",
+            "Human rejected draft for %s — re-planning with feedback (%d chars)",
             section_key,
             len(feedback) if feedback else 0,
         )
-        return "section_drafter"
+        return "content_plan"
     logger.warning("Unexpected human decision for %s — persisting as-is", section_key)
     return "persist_result"
 
@@ -105,7 +112,12 @@ def route_after_rfp(state: BidPilotState) -> str:
 
 
 def route_after_retrieval(state: BidPilotState) -> str:
-    """Draft after retrieval completes."""
+    """Plan content structure after retrieval completes."""
+    return "content_plan"
+
+
+def route_after_content_plan(state: BidPilotState) -> str:
+    """Draft after the content plan is ready."""
     return "section_drafter"
 
 

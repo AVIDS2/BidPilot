@@ -11,6 +11,16 @@ celery_app = Celery(
     backend=REDIS_URL,
 )
 
+
+def _record_dead_letter(task, exc, task_id, args, kwargs, einfo) -> None:
+    """Named failure hook so Windows spawn workers can pickle Celery config."""
+    task.app.send_task(
+        "worker.record_dead_letter",
+        args=[task_id, task.name, str(exc), args, kwargs],
+        queue="dead_letter",
+    )
+
+
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
@@ -30,11 +40,7 @@ celery_app.conf.update(
     },
     task_default_queue="celery",
     # On failure, route to dead_letter queue
-    task_on_failure=lambda task, exc, task_id, args, kwargs, einfo: task.app.send_task(
-        "worker.record_dead_letter",
-        args=[task_id, task.name, str(exc), args, kwargs],
-        queue="dead_letter",
-    ),
+    task_on_failure=_record_dead_letter,
 )
 
 celery_app.conf.beat_schedule = {

@@ -336,6 +336,7 @@ def _node_label(node_name: str) -> str:
         "supervisor": "执行规划",
         "rfp_parser": "招标需求解析",
         "knowledge_retriever": "证据检索",
+        "content_plan": "内容计划",
         "section_drafter": "章节起草",
         "quality_reviewer": "质量审核",
         "human_approval": "人工审核",

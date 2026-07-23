@@ -27,7 +27,7 @@ from app.models import (
     RequirementItem,
     SectionVersion,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..state import BidPilotState
 from ._history import record_agent_call
@@ -70,12 +70,19 @@ def _find_or_create_section(
         db.add(deliverable)
         db.flush()
 
+    # Append after existing outline chapters so sort_order stays contiguous.
+    next_order = db.scalar(
+        select(func.max(DeliverableSection.sort_order)).where(
+            DeliverableSection.deliverable_id == deliverable.id
+        )
+    )
     section = DeliverableSection(
         deliverable_id=deliverable.id,
         section_key=section_key,
         title=section_key.replace("-", " ").title(),
         status="draft",
         assignee_type="ai",
+        sort_order=int(next_order or 0) + 1,
     )
     db.add(section)
     db.flush()
@@ -116,6 +123,38 @@ def _find_existing_version_for_run(
 
 def _normalize_claim_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+
+def _recompute_deliverable_approval(db, deliverable: Deliverable) -> None:
+    """Approve a deliverable when every non-empty section is approved.
+
+    Empty outline placeholders may remain draft (OpenBidKit-style partial export).
+    A section is non-empty when it has at least one SectionVersion.
+    """
+    sections = list(
+        db.scalars(
+            select(DeliverableSection).where(DeliverableSection.deliverable_id == deliverable.id)
+        ).all()
+    )
+    if not sections:
+        return
+
+    non_empty: list[DeliverableSection] = []
+    for section in sections:
+        has_version = db.scalar(
+            select(SectionVersion.id)
+            .where(SectionVersion.deliverable_section_id == section.id)
+            .limit(1)
+        )
+        if has_version is not None:
+            non_empty.append(section)
+
+    if non_empty and all(section.status == "approved" for section in non_empty):
+        deliverable.status = "approved"
+    elif any(section.status == "approved" for section in non_empty):
+        # Partial progress: keep draft/in_review, export still allowed via approved sections.
+        if deliverable.status not in {"approved"}:
+            deliverable.status = "in_review"
 
 
 def _unique_strings(value: object) -> list[str]:
@@ -285,13 +324,23 @@ def persist_result_node(state: BidPilotState) -> dict:
                     ).all()
                 )
             )
+            # Replay path still needs HITL promotion — a previous partial write may
+            # have left the section in draft after the version row was committed.
+            section = _find_or_create_section(db, project_id, section_key)
+            human_decision = state.get("human_decision")
+            if human_decision == "approved":
+                section.status = "approved"
+                deliverable = db.get(Deliverable, section.deliverable_id)
+                if deliverable is not None:
+                    _recompute_deliverable_approval(db, deliverable)
+                db.commit()
             history = record_agent_call(
                 agent="persist_result",
                 action="persist_to_db",
                 input_summary=f"section={section_key}, run_id={run_id}, replayed=True",
                 output_summary=(
                     f"section_version_id={existing_version.id}, persisted=True, "
-                    f"replayed=True, claims={claim_count}"
+                    f"replayed=True, claims={claim_count}, section_status={section.status}"
                 ),
                 duration_ms=int((time.monotonic() - start) * 1000),
                 success=True,
@@ -378,7 +427,21 @@ def persist_result_node(state: BidPilotState) -> dict:
         if claim_integrity_status == "proposed" and not persisted_claim_count:
             claim_integrity_status = "invalid_candidates"
 
-        # 4. Update execution run status
+        # 4. Promote section/deliverable status after human approval.
+        # Quality-only persist (max iterations without HITL) stays draft so export
+        # cannot silently ship unreviewed body text.
+        human_decision = state.get("human_decision")
+        if human_decision == "approved":
+            section.status = "approved"
+            deliverable = db.get(Deliverable, section.deliverable_id)
+            if deliverable is not None:
+                _recompute_deliverable_approval(db, deliverable)
+        elif human_decision == "rejected_with_feedback":
+            section.status = "rejected"
+        elif section.status in {None, "", "draft"}:
+            section.status = "draft"
+
+        # 5. Update execution run status
         run = db.get(ExecutionRun, run_id)
         if run is not None:
             run.status = "succeeded"
@@ -392,6 +455,8 @@ def persist_result_node(state: BidPilotState) -> dict:
                 "claim_integrity_status": claim_integrity_status,
                 "claim_candidate_count": len(claim_candidates),
                 "claim_count": persisted_claim_count,
+                "section_status": section.status,
+                "human_decision": human_decision,
             }
 
         db.commit()

@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { REACTBITS_AURORA } from "@/components/reactbits-theme";
 import { downloadAssistantArtifact } from "@/lib/api";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
+import { buildTranscriptTurns } from "@/lib/assistant-transcript";
 import { cn } from "@/lib/utils";
 import { getAssistantToolIcon, getAssistantToolLabel } from "./assistant-tool-metadata";
 
@@ -60,9 +61,14 @@ function getWorkflowNodeLabel(nodeName: string, t: Translate) {
   const labels: Record<string, string> = {
     document_analyzer: "分析资料",
     retriever: "检索资料",
+    knowledge_retriever: "证据检索",
+    content_plan: "内容计划",
     section_planner: "规划章节",
     section_drafter: "章节起草",
     quality_review: "质量审核",
+    quality_reviewer: "质量审核",
+    human_approval: "人工审核",
+    persist_result: "保存结果",
     redrafter: "重新起草",
     exporter: "生成交付物",
   };
@@ -226,6 +232,40 @@ function countByKind(items: AssistantExecutionItem[]) {
   return { tools, workflows };
 }
 
+function buildLocalizedTurnSummary(
+  tools: Array<{ name: string; title: string; status: string }>,
+  tone: ActivityTone,
+  t: Translate,
+) {
+  const labels = tools.map((tool) => getAssistantToolLabel(tool.name || tool.title, t));
+  if (labels.length === 1) {
+    const label = labels[0];
+    const key =
+      tone === "running" || tone === "pending"
+        ? "activity.summarySingleRunning"
+        : tone === "failed"
+          ? "activity.summarySingleFailed"
+          : tone === "cancelled"
+            ? "activity.summarySingleCancelled"
+            : "activity.summarySingleDone";
+    return t(key, { label, defaultValue: `${label} ${tone}` });
+  }
+  const joined = labels.join(" · ");
+  if (tone === "running" || tone === "pending") {
+    return t("activity.summaryTurnRunning", {
+      tools: joined,
+      defaultValue: `正在处理：${joined}`,
+    });
+  }
+  if (tone === "failed") {
+    return t("activity.summaryTurnFailed", {
+      tools: joined,
+      defaultValue: `部分失败：${joined}`,
+    });
+  }
+  return joined;
+}
+
 function buildActivityLabel(
   items: AssistantExecutionItem[],
   tone: ActivityTone,
@@ -233,6 +273,35 @@ function buildActivityLabel(
   workflows: number,
   t: Translate,
 ) {
+  // Multi-tool / multi-turn harness paths use transcript aggregation for L1.
+  // Single-tool paths keep the existing i18n summary contract.
+  const turns = buildTranscriptTurns(items);
+  if (turns.length === 1 && turns[0].tools.length > 1) {
+    return buildLocalizedTurnSummary(turns[0].tools, tone, t);
+  }
+  if (turns.length > 1) {
+    const running = turns.filter((turn) => turn.status === "running" || turn.status === "pending").length;
+    const failed = turns.filter((turn) => turn.status === "failed").length;
+    if (failed > 0) {
+      return t("activity.summaryTurnsFailed", {
+        turns: turns.length,
+        failed,
+        defaultValue: `${turns.length} 个回合，${failed} 个失败`,
+      });
+    }
+    if (running > 0) {
+      return t("activity.summaryTurnsRunning", {
+        turns: turns.length,
+        running,
+        defaultValue: `正在处理 ${turns.length} 个回合`,
+      });
+    }
+    return t("activity.summaryTurnsDone", {
+      turns: turns.length,
+      defaultValue: `已完成 ${turns.length} 个回合`,
+    });
+  }
+
   if (items.length === 1) {
     const item = items[0];
     const label =
@@ -444,6 +513,8 @@ export function AssistantActivityTimeline({
     setExpanded(defaultExpanded);
   }, [defaultExpanded, items.length, tone]);
 
+  // L1 header keeps the existing i18n activity label for product polish.
+  // Turn grouping still powers stable L2 keys via toolCallId.
   const label = items.length > 0 ? buildActivityLabel(items, tone, tools, workflows, t) : "";
   const statusLabel = t(`activity.status.${tone}`, { defaultValue: tone });
   const requestCancellation = async (runtimeRunId: string) => {
@@ -534,8 +605,9 @@ export function AssistantActivityTimeline({
           className="ml-[7px] mt-2 flex flex-col gap-1 border-l pl-5"
           style={{ borderColor: "color-mix(in oklch, var(--border) 62%, transparent)" }}
         >
+          {/* L2: individual tool steps */}
           {items.map((item) => (
-            <div key={item.id} className="assistant-activity-detail">
+            <div key={item.toolCallId || item.id} className="assistant-activity-detail">
               <ActivityDetail
                 item={item}
                 onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}

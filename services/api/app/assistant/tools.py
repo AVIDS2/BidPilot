@@ -19,8 +19,8 @@ from app.bundles.service import list_bundles_query
 from app.deliverables.schemas import DeliverableCreate
 from app.deliverables.service import create_deliverable_command, list_deliverables_query
 from app.documents.service import list_documents_query
-from app.drafting.schemas import DraftSectionRequest, RedraftSectionRequest
-from app.drafting.service import draft_section_command, redraft_section_command
+from app.drafting.schemas import DraftSectionRequest, RedraftSectionRequest, ResumeRunRequest
+from app.drafting.service import draft_section_command, redraft_section_command, resume_run_command
 from app.evidence.service import list_evidence_query
 from app.execution.service import list_runs_query, retry_failed_run_command
 from app.export.service import generate_deliverable_export_command
@@ -68,6 +68,8 @@ def execute_tool(
         return list_project_bundles(db, user, arguments)
     if tool_name == "list_sections":
         return list_sections(db, user, arguments)
+    if tool_name == "get_project_outline":
+        return get_project_outline(db, user, arguments)
     if tool_name == "search_bid_wiki":
         return search_bid_wiki_tool(db, user, arguments)
     if tool_name == "list_knowledge_portfolio":
@@ -90,6 +92,8 @@ def execute_tool(
         return start_draft_section(db, user, arguments)
     if tool_name == "start_redraft_section":
         return start_redraft_section(db, user, arguments)
+    if tool_name == "resume_draft_run":
+        return resume_draft_run_tool(db, user, arguments)
     if tool_name == "list_requirements":
         return list_requirements_tool(db, user, arguments)
     if tool_name == "list_claim_review_queue":
@@ -227,20 +231,108 @@ def list_sections(db: Session, user: CurrentUser, arguments: dict) -> AssistantT
         .order_by(DeliverableSection.section_key.asc())
         .all()
     )
+    from sqlalchemy import func, select
+
+    from app.models import SectionVersion
+
+    items: list[dict] = []
+    for row in rows:
+        version_count = db.scalar(
+            select(func.count())
+            .select_from(SectionVersion)
+            .where(SectionVersion.deliverable_section_id == row.id)
+        ) or 0
+        latest = db.scalar(
+            select(SectionVersion)
+            .where(SectionVersion.deliverable_section_id == row.id)
+            .order_by(SectionVersion.version_number.desc())
+            .limit(1)
+        )
+        items.append(
+            {
+                "id": row.id,
+                "deliverable_id": row.deliverable_id,
+                "section_key": row.section_key,
+                "title": row.title,
+                "status": row.status,
+                "version_count": int(version_count),
+                "has_content": bool(version_count),
+                "latest_version_id": latest.id if latest else None,
+                "latest_version_number": latest.version_number if latest else None,
+            }
+        )
+    drafted = sum(1 for item in items if item["has_content"])
+    approved = sum(1 for item in items if item["status"] == "approved")
     return AssistantToolResult(
         tool_name="list_sections",
         result={
-            "items": [
-                {
-                    "id": row.id,
-                    "section_key": row.section_key,
-                    "title": row.title,
-                    "status": row.status,
-                }
-                for row in rows
-            ]
+            "items": items,
+            "outline_count": len(items),
+            "drafted_count": drafted,
+            "approved_count": approved,
         },
-        summary=f"项目「{project.name}」下有 {len(rows)} 个章节。",
+        summary=(
+            f"项目「{project.name}」大纲共 {len(items)} 章，"
+            f"已起草 {drafted} 章，已批准 {approved} 章。"
+        ),
+    )
+
+
+def get_project_outline(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """Outline-first view: scenario sections + drafting/approval progress."""
+    result = list_sections(db, user, arguments)
+    project = _get_project_for_user(db, user, arguments["project_id"])
+    scenario_key = project.scenario_package or "bidpilot"
+    try:
+        from app.scenarios.templates import get_sections_for_scenario
+
+        template = get_sections_for_scenario(scenario_key)
+    except Exception:
+        template = []
+    existing = {item["section_key"]: item for item in result.result.get("items", [])}
+    ordered: list[dict] = []
+    for sec in template:
+        key = sec["section_key"]
+        if key in existing:
+            ordered.append({**existing[key], "in_template": True})
+        else:
+            ordered.append(
+                {
+                    "id": None,
+                    "deliverable_id": None,
+                    "section_key": key,
+                    "title": sec["title"],
+                    "status": "missing",
+                    "version_count": 0,
+                    "has_content": False,
+                    "latest_version_id": None,
+                    "latest_version_number": None,
+                    "in_template": True,
+                }
+            )
+    # Append any extra sections not in the scenario template.
+    template_keys = {sec["section_key"] for sec in template}
+    for key, item in existing.items():
+        if key not in template_keys:
+            ordered.append({**item, "in_template": False})
+
+    drafted = sum(1 for item in ordered if item["has_content"])
+    approved = sum(1 for item in ordered if item["status"] == "approved")
+    return AssistantToolResult(
+        tool_name="get_project_outline",
+        result={
+            "project_id": project.id,
+            "project_name": project.name,
+            "scenario_package": scenario_key,
+            "items": ordered,
+            "outline_count": len(ordered),
+            "drafted_count": drafted,
+            "approved_count": approved,
+        },
+        summary=(
+            f"项目「{project.name}」大纲（{scenario_key}）共 {len(ordered)} 章，"
+            f"已起草 {drafted} 章，已批准 {approved} 章。"
+        ),
     )
 
 
@@ -322,6 +414,21 @@ def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> Assi
         project_id=arguments["project_id"],
         capability="workflow.run",
     )
+    # Fail closed when the project has no ingested knowledge yet. Drafting an
+    # empty project wastes quota and produces unusable output.
+    from sqlalchemy import func, select
+
+    from app.models import KnowledgeChunk
+
+    chunk_count = db.scalar(
+        select(func.count())
+        .select_from(KnowledgeChunk)
+        .where(KnowledgeChunk.project_id == arguments["project_id"])
+    )
+    if not chunk_count:
+        raise ValueError(
+            "当前项目还没有可检索的解析资料。请先上传并等待资料包解析完成，再启动章节起草。"
+        )
     response = draft_section_command(
         db,
         DraftSectionRequest(
@@ -509,6 +616,32 @@ def start_redraft_section(db: Session, user: CurrentUser, arguments: dict) -> As
         tool_name="start_redraft_section",
         result=response.model_dump(),
         summary=f"已启动章节重写工作流，运行 ID：{response.run_id}。",
+        workflow=True,
+    )
+
+
+def resume_draft_run_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """Resume a drafting run that is paused for human approval."""
+    run_id = str(arguments.get("run_id") or "").strip()
+    decision = str(arguments.get("decision") or "").strip()
+    if not run_id:
+        raise ValueError("run_id is required")
+    if decision not in {"approved", "rejected"}:
+        raise ValueError("decision must be approved or rejected")
+    feedback = arguments.get("feedback")
+    response = resume_run_command(
+        db,
+        run_id,
+        ResumeRunRequest(
+            decision=decision,  # type: ignore[arg-type]
+            feedback=str(feedback) if feedback is not None else None,
+        ),
+        user,
+    )
+    return AssistantToolResult(
+        tool_name="resume_draft_run",
+        result=response.model_dump(),
+        summary=f"已提交章节审核决定，运行 ID：{response.run_id}。",
         workflow=True,
     )
 
@@ -792,10 +925,15 @@ def export_deliverable_tool(db: Session, user: CurrentUser, arguments: dict) -> 
         deliverable_id=deliverable_id,
         capability="deliverables.export",
     )
-    if deliverable.project_id != arguments.get("project_id"):
+    # Prefer server-derived project ownership. If the model supplies project_id,
+    # it must match; if omitted, use the deliverable's project.
+    requested_project_id = arguments.get("project_id")
+    if requested_project_id and deliverable.project_id != requested_project_id:
         raise ValueError("Deliverable does not belong to this project")
-    if deliverable.status != "approved":
-        raise ValueError("Deliverable must be approved before export")
+    # Partial packages are allowed when at least one approved section exists.
+    # generate_deliverable_export_command enforces that content boundary.
+    if deliverable.status not in {"approved", "in_review", "draft"}:
+        raise ValueError(f"Deliverable status '{deliverable.status}' cannot be exported")
     artifact = generate_deliverable_export_command(
         db,
         deliverable_id=deliverable_id,

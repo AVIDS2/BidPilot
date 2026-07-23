@@ -72,6 +72,28 @@ class ClaimCandidate(TypedDict):
     evidence_chunk_ids: list[str]
 
 
+class ContentPlanItem(TypedDict):
+    """One planned writing element (evidence pick, table, or figure)."""
+
+    kind: str
+    title: str
+    detail: str
+    source_ref: str | None
+
+
+class ContentPlan(TypedDict):
+    """Deterministic writing plan produced before section drafting."""
+
+    section_key: str
+    summary: str
+    outline: list[str]
+    key_points: list[str]
+    evidence_picks: list[ContentPlanItem]
+    tables: list[ContentPlanItem]
+    figures: list[ContentPlanItem]
+    gaps: list[str]
+
+
 class BidPilotState(TypedDict):
     """Shared state for the BidPilot LangGraph agent.
 
@@ -96,6 +118,10 @@ class BidPilotState(TypedDict):
     # ── Knowledge retriever output ─────────────────────────────────────
     evidence_chunks: list[EvidenceChunk]
     evidence_retrieved: bool
+
+    # ── Content plan (pre-draft structure) ────────────────────────────
+    content_plan: ContentPlan | None
+    content_plan_ready: bool
 
     # ── Governed memory context ───────────────────────────────────────
     memory_context_loaded: bool

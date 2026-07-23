@@ -1,6 +1,45 @@
 # BidPilot Development and Learning Progress
 
-Updated: 2026-07-22
+Updated: 2026-07-23
+
+## Latest (2026-07-23 agent closeout — CLOSED)
+
+**Status: Agent MVP / controlled-pilot main path closed.**
+
+Proven loop:
+
+`outline edit → CN-aware retrieve → content-plan → DeepSeek draft → HITL approve → export`
+
+Evidence on `docpilot_smoke` (API `:8001`, worker solo, `deepseek-chat`):
+
+| Gate | Result |
+|---|---|
+| Outline API create/rename/reorder | pass |
+| Chinese evidence binding | pass (`evidence_count=1`) |
+| Content-plan before draft | pass |
+| DeepSeek section draft + HITL approve | pass |
+| DOCX/PDF export | pass (37614 / 2866 bytes) |
+| Assistant export tool | pass (`download_path`) |
+| Assistant panel + transcript tests | 27 passed |
+| Web typecheck | clean |
+
+Artifacts / ids:
+
+- report: `tmp/closeout-report.json`
+- docx/pdf: `tmp/closeout-export.docx`, `tmp/closeout-export.pdf`
+- project: `8b6cb462-581a-478f-a9e8-2adb57f71ecc`
+- run: `737c69b2-3184-48da-aabe-26d70f9c30ed`
+- dev-log: `docs/dev-log/2026-07-23-agent-closeout-resmoke.md`
+
+Provider note: process/user DeepSeek key suffix `27b0` works; `.env` suffix
+`9a49` is invalid and must not override process env.
+
+### Explicitly still open (not part of this closeout)
+
+- Clean-worktree release rehearsal / retained CI artifact
+- Authenticated browser click-through recording (SPA + data ready on `:5174`)
+- Replace stale DeepSeek key in `services/api/.env`
+- Retrieval polish beyond first Chinese hit; model-based content-plan
 
 ## Current State
 
@@ -361,3 +400,18 @@ Do not add another visible feature until the relevant concept, architecture deci
   successful reply. Targeted API regression coverage passed (`52 passed`),
   Ruff passed, and production commit `c980545` returned ready with PostgreSQL,
   Redis, and MinIO checks all `ok`.
+
+## 2026-07-23 Streaming harness + LangGraph main-path closeout
+
+- Streaming harness is the default assistant path; DeepSeek HTTP multi-step tool loop verified on port 8001.
+- USE_LANGGRAPH defaults on; worker drafted with DeepSeek, paused at HITL, resumed, and persisted a section version.
+- Added resume_draft_run capability, typed-confirmation resume edits, redraft/export schema fixes, draft preflight, and section_drafter stale-review clear.
+- OpenBidKit/LangGraph design alignment recorded in docs/dev-log/2026-07-23-openbidkit-langgraph-alignment.md.
+- Local smoke evidence: docs/dev-log/2026-07-23-deepseek-mainpath-smoke.md.
+
+## 2026-07-23 Approve/export + outline-first
+
+- get_project_outline capability + richer list_sections progress.
+- HITL-approved sections promote for export; partial DOCX/PDF packages supported.
+- DeepSeek e2e produced real files: tmp/e2e-export.docx (37KB) and tmp/e2e-export.pdf (5KB).
+- Details: docs/dev-log/2026-07-23-approve-export-outline-closeout.md.

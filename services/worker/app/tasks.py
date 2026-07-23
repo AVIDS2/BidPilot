@@ -32,9 +32,9 @@ from app.runtime.events import (
 
 logger = logging.getLogger(__name__)
 
-# Feature flag: set USE_LANGGRAPH=1 (or true/yes) to route drafting through
-# the LangGraph agent graph instead of the legacy run_draft() path.
-_USE_LANGGRAPH = os.getenv("USE_LANGGRAPH", "0").lower() in ("1", "true", "yes")
+# Feature flag: product drafting uses the LangGraph graph by default.
+# Set USE_LANGGRAPH=0/false/no only for explicit legacy single-shot drafting.
+_USE_LANGGRAPH = os.getenv("USE_LANGGRAPH", "1").lower() in ("1", "true", "yes")
 
 
 @celery_app.task(name="worker.ping")

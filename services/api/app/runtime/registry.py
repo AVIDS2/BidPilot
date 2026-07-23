@@ -44,6 +44,13 @@ _CAPABILITIES = (
     CapabilityDefinition("get_project_summary", "查看项目概览", "Get project summary", RuntimeRiskLevel.READ, "project.read"),
     CapabilityDefinition("list_project_bundles", "查看资料包", "List project bundles", RuntimeRiskLevel.READ, "project.read"),
     CapabilityDefinition("list_sections", "查看章节", "List sections", RuntimeRiskLevel.READ, "project.read"),
+    CapabilityDefinition(
+        "get_project_outline",
+        "查看项目大纲",
+        "Get project outline",
+        RuntimeRiskLevel.READ,
+        "project.read",
+    ),
     CapabilityDefinition("list_pending_reviews", "查看待审内容", "List pending reviews", RuntimeRiskLevel.READ, "project.read"),
     CapabilityDefinition(
         "submit_review_decision",
@@ -97,6 +104,14 @@ _CAPABILITIES = (
         "启动章节重写",
         "Start redraft section",
         RuntimeRiskLevel.COSTING,
+        "workflow.run",
+        requires_approval_in_risky_only=True,
+    ),
+    CapabilityDefinition(
+        "resume_draft_run",
+        "恢复章节审核工作流",
+        "Resume draft run after human approval",
+        RuntimeRiskLevel.LOW_RISK_WRITE,
         "workflow.run",
         requires_approval_in_risky_only=True,
     ),
@@ -172,6 +187,7 @@ WORKFLOW_CAPABILITY_NAMES = frozenset(
     {
         "start_draft_section",
         "start_redraft_section",
+        "resume_draft_run",
         "retry_run",
         "propose_memory_graph",
     }
@@ -227,6 +243,9 @@ def format_approval_request(capability_name: str, arguments: dict[str, Any]) -> 
         return f"确认启动章节「{arguments.get('section_key') or '未指定章节'}」的起草工作流吗？"
     if capability_name == "start_redraft_section":
         return f"确认启动章节「{arguments.get('section_key') or '未指定章节'}」的重写工作流吗？"
+    if capability_name == "resume_draft_run":
+        decision = "通过" if arguments.get("decision") == "approved" else "退回并继续修改"
+        return f"确认对章节草稿提交审核决定：{decision}吗？"
     if capability_name == "propose_memory_graph":
         return "确认从这条已验证的项目知识生成实体关系提案吗？该操作会使用一次模型额度，结果仍需人工审核。"
     if capability_name == "retry_run":
@@ -336,9 +355,23 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
         return PublicCapabilityResult("已保存为个人工作偏好。", {"memory_id": result["id"]})
     if capability_name == "forget_memory" and result.get("deleted") is True:
         return PublicCapabilityResult("这条记忆已遗忘。", {"deleted": True})
+    if capability_name == "list_sections":
+        return PublicCapabilityResult(f"已找到 {count} 个章节。", {"count": count})
+    if capability_name == "get_project_outline":
+        drafted = result.get("drafted_count")
+        approved = result.get("approved_count")
+        payload = {"count": count}
+        if isinstance(drafted, int):
+            payload["drafted_count"] = drafted
+        if isinstance(approved, int):
+            payload["approved_count"] = approved
+        return PublicCapabilityResult(
+            f"大纲共 {count} 章，已起草 {drafted if isinstance(drafted, int) else 0} 章，"
+            f"已批准 {approved if isinstance(approved, int) else 0} 章。",
+            payload,
+        )
     if capability_name in {
         "list_project_bundles",
-        "list_sections",
         "list_pending_reviews",
         "list_evidence",
         "list_deliverables",
@@ -364,7 +397,15 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
             for key in ("run_id", "runtime_run_id")
             if isinstance(result.get(key), str)
         }
-        return PublicCapabilityResult("起草工作流已启动。", payload)
+        summary = "起草工作流已启动。" if capability_name == "start_draft_section" else "重写工作流已启动。"
+        return PublicCapabilityResult(summary, payload)
+    if capability_name == "resume_draft_run":
+        payload = {
+            key: result[key]
+            for key in ("run_id", "runtime_run_id", "status")
+            if key in result
+        }
+        return PublicCapabilityResult("已提交章节审核决定，工作流继续执行。", payload)
     if capability_name == "propose_memory_graph" and isinstance(result.get("run_id"), str):
         payload = {
             key: result[key]

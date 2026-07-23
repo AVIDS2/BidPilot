@@ -10,12 +10,14 @@ from .supervisor import (
     route_initial,
     route_after_rfp,
     route_after_retrieval,
+    route_after_content_plan,
     route_after_draft,
     route_after_review,
     route_after_human_approval,
 )
 from .rfp_parser import rfp_parser_node
 from .knowledge_retriever import knowledge_retriever_node
+from .content_plan import content_plan_node
 from .section_drafter import section_drafter_node
 from .quality_reviewer import quality_reviewer_node
 from .human_approval import human_approval_node
@@ -27,6 +29,7 @@ __all__ = [
     "supervisor_node",
     "rfp_parser_node",
     "knowledge_retriever_node",
+    "content_plan_node",
     "section_drafter_node",
     "quality_reviewer_node",
     "human_approval_node",
@@ -35,6 +38,7 @@ __all__ = [
     "route_initial",
     "route_after_rfp",
     "route_after_retrieval",
+    "route_after_content_plan",
     "route_after_draft",
     "route_after_review",
     "route_after_human_approval",

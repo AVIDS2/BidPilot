@@ -9,6 +9,7 @@ from app.db import SessionLocal
 from app.execution.embedding_capacity import generate_metered_embedding
 from app.models import Project, RuntimeRun, User
 from app.retrieval.reranker import rerank_candidates
+from app.retrieval.section_query import expand_section_retrieval_query, section_fallback_query
 from contracts import EmbeddingOutcome, EmbeddingOutcomeStatus
 from contracts.retrieval_service import retrieve_project_evidence
 
@@ -20,12 +21,31 @@ logger = logging.getLogger(__name__)
 _TOP_K = 5
 
 
+def _map_candidates(candidates) -> list[EvidenceChunk]:
+    return [
+        EvidenceChunk(
+            chunk_id=candidate.chunk_id,
+            source_document_id=candidate.source_document_id,
+            content=candidate.content[:500],
+            retrieval_score=candidate.final_score,
+            retrieval_methods=list(candidate.methods),
+            locator_json=candidate.locator.model_dump(exclude_none=True),
+            chunk_index=candidate.locator.chunk_index,
+        )
+        for candidate in candidates
+    ]
+
+
 def knowledge_retriever_node(state: BidPilotState) -> dict:
     """Retrieve validated project evidence without raw SQL or broad fallback."""
     started = time.monotonic()
     project_id: str = state["project_id"]
     section_key: str = state["section_key"]
-    query = section_key.replace("-", " ")
+    # Expand English section keys into bilingual lexical queries so Chinese
+    # FTS / trigram corpora can match (e.g. technical-approach → 技术方案).
+    query = expand_section_retrieval_query(section_key)
+    query_used = query
+    used_fallback = False
 
     db = SessionLocal()
     try:
@@ -68,28 +88,40 @@ def knowledge_retriever_node(state: BidPilotState) -> dict:
             top_k=_TOP_K,
             reranker=rerank_candidates,
         )
-        chunks: list[EvidenceChunk] = [
-            EvidenceChunk(
-                chunk_id=candidate.chunk_id,
-                source_document_id=candidate.source_document_id,
-                content=candidate.content[:500],
-                retrieval_score=candidate.final_score,
-                retrieval_methods=list(candidate.methods),
-                locator_json=candidate.locator.model_dump(exclude_none=True),
-                chunk_index=candidate.locator.chunk_index,
-            )
-            for candidate in result.candidates
-        ]
+        # Empty primary hit: retry with a pure Chinese domain fallback. Dense
+        # embedding is intentionally not re-metered for the fallback pass.
+        if not result.candidates:
+            fallback = section_fallback_query(section_key)
+            if fallback and fallback != query:
+                used_fallback = True
+                query_used = fallback
+                result = retrieve_project_evidence(
+                    db,
+                    project_id=project_id,
+                    raw_query=fallback,
+                    profile_id=None,
+                    query_embedding=None,
+                    top_k=_TOP_K,
+                    reranker=rerank_candidates,
+                )
+        chunks = _map_candidates(result.candidates)
         duration_ms = int((time.monotonic() - started) * 1000)
         methods = sorted({method for chunk in chunks for method in chunk["retrieval_methods"]})
+        degraded = list(result.degraded_reasons)
+        if used_fallback:
+            degraded.append("section_query_fallback")
         history = record_agent_call(
             agent="knowledge_retriever",
             action="retrieve_evidence",
-            input_summary=f"project_id={project_id}, section={section_key}",
+            input_summary=(
+                f"project_id={project_id}, section={section_key}, "
+                f"query={query_used[:80]}"
+            ),
             output_summary=(
                 f"evidence_chunks[{len(chunks)}], methods={','.join(methods) or 'none'}, "
-                f"degraded={','.join(result.degraded_reasons) or 'none'}, "
-                f"embedding={query_embedding.error_code or 'available'}"
+                f"degraded={','.join(degraded) or 'none'}, "
+                f"embedding={query_embedding.error_code or 'available'}, "
+                f"fallback={used_fallback}"
             ),
             duration_ms=duration_ms,
             success=True,

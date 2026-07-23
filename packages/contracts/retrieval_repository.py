@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -204,6 +205,39 @@ def _or_query_text(normalized_query: str) -> str:
     return " OR ".join(f'"{term}"' for term in terms if term)
 
 
+def _trigram_terms(raw_query: str) -> list[str]:
+    """Split multi-keyword queries into phrase-sized terms for CJK recall.
+
+    Full-query similarity against a long bilingual string is near zero for
+    Chinese corpora. Individual 2+ character terms (技术方案, 微服务) remain
+    high-signal for ``ilike`` / ``%`` matching.
+    """
+    query = raw_query.strip()
+    if not query:
+        return []
+    terms: list[str] = []
+    # Prefer whitespace-delimited keywords first (section expansion path).
+    for part in re.split(r"\s+", query):
+        token = part.strip()
+        if len(token) >= 2:
+            terms.append(token)
+    # Also keep the full query for exact phrase hits on short inputs.
+    if query not in terms and len(query) >= 2:
+        terms.insert(0, query)
+    # Deduplicate while preserving order; cap to keep the OR clause bounded.
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        key = term.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(term)
+        if len(ordered) >= 16:
+            break
+    return ordered
+
+
 def search_trigram_candidates(
     db: Session,
     *,
@@ -212,19 +246,32 @@ def search_trigram_candidates(
     top_k: int,
 ) -> list[RankedKnowledgeChunk]:
     """Retrieve exact phrases and typo-tolerant candidates for legacy/CJK content."""
-    query = raw_query.strip()
-    if not query:
+    terms = _trigram_terms(raw_query)
+    if not terms:
         return []
-    phrase_match = KnowledgeChunk.content.ilike(f"%{query}%")
-    similarity = func.similarity(KnowledgeChunk.content, query)
-    phrase_boost = case((phrase_match, 1.0), else_=0.0)
+
+    # Score = sum of per-term phrase hits + best single-term similarity.
+    # This recovers Chinese section-key expansions where the full bilingual
+    # string would never substring-match a knowledge chunk.
+    phrase_matches = [
+        KnowledgeChunk.content.ilike(f"%{_escape_like(term)}%", escape="\\")
+        for term in terms
+    ]
+    phrase_score = case((phrase_matches[0], 1.0), else_=0.0)
+    for match in phrase_matches[1:]:
+        phrase_score = phrase_score + case((match, 1.0), else_=0.0)
+
+    similarity = func.greatest(
+        *[func.similarity(KnowledgeChunk.content, term) for term in terms]
+    )
+    similarity_matches = [KnowledgeChunk.content.op("%")(term) for term in terms]
     stmt = (
-        select(KnowledgeChunk, (phrase_boost + similarity).label("score"))
+        select(KnowledgeChunk, (phrase_score + similarity).label("score"))
         .where(
             KnowledgeChunk.project_id == project_id,
-            or_(phrase_match, KnowledgeChunk.content.op("%")(query)),
+            or_(*phrase_matches, *similarity_matches),
         )
-        .order_by(phrase_boost.desc(), similarity.desc(), KnowledgeChunk.id.asc())
+        .order_by(phrase_score.desc(), similarity.desc(), KnowledgeChunk.id.asc())
         .limit(_limit(top_k))
     )
     return [
