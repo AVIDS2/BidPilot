@@ -594,6 +594,30 @@ def _replay_existing_action(db: Session, action: RuntimeAction) -> RuntimeCapabi
     return RuntimeCapabilityExecution(action=action, approval=approval, result=result)
 
 
+def _expected_confirmation_text(
+    db: Session,
+    capability_name: str,
+    arguments: dict | None,
+) -> str | None:
+    """Resolve the typed-confirmation string the UI must collect for destructive tools."""
+    args = arguments or {}
+    if capability_name != "delete_project":
+        return None
+    # Prefer an explicit name if the model already supplied one.
+    explicit = args.get("project_name") or args.get("name") or args.get("confirmation_text")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+    project_id = args.get("project_id")
+    if not isinstance(project_id, str) or not project_id:
+        return None
+    from app.models import Project
+
+    project = db.get(Project, project_id)
+    if project is None or not isinstance(project.name, str) or not project.name.strip():
+        return None
+    return project.name.strip()
+
+
 def _create_pending_approval(
     db: Session,
     run: RuntimeRun,
@@ -601,6 +625,15 @@ def _create_pending_approval(
     user: CurrentUser,
     message: str,
 ) -> RuntimeApproval:
+    definition = get_capability_definition(action.capability_name)
+    expected_text = (
+        _expected_confirmation_text(db, action.capability_name, action.arguments_json)
+        if definition.requires_typed_confirmation
+        else None
+    )
+    if action.capability_name == "delete_project" and expected_text:
+        # Make the approval copy explicit: user must retype the project name.
+        message = f"删除项目后无法恢复。请输入完整项目名称「{expected_text}」确认继续。"
     approval = RuntimeApproval(
         action_id=action.id,
         user_id=user.id,
@@ -610,6 +643,8 @@ def _create_pending_approval(
             "capability": action.capability_name,
             "arguments": action.arguments_json,
             "message": message,
+            "requires_typed_confirmation": definition.requires_typed_confirmation,
+            "expected_text": expected_text,
         },
         expires_at=_now() + timedelta(minutes=30),
     )
@@ -617,21 +652,22 @@ def _create_pending_approval(
     db.add(approval)
     db.commit()
     db.refresh(approval)
+    payload = {
+        "approval_id": approval.id,
+        "capability": action.capability_name,
+        "arguments": action.arguments_json,
+        "message": message,
+        "requires_typed_confirmation": definition.requires_typed_confirmation,
+    }
+    if expected_text:
+        payload["expected_text"] = expected_text
     publish_event(
         db,
         run.id,
         RuntimeEventDraft(
             type=RuntimeEventType.APPROVAL_REQUESTED,
             public_summary="该操作需要你的确认。",
-            payload={
-                "approval_id": approval.id,
-                "capability": action.capability_name,
-                "arguments": action.arguments_json,
-                "message": message,
-                "requires_typed_confirmation": get_capability_definition(
-                    action.capability_name
-                ).requires_typed_confirmation,
-            },
+            payload=payload,
         ),
     )
     return approval

@@ -501,7 +501,9 @@ export function AssistantActivityTimeline({
 }) {
   const { t } = useTranslation("ai-assistant");
   const tone = getTone(items);
-  const defaultExpanded = tone === "running" || tone === "failed";
+  // Pi/CC-style: keep L2 tool steps visible by default so the three-level
+  // transcript is not collapsed into a single L1 chip.
+  const defaultExpanded = true;
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const [cancellationError, setCancellationError] = useState<string | null>(null);

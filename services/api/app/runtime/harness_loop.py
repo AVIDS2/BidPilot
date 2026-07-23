@@ -589,9 +589,18 @@ class StreamingHarness:
                 )
             result = execution.result or PublicCapabilityResult("操作已完成。", {})
             self._maybe_bind_project(tool_name, result.payload)
-            # After approval, finish this run with the public summary. A later user
-            # message can continue with fresh context. This keeps resume simple and
-            # avoids replaying an incomplete message history from checkpoints.
+            # Surface success immediately, then let a short continuation turn
+            # summarize / offer next steps instead of hard-stopping the loop.
+            yield _sse(
+                "assistant.tool_succeeded",
+                {
+                    "runtime_run_id": self.runtime_run.id,
+                    "tool_name": tool_name,
+                    "result": result.payload,
+                    "summary": result.summary,
+                    "state": "completed",
+                },
+            )
             save_message(self.db, self.conversation_id, "assistant", result.summary)
             complete_runtime_run(
                 self.db,
@@ -599,18 +608,69 @@ class StreamingHarness:
                 result.summary,
                 result_json={"summary": result.summary, "payload": result.payload},
             )
-            async for event in self._flush_new_events():
+            async for event in self._flush_new_events(skip_message_completed=True):
                 yield event
+            yield _sse(
+                "assistant.message",
+                {
+                    "runtime_run_id": self.runtime_run.id,
+                    "content": result.summary,
+                    "state": "completed",
+                },
+            )
+            yield _sse(
+                "assistant.end",
+                {
+                    "conversation_id": self.conversation_id,
+                    "runtime_run_id": self.runtime_run.id,
+                    "state": "completed",
+                },
+            )
         except Exception as exc:
             safe_error = redact_text(str(exc))
             message = f"执行失败：{safe_error}"
+            # Keep the failure visible as a tool card, but do not strand the UI
+            # without a clear next step. Typed confirmation mismatches should
+            # tell the user exactly what to type, not look like a fake sandbox.
+            yield _sse(
+                "assistant.tool_failed",
+                {
+                    "runtime_run_id": self.runtime_run.id,
+                    "tool_name": tool_name,
+                    "error_message": safe_error,
+                    "state": "failed",
+                },
+            )
             try:
                 fail_runtime_run(self.db, self.runtime_run.id, message, error_code="harness_approval_failed")
             except ValueError:
                 pass
-            save_message(self.db, self.conversation_id, "assistant", message)
-            async for event in self._flush_new_events():
+            guidance = message
+            if "完整项目名称" in safe_error or "confirmation" in safe_error.lower():
+                guidance = (
+                    f"{message}\n\n"
+                    "这不是沙箱假失败：删除属于破坏性操作，即使在「完全访问」下也需要输入完整项目名称确认。"
+                    "请再次发起删除，并在确认框中输入完整项目名。"
+                )
+            save_message(self.db, self.conversation_id, "assistant", guidance)
+            async for event in self._flush_new_events(skip_message_completed=True):
                 yield event
+            yield _sse(
+                "assistant.message",
+                {
+                    "runtime_run_id": self.runtime_run.id,
+                    "content": guidance,
+                    "state": "failed",
+                },
+            )
+            yield _sse(
+                "assistant.end",
+                {
+                    "conversation_id": self.conversation_id,
+                    "runtime_run_id": self.runtime_run.id,
+                    "state": "failed",
+                },
+            )
 
     def _initial_messages(self) -> list[Any]:
         capability_list = "、".join(

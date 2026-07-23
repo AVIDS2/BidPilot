@@ -259,7 +259,10 @@ def format_approval_request(capability_name: str, arguments: dict[str, Any]) -> 
     if capability_name == "forget_memory":
         return "确认遗忘这条记忆吗？它将不再进入后续 Agent 上下文。"
     if capability_name == "delete_project":
-        return "删除项目后无法恢复。请确认继续。"
+        name = arguments.get("project_name") or arguments.get("name")
+        if isinstance(name, str) and name.strip():
+            return f"删除项目「{name.strip()}」后无法恢复。请输入完整项目名称确认继续。"
+        return "删除项目后无法恢复。请输入完整项目名称确认继续。"
     return "该操作会改变平台数据。确认继续吗？"
 
 

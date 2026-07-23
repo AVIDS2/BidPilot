@@ -44,9 +44,18 @@ function renderPanel() {
 }
 
 async function expandActivityDetails() {
+  // L2/L3 now default open (Pi/CC-style). Only click if still collapsed.
   await waitFor(() => {
-    expect(screen.getByRole("button", { name: "Expand activity details" })).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: "Expand activity details" }) ||
+        screen.queryByRole("button", { name: "Collapse activity details" }),
+    ).toBeTruthy();
   });
+  const collapse = screen.queryByRole("button", { name: "Collapse activity details" });
+  if (collapse) {
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+    return;
+  }
   fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
   await waitFor(() => {
     expect(screen.getByRole("button", { name: "Collapse activity details" })).toHaveAttribute("aria-expanded", "true");
@@ -499,18 +508,15 @@ describe("AIAssistantPanel", () => {
       expect(screen.getAllByText("已打开项目页。").length).toBeGreaterThan(0);
     });
     expect(screen.getByText("Open page completed")).toBeInTheDocument();
-    expect(screen.getByText("done")).toBeInTheDocument();
-    expect(screen.queryByText("raw detail should be hidden until expanded")).not.toBeInTheDocument();
+    expect(screen.getAllByText("done").length).toBeGreaterThan(0);
+    // L2/L3 default open: summary detail is visible without an expand click.
+    expect(screen.getByText("raw detail should be hidden until expanded")).toBeInTheDocument();
     expect(
-      screen.getByText("Open page completed").compareDocumentPosition(screen.getByText("已打开项目页。")) &
+      screen.getByText("Open page completed").compareDocumentPosition(screen.getAllByText("已打开项目页。")[0]) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
     await expandActivityDetails();
-
-    await waitFor(() => {
-      expect(screen.getByText("raw detail should be hidden until expanded")).toBeInTheDocument();
-    });
   });
 
   it("sanitizes raw tool payloads from activity details", async () => {
@@ -947,7 +953,7 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => {
-      expect(screen.getByText("已启动章节起草工作流，运行 ID：run-1。")).toBeInTheDocument();
+      expect(screen.getAllByText("已启动章节起草工作流，运行 ID：run-1。").length).toBeGreaterThan(0);
     });
     await expandActivityDetails();
     await waitFor(() => {

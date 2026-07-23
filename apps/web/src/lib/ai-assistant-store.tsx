@@ -642,6 +642,9 @@ function handleAssistantSseEvent(
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
     const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
     const title = typeof parsed.title === "string" && parsed.title ? parsed.title : toolName;
+    if (turnId) {
+      dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
+    }
     if (runtimeRunId && !toolCallId) {
       dispatch({
         type: "MERGE_WORKFLOW_NODE",
