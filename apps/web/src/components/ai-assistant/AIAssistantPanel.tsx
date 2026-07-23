@@ -439,33 +439,91 @@ function MessageBubble({
       </FadeContent>
     );
   }
+
+  // Interleave only when harness turn slots exist. Legacy streams without
+  // turn_id keep tools-on-top so completed cards still precede the summary.
+  const parts = msg.transcriptParts ?? [];
+  const hasTurnParts = parts.some((part) => part.kind === "turn");
+  const toolsByTurn = useMemo(() => {
+    const map = new Map<string, AssistantExecutionItem[]>();
+    for (const item of activityItems) {
+      const key =
+        item.turnId ||
+        (item.runtimeRunId ? `run:${item.runtimeRunId}` : undefined) ||
+        item.toolCallId ||
+        item.id;
+      const list = map.get(key) ?? [];
+      list.push(item);
+      map.set(key, list);
+    }
+    return map;
+  }, [activityItems]);
+
+  const renderNarrative = (text: string, key: string) =>
+    text ? (
+      <Markdown key={key} variant="assistant" className="[&_code]:break-words">
+        {normalizeAssistantMarkdown(text)}
+      </Markdown>
+    ) : null;
+
+  const thinkingDots = (
+    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "0ms" }} />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "150ms" }} />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "300ms" }} />
+    </span>
+  );
+
   return (
     <FadeContent duration={280} threshold={0.02} className="flex flex-col items-start gap-2 animate-fade-in">
       <div
-        className="w-full max-w-full px-1 py-1 text-[14px] leading-7 break-words sm:max-w-[92%]"
+        className="w-full max-w-full space-y-3 px-1 py-1 text-[14px] leading-7 break-words sm:max-w-[92%]"
         style={{
           background: "transparent",
           color: "var(--foreground)",
           borderColor: "transparent",
         }}
       >
-        {activityItems.length > 0 && (
-          <AssistantActivityTimeline
-            items={activityItems}
-            onCancelWorkflow={onCancelWorkflow}
-            onConfigureProvider={onConfigureProvider}
-          />
-        )}
-        {msg.content ? (
-          <Markdown variant="assistant" className="[&_code]:break-words">
-            {normalizeAssistantMarkdown(msg.content)}
-          </Markdown>
+        {hasTurnParts ? (
+          <>
+            {parts.map((part) => {
+              if (part.kind === "narrative") {
+                return renderNarrative(part.text, part.id);
+              }
+              const turnItems = toolsByTurn.get(part.turnId) ?? [];
+              const items =
+                turnItems.length > 0
+                  ? turnItems
+                  : activityItems.filter((item) => item.turnId === part.turnId);
+              if (items.length === 0) return null;
+              return (
+                <AssistantActivityTimeline
+                  key={part.id}
+                  items={items}
+                  onCancelWorkflow={onCancelWorkflow}
+                  onConfigureProvider={onConfigureProvider}
+                />
+              );
+            })}
+            {!msg.content && parts.every((part) => part.kind !== "narrative") && thinkingDots}
+          </>
         ) : (
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "0ms" }} />
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "150ms" }} />
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "300ms" }} />
-          </span>
+          <>
+            {activityItems.length > 0 && (
+              <AssistantActivityTimeline
+                items={activityItems}
+                onCancelWorkflow={onCancelWorkflow}
+                onConfigureProvider={onConfigureProvider}
+              />
+            )}
+            {msg.content ? (
+              <Markdown variant="assistant" className="[&_code]:break-words">
+                {normalizeAssistantMarkdown(msg.content)}
+              </Markdown>
+            ) : (
+              thinkingDots
+            )}
+          </>
         )}
       </div>
     </FadeContent>

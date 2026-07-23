@@ -20,6 +20,10 @@ export interface TranscriptTurn {
   tools: TranscriptTool[];
 }
 
+export type AssistantTranscriptPart =
+  | { id: string; kind: "narrative"; text: string; timestamp: number }
+  | { id: string; kind: "turn"; turnId: string; timestamp: number };
+
 /**
  * Aggregate flat execution items into L1 turns.
  *
@@ -57,6 +61,54 @@ export function buildTranscriptTurns(items: AssistantExecutionItem[]): Transcrip
       tools,
     };
   });
+}
+
+/** Append streamed assistant text into the open narrative part (or open a new one). */
+export function appendNarrativePart(
+  parts: AssistantTranscriptPart[] | undefined,
+  text: string,
+  now = Date.now(),
+): AssistantTranscriptPart[] {
+  if (!text) return parts ? [...parts] : [];
+  const next = parts ? [...parts] : [];
+  const last = next[next.length - 1];
+  if (last?.kind === "narrative") {
+    next[next.length - 1] = { ...last, text: last.text + text };
+    return next;
+  }
+  next.push({
+    id: `narrative-${now}-${next.length}`,
+    kind: "narrative",
+    text,
+    timestamp: now,
+  });
+  return next;
+}
+
+/** Ensure a turn block exists after the current narrative so tools render mid-stream. */
+export function ensureTurnPart(
+  parts: AssistantTranscriptPart[] | undefined,
+  turnId: string,
+  now = Date.now(),
+): AssistantTranscriptPart[] {
+  const next = parts ? [...parts] : [];
+  const existing = next.find((part) => part.kind === "turn" && part.turnId === turnId);
+  if (existing) return next;
+  next.push({
+    id: `turn-${turnId}`,
+    kind: "turn",
+    turnId,
+    timestamp: now,
+  });
+  return next;
+}
+
+export function narrativeTextFromParts(parts: AssistantTranscriptPart[] | undefined): string {
+  if (!parts?.length) return "";
+  return parts
+    .filter((part): part is Extract<AssistantTranscriptPart, { kind: "narrative" }> => part.kind === "narrative")
+    .map((part) => part.text)
+    .join("");
 }
 
 function toTranscriptTool(item: AssistantExecutionItem): TranscriptTool {

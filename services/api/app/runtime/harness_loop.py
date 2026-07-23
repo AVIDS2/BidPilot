@@ -23,11 +23,12 @@ from app.chat.service import bind_conversation_project_context, save_message
 from app.models import RuntimeRun
 from app.usage.schemas import ProviderSource
 from app.usage.service import UsageLimitExceeded, reserve_assistant_model_tokens
-from contracts.model_usage import ProviderUsageMeasurement
+from contracts.model_usage import ProviderUsageMeasurement, normalize_langchain_usage
 from contracts.untrusted_context import build_untrusted_context_packet, with_untrusted_context_guard
 from contracts.usage_ledger import (
     mark_model_reservation_uncertain,
     record_model_usage,
+    release_model_reservation,
     settle_model_reservation,
 )
 
@@ -431,11 +432,21 @@ class StreamingHarness:
 
                 text_parts: list[str] = []
                 tool_calls: list[_BufferedToolCall] = []
+                usage_holder: dict[str, ProviderUsageMeasurement | None] = {"measurement": None}
                 self._reserve_model_capacity()
                 try:
-                    async for event in self._stream_model_step(bound, messages, turn_id, text_parts, tool_calls):
+                    async for event in self._stream_model_step(
+                        bound,
+                        messages,
+                        turn_id,
+                        text_parts,
+                        tool_calls,
+                        usage_holder,
+                    ):
                         yield event
-                    self._observe_model_usage(None)
+                    # Prefer provider-reported usage; if streaming omitted it,
+                    # release the hold instead of parking 8k–24k as "uncertain".
+                    self._observe_model_usage(usage_holder.get("measurement"))
                 except Exception:
                     self._mark_active_reservations_uncertain()
                     raise
@@ -665,11 +676,21 @@ class StreamingHarness:
         turn_id: str,
         text_parts: list[str],
         tool_calls: list[_BufferedToolCall],
+        usage_holder: dict[str, ProviderUsageMeasurement | None] | None = None,
     ) -> AsyncGenerator[str, None]:
         # Prefer token streaming; fall back to one-shot invoke for test doubles.
         if hasattr(bound, "astream"):
             assembled_tools: dict[int, dict[str, Any]] = {}
             async for chunk in bound.astream(messages):
+                measurement = normalize_langchain_usage(getattr(chunk, "usage_metadata", None))
+                if measurement is None:
+                    measurement = normalize_langchain_usage(
+                        (getattr(chunk, "response_metadata", None) or {}).get("token_usage")
+                        if isinstance(getattr(chunk, "response_metadata", None), dict)
+                        else None
+                    )
+                if measurement is not None and usage_holder is not None:
+                    usage_holder["measurement"] = measurement
                 content = getattr(chunk, "content", None)
                 if isinstance(content, str) and content:
                     text_parts.append(content)
@@ -716,6 +737,13 @@ class StreamingHarness:
 
         # Non-streaming fallback for unit tests / providers without astream.
         response = bound.invoke(messages) if hasattr(bound, "invoke") else await bound.ainvoke(messages)
+        if usage_holder is not None:
+            measurement = normalize_langchain_usage(getattr(response, "usage_metadata", None))
+            if measurement is None and isinstance(getattr(response, "response_metadata", None), dict):
+                measurement = normalize_langchain_usage(
+                    (response.response_metadata or {}).get("token_usage")
+                )
+            usage_holder["measurement"] = measurement
         content = getattr(response, "content", "") or ""
         if isinstance(content, str) and content:
             text_parts.append(content)
@@ -997,7 +1025,10 @@ class StreamingHarness:
                 )
             if reservation_key is not None:
                 if measurement is None:
-                    mark_model_reservation_uncertain(
+                    # Streaming providers often omit usage metadata. Releasing the
+                    # preflight hold is safer than parking 8k–24k as "uncertain",
+                    # which was exhausting the monthly ceiling after a few turns.
+                    release_model_reservation(
                         self.db,
                         org_id=self.user.org_id,
                         reservation_key=reservation_key,
@@ -1014,7 +1045,7 @@ class StreamingHarness:
             self.db.rollback()
             if reservation_key is not None:
                 try:
-                    mark_model_reservation_uncertain(
+                    release_model_reservation(
                         self.db,
                         org_id=self.user.org_id,
                         reservation_key=reservation_key,

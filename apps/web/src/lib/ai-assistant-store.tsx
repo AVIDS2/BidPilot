@@ -23,6 +23,12 @@ import {
   runtimeEventToAssistantEvents,
   type RuntimeEventCursor,
 } from "@/lib/runtime-event-feed";
+import {
+  appendNarrativePart,
+  ensureTurnPart,
+  narrativeTextFromParts,
+  type AssistantTranscriptPart,
+} from "@/lib/assistant-transcript";
 
 /* ─── Types ─── */
 
@@ -43,6 +49,8 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Ordered narrative/turn parts for Pi-style interleaved rendering. */
+  transcriptParts?: AssistantTranscriptPart[];
   timestamp: number;
   attachments?: ChatMessageAttachment[];
 }
@@ -191,6 +199,7 @@ type Action =
   | { type: "ADD_MESSAGE"; message: ChatMessage }
   | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
   | { type: "UPDATE_LAST_ASSISTANT"; content: string }
+  | { type: "ENSURE_TRANSCRIPT_TURN"; turnId: string }
   | { type: "FLUSH_READY_ASSISTANT_CONTENT" }
   | { type: "SET_ACTIVE_ASSISTANT_MESSAGE"; messageId: string | null }
   | { type: "SET_STATUS"; status: AssistantStatus }
@@ -307,9 +316,27 @@ function hasOpenActivity(state: AIAssistantState, messageId: string) {
 function appendAssistantContent(state: AIAssistantState, messageId: string, content: string): AIAssistantState {
   return {
     ...state,
+    messages: state.messages.map((message) => {
+      if (message.id !== messageId || message.role !== "assistant") return message;
+      const transcriptParts = appendNarrativePart(message.transcriptParts, content);
+      return {
+        ...message,
+        content: narrativeTextFromParts(transcriptParts) || message.content + content,
+        transcriptParts,
+      };
+    }),
+  };
+}
+
+function ensureAssistantTurnPart(state: AIAssistantState, turnId: string | undefined): AIAssistantState {
+  if (!turnId) return state;
+  const messageId = state.activeAssistantMessageId ?? getLastAssistantMessageId(state);
+  if (!messageId) return state;
+  return {
+    ...state,
     messages: state.messages.map((message) =>
       message.id === messageId && message.role === "assistant"
-        ? { ...message, content: message.content + content }
+        ? { ...message, transcriptParts: ensureTurnPart(message.transcriptParts, turnId) }
         : message,
     ),
   };
@@ -390,6 +417,8 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "UPDATE_LAST_ASSISTANT": {
       return appendOrBufferAssistantContent(state, action.content);
     }
+    case "ENSURE_TRANSCRIPT_TURN":
+      return ensureAssistantTurnPart(state, action.turnId);
     case "FLUSH_READY_ASSISTANT_CONTENT":
       return flushReadyAssistantBuffers(state);
     case "SET_ACTIVE_ASSISTANT_MESSAGE":
@@ -430,7 +459,11 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           ...action.patch,
         });
       }
-      return flushReadyAssistantBuffers({ ...state, executionItems });
+      const withTurn = ensureAssistantTurnPart(
+        { ...state, executionItems },
+        action.turnId ?? action.patch.turnId,
+      );
+      return flushReadyAssistantBuffers(withTurn);
     }
     case "MERGE_WORKFLOW_NODE": {
       const executionItems = state.executionItems.map((item) => {
@@ -593,6 +626,14 @@ function handleAssistantSseEvent(
         summary: String(parsed.message ?? ""),
       },
     });
+    return;
+  }
+
+  if (eventType === "assistant.turn_started") {
+    const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
+    if (turnId) {
+      dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
+    }
     return;
   }
 

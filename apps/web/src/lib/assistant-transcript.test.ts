@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
-import { buildTranscriptTurns } from "@/lib/assistant-transcript";
+import {
+  appendNarrativePart,
+  buildTranscriptTurns,
+  ensureTurnPart,
+  narrativeTextFromParts,
+} from "@/lib/assistant-transcript";
 
 function item(partial: Partial<AssistantExecutionItem> & Pick<AssistantExecutionItem, "id" | "title">): AssistantExecutionItem {
   return {
@@ -56,5 +61,21 @@ describe("buildTranscriptTurns", () => {
     expect(turns).toHaveLength(2);
     expect(turns[0].tools[0].toolCallId).toBe("c1");
     expect(turns[1].tools[0].toolCallId).toBe("c2");
+  });
+});
+
+describe("interleaved transcript parts", () => {
+  it("appends text into the open narrative and opens a new one after a turn", () => {
+    let parts = appendNarrativePart(undefined, "先看一下项目。");
+    parts = ensureTurnPart(parts, "turn-1");
+    parts = appendNarrativePart(parts, "找到 3 个项目。");
+    expect(parts.map((part) => part.kind)).toEqual(["narrative", "turn", "narrative"]);
+    expect(narrativeTextFromParts(parts)).toBe("先看一下项目。找到 3 个项目。");
+  });
+
+  it("is idempotent for the same turn id", () => {
+    let parts = ensureTurnPart(undefined, "turn-1");
+    parts = ensureTurnPart(parts, "turn-1");
+    expect(parts).toHaveLength(1);
   });
 });
