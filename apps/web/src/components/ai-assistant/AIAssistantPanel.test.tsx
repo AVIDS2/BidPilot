@@ -108,6 +108,30 @@ describe("AIAssistantPanel", () => {
     expect(screen.getAllByText(/Acme Bid/).length).toBeGreaterThan(0);
   });
 
+  it("submits a prompt once when Enter is pressed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: streamFrom(
+        [
+          'event: assistant.start\\ndata: {"conversation_id":"enter-once","state":"thinking"}',
+          'event: assistant.message\\ndata: {"content":"Hello back","state":"completed"}',
+          'event: assistant.end\\ndata: {"conversation_id":"enter-once","full_response":"Hello back"}',
+        ].join("\\n\\n") + "\\n\\n",
+      ),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    const input = screen.getByPlaceholderText("Ask me anything...");
+    fireEvent.change(input, { target: { value: "Hello" } });
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("renders the workspace variant without opening the side panel", async () => {
     render(
       <AIAssistantProvider>

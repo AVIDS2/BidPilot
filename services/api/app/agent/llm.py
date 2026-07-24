@@ -102,7 +102,7 @@ def get_agent_llm(
             os.getenv("DOCPILOT_ASSISTANT_PROTOCOL", "openai"),
             asst_key,
             os.getenv("DOCPILOT_ASSISTANT_BASE_URL", "https://api.deepseek.com/v1"),
-            os.getenv("DOCPILOT_ASSISTANT_MODEL", "deepseek-chat"),
+            os.getenv("DOCPILOT_ASSISTANT_MODEL", "deepseek-v4-flash"),
             provider_id=os.getenv("DOCPILOT_ASSISTANT_PROVIDER_ID", "deepseek"),
             reasoning_effort=reasoning_effort,
         )
@@ -114,7 +114,7 @@ def get_agent_llm(
             "openai",
             ds_key,
             os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
-            os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+            os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
             provider_id="deepseek",
             reasoning_effort=reasoning_effort,
         )
@@ -140,7 +140,7 @@ def get_agent_llm(
         "openai",
         "sk-placeholder",
         "https://api.deepseek.com/v1",
-        "deepseek-chat",
+        "deepseek-v4-flash",
         provider_id="deepseek",
         reasoning_effort=reasoning_effort,
     )

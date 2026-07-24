@@ -64,7 +64,7 @@ def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
         return None
 
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
     return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model, provider_id="deepseek")
 
 

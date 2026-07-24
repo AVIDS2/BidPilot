@@ -1234,16 +1234,6 @@ export function AIAssistantPanel({
     });
   }, [queuedPrompts, sendMessage, state.status]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    },
-    [handleSend],
-  );
-
   const handleQuickAction = useCallback(
     (text: string) => {
       if (isBusy) {
@@ -1801,7 +1791,6 @@ export function AIAssistantPanel({
                     <PromptInputTextarea
                       aria-label={t("inputPlaceholder")}
                       placeholder={t("inputPlaceholder")}
-                      onKeyDown={handleKeyDown}
                       className="min-h-8 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-[14px]"
                     />
                     <PromptInputActions className="shrink-0">

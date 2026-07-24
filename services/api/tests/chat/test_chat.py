@@ -297,7 +297,7 @@ class TestChatService:
         assert provider is not None
         assert provider.api_key == "deepseek-test-key"
         assert provider.base_url == "https://api.deepseek.com/v1"
-        assert provider.model == "deepseek-chat"
+        assert provider.model == "deepseek-v4-flash"
 
     def test_resolve_provider_config_explicit_id(self, test_db, chat_test_user_id):
         """Resolves provider config by explicit ID."""
