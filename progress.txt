@@ -23,7 +23,14 @@ Updated: 2026-07-24
 - **Queue: yes** — Celery worker + task outbox + dead-letter paths
 - **Complex microservices: no** — modular monolith (`api` + `worker` + `web`) + Postgres/Redis/MinIO
 
-### Done next (2026-07-24 evening)
+### Done next (2026-07-24 ROI closeout)
+- **Dual tool_started fix**: one live started; durable capability.started / approval-resolved remaps suppressed
+- **Confirmation event order**: resume_approval started→succeeded→single end; needs_confirmation no longer returns before end
+- **Strategic step budget**: default 8/6; campaign/research language or tools raise to 16/10
+- **Multi-section campaign**: `run_section_campaign` framework/draft_workflow waves + wake-bindable children
+- **CI smoke**: agent stress A/C/D/I control-plane tests + harness/campaign units (33 passed)
+
+### Previous evening
 - **Global auto-resume**: `AgentWakeResume` polls `agent_task` notifications and resumes conversation without opening `/agent`
 - **Redis password migration**: live redis now requirepass; worker/api connected; noauth rejected
 - **Message/ChatContainer**: operator transcript uses shadcn Message + ChatContainerRoot/Content + ScrollButton
