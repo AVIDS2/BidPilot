@@ -172,6 +172,8 @@ export interface AIAssistantState {
   messages: ChatMessage[];
   activeAssistantMessageId: string | null;
   assistantContentBuffers: Record<string, string>;
+  /** True only while this browser is consuming an assistant SSE response. */
+  isStreaming: boolean;
   status: AssistantStatus;
   executionItems: AssistantExecutionItem[];
   pendingConfirmation: AssistantConfirmationRequest | null;
@@ -204,6 +206,8 @@ type Action =
   | { type: "FINALIZE_OPEN_EXECUTION_ITEMS"; runtimeRunId?: string; failed?: boolean }
   | { type: "FLUSH_READY_ASSISTANT_CONTENT" }
   | { type: "SET_ACTIVE_ASSISTANT_MESSAGE"; messageId: string | null }
+  | { type: "SET_STREAMING"; streaming: boolean }
+  | { type: "STOP_ACTIVE_RESPONSE" }
   | { type: "SET_STATUS"; status: AssistantStatus }
   | { type: "ADD_EXECUTION_ITEM"; item: AssistantExecutionItem }
   | {
@@ -243,6 +247,7 @@ const initialState: AIAssistantState = {
   messages: [],
   activeAssistantMessageId: null,
   assistantContentBuffers: {},
+  isStreaming: false,
   status: "idle",
   executionItems: [],
   pendingConfirmation: null,
@@ -475,6 +480,40 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       return flushReadyAssistantBuffers(state);
     case "SET_ACTIVE_ASSISTANT_MESSAGE":
       return { ...state, activeAssistantMessageId: action.messageId };
+    case "SET_STREAMING":
+      return { ...state, isStreaming: action.streaming };
+    case "STOP_ACTIVE_RESPONSE": {
+      const activeMessageId = state.activeAssistantMessageId;
+      const executionItems = state.executionItems.map((item) => {
+        if (
+          item.messageId !== activeMessageId ||
+          !isOpenExecutionStatus(item.status) ||
+          (item.kind === "workflow" && Boolean(item.runtimeRunId || item.runId))
+        ) {
+          return item;
+        }
+        return {
+          ...item,
+          status: "cancelled" as const,
+          isRunning: false,
+          isWaitingApproval: false,
+          summary: item.summary || "本轮响应已停止",
+        };
+      });
+      const hasBackgroundWorkflow = executionItems.some(
+        (item) =>
+          item.kind === "workflow" &&
+          isOpenExecutionStatus(item.status) &&
+          Boolean(item.runtimeRunId || item.runId),
+      );
+      return flushReadyAssistantBuffers({
+        ...state,
+        isStreaming: false,
+        status: hasBackgroundWorkflow ? "running_workflow" : "completed",
+        activeAssistantMessageId: null,
+        executionItems,
+      });
+    }
     case "SET_STATUS":
       return { ...state, status: action.status };
     case "ADD_EXECUTION_ITEM":
@@ -971,6 +1010,7 @@ interface AIAssistantContextValue {
     content: string,
     options?: SendAssistantOptions,
   ) => Promise<void>;
+  stopAssistantResponse: () => void;
   setSelectedProviderConfig: (providerConfigId: string | null) => void;
   setReasoningEffort: (effort: AssistantReasoningEffort) => void;
   setApprovalMode: (mode: AssistantApprovalMode) => void;
@@ -1250,6 +1290,7 @@ export function isAssistantBusy(status: AssistantStatus) {
 export function AIAssistantProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const runtimeEventCursorsRef = useRef<RuntimeEventCursor>({});
+  const activeStreamAbortRef = useRef<AbortController | null>(null);
 
   const shouldHandleRuntimeEvent = useCallback((data: Record<string, unknown>) => {
     const runId = typeof data.runtime_run_id === "string" ? data.runtime_run_id : undefined;
@@ -1414,6 +1455,19 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const stopAssistantResponse = useCallback(() => {
+    const controller = activeStreamAbortRef.current;
+    if (!controller || controller.signal.aborted) return;
+    controller.abort();
+  }, []);
+
+  useEffect(
+    () => () => {
+      activeStreamAbortRef.current?.abort();
+    },
+    [],
+  );
+
   const startNewConversation = useCallback(() => {
     removeStoredValue("lastAssistantConversationId");
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: null });
@@ -1487,6 +1541,9 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       let activeRuntimeRunId: string | null = null;
       let activeConversationId = state.currentConversationId;
       let receivedTerminalEvent = false;
+      const abortController = new AbortController();
+      activeStreamAbortRef.current = abortController;
+      dispatch({ type: "SET_STREAMING", streaming: true });
       const sseOptions: AssistantSseHandlingOptions = {
         shouldHandleRuntimeEvent,
         onRuntimeRun: (runId) => {
@@ -1519,6 +1576,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         const token = getAuthToken();
         const response = await fetch(`${API_BASE}/assistant/stream`, {
           method: "POST",
+          signal: abortController.signal,
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -1571,8 +1629,17 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        if (abortController.signal.aborted) {
+          dispatch({ type: "STOP_ACTIVE_RESPONSE" });
+          return;
+        }
+
         await recoverDurableTimeline();
       } catch (err) {
+        if (abortController.signal.aborted) {
+          dispatch({ type: "STOP_ACTIVE_RESPONSE" });
+          return;
+        }
         try {
           const recovered = await recoverDurableTimeline();
           if (recovered.replayed || recovered.terminal) return;
@@ -1597,6 +1664,10 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
             : message;
         dispatch({ type: "SET_SESSION_ERROR", message: friendly, errorCode });
       } finally {
+        if (activeStreamAbortRef.current === abortController) {
+          activeStreamAbortRef.current = null;
+          dispatch({ type: "SET_STREAMING", streaming: false });
+        }
         void refreshConversations();
       }
     },
@@ -1658,6 +1729,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         close,
         toggle,
         sendMessage,
+        stopAssistantResponse,
         setSelectedProviderConfig,
         setReasoningEffort,
         setApprovalMode,

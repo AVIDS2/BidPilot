@@ -132,6 +132,50 @@ describe("AIAssistantPanel", () => {
     });
   });
 
+  it("turns send into a stop control and aborts the active response stream", async () => {
+    let requestSignal: AbortSignal | undefined;
+    const encoder = new TextEncoder();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode(
+              'event: assistant.start\ndata: {"conversation_id":"c-stop","state":"thinking"}\n\n',
+            ),
+          );
+          requestSignal?.addEventListener("abort", () => {
+            controller.error(
+              Object.assign(new Error("Aborted"), { name: "AbortError" }),
+            );
+          });
+        },
+      });
+      return Promise.resolve({ ok: true, body });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Long-running request" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    const stopButton = await screen.findByRole("button", {
+      name: "Stop generating",
+    });
+    fireEvent.click(stopButton);
+
+    await waitFor(() => {
+      expect(requestSignal?.aborted).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Aborted")).not.toBeInTheDocument();
+  });
+
   it("renders the workspace variant without opening the side panel", async () => {
     render(
       <AIAssistantProvider>

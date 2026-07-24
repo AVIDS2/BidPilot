@@ -215,7 +215,8 @@
     "howToUse": "How to use?",
     "howToUsePrompt": "How to use BidPilot?",
     "send": "Send",
-    "stop": "Stop"
+    "stop": "Stop",
+    "stopGenerating": "Stop generating"
   },
   "attachments": {
     "add": "Add attachment",
@@ -247,7 +248,8 @@
     "renameConversation": "Rename conversation",
     "renameConversationHint": "Double-click to rename",
     "enterToQueue": "Enter queues",
-    "queuedPrompt": "Queued"
+    "queuedPrompt": "Queued",
+    "running": "Running"
   },
   "history": {
     "today": "Today",
@@ -256,7 +258,8 @@
     "earlier": "Earlier",
     "searchPlaceholder": "Search conversations...",
     "noResults": "No matching conversations",
-    "delete": "Delete conversation"
+    "delete": "Delete conversation",
+    "running": "Running"
   },
   "floating": {
     "ariaLabel": "BidPilot AI Assistant",

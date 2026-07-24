@@ -25,6 +25,7 @@ import {
   FolderOpenIcon,
   ImageIcon,
   Loader2Icon,
+  SquareIcon,
   XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -457,11 +458,13 @@ function MessageBubble({
   activityItems = [],
   onCancelWorkflow,
   onConfigureProvider,
+  isStreaming = false,
 }: {
   msg: ChatMessage;
   activityItems?: AssistantExecutionItem[];
   onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider?: () => void;
+  isStreaming?: boolean;
 }) {
   const isUser = msg.role === "user";
   if (isUser) {
@@ -570,6 +573,10 @@ function MessageBubble({
     </span>
   );
 
+  if (!msg.content && activityItems.length === 0 && !isStreaming) {
+    return null;
+  }
+
   return (
     <Message className="w-full max-w-full animate-fade-in flex-col items-start gap-2 sm:max-w-[92%]">
       <div className="w-full space-y-3 px-1 py-1 text-[14px] leading-7 break-words text-foreground">
@@ -599,6 +606,7 @@ function MessageBubble({
             )}
             {!msg.content &&
               parts.every((part) => part.kind !== "narrative") &&
+              isStreaming &&
               thinkingDots}
           </>
         ) : (
@@ -618,9 +626,9 @@ function MessageBubble({
               >
                 {normalizeAssistantMarkdown(msg.content)}
               </MessageContent>
-            ) : (
+            ) : isStreaming ? (
               thinkingDots
-            )}
+            ) : null}
           </>
         )}
       </div>
@@ -649,6 +657,7 @@ function HistorySidebar({
   renameInputRef,
   t,
   docked = false,
+  isCurrentConversationRunning = false,
 }: {
   conversations: ChatConversationRead[];
   currentId: string | null;
@@ -668,6 +677,7 @@ function HistorySidebar({
   renameInputRef: RefObject<HTMLInputElement | null>;
   t: (key: string, options?: Record<string, unknown>) => string;
   docked?: boolean;
+  isCurrentConversationRunning?: boolean;
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -693,22 +703,27 @@ function HistorySidebar({
         docked ? "assistant-history-rail" : "assistant-history-drawer"
       }
       className={cn(
-        "flex h-full shrink-0 flex-col border-r bg-card",
+        "flex h-full shrink-0 flex-col border-r bg-background",
         docked
-          ? "w-72 border-border bg-card shadow-none max-lg:hidden"
-          : "w-[min(20rem,calc(100vw-1.25rem))] shadow-xl",
+          ? "w-[17rem] border-border/70 shadow-none max-lg:hidden"
+          : "w-[min(20rem,calc(100vw-1.25rem))] shadow-[20px_0_48px_oklch(0_0_0/0.16)]",
       )}
       style={{ borderColor: "var(--border)" }}
     >
       {/* Header */}
       <div
-        className="flex shrink-0 flex-col gap-2 border-b p-3"
+        className="flex shrink-0 flex-col gap-2.5 border-b px-3 py-3"
         style={{ borderColor: "var(--border)" }}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium text-muted-foreground">
-            {t("panel.history")}
-          </span>
+          <div className="min-w-0">
+            <span className="text-[11px] font-semibold text-foreground">
+              {t("panel.history")}
+            </span>
+            <p className="mt-0.5 text-[10px] text-muted-foreground">
+              {t("panel.historySubtitle")}
+            </p>
+          </div>
           {!docked && (
             <Button
               variant="ghost"
@@ -723,7 +738,7 @@ function HistorySidebar({
         <Button
           variant="outline"
           size="sm"
-          className="h-9 w-full justify-start gap-2 rounded-lg text-sm font-normal"
+          className="h-8 w-full justify-start gap-2 rounded-md border-border/80 bg-transparent px-2.5 text-xs font-medium shadow-none hover:bg-muted/70"
           onClick={onNew}
         >
           <PlusIcon className="size-3.5" />
@@ -732,21 +747,21 @@ function HistorySidebar({
       </div>
 
       {/* Search */}
-      <div className="shrink-0 px-3 pb-1 pt-2">
+      <div className="shrink-0 px-3 pb-2 pt-2.5">
         <div className="relative">
           <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={t("history.searchPlaceholder")}
-            className="h-7 pl-8 text-xs"
+            className="h-8 rounded-md border-border/70 bg-muted/35 pl-8 text-xs shadow-none placeholder:text-muted-foreground/70 focus-visible:border-ring/70 focus-visible:ring-2 focus-visible:ring-ring/15"
           />
         </div>
       </div>
 
       {/* Conversation list */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="flex flex-col gap-3 p-2">
+        <div className="flex flex-col gap-4 px-2 py-2">
           {filtered.length === 0 ? (
             <div className="text-center py-8">
               <MessageSquareIcon className="size-8 mx-auto mb-2 text-muted-foreground/40" />
@@ -759,12 +774,13 @@ function HistorySidebar({
               if (items.length === 0) return null;
               return (
                 <div key={key}>
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60 px-2 mb-1">
+                  <p className="mb-1 px-2 text-[10px] font-medium tracking-wide text-muted-foreground/70">
                     {groupLabels[key]}
                   </p>
                   <div className="space-y-0.5">
                     {items.map((conversation) => {
                       const active = conversation.id === currentId;
+                      const isRunning = active && isCurrentConversationRunning;
                       const isEditing = editingId === conversation.id;
                       const isHovered = hoveredId === conversation.id;
                       const actionVisibility = isHovered
@@ -775,8 +791,10 @@ function HistorySidebar({
                           key={conversation.id}
                           data-conversation-row
                           className={cn(
-                            "group relative rounded-lg px-2.5 py-2 text-left transition-colors cursor-pointer",
-                            active ? "bg-muted" : "hover:bg-muted/50",
+                            "group relative min-h-11 cursor-pointer rounded-md px-2.5 py-2 text-left transition-colors",
+                            active
+                              ? "bg-muted text-foreground shadow-[inset_0_0_0_1px_oklch(0_0_0/0.035)]"
+                              : "text-foreground/85 hover:bg-muted/65",
                           )}
                           onMouseEnter={() => setHoveredId(conversation.id)}
                           onMouseLeave={() => setHoveredId(null)}
@@ -816,26 +834,39 @@ function HistorySidebar({
                             />
                           ) : (
                             <>
-                              <div
-                                className="text-xs font-medium truncate pr-12"
-                                onDoubleClick={(e) => {
-                                  e.stopPropagation();
-                                  onRename(conversation.id, conversation.title);
-                                }}
-                              >
-                                {conversation.title ||
-                                  t("panel.untitledConversation")}
+                              <div className="flex min-w-0 items-center gap-1.5 pr-12">
+                                <div
+                                  className="min-w-0 truncate text-[13px] font-medium leading-5"
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    onRename(conversation.id, conversation.title);
+                                  }}
+                                >
+                                  {conversation.title ||
+                                    t("panel.untitledConversation")}
+                                </div>
+                                {isRunning && (
+                                  <Loader2Icon
+                                    data-testid="conversation-running-indicator"
+                                    aria-label={t("history.running")}
+                                    className="size-3 shrink-0 animate-spin text-muted-foreground"
+                                  />
+                                )}
                               </div>
-                              <div className="text-[10px] mt-0.5 text-muted-foreground/60">
-                                {conversation.created_at
-                                  ? new Date(
+                              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+                                {isRunning ? (
+                                  <span>{t("history.running")}</span>
+                                ) : conversation.created_at ? (
+                                  <span>
+                                    {new Date(
                                       conversation.created_at,
-                                    ).toLocaleDateString()
-                                  : ""}
+                                    ).toLocaleDateString()}
+                                  </span>
+                                ) : null}
                               </div>
                               <button
                                 className={cn(
-                                  "absolute right-7 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground/50 transition-all hover:bg-muted hover:text-foreground",
+                                  "absolute right-7 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground/50 transition-all hover:bg-background hover:text-foreground",
                                   actionVisibility,
                                 )}
                                 onClick={(e) => {
@@ -849,7 +880,7 @@ function HistorySidebar({
                               </button>
                               <button
                                 className={cn(
-                                  "absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground/40 transition-all hover:bg-destructive/10 hover:text-destructive",
+                                  "absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground/40 transition-all hover:bg-destructive/10 hover:text-destructive",
                                   actionVisibility,
                                 )}
                                 onClick={(e) => {
@@ -898,6 +929,7 @@ export function AIAssistantPanel({
     setReasoningEffort,
     setApprovalMode,
     cancelWorkflow,
+    stopAssistantResponse,
   } = useAIAssistant();
   const { t } = useTranslation("ai-assistant");
   const isWorkspace = variant === "workspace";
@@ -937,6 +969,7 @@ export function AIAssistantPanel({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const queueDrainingRef = useRef(false);
   const isBusy = isAssistantBusy(state.status);
+  const isStreaming = state.isStreaming;
   const isUploadingAttachments = attachments.some(
     (attachment) => attachment.status === "uploading",
   );
@@ -980,6 +1013,8 @@ export function AIAssistantPanel({
     () => state.executionItems.filter((item) => !item.messageId),
     [state.executionItems],
   );
+  const currentConversationIsRunning =
+    isBusy && Boolean(state.currentConversationId);
 
   const resizeComposer = useCallback(() => {
     const el = inputRef.current;
@@ -1494,6 +1529,7 @@ export function AIAssistantPanel({
             renameInputRef={renameInputRef}
             t={t}
             docked
+            isCurrentConversationRunning={currentConversationIsRunning}
           />
         )}
 
@@ -1533,6 +1569,7 @@ export function AIAssistantPanel({
                 renamingId={renamingConversationId}
                 renameInputRef={renameInputRef}
                 t={t}
+                isCurrentConversationRunning={currentConversationIsRunning}
               />
             </div>
           </>
@@ -1607,6 +1644,10 @@ export function AIAssistantPanel({
                               msg.role === "assistant"
                                 ? openProviderSettings
                                 : undefined
+                            }
+                            isStreaming={
+                              state.isStreaming &&
+                              state.activeAssistantMessageId === msg.id
                             }
                           />
                         </div>
@@ -1794,20 +1835,37 @@ export function AIAssistantPanel({
                       className="min-h-8 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-[14px]"
                     />
                     <PromptInputActions className="shrink-0">
-                      <PromptInputAction tooltip={t("actions.send")}>
+                      <PromptInputAction
+                        tooltip={
+                          isStreaming
+                            ? t("actions.stopGenerating")
+                            : t("actions.send")
+                        }
+                      >
                         <button
                           type="button"
-                          onClick={handleSend}
-                          disabled={!canSend}
-                          aria-label={t("actions.send")}
+                          onClick={isStreaming ? stopAssistantResponse : handleSend}
+                          disabled={isStreaming ? false : !canSend}
+                          aria-label={
+                            isStreaming
+                              ? t("actions.stopGenerating")
+                              : t("actions.send")
+                          }
                           className={cn(
-                            "flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
-                            canSend
+                            "relative flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
+                            isStreaming
+                              ? "bg-foreground text-background shadow-[0_8px_20px_oklch(0_0_0/0.2)] hover:scale-[1.03] active:scale-95"
+                              : canSend
                               ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
                               : "text-muted-foreground",
                           )}
                         >
-                          {isUploadingAttachments ? (
+                          {isStreaming ? (
+                            <>
+                              <Loader2Icon className="absolute size-[1.15rem] animate-spin opacity-45" />
+                              <SquareIcon className="relative size-2.5 fill-current" />
+                            </>
+                          ) : isUploadingAttachments ? (
                             <Loader2Icon className="h-4 w-4 animate-spin" />
                           ) : (
                             <SendIcon className="w-4 h-4" />
@@ -1819,12 +1877,21 @@ export function AIAssistantPanel({
                 </div>
                 <div className="mt-1.5 flex min-h-5 items-center justify-between gap-2 px-1">
                   <span className="hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex">
-                    <CornerDownLeftIcon className="w-3 h-3" />{" "}
-                    {isBusy
+                    {isStreaming ? (
+                      <>
+                        <Loader2Icon className="size-3 animate-spin" />
+                        {t("panel.running")}
+                      </>
+                    ) : (
+                      <>
+                        <CornerDownLeftIcon className="w-3 h-3" />{" "}
+                        {isBusy
                       ? t("panel.enterToQueue", {
                           defaultValue: "Enter queues",
                         })
                       : t("panel.enterToSend")}
+                      </>
+                    )}
                   </span>
                   <div className="relative ml-auto flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
                     <button
