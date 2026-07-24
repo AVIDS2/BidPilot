@@ -2,7 +2,15 @@
 
 Updated: 2026-07-24
 
-## Latest (2026-07-24 frontend quieter operate)
+## Latest (2026-07-24 login fix)
+
+- Root cause of public login "无法连接服务器": emergency local web dist inject baked VITE_API_URL=http://127.0.0.1:8001
+- Rebuilt with VITE_API_URL=https://bidpilot-api.rglens.com and reinjected into bidpilot-web
+- Added apps/web/.env.production so production builds default to public API
+- Public API/CORS themselves were healthy (login returns 401 for bad password, not network fail)
+
+## Previous (2026-07-24 frontend quieter operate)
+
 
 - Removed exaggerated ReactBits electric/lightning/glare motion (ElectricBorder/ClickSpark/GlareHover/AnimatedContent/FadeContent/ShinyText are no-op shells; reactbits-product wrappers quiet)
 - Neutralized REACTBITS_AURORA purple/violet tokens to CSS primary/ring
