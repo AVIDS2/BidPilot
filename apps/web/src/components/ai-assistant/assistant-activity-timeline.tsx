@@ -537,23 +537,16 @@ export function AssistantActivityTimeline({
 
   useGSAP(
     () => {
+      // Only animate first mount of the L1 chip. Expand/collapse is owned by
+      // CSS grid-rows so open/close stays smooth without mount thrash.
       if (prefersReducedMotion || !activityRef.current) return;
-
       gsap.fromTo(
         ".assistant-activity-summary",
         { opacity: 0, y: 5 },
         { opacity: 1, y: 0, duration: 0.28, ease: "power3.out" },
       );
-
-      if (expanded) {
-        gsap.fromTo(
-          ".assistant-activity-detail",
-          { opacity: 0, y: 8 },
-          { opacity: 1, y: 0, duration: 0.26, stagger: 0.045, ease: "power3.out" },
-        );
-      }
     },
-    { dependencies: [expanded, items.length, tone, prefersReducedMotion], scope: activityRef },
+    { dependencies: [items.length, tone, prefersReducedMotion], scope: activityRef },
   );
 
   if (items.length === 0) return null;
@@ -561,8 +554,11 @@ export function AssistantActivityTimeline({
   return (
     <div
       ref={activityRef}
-      className={cn("mb-4", expanded && "border-b pb-3")}
-      style={{ borderColor: "color-mix(in oklch, var(--border) 54%, transparent)" }}
+      className={cn(
+        "mb-4 border-b transition-[border-color,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+        expanded ? "pb-3" : "border-transparent pb-0",
+      )}
+      style={{ borderColor: expanded ? "color-mix(in oklch, var(--border) 54%, transparent)" : undefined }}
     >
       <button
         type="button"
@@ -603,27 +599,39 @@ export function AssistantActivityTimeline({
           )}
         </span>
         <span className="shrink-0 text-[11px] text-muted-foreground/80">{statusLabel}</span>
-        <ChevronDownIcon className={cn("h-3.5 w-3.5 shrink-0 transition-transform opacity-70 group-hover:opacity-100", expanded && "rotate-180")} />
+        <ChevronDownIcon
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:opacity-100",
+            expanded && "rotate-180",
+          )}
+        />
       </button>
-      {expanded && (
-        <div
-          className="ml-[7px] mt-2 flex flex-col gap-1 border-l pl-5"
-          style={{ borderColor: "color-mix(in oklch, var(--border) 62%, transparent)" }}
-        >
-          {/* L2: individual tool steps */}
-          {items.map((item) => (
-            <div key={item.toolCallId || item.id} className="assistant-activity-detail">
-              <ActivityDetail
-                item={item}
-                onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
-                onConfigureProvider={onConfigureProvider}
-                isCancelling={cancellingRunId === item.runtimeRunId}
-              />
-            </div>
-          ))}
-          {cancellationError && <p className="pt-1 text-[11px] text-destructive">{cancellationError}</p>}
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+          expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div
+            className="ml-[7px] mt-2 flex flex-col gap-1 border-l pl-5"
+            style={{ borderColor: "color-mix(in oklch, var(--border) 62%, transparent)" }}
+          >
+            {/* L2: individual tool steps — stay mounted so height can animate. */}
+            {items.map((item) => (
+              <div key={item.toolCallId || item.id} className="assistant-activity-detail">
+                <ActivityDetail
+                  item={item}
+                  onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
+                  onConfigureProvider={onConfigureProvider}
+                  isCancelling={cancellingRunId === item.runtimeRunId}
+                />
+              </div>
+            ))}
+            {cancellationError && <p className="pt-1 text-[11px] text-destructive">{cancellationError}</p>}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

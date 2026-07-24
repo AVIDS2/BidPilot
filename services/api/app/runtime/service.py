@@ -64,13 +64,15 @@ def list_runtime_runs_query(
     current_user: CurrentUser,
     *,
     limit: int = 50,
+    conversation_id: str | None = None,
 ) -> list[RuntimeRunListRow]:
-    """Return a bounded, permission-scoped list for the Run Center."""
+    """Return a bounded, permission-scoped list for the Run Center / history restore."""
 
     return list_visible_runtime_runs(
         db,
         current_user=current_user,
         limit=max(1, min(limit, 100)),
+        conversation_id=conversation_id,
     )
 
 

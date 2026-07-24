@@ -49,6 +49,7 @@ def list_visible_runtime_runs(
     *,
     current_user: CurrentUser,
     limit: int,
+    conversation_id: str | None = None,
 ) -> list[RuntimeRunListRow]:
     """List only RuntimeRuns that the caller can already open individually.
 
@@ -75,6 +76,8 @@ def list_visible_runtime_runs(
             or_(RuntimeRun.project_id.is_(None), Project.status != "deleted"),
         )
     )
+    if conversation_id:
+        stmt = stmt.where(RuntimeRun.conversation_id == conversation_id)
 
     if current_user.role != "admin":
         accessible_project_ids = [

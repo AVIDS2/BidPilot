@@ -32,7 +32,7 @@ from app.memory.service import (
     memory_context_for_agent,
     start_memory_graph_extraction_command,
 )
-from app.models import Deliverable, DeliverableSection, Project, ReviewThread
+from app.models import Deliverable, DeliverableSection, Project, ReviewThread, SectionVersion
 from app.projects.schemas import ProjectCreate
 from app.projects.demo import create_demo_project_command
 from app.projects.service import create_project_command, delete_project_command_for_user
@@ -90,6 +90,8 @@ def execute_tool(
         return get_runtime_status(db, user, arguments)
     if tool_name == "start_draft_section":
         return start_draft_section(db, user, arguments)
+    if tool_name == "write_section":
+        return write_section_tool(db, user, arguments)
     if tool_name == "start_redraft_section":
         return start_redraft_section(db, user, arguments)
     if tool_name == "resume_draft_run":
@@ -407,6 +409,136 @@ def get_runtime_status(db: Session, user: CurrentUser, arguments: dict) -> Assis
     )
 
 
+def _find_or_create_section_for_write(
+    db: Session,
+    *,
+    project: Project,
+    section_key: str,
+    title: str | None = None,
+) -> DeliverableSection:
+    """Mirror worker outline-first section creation for lightweight writes."""
+    from sqlalchemy import func, select
+
+    section = db.scalar(
+        select(DeliverableSection)
+        .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
+        .where(
+            Deliverable.project_id == project.id,
+            DeliverableSection.section_key == section_key,
+        )
+        .limit(1)
+    )
+    if section is not None:
+        if title and title.strip() and section.title != title.strip():
+            section.title = title.strip()
+        return section
+
+    deliverable = db.scalar(select(Deliverable).where(Deliverable.project_id == project.id).limit(1))
+    if deliverable is None:
+        deliverable = Deliverable(
+            project_id=project.id,
+            type="proposal",
+            title=project.name or "提案交付物",
+            status="draft",
+        )
+        db.add(deliverable)
+        db.flush()
+
+    next_order = db.scalar(
+        select(func.max(DeliverableSection.sort_order)).where(
+            DeliverableSection.deliverable_id == deliverable.id
+        )
+    )
+    resolved_title = (title or "").strip()
+    if not resolved_title:
+        try:
+            from app.scenarios.templates import get_sections_for_scenario
+
+            for item in get_sections_for_scenario(project.scenario_package or "bidpilot"):
+                if item.get("section_key") == section_key:
+                    resolved_title = str(item.get("title") or section_key)
+                    break
+        except Exception:
+            resolved_title = section_key
+    if not resolved_title:
+        resolved_title = section_key
+
+    section = DeliverableSection(
+        deliverable_id=deliverable.id,
+        section_key=section_key,
+        title=resolved_title,
+        status="draft",
+        sort_order=int(next_order or 0) + 1,
+    )
+    db.add(section)
+    db.flush()
+    return section
+
+
+def write_section_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """Directly write markdown into a section without the full draft workflow.
+
+    Intended for empty-material / outline-first drafting when the user asks the
+    agent to 自行拟草. Still goes through execute_capability (approval/audit).
+    """
+    from sqlalchemy import func, select
+
+    project = require_project_capability(
+        db,
+        current_user=user,
+        project_id=str(arguments.get("project_id") or "").strip(),
+        capability="project.manage",
+    ).project
+    section_key = str(arguments.get("section_key") or "").strip()
+    content = str(arguments.get("content_markdown") or "").strip()
+    if not section_key:
+        raise ValueError("section_key is required")
+    if not content:
+        raise ValueError("content_markdown is required")
+    if len(content) > 50_000:
+        raise ValueError("content_markdown is too long (max 50000 characters)")
+
+    section = _find_or_create_section_for_write(
+        db,
+        project=project,
+        section_key=section_key,
+        title=str(arguments.get("title") or "").strip() or None,
+    )
+    latest = db.scalar(
+        select(SectionVersion)
+        .where(SectionVersion.deliverable_section_id == section.id)
+        .order_by(SectionVersion.version_number.desc())
+        .limit(1)
+    )
+    next_version = (latest.version_number + 1) if latest else 1
+    version = SectionVersion(
+        deliverable_section_id=section.id,
+        version_number=next_version,
+        content_markdown=content,
+        created_by_actor="ai",
+        generation_run_id=None,
+    )
+    db.add(version)
+    section.status = "draft"
+    db.commit()
+    db.refresh(version)
+    db.refresh(section)
+
+    return AssistantToolResult(
+        tool_name="write_section",
+        result={
+            "section_id": section.id,
+            "section_key": section.section_key,
+            "section_title": section.title,
+            "section_version_id": version.id,
+            "version_number": version.version_number,
+            "deliverable_id": section.deliverable_id,
+            "char_count": len(content),
+        },
+        summary=f"已写入章节「{section.title}」v{version.version_number}（{len(content)} 字）。",
+    )
+
+
 def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     require_project_capability(
         db,
@@ -414,8 +546,9 @@ def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> Assi
         project_id=arguments["project_id"],
         capability="workflow.run",
     )
-    # Fail closed when the project has no ingested knowledge yet. Drafting an
-    # empty project wastes quota and produces unusable output.
+    # Prefer evidence-backed drafts, but allow empty-project drafting so the
+    # harness can still produce outline-first placeholder content when the user
+    # explicitly asks to "自行拟草". The workflow itself handles zero evidence.
     from sqlalchemy import func, select
 
     from app.models import KnowledgeChunk
@@ -425,9 +558,14 @@ def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> Assi
         .select_from(KnowledgeChunk)
         .where(KnowledgeChunk.project_id == arguments["project_id"])
     )
-    if not chunk_count:
+    allow_empty = bool(arguments.get("allow_empty_evidence"))
+    if not chunk_count and not allow_empty:
+        # Soft guidance rather than hard stop: still fail closed by default so
+        # accidental drafts don't burn quota, but tell the model the escape hatch.
         raise ValueError(
-            "当前项目还没有可检索的解析资料。请先上传并等待资料包解析完成，再启动章节起草。"
+            "当前项目还没有可检索的解析资料。若用户明确要求自行拟草/先写框架，"
+            "请以 allow_empty_evidence=true 再次调用 start_draft_section；"
+            "否则请先上传并等待资料包解析完成。"
         )
     response = draft_section_command(
         db,

@@ -17,3 +17,6 @@ test-results/
 tmp/
 output/
 packages/contracts/*.egg-info/
+
+# Local Vite overrides
+apps/web/.env.local

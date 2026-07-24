@@ -1,8 +1,64 @@
 # BidPilot Development and Learning Progress
 
-Updated: 2026-07-23
+Updated: 2026-07-24
 
-## Latest (2026-07-23 agent closeout — CLOSED)
+## Latest (2026-07-24 history restore + write_section)
+
+Shipped the three remaining assistant closeout items:
+
+1. **Auto-restore last conversation**
+   - Persist `lastAssistantConversationId` in localStorage
+   - On assistant mount, auto `loadConversation` when empty
+   - Clear on new conversation / failed load
+
+2. **Persist tool transcript in history (via runtime replay)**
+   - `GET /runtime/runs?conversation_id=` filter
+   - Loading a conversation replays durable tool lifecycle events into L1/L2 cards
+   - Text still comes from chat_message; tools from RuntimeEvent (no schema migration)
+
+3. **Lightweight `write_section` tool**
+   - Capability + harness schema + `write_section_tool`
+   - Finds/creates outline section and writes a new SectionVersion markdown
+   - For empty-material / 自行拟草 path (approval still required under risky_only)
+   - System prompt prefers write_section when no materials, start_draft_section when evidence exists
+
+Also earlier: outline section_key public payload, conversation list includes global, grid expand animation.
+
+Verification: registry write_section unit OK; AIAssistantPanel 24 passed.
+
+## Previous (2026-07-24 harness intelligence + history)
+
+Root causes fixed for "agent looks dumb" and "history disappears":
+
+1. **Tool result blinding**: `format_public_result` for `list_sections` /
+   `get_project_outline` now returns compact `sections[]` with `section_key` +
+   `title` (was only `{count}`), so harness can chain `start_draft_section`.
+2. **Empty-project draft**: `start_draft_section` accepts
+   `allow_empty_evidence=true` when user asks to 自行拟草; default still
+   fail-closed with guidance.
+3. **System prompt**: outline-first drafting rules + never claim missing
+   section_key when tool payload has sections.
+4. **History list filter**: project-scoped list also includes unbound global
+   conversations (no more vanishing after navigating into a project).
+5. **Load failure UX**: failed history load shows an error message instead of
+   a blank transcript.
+
+Verification: registry + conversation filter tests 16 passed.
+
+## Previous (2026-07-24 UI polish)
+
+Four remaining UI issues fixed:
+
+1. Chat markdown tables are content-sized (`width: max-content; max-width: 100%`)
+   with a `.markdown-table-scroll` wrapper — no more empty right column stretch.
+2. Assistant composer ElectricBorder / ClickSpark removed; plain shadcn border.
+3. Empty component no longer defaults to `flex-1`; provider empty card ~232px.
+4. Team management rebuilt with Card / Badge / Avatar / summary stats + create form.
+
+Verification: markdown/provider/assistant tests 36 passed; local authenticated
+preview on `:5176` against API `:8001` (CORS origins include 5175/5176).
+
+## Previous (2026-07-23 agent closeout — CLOSED)
 
 **Status: Agent MVP / controlled-pilot main path closed.**
 
@@ -415,3 +471,17 @@ Do not add another visible feature until the relevant concept, architecture deci
 - HITL-approved sections promote for export; partial DOCX/PDF packages supported.
 - DeepSeek e2e produced real files: tmp/e2e-export.docx (37KB) and tmp/e2e-export.pdf (5KB).
 - Details: docs/dev-log/2026-07-23-approve-export-outline-closeout.md.
+
+## Hotfix (2026-07-23 evening)
+
+- Assistant token budget unblocked on production:
+  - ceiling raised `100000 -> 5000000`
+  - stuck `uncertain` holds released (they were counting against the cap)
+  - harness no longer parks successful turns as `uncertain` when usage metadata is missing; releases/settles instead
+  - per-turn assistant reservation `24000 -> 8000`
+- Interleaved transcript v1 deployed:
+  - store keeps `transcriptParts` (narrative/turn)
+  - MessageBubble renders narrative → tool turn → narrative when turn_id present
+  - legacy streams without turn_id keep tools-on-top
+- Deployed commit: `2cd868f`
+- Public health: api/web 200

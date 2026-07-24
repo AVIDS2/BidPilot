@@ -63,7 +63,13 @@
     "collapse": "收起",
     "manage": "管理",
     "confirmDelete": "确定要删除此团队吗？",
-    "noMembers": "暂无成员"
+    "noMembers": "暂无成员",
+    "pageHint": "按团队组织成员，控制协作范围与权限边界。",
+    "summaryTeams": "团队数",
+    "summaryMembers": "成员席位",
+    "summaryWorkspace": "工作区成员",
+    "renameHint": "点击重命名",
+    "noCandidates": "暂无可添加成员"
   },
   "invitationManagement": {
     "title": "邀请管理",
@@ -76,14 +82,13 @@
     "inviteSent": "邀请已发送",
     "inviteFailed": "邀请发送失败",
     "workspaceManagerRequired": "需要当前工作区的负责人或管理员角色。",
-    "revoked": "邀请已撤销",
+    "revoked": "已撤销",
     "revokeFailed": "撤销邀请失败",
     "expiresIn": "{{days}} 天后过期",
     "status": "状态",
     "pending": "待处理",
     "accepted": "已接受",
-    "expired": "已过期",
-    "revoked": "已撤销"
+    "expired": "已过期"
   },
   "workspaceMembers": {
     "title": "工作区成员",

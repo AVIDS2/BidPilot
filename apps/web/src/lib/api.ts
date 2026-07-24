@@ -512,8 +512,12 @@ export interface RuntimeRunListItem {
   latest_event_summary: string | null;
 }
 
-export function listRuntimeRuns(limit = 50) {
-  return request<RuntimeRunListItem[]>(`/runtime/runs?limit=${Math.min(Math.max(limit, 1), 100)}`);
+export function listRuntimeRuns(limit = 50, conversationId?: string | null) {
+  const params = new URLSearchParams({
+    limit: String(Math.min(Math.max(limit, 1), 100)),
+  });
+  if (conversationId) params.set("conversation_id", conversationId);
+  return request<RuntimeRunListItem[]>(`/runtime/runs?${params.toString()}`);
 }
 
 export function listRuntimeEvents(runId: string, afterSequence = 0) {

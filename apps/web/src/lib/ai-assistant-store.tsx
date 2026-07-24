@@ -12,6 +12,7 @@ import {
   cancelRuntimeWorkflow,
   getChatConversationMessages,
   listRuntimeEvents,
+  listRuntimeRuns,
   listChatConversations,
   type ChatConversationRead,
 } from "@/lib/api";
@@ -1313,23 +1314,86 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   }, [state.currentContext.projectId]);
 
   const loadConversation = useCallback(async (conversationId: string) => {
+    setStoredValue("lastAssistantConversationId", conversationId);
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
     dispatch({ type: "CLEAR_MESSAGES" });
+    // Clear previous run tool cards so restored transcript only shows this conversation.
+    dispatch({ type: "CLEAR_TRANSIENT_STATE" });
     dispatch({ type: "SET_STATUS", status: "thinking" });
     try {
       const history = await getChatConversationMessages(conversationId);
+      const messages = history.items.map((item, index) => ({
+        id: `${conversationId}-${index}`,
+        role: item.role,
+        content: item.content,
+        timestamp: Date.now() + index,
+      }));
       dispatch({
         type: "REPLACE_MESSAGES",
-        messages: history.items.map((item, index) => ({
-          id: `${conversationId}-${index}`,
-          role: item.role,
-          content: item.content,
-          timestamp: Date.now() + index,
-        })),
+        messages,
       });
+
+      // Point tool cards at the last assistant message in this history.
+      const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+      if (lastAssistant) {
+        dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: lastAssistant.id });
+      }
+
+      // Replay durable runtime tool events so history shows L1/L2 tool cards,
+      // not only plain assistant text.
+      try {
+        const runs = await listRuntimeRuns(12, conversationId);
+        // Replay oldest→newest so tool order matches conversation flow.
+        for (const run of [...runs].reverse()) {
+          const response = await listRuntimeEvents(run.id, 0);
+          for (const event of response.items) {
+            for (const compatibilityEvent of runtimeEventToAssistantEvents(
+              event,
+              conversationId,
+            )) {
+              // Only restore tool lifecycle cards. Skip text (already in chat history)
+              // and workflow_started (would kick off live polling).
+              if (
+                compatibilityEvent.eventType !== "assistant.tool_started" &&
+                compatibilityEvent.eventType !== "assistant.tool_succeeded" &&
+                compatibilityEvent.eventType !== "assistant.tool_failed" &&
+                compatibilityEvent.eventType !== "assistant.turn_started" &&
+                compatibilityEvent.eventType !== "assistant.turn_finished"
+              ) {
+                continue;
+              }
+              handleAssistantSseEvent(
+                compatibilityEvent.eventType,
+                compatibilityEvent.data,
+                dispatch,
+              );
+            }
+          }
+        }
+      } catch (replayError) {
+        console.error("Failed to restore tool transcript:", replayError);
+      }
+
+      // History is complete — never leave restored tools stuck in "running".
+      dispatch({ type: "FINALIZE_OPEN_EXECUTION_ITEMS" });
+      dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: null });
       dispatch({ type: "OPEN", mode: "panel" });
     } catch (error) {
       console.error("Failed to load chat history:", error);
+      removeStoredValue("lastAssistantConversationId");
+      // Keep the conversation selected but restore a visible error instead of a
+      // blank transcript that looks like history was deleted.
+      dispatch({
+        type: "REPLACE_MESSAGES",
+        messages: [
+          {
+            id: `${conversationId}-load-error`,
+            role: "assistant",
+            content: "加载会话历史失败，请重试或新建对话。消息仍保存在服务器上。",
+            timestamp: Date.now(),
+          },
+        ],
+      });
     } finally {
       dispatch({ type: "SET_STATUS", status: "idle" });
     }
@@ -1379,8 +1443,10 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const startNewConversation = useCallback(() => {
+    removeStoredValue("lastAssistantConversationId");
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: null });
     dispatch({ type: "CLEAR_MESSAGES" });
+    dispatch({ type: "CLEAR_TRANSIENT_STATE" });
     dispatch({ type: "SET_STATUS", status: "idle" });
     dispatch({ type: "OPEN", mode: "panel" });
   }, []);
@@ -1390,6 +1456,23 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       void refreshConversations();
     }
   }, [state.isOpen, state.mode, refreshConversations]);
+
+  // Auto-restore the last conversation once when the assistant surface mounts.
+  const didAutoRestoreRef = useRef(false);
+  useEffect(() => {
+    if (didAutoRestoreRef.current) return;
+    if (state.currentConversationId || state.messages.length > 0) {
+      didAutoRestoreRef.current = true;
+      return;
+    }
+    const lastId = getStoredValue("lastAssistantConversationId");
+    if (!lastId) {
+      didAutoRestoreRef.current = true;
+      return;
+    }
+    didAutoRestoreRef.current = true;
+    void loadConversation(lastId);
+  }, [loadConversation, state.currentConversationId, state.messages.length]);
 
   const sendAssistantRequest = useCallback(
     async (
@@ -1439,6 +1522,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         },
         onConversation: (conversationId) => {
           activeConversationId = conversationId;
+          setStoredValue("lastAssistantConversationId", conversationId);
         },
         onTerminal: () => {
           receivedTerminalEvent = true;

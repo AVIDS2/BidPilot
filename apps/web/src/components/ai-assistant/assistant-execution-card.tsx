@@ -66,23 +66,40 @@ export function AssistantExecutionCard({ item }: { item: AssistantExecutionItem 
                 <button
                   type="button"
                   aria-label={expanded ? "Hide tool details" : "Show tool details"}
+                  aria-expanded={expanded}
                   onClick={() => setExpanded((value) => !value)}
                   className="rounded-full p-0.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                 >
-                  <ChevronDownIcon className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+                  <ChevronDownIcon
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                      expanded && "rotate-180",
+                    )}
+                  />
                 </button>
               )}
             </div>
           </div>
-          {expanded && item.summary && (
-            <p className="mt-1 leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
-              {item.summary}
-            </p>
-          )}
-          {expanded && item.errorMessage && (
-            <p className="mt-1 leading-relaxed" style={{ color: "var(--destructive)" }}>
-              {item.errorMessage}
-            </p>
+          {hasDetails && (
+            <div
+              className={cn(
+                "grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+                expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                {item.summary && (
+                  <p className="mt-1 leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+                    {item.summary}
+                  </p>
+                )}
+                {item.errorMessage && (
+                  <p className="mt-1 leading-relaxed" style={{ color: "var(--destructive)" }}>
+                    {item.errorMessage}
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>

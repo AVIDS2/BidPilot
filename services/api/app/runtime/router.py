@@ -35,6 +35,7 @@ router = APIRouter(prefix="/runtime", tags=["runtime"])
 @router.get("/runs", response_model=list[RuntimeRunListItem])
 def list_runtime_runs(
     limit: int = Query(default=50, ge=1, le=100),
+    conversation_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_auth),
 ) -> list[RuntimeRunListItem]:
@@ -51,7 +52,12 @@ def list_runtime_runs(
             finished_at=row.run.finished_at,
             latest_event_summary=row.latest_event_summary,
         )
-        for row in list_runtime_runs_query(db, current_user, limit=limit)
+        for row in list_runtime_runs_query(
+            db,
+            current_user,
+            limit=limit,
+            conversation_id=conversation_id,
+        )
     ]
 
 

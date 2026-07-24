@@ -59,6 +59,15 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   pre: function PreComponent({ children }) {
     return <>{children}</>
   },
+  // Keep markdown tables content-sized. Wrapping enables horizontal scroll
+  // without stretching the table to 100% of the chat bubble.
+  table: function TableComponent({ children, ...props }) {
+    return (
+      <div className="markdown-table-scroll">
+        <table {...props}>{children}</table>
+      </div>
+    )
+  },
 }
 
 const MemoizedMarkdownBlock = memo(

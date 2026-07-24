@@ -389,10 +389,17 @@ def list_conversations(
     user_id: str,
     project_id: str | None = None,
 ) -> list[ChatConversation]:
-    """List conversations for a user, optionally filtered by project."""
+    """List conversations for a user, optionally filtered by project.
+
+    When a project filter is set, also include unbound (global) conversations so
+    history does not appear to vanish after the user navigates into a project.
+    """
     query = db.query(ChatConversation).filter(ChatConversation.user_id == user_id)
     if project_id:
-        query = query.filter(ChatConversation.project_id == project_id)
+        query = query.filter(
+            (ChatConversation.project_id == project_id)
+            | (ChatConversation.project_id.is_(None))
+        )
     return query.order_by(ChatConversation.updated_at.desc(), ChatConversation.created_at.desc()).all()
 
 

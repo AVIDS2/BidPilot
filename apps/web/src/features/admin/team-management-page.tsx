@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -9,36 +9,118 @@ import {
   listTeams,
   removeTeamMember,
   updateTeam,
+  type TeamRead,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
 import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { UsersIcon, ShieldIcon, PlusIcon, TrashIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PlusIcon,
+  ShieldIcon,
+  TrashIcon,
+  UsersIcon,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const CARDS_PER_PAGE = 6;
+
+function memberInitials(name: string | undefined | null, email?: string | null) {
+  const source = (name || email || "?").trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
+  }
+  return source.slice(0, 2).toUpperCase();
+}
 
 function TeamManagementSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Skeleton className="size-6" />
-        <Skeleton className="h-7 w-48" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Skeleton className="size-5 rounded-md" />
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-5 w-10 rounded-full" />
+        </div>
+        <Skeleton className="h-8 w-28" />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="rounded-xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-            <Skeleton className="h-5 w-32 mb-3" />
-            <Skeleton className="h-4 w-20" />
-          </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-4 w-24" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-8 w-28 rounded-full" />
+              <Skeleton className="h-4 w-full" />
+            </CardContent>
+          </Card>
         ))}
       </div>
     </div>
+  );
+}
+
+function TeamMemberPreview({ team }: { team: TeamRead }) {
+  const members = team.members ?? [];
+  const visible = members.slice(0, 4);
+  const overflow = Math.max(0, members.length - visible.length);
+
+  if (members.length === 0) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <UsersIcon className="size-3.5" />
+        <span>—</span>
+      </div>
+    );
+  }
+
+  return (
+    <AvatarGroup className="justify-start">
+      {visible.map((member) => (
+        <Avatar key={member.id} size="sm" title={member.user_display_name || member.user_email}>
+          <AvatarFallback>
+            {memberInitials(member.user_display_name, member.user_email)}
+          </AvatarFallback>
+        </Avatar>
+      ))}
+      {overflow > 0 && <AvatarGroupCount>+{overflow}</AvatarGroupCount>}
+    </AvatarGroup>
   );
 }
 
@@ -105,6 +187,13 @@ export function TeamManagementPage() {
     onError: () => toast.error(t("teamManagement.operationFailed")),
   });
 
+  const teams = teamsData?.items ?? [];
+  const users = workspaceMembers ?? [];
+  const totalMembers = useMemo(
+    () => teams.reduce((sum, team) => sum + (team.members?.length ?? 0), 0),
+    [teams],
+  );
+
   if (isLoading || isLoadingWorkspaceMembers) return <TeamManagementSkeleton />;
 
   const currentMembership = workspaceMembers?.find((member) => member.id === currentUser?.id);
@@ -112,260 +201,395 @@ export function TeamManagementPage() {
 
   if (!canManageTeams) {
     return (
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col items-center justify-center py-20" style={{ color: "var(--muted-foreground)" }}>
-          <ShieldIcon className="size-10 mb-3 opacity-40" />
-          <p className="text-sm">{t("invitationManagement.workspaceManagerRequired")}</p>
-        </div>
+      <div className="flex flex-col gap-4">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
+              <ShieldIcon className="size-5 text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {t("invitationManagement.workspaceManagerRequired")}
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  const teams = teamsData?.items ?? [];
-  const users = workspaceMembers ?? [];
   const totalPages = Math.max(1, Math.ceil(teams.length / CARDS_PER_PAGE));
-  const paginatedTeams = teams.slice((currentPage - 1) * CARDS_PER_PAGE, currentPage * CARDS_PER_PAGE);
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedTeams = teams.slice((safePage - 1) * CARDS_PER_PAGE, safePage * CARDS_PER_PAGE);
+
+  function commitRename(teamId: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setEditingId(null);
+      return;
+    }
+    updateTeam(teamId, { name: trimmed })
+      .then(() => {
+        toast.success(t("teamManagement.teamUpdated"));
+        qc.invalidateQueries({ queryKey: ["teams"] });
+      })
+      .catch(() => toast.error(t("teamManagement.operationFailed")));
+    setEditingId(null);
+  }
+
+  function slugifyName(name: string) {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9一-鿿]+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 48);
+  }
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-180px)]">
+    <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <UsersIcon className="size-5" style={{ color: "var(--muted-foreground)" }} />
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">{t("teamManagement.title")}</h1>
-          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(132, 204, 22, 0.15)", color: "var(--primary)" }}>
-            {teams.length}
-          </span>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <UsersIcon className="size-5 text-muted-foreground" />
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">
+              {t("teamManagement.title")}
+            </h1>
+            <Badge variant="secondary">{teams.length}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {t("teamManagement.pageHint", {
+              defaultValue: "按团队组织成员，控制协作范围与权限边界。",
+            })}
+          </p>
         </div>
-        <Button size="sm" onClick={() => setShowCreate(!showCreate)} className="bg-primary text-primary-foreground hover:bg-primary/90">
-          <PlusIcon className="size-4 mr-1.5" />
+        <Button
+          size="sm"
+          onClick={() => setShowCreate((open) => !open)}
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
+        >
+          <PlusIcon className="size-4" />
           {t("teamManagement.createTeam")}
         </Button>
       </div>
 
+      {/* Summary */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card size="sm">
+          <CardHeader className="border-0">
+            <CardDescription>{t("teamManagement.summaryTeams", { defaultValue: "团队数" })}</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">{teams.length}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card size="sm">
+          <CardHeader className="border-0">
+            <CardDescription>{t("teamManagement.summaryMembers", { defaultValue: "成员席位" })}</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">{totalMembers}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card size="sm">
+          <CardHeader className="border-0">
+            <CardDescription>{t("teamManagement.summaryWorkspace", { defaultValue: "工作区成员" })}</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">{users.length}</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
       {/* Create form */}
       {showCreate && (
-        <div className="rounded-xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-          <div className="flex items-end gap-3">
-            <div className="flex-1 space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{t("teamManagement.teamNameLabel")}</label>
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle>{t("teamManagement.createTeam")}</CardTitle>
+            <CardDescription>
+              {t("teamManagement.teamSlugDescription")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 pt-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="team-name">{t("teamManagement.teamNameLabel")}</Label>
               <Input
+                id="team-name"
                 placeholder={t("teamManagement.teamNamePlaceholder")}
                 value={newTeamName}
-                onChange={(e) => setNewTeamName(e.target.value)}
-                className="bg-background border-border text-foreground placeholder:text-muted-foreground"
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setNewTeamName(next);
+                  // Only auto-fill slug when user hasn't customized it yet.
+                  if (!newTeamSlug || newTeamSlug === slugifyName(newTeamName)) {
+                    setNewTeamSlug(slugifyName(next));
+                  }
+                }}
               />
             </div>
-            <div className="flex-1 space-y-1.5">
-              <label className="text-sm font-medium text-foreground">{t("teamManagement.teamSlugLabel")}</label>
+            <div className="space-y-1.5">
+              <Label htmlFor="team-slug">{t("teamManagement.teamSlugLabel")}</Label>
               <Input
+                id="team-slug"
                 placeholder={t("teamManagement.teamSlugPlaceholder")}
                 value={newTeamSlug}
-                onChange={(e) => setNewTeamSlug(e.target.value.replace(/[^a-z0-9-]/g, "").toLowerCase())}
-                className="bg-background border-border text-foreground placeholder:text-muted-foreground"
+                onChange={(e) =>
+                  setNewTeamSlug(e.target.value.replace(/[^a-z0-9-]/g, "").toLowerCase())
+                }
               />
             </div>
+          </CardContent>
+          <CardFooter className="justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowCreate(false)}>
+              {t("common:actions.cancel", { defaultValue: "取消" })}
+            </Button>
             <Button
-              disabled={!newTeamName || !newTeamSlug}
-              onClick={() => createMut.mutate({ name: newTeamName, slug: newTeamSlug })}
+              size="sm"
+              disabled={!newTeamName.trim() || !newTeamSlug.trim() || createMut.isPending}
+              onClick={() =>
+                createMut.mutate({ name: newTeamName.trim(), slug: newTeamSlug.trim() })
+              }
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {t("common:actions.save")}
             </Button>
-          </div>
-        </div>
+          </CardFooter>
+        </Card>
       )}
 
-      {/* Empty state */}
+      {/* Empty / list */}
       {!teams.length ? (
-        <div className="rounded-xl py-20" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-          <Empty className="min-h-32">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <UsersIcon />
-              </EmptyMedia>
-              <EmptyTitle>{t("teamManagement.noTeams")}</EmptyTitle>
-              <EmptyDescription>{t("teamManagement.noTeamsHint")}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        </div>
+        <Card>
+          <CardContent className="py-8">
+            <Empty className="border-0 p-0">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <UsersIcon />
+                </EmptyMedia>
+                <EmptyTitle>{t("teamManagement.noTeams")}</EmptyTitle>
+                <EmptyDescription>{t("teamManagement.noTeamsHint")}</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button
+                  size="sm"
+                  onClick={() => setShowCreate(true)}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <PlusIcon className="size-4" />
+                  {t("teamManagement.createTeam")}
+                </Button>
+              </EmptyContent>
+            </Empty>
+          </CardContent>
+        </Card>
       ) : (
         <>
-          {/* Card grid - flex-1 自动填充中间空间 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
-            {paginatedTeams.map((team) => (
-              <div
-                key={team.id}
-                className="rounded-xl p-8 transition-all duration-300 hover:-translate-y-1"
-                style={{
-                  background: "var(--card)",
-                  border: "1px solid var(--border)",
-                }}
-              >
-                {/* Team header */}
-                <div className="flex items-center justify-between mb-4">
-                  {editingId === team.id ? (
-                    <Input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="flex-1 mr-3 h-10 text-base bg-background border-border text-foreground"
-                      onBlur={() => {
-                        updateTeam(team.id, { name: editName }).then(() => {
-                          toast.success(t("teamManagement.teamUpdated"));
-                          qc.invalidateQueries({ queryKey: ["teams"] });
-                        }).catch(() => toast.error(t("teamManagement.operationFailed")));
-                        setEditingId(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          updateTeam(team.id, { name: editName }).then(() => {
-                            toast.success(t("teamManagement.teamUpdated"));
-                            qc.invalidateQueries({ queryKey: ["teams"] });
-                          }).catch(() => toast.error(t("teamManagement.operationFailed")));
-                          setEditingId(null);
-                        }
-                      }}
-                      autoFocus
-                    />
-                  ) : (
-                    <h3
-                      className="text-lg font-medium text-foreground cursor-pointer hover:text-primary transition-colors"
-                      onClick={() => { setEditingId(team.id); setEditName(team.name); }}
-                    >
-                      {team.name}
-                    </h3>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => { if (window.confirm(t("teamManagement.confirmDelete"))) deleteMut.mutate(team.id); }}
-                    className="text-muted-foreground hover:text-red-400"
-                  >
-                    <TrashIcon className="size-4" />
-                  </Button>
-                </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+            {paginatedTeams.map((team) => {
+              const isExpanded = expandedTeamId === team.id;
+              const memberCount = team.members?.length ?? 0;
+              const candidates = users.filter(
+                (user) => !team.members?.some((member) => member.user_id === user.id),
+              );
 
-                <p className="text-sm mb-4" style={{ color: "var(--text-tertiary)" }}>{team.slug}</p>
-
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                    {team.members?.length ?? 0} {t("teamManagement.membersCount", { count: team.members?.length ?? 0 }).replace(/\d+\s*/, "")}
-                  </span>
-                  <button
-                    className="text-sm hover:text-primary transition-colors font-medium"
-                    style={{ color: "var(--primary)" }}
-                    onClick={() => setExpandedTeamId(expandedTeamId === team.id ? null : team.id)}
-                  >
-                    {expandedTeamId === team.id ? t("teamManagement.collapse", { defaultValue: "收起" }) : t("teamManagement.manage", { defaultValue: "管理成员" })}
-                  </button>
-                </div>
-
-                {/* Expanded member management */}
-                {expandedTeamId === team.id && (
-                  <div className="pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-                    <div className="mb-3">
-                      <Select
-                        onValueChange={(value: string | null) => {
-                          if (value) addMemberMut.mutate({ teamId: team.id, userId: value });
+              return (
+                <Card key={team.id} className="h-fit">
+                  <CardHeader className="border-b">
+                    {editingId === team.id ? (
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="h-9"
+                        onBlur={() => commitRename(team.id, editName)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename(team.id, editName);
+                          if (e.key === "Escape") setEditingId(null);
                         }}
-                      >
-                        <SelectTrigger className="w-full h-9 text-sm bg-background border-border text-foreground">
-                          <SelectValue placeholder={t("teamManagement.addMember")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {users
-                              .filter((user) => !team.members?.some((member) => member.user_id === user.id))
-                              .map((u) => (
-                              <SelectItem key={u.id} value={u.id}>
-                                {u.display_name} ({u.email})
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {team.members && team.members.length > 0 ? (
-                      <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
-                        {team.members.map((m) => (
-                          <div
-                            key={m.id}
-                            className="flex items-center justify-between rounded-lg px-4 py-2.5 text-sm"
-                            style={{ background: "var(--muted)" }}
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span className="font-medium text-foreground truncate">{m.user_display_name}</span>
-                              <span className="truncate text-xs" style={{ color: "var(--text-tertiary)" }}>{m.user_email}</span>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-xs px-2 py-0.5 rounded" style={{
-                                background: m.role === "admin" ? "rgba(132, 204, 22, 0.15)" : "var(--border)",
-                                color: m.role === "admin" ? "var(--primary)" : "var(--muted-foreground)",
-                              }}>
-                                {t(`workspaceMembers.roles.${m.role}`, { defaultValue: m.role })}
-                              </span>
-                              <button
-                                className="text-muted-foreground hover:text-red-400 transition-colors"
-                                onClick={() => removeMemberMut.mutate({ teamId: team.id, userId: m.user_id })}
-                              >
-                                <TrashIcon className="size-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                        autoFocus
+                      />
                     ) : (
-                      <p className="text-sm text-center py-6" style={{ color: "var(--text-tertiary)" }}>
-                        {t("teamManagement.noMembers")}
-                      </p>
+                      <CardTitle
+                        className="cursor-pointer hover:text-primary"
+                        onClick={() => {
+                          setEditingId(team.id);
+                          setEditName(team.name);
+                        }}
+                        title={t("teamManagement.renameHint", { defaultValue: "点击重命名" })}
+                      >
+                        {team.name}
+                      </CardTitle>
                     )}
-                  </div>
-                )}
-              </div>
-            ))}
+                    <CardDescription className="font-mono text-xs">{team.slug}</CardDescription>
+                    <CardAction>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t("teamManagement.confirmDelete")}
+                        onClick={() => {
+                          if (window.confirm(t("teamManagement.confirmDelete"))) {
+                            deleteMut.mutate(team.id);
+                          }
+                        }}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <TrashIcon className="size-4" />
+                      </Button>
+                    </CardAction>
+                  </CardHeader>
+
+                  <CardContent className="space-y-4 pt-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <TeamMemberPreview team={team} />
+                      <Badge variant="outline">
+                        {t("teamManagement.membersCount", { count: memberCount })}
+                      </Badge>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-between"
+                      onClick={() => setExpandedTeamId(isExpanded ? null : team.id)}
+                    >
+                      <span>
+                        {isExpanded
+                          ? t("teamManagement.collapse", { defaultValue: "收起" })
+                          : t("teamManagement.manage", { defaultValue: "管理成员" })}
+                      </span>
+                      <ChevronDownIcon
+                        className={cn(
+                          "size-4 text-muted-foreground transition-transform",
+                          isExpanded && "rotate-180",
+                        )}
+                      />
+                    </Button>
+
+                    {isExpanded && (
+                      <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">
+                            {t("teamManagement.addMember")}
+                          </Label>
+                          <Select
+                            onValueChange={(value: string | null) => {
+                              if (value) {
+                                addMemberMut.mutate({ teamId: team.id, userId: value });
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-full bg-background">
+                              <SelectValue
+                                placeholder={
+                                  candidates.length
+                                    ? t("teamManagement.addMember")
+                                    : t("teamManagement.noCandidates", {
+                                        defaultValue: "暂无可添加成员",
+                                      })
+                                }
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                {candidates.map((user) => (
+                                  <SelectItem key={user.id} value={user.id}>
+                                    {user.display_name} ({user.email})
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <Separator />
+
+                        {memberCount > 0 ? (
+                          <div className="flex max-h-56 flex-col gap-2 overflow-y-auto">
+                            {team.members!.map((member) => (
+                              <div
+                                key={member.id}
+                                className="flex items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-2"
+                              >
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <Avatar size="sm">
+                                    <AvatarFallback>
+                                      {memberInitials(
+                                        member.user_display_name,
+                                        member.user_email,
+                                      )}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-foreground">
+                                      {member.user_display_name}
+                                    </p>
+                                    <p className="truncate text-xs text-muted-foreground">
+                                      {member.user_email}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1.5">
+                                  <Badge
+                                    variant={member.role === "admin" ? "default" : "secondary"}
+                                  >
+                                    {t(`workspaceMembers.roles.${member.role}`, {
+                                      defaultValue: member.role,
+                                    })}
+                                  </Badge>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={t("teamManagement.removeMember")}
+                                    className="text-muted-foreground hover:text-destructive"
+                                    onClick={() =>
+                                      removeMemberMut.mutate({
+                                        teamId: team.id,
+                                        userId: member.user_id,
+                                      })
+                                    }
+                                  >
+                                    <TrashIcon className="size-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="py-4 text-center text-sm text-muted-foreground">
+                            {t("teamManagement.noMembers")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
 
-          {/* Pagination - 页面最底部 */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-12 pb-2">
-              <button
-                className="px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-30"
-                style={{
-                  background: "var(--card)",
-                  color: "var(--muted-foreground)",
-                  border: "1px solid var(--border)",
-                }}
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
+            <div className="flex items-center justify-center gap-2">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                disabled={safePage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               >
                 <ChevronLeftIcon className="size-4" />
-              </button>
+              </Button>
               {Array.from({ length: totalPages }, (_, i) => (
-                <button
+                <Button
                   key={i}
+                  size="sm"
+                  variant={safePage === i + 1 ? "default" : "outline"}
                   onClick={() => setCurrentPage(i + 1)}
-                  className="px-4 py-2 text-sm font-medium rounded-md transition-all duration-200"
-                  style={{
-                    background: currentPage === i + 1 ? "var(--primary)" : "var(--card)",
-                    color: currentPage === i + 1 ? "var(--background)" : "var(--muted-foreground)",
-                    border: `1px solid ${currentPage === i + 1 ? "var(--primary)" : "var(--border)"}`,
-                  }}
+                  className="min-w-9"
                 >
                   {i + 1}
-                </button>
+                </Button>
               ))}
-              <button
-                className="px-3 py-1.5 text-sm rounded-md transition-colors disabled:opacity-30"
-                style={{
-                  background: "var(--card)",
-                  color: "var(--muted-foreground)",
-                  border: "1px solid var(--border)",
-                }}
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
+              <Button
+                variant="outline"
+                size="icon-sm"
+                disabled={safePage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               >
                 <ChevronRightIcon className="size-4" />
-              </button>
+              </Button>
             </div>
           )}
         </>

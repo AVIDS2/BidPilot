@@ -100,6 +100,14 @@ _CAPABILITIES = (
         requires_approval_in_risky_only=True,
     ),
     CapabilityDefinition(
+        "write_section",
+        "直接写入章节内容",
+        "Write section markdown",
+        RuntimeRiskLevel.LOW_RISK_WRITE,
+        "project.manage",
+        requires_approval_in_risky_only=True,
+    ),
+    CapabilityDefinition(
         "start_redraft_section",
         "启动章节重写",
         "Start redraft section",
@@ -196,6 +204,7 @@ WORKFLOW_CAPABILITY_NAMES = frozenset(
 
 _REQUIRED_ARGUMENT_FIELDS: dict[str, tuple[str, ...]] = {
     "create_project": ("name",),
+    "write_section": ("project_id", "section_key", "content_markdown"),
 }
 
 
@@ -241,6 +250,8 @@ def format_approval_request(capability_name: str, arguments: dict[str, Any]) -> 
         return f"确认将 {count} 个附件加入项目资料包并开始解析吗？"
     if capability_name == "start_draft_section":
         return f"确认启动章节「{arguments.get('section_key') or '未指定章节'}」的起草工作流吗？"
+    if capability_name == "write_section":
+        return f"确认把内容写入章节「{arguments.get('section_key') or '未指定章节'}」吗？"
     if capability_name == "start_redraft_section":
         return f"确认启动章节「{arguments.get('section_key') or '未指定章节'}」的重写工作流吗？"
     if capability_name == "resume_draft_run":
@@ -359,25 +370,76 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
     if capability_name == "forget_memory" and result.get("deleted") is True:
         return PublicCapabilityResult("这条记忆已遗忘。", {"deleted": True})
     if capability_name == "list_sections":
-        return PublicCapabilityResult(f"已找到 {count} 个章节。", {"count": count})
-    if capability_name == "get_project_outline":
+        # Keep section_key/title so the harness can chain into start_draft_section.
+        sections = _public_items(
+            result.get("items"),
+            (
+                "section_key",
+                "title",
+                "status",
+                "has_content",
+                "deliverable_id",
+                "id",
+            ),
+        )
+        payload: dict[str, Any] = {"count": count}
+        if sections:
+            payload["sections"] = sections
         drafted = result.get("drafted_count")
         approved = result.get("approved_count")
-        payload = {"count": count}
         if isinstance(drafted, int):
             payload["drafted_count"] = drafted
         if isinstance(approved, int):
             payload["approved_count"] = approved
         return PublicCapabilityResult(
+            f"已找到 {count} 个章节。",
+            payload,
+        )
+    if capability_name == "get_project_outline":
+        drafted = result.get("drafted_count")
+        approved = result.get("approved_count")
+        # Outline-first drafting needs concrete section_key values in the LLM track.
+        sections = _public_items(
+            result.get("items"),
+            (
+                "section_key",
+                "title",
+                "status",
+                "has_content",
+                "in_template",
+                "deliverable_id",
+                "id",
+            ),
+        )
+        payload = {"count": count}
+        if isinstance(drafted, int):
+            payload["drafted_count"] = drafted
+        if isinstance(approved, int):
+            payload["approved_count"] = approved
+        if isinstance(result.get("project_id"), str):
+            payload["project_id"] = result["project_id"]
+        if isinstance(result.get("project_name"), str):
+            payload["project_name"] = result["project_name"]
+        if sections:
+            payload["sections"] = sections
+        return PublicCapabilityResult(
             f"大纲共 {count} 章，已起草 {drafted if isinstance(drafted, int) else 0} 章，"
             f"已批准 {approved if isinstance(approved, int) else 0} 章。",
             payload,
         )
+    if capability_name == "list_deliverables":
+        deliverables = _public_items(
+            result.get("items"),
+            ("id", "title", "status", "type"),
+        )
+        payload = {"count": count}
+        if deliverables:
+            payload["deliverables"] = deliverables
+        return PublicCapabilityResult(f"已找到 {count} 条相关记录。", payload)
     if capability_name in {
         "list_project_bundles",
         "list_pending_reviews",
         "list_evidence",
-        "list_deliverables",
         "list_documents",
         "get_section_versions",
         "get_runtime_status",
@@ -402,6 +464,21 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
         }
         summary = "起草工作流已启动。" if capability_name == "start_draft_section" else "重写工作流已启动。"
         return PublicCapabilityResult(summary, payload)
+    if capability_name == "write_section":
+        payload = {
+            key: result[key]
+            for key in (
+                "section_id",
+                "section_key",
+                "section_title",
+                "section_version_id",
+                "version_number",
+                "deliverable_id",
+            )
+            if key in result
+        }
+        title = result.get("section_title") or result.get("section_key") or "章节"
+        return PublicCapabilityResult(f"已写入章节「{title}」。", payload)
     if capability_name == "resume_draft_run":
         payload = {
             key: result[key]
@@ -455,11 +532,16 @@ def _result_count(result: dict[str, Any]) -> int:
     return 0
 
 
-def _public_items(value: Any, allowed_keys: tuple[str, ...]) -> list[dict[str, Any]]:
+def _public_items(
+    value: Any,
+    allowed_keys: tuple[str, ...],
+    *,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     return [
         {key: item[key] for key in allowed_keys if key in item}
-        for item in value[:10]
+        for item in value[:limit]
         if isinstance(item, dict)
     ]

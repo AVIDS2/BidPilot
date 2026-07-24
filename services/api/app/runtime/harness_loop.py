@@ -202,8 +202,35 @@ _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
             "section_key": {"type": "string"},
             "provider_config_id": {"type": "string"},
             "reasoning_effort": {"type": "string"},
+            "allow_empty_evidence": {
+                "type": "boolean",
+                "description": (
+                    "Set true only when the user explicitly asks to draft without "
+                    "uploaded materials (e.g. 自行拟草)."
+                ),
+            },
         },
         "required": ["project_id", "section_key"],
+        "additionalProperties": False,
+    },
+    "write_section": {
+        "type": "object",
+        "properties": {
+            "project_id": {"type": "string"},
+            "section_key": {
+                "type": "string",
+                "description": "Outline section_key from get_project_outline/list_sections",
+            },
+            "content_markdown": {
+                "type": "string",
+                "description": "Full markdown body to persist as a new section version",
+            },
+            "title": {
+                "type": "string",
+                "description": "Optional section title when creating a missing outline chapter",
+            },
+        },
+        "required": ["project_id", "section_key", "content_markdown"],
         "additionalProperties": False,
     },
     "start_redraft_section": {
@@ -685,6 +712,11 @@ class StreamingHarness:
             "3. 变更类操作由服务端审批，你仍然可以提出 tool call。\n"
             "4. 若 active_project_id 存在，项目范围内操作优先使用它。\n"
             "5. 工具结果返回后，用简洁中文总结并推进下一步。\n"
+            "6. 写作/起草任务：先 get_project_outline 或 list_sections 拿到 section_key，"
+            "再 start_draft_section 或 write_section；禁止只在聊天里写长文代替章节写入。"
+            "用户说「自行完成/拟草」时：无资料用 write_section 直接写入；有资料用 start_draft_section。\n"
+            "7. outline/sections 工具结果里的 sections[].section_key 必须原样用于后续工具，"
+            "不要声称「没有 section_key」。\n"
             f"可用工具：{capability_list}"
         )
         packet = build_untrusted_context_packet(

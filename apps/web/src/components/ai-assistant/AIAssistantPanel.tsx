@@ -48,12 +48,7 @@ import { Input } from "@/components/ui/input";
 import { Markdown } from "@/components/ui/markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AgentMark } from "@/components/brand";
-import ClickSpark from "@/components/ClickSpark";
-import ElectricBorder from "@/components/ElectricBorder";
 import FadeContent from "@/components/FadeContent";
-import ShinyText from "@/components/ShinyText";
-import { REACTBITS_AURORA } from "@/components/reactbits-theme";
-import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { AssistantConfirmationCard } from "./assistant-confirmation-card";
 import { AssistantActivityTimeline } from "./assistant-activity-timeline";
 
@@ -222,35 +217,9 @@ function toRequestAttachments(attachments: ComposerAttachment[]): AssistantReque
   }));
 }
 
-function ReactBitsComposerFrame({
-  active,
-  children,
-}: {
-  active: boolean;
-  children: ReactNode;
-}) {
-  const prefersReducedMotion = usePrefersReducedMotion();
-  const activeMotion = active && !prefersReducedMotion;
-
-  return (
-    <ClickSpark
-      sparkColor={REACTBITS_AURORA.accentAlt}
-      sparkSize={8}
-      sparkRadius={18}
-      sparkCount={7}
-      duration={360}
-      easing="ease-out"
-    >
-      <ElectricBorder
-        color={REACTBITS_AURORA.accent}
-        speed={activeMotion ? 0.65 : 0.18}
-        chaos={activeMotion ? 0.045 : 0}
-        borderRadius={30}
-      >
-        {children}
-      </ElectricBorder>
-    </ClickSpark>
-  );
+/** Plain shadcn-style composer shell — no electric border / spark effects. */
+function ComposerFrame({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }
 
 /* ─── Quick action chips shown in empty state ─── */
@@ -1275,13 +1244,7 @@ export function AIAssistantPanel({
               <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                 <AgentMark decorative className="mx-auto mb-4 size-14 drop-shadow-[0_18px_50px_oklch(0_0_0/0.16)]" />
                 <h3 className="mb-1 text-base font-semibold text-foreground">
-                  <ShinyText
-                    text={t("welcome.title")}
-                    speed={3.4}
-                    color="var(--foreground)"
-                    shineColor={REACTBITS_AURORA.accentAlt}
-                    spread={105}
-                  />
+                  {t("welcome.title")}
                 </h3>
                 <p className="mb-6 max-w-[28ch] text-sm leading-6 text-muted-foreground">{t("welcome.description")}</p>
                 <QuickActions onSelect={handleQuickAction} />
@@ -1370,13 +1333,12 @@ export function AIAssistantPanel({
           className="hidden"
           onChange={(event) => handleAttachmentInputChange(event, "image")}
         />
-        <ReactBitsComposerFrame active={isBusy || isUploadingAttachments || queuedPrompts.length > 0}>
+        <ComposerFrame>
           <div
-            className="rounded-[1.6rem] border px-2 py-2 shadow-[0_18px_55px_oklch(0_0_0/0.18),inset_0_1px_0_oklch(1_0_0/0.08)] sm:rounded-[1.85rem]"
+            className="rounded-[1.6rem] border px-2 py-2 shadow-sm sm:rounded-[1.85rem]"
             style={{
-              background: "color-mix(in oklch, var(--card) 92%, transparent)",
-              borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
-              backdropFilter: "blur(18px) saturate(1.08)",
+              background: "color-mix(in oklch, var(--card) 96%, transparent)",
+              borderColor: "var(--border)",
             }}
           >
           {(attachments.length > 0 || queuedPrompts.length > 0) && (
@@ -1667,7 +1629,7 @@ export function AIAssistantPanel({
             </div>
           </div>
           </div>
-        </ReactBitsComposerFrame>
+        </ComposerFrame>
       </div>
     </div>
   );

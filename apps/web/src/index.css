@@ -610,10 +610,10 @@
 }
 
 .prose-bidpilot :where(table) {
-  display: block;
-  width: 100%;
+  display: table;
+  width: max-content;
+  max-width: 100%;
   margin: 1.1rem 0;
-  overflow-x: auto;
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--prose-hairline);
@@ -621,14 +621,29 @@
   background: color-mix(in oklch, var(--card) 88%, var(--background));
 }
 
+/* Horizontal scroll lives on a wrapper so the table itself stays content-sized. */
+.prose-bidpilot :where(.markdown-table-scroll) {
+  display: block;
+  max-width: 100%;
+  margin: 1.1rem 0;
+  overflow-x: auto;
+  border-radius: 1rem;
+}
+
+.prose-bidpilot :where(.markdown-table-scroll > table) {
+  margin: 0;
+}
+
 .prose-bidpilot :where(thead) {
   background: color-mix(in oklch, var(--muted) 62%, transparent);
 }
 
 .prose-bidpilot :where(th, td) {
-  min-width: 7rem;
+  width: auto;
+  min-width: 0;
+  white-space: nowrap;
   border-bottom: 1px solid var(--prose-hairline);
-  padding: 0.65rem 0.78rem;
+  padding: 0.55rem 0.85rem;
   text-align: left;
   vertical-align: top;
 }
@@ -642,6 +657,18 @@
 
 .prose-bidpilot :where(tr:last-child td) {
   border-bottom: 0;
+}
+
+/* Chat bubbles: keep tables snug to content, not full bubble width. */
+.prose-bidpilot-assistant :where(table) {
+  width: max-content;
+  max-width: 100%;
+}
+
+.prose-bidpilot-assistant :where(th, td) {
+  white-space: normal;
+  min-width: 4.5rem;
+  max-width: 16rem;
 }
 
 .prose-bidpilot :where(img) {

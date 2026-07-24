@@ -465,7 +465,7 @@ class TestChatService:
         assert len(convs) >= 2
 
     def test_list_conversations_filtered_by_project(self, test_db, chat_test_user_id, default_org_id: str):
-        """Lists conversations filtered by project_id."""
+        """Project filter keeps that project and unbound global conversations."""
         from app.models import Project
         from app.chat.service import create_conversation, list_conversations
 
@@ -489,10 +489,14 @@ class TestChatService:
 
         create_conversation(test_db, chat_test_user_id, project_one.id)
         create_conversation(test_db, chat_test_user_id, project_two.id)
+        create_conversation(test_db, chat_test_user_id, None)
 
         convs = list_conversations(test_db, chat_test_user_id, project_id=project_one.id)
         assert convs
-        assert all(c.project_id == project_one.id for c in convs)
+        assert all(c.project_id in {project_one.id, None} for c in convs)
+        assert any(c.project_id == project_one.id for c in convs)
+        assert any(c.project_id is None for c in convs)
+        assert all(c.project_id != project_two.id for c in convs)
 
     def test_build_messages(self):
         """Builds the messages array correctly."""

@@ -128,3 +128,105 @@ def test_retry_formatter_exposes_only_the_new_attempt_identifiers() -> None:
 
     assert result.summary == "已创建新的工作流尝试。"
     assert result.payload == {"run_id": "execution-run-2", "runtime_run_id": "runtime-run-2"}
+
+
+def test_outline_formatter_keeps_section_keys_for_harness_chaining() -> None:
+    result = format_public_result(
+        "get_project_outline",
+        {
+            "project_id": "project-1",
+            "project_name": "AI KIMI投资",
+            "outline_count": 2,
+            "drafted_count": 0,
+            "approved_count": 0,
+            "items": [
+                {
+                    "section_key": "executive_summary",
+                    "title": "执行摘要",
+                    "status": "missing",
+                    "has_content": False,
+                    "in_template": True,
+                    "secret_blob": "must-not-leak",
+                },
+                {
+                    "section_key": "solution",
+                    "title": "技术方案",
+                    "status": "draft",
+                    "has_content": False,
+                    "in_template": True,
+                },
+            ],
+        },
+    )
+
+    assert "大纲共 2 章" in result.summary
+    assert result.payload["project_id"] == "project-1"
+    assert result.payload["sections"] == [
+        {
+            "section_key": "executive_summary",
+            "title": "执行摘要",
+            "status": "missing",
+            "has_content": False,
+            "in_template": True,
+        },
+        {
+            "section_key": "solution",
+            "title": "技术方案",
+            "status": "draft",
+            "has_content": False,
+            "in_template": True,
+        },
+    ]
+    assert "secret_blob" not in result.payload["sections"][0]
+
+
+def test_list_sections_formatter_keeps_section_keys() -> None:
+    result = format_public_result(
+        "list_sections",
+        {
+            "items": [
+                {
+                    "id": "sec-1",
+                    "deliverable_id": "del-1",
+                    "section_key": "executive_summary",
+                    "title": "执行摘要",
+                    "status": "draft",
+                    "has_content": False,
+                    "raw_markdown": "must-not-leak",
+                }
+            ],
+            "drafted_count": 0,
+            "approved_count": 0,
+        },
+    )
+
+    assert result.payload["count"] == 1
+    assert result.payload["sections"][0]["section_key"] == "executive_summary"
+    assert "raw_markdown" not in result.payload["sections"][0]
+
+
+def test_write_section_formatter_exposes_safe_section_identifiers() -> None:
+    result = format_public_result(
+        "write_section",
+        {
+            "section_id": "sec-1",
+            "section_key": "executive_summary",
+            "section_title": "执行摘要",
+            "section_version_id": "ver-1",
+            "version_number": 2,
+            "deliverable_id": "del-1",
+            "content_markdown": "must-not-leak",
+            "char_count": 12,
+        },
+    )
+
+    assert "执行摘要" in result.summary
+    assert result.payload == {
+        "section_id": "sec-1",
+        "section_key": "executive_summary",
+        "section_title": "执行摘要",
+        "section_version_id": "ver-1",
+        "version_number": 2,
+        "deliverable_id": "del-1",
+    }
+    assert "content_markdown" not in result.payload

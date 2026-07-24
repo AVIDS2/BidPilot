@@ -38,7 +38,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { ProviderBrandMark, type ProviderBrandId } from "./provider-brand-mark";
-import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
+import { ProductGlareCard } from "@/components/reactbits-product";
 import {
   Plus,
   Search,
@@ -501,14 +501,12 @@ export function ProviderSettingsPage() {
 
   return (
     <div className="min-w-0 space-y-6">
-      <ProductReveal blur={false} className="min-w-0">
+      <div className="min-w-0 space-y-1">
         <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">
-          <ProductShinyText text={t("title")} />
+          {t("title")}
         </h1>
-        <p style={{ color: "var(--muted-foreground)" }}>
-          {t("description")}
-        </p>
-      </ProductReveal>
+        <p className="text-sm text-muted-foreground">{t("description")}</p>
+      </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
@@ -517,31 +515,34 @@ export function ProviderSettingsPage() {
             {t("providersCount", { count: providers.length })}
           </span>
         </div>
-        <ProductElectricFrame radius={12}>
-          <Button onClick={handleAddProvider} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">
-            <Plus className="size-4" />
-            {t("addProvider")}
-          </Button>
-        </ProductElectricFrame>
+        <Button onClick={handleAddProvider} className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">
+          <Plus className="size-4" />
+          {t("addProvider")}
+        </Button>
       </div>
 
       {providers.length === 0 ? (
-        <ProductGlareCard intense>
-          <div className="w-full rounded-xl py-12 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-            <Settings2 className="mx-auto size-10 mb-3 opacity-40" style={{ color: "var(--text-tertiary)" }} />
-            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>{t("noProvidersTitle")}</p>
-            <p className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
-              {t("noProvidersDesc")}
-            </p>
-            <Button
-              onClick={handleAddProvider}
-              className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              <Plus className="size-4" />
-              {t("addFirstProvider")}
-            </Button>
-          </div>
-        </ProductGlareCard>
+        <Card>
+          <CardContent className="py-8">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-muted">
+                <Settings2 className="size-5 text-muted-foreground" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">{t("noProvidersTitle")}</p>
+                <p className="max-w-sm text-xs text-muted-foreground">{t("noProvidersDesc")}</p>
+              </div>
+              <Button
+                onClick={handleAddProvider}
+                size="sm"
+                className="mt-1 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <Plus className="size-4" />
+                {t("addFirstProvider")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <div
           className="grid min-w-0 gap-4"

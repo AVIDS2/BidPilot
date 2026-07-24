@@ -37,4 +37,20 @@ describe("Markdown", () => {
     expect(message.className).toContain("prose-bidpilot");
     expect(message.className).toContain("prose-bidpilot-typora");
   });
+
+  it("wraps tables in a content-sized scroll container for chat bubbles", () => {
+    render(
+      <Markdown variant="assistant" data-testid="assistant-markdown">
+        {"| 项目 | 状态 |\n| --- | --- |\n| Alpha | 活跃 |"}
+      </Markdown>,
+    );
+
+    const markdown = screen.getByTestId("assistant-markdown");
+    const scroll = markdown.querySelector(".markdown-table-scroll");
+    const table = markdown.querySelector("table");
+    expect(scroll).not.toBeNull();
+    expect(table).not.toBeNull();
+    expect(scroll?.contains(table as Node)).toBe(true);
+    expect(markdown.className).toContain("prose-bidpilot-assistant");
+  });
 });

@@ -63,7 +63,13 @@
     "collapse": "Collapse",
     "manage": "Manage",
     "confirmDelete": "Are you sure you want to delete this team?",
-    "noMembers": "No members yet"
+    "noMembers": "No members yet",
+    "pageHint": "Organize members into teams to scope collaboration and permissions.",
+    "summaryTeams": "Teams",
+    "summaryMembers": "Member seats",
+    "summaryWorkspace": "Workspace members",
+    "renameHint": "Click to rename",
+    "noCandidates": "No members available to add"
   },
   "invitationManagement": {
     "title": "Invitations",
@@ -76,14 +82,13 @@
     "inviteSent": "Invitation sent",
     "inviteFailed": "Failed to send invitation",
     "workspaceManagerRequired": "An owner or admin role in this workspace is required.",
-    "revoked": "Invitation revoked",
+    "revoked": "Revoked",
     "revokeFailed": "Failed to revoke invitation",
     "expiresIn": "Expires in {{days}} days",
     "status": "Status",
     "pending": "Pending",
     "accepted": "Accepted",
-    "expired": "Expired",
-    "revoked": "Revoked"
+    "expired": "Expired"
   },
   "workspaceMembers": {
     "title": "Workspace members",
