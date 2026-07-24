@@ -46,6 +46,8 @@ from .assistant_adapter import (
     _ensure_conversation,
     _is_cancellation_followup,
     _is_confirmation_followup,
+    _matches_typed_confirmation,
+    _pending_approval_status_reply,
     _render_runtime_events,
     _sse,
 )
@@ -142,6 +144,69 @@ async def stream_operator_assistant_response(
             reasoning_effort=payload.reasoning_effort,
         ):
             yield event
+        return
+
+    # Typed delete confirmation: user retyped the exact project name.
+    if pending is not None and _matches_typed_confirmation(pending, payload.message):
+        save_message(db, conversation_id, "user", payload.message)
+        async for event in _resume_operator_approval(
+            db,
+            user,
+            conversation_id,
+            AssistantConfirmation(
+                approved=True,
+                tool_name=_approval_capability(db, pending),
+                approval_id=pending.id,
+                arguments={
+                    **(
+                        (pending.payload_json or {}).get("arguments")
+                        if isinstance(pending.payload_json, dict)
+                        else {}
+                    ),
+                    "confirmation_text": payload.message.strip(),
+                },
+            ),
+            provider_type=provider_type,
+            provider_id=provider_id,
+            provider_source=provider_source,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            reasoning_effort=payload.reasoning_effort,
+        ):
+            yield event
+        return
+
+    # Any other free-text while approval is pending must not start a new tool loop
+    # that forgets the pending delete / write. Re-surface the confirmation instead.
+    if pending is not None:
+        save_message(db, conversation_id, "user", payload.message)
+        reply = _pending_approval_status_reply(pending)
+        save_message(db, conversation_id, "assistant", reply)
+        payload_json = pending.payload_json if isinstance(pending.payload_json, dict) else {}
+        yield _sse(
+            "assistant.start",
+            {"conversation_id": conversation_id, "state": "needs_confirmation"},
+        )
+        yield _sse(
+            "assistant.message",
+            {"content": reply, "state": "needs_confirmation"},
+        )
+        confirmation = {
+            "approval_id": pending.id,
+            "tool_name": _approval_capability(db, pending),
+            "arguments": payload_json.get("arguments") or {},
+            "message": payload_json.get("message") or reply,
+            "requires_typed_confirmation": bool(payload_json.get("requires_typed_confirmation")),
+            "state": "needs_confirmation",
+        }
+        if isinstance(payload_json.get("expected_text"), str):
+            confirmation["expected_text"] = payload_json["expected_text"]
+        yield _sse("assistant.confirmation_requested", confirmation)
+        yield _sse(
+            "assistant.end",
+            {"conversation_id": conversation_id, "state": "needs_confirmation"},
+        )
         return
 
     conversation_context = _bounded_conversation_context(db, conversation_id)

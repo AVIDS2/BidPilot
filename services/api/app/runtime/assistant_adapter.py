@@ -79,6 +79,47 @@ async def stream_runtime_assistant_response(
             yield event
         return
 
+    if pending is not None and _matches_typed_confirmation(pending, payload.message):
+        save_message(db, conversation_id, "user", payload.message)
+        payload_json = pending.payload_json if isinstance(pending.payload_json, dict) else {}
+        async for event in _resume_approval(
+            db,
+            user,
+            conversation_id,
+            AssistantConfirmation(
+                approved=True,
+                tool_name=_approval_capability(db, pending),
+                approval_id=pending.id,
+                arguments={
+                    **(payload_json.get("arguments") if isinstance(payload_json.get("arguments"), dict) else {}),
+                    "confirmation_text": payload.message.strip(),
+                },
+            ),
+        ):
+            yield event
+        return
+
+    if pending is not None:
+        save_message(db, conversation_id, "user", payload.message)
+        reply = _pending_approval_status_reply(pending)
+        save_message(db, conversation_id, "assistant", reply)
+        payload_json = pending.payload_json if isinstance(pending.payload_json, dict) else {}
+        yield _sse("assistant.start", {"conversation_id": conversation_id, "state": "needs_confirmation"})
+        yield _sse("assistant.message", {"content": reply, "state": "needs_confirmation"})
+        confirmation = {
+            "approval_id": pending.id,
+            "tool_name": _approval_capability(db, pending),
+            "arguments": payload_json.get("arguments") or {},
+            "message": payload_json.get("message") or reply,
+            "requires_typed_confirmation": bool(payload_json.get("requires_typed_confirmation")),
+            "state": "needs_confirmation",
+        }
+        if isinstance(payload_json.get("expected_text"), str):
+            confirmation["expected_text"] = payload_json["expected_text"]
+        yield _sse("assistant.confirmation_requested", confirmation)
+        yield _sse("assistant.end", {"conversation_id": conversation_id, "state": "needs_confirmation"})
+        return
+
     save_message(db, conversation_id, "user", payload.message)
     run = create_runtime_run(
         db,
@@ -466,12 +507,63 @@ def _approval_capability(db: Session, approval: RuntimeApproval) -> str:
 
 def _is_confirmation_followup(message: str) -> bool:
     normalized = re.sub(r"[。！!?？\s]+", "", message.strip())
-    return normalized in {"确认", "同意", "可以", "行", "好", "开始", "开始吧", "执行", "继续", "确定", "取消", "算了", "不要", "别", "停止", "先不", "不用了"}
+    return normalized in {
+        "确认",
+        "同意",
+        "可以",
+        "行",
+        "好",
+        "好的",
+        "开始",
+        "开始吧",
+        "执行",
+        "继续",
+        "确定",
+        "确认执行",
+        "确认删除",
+        "删除",
+        "删掉",
+        "取消",
+        "算了",
+        "不要",
+        "别",
+        "停止",
+        "先不",
+        "不用了",
+    }
 
 
 def _is_cancellation_followup(message: str) -> bool:
     normalized = re.sub(r"[。！!?？\s]+", "", message.strip())
-    return normalized in {"取消", "算了", "不要", "别", "停止", "先不", "不用了"}
+    return normalized in {"取消", "算了", "不要", "别", "停止", "先不", "不用了", "先别删", "不要删"}
+
+
+def _pending_expected_text(approval: RuntimeApproval) -> str | None:
+    payload = approval.payload_json if isinstance(approval.payload_json, dict) else {}
+    expected = payload.get("expected_text")
+    if isinstance(expected, str) and expected.strip():
+        return expected.strip()
+    return None
+
+
+def _matches_typed_confirmation(approval: RuntimeApproval, message: str) -> bool:
+    expected = _pending_expected_text(approval)
+    if not expected:
+        return False
+    return message.strip() == expected
+
+
+def _pending_approval_status_reply(approval: RuntimeApproval) -> str:
+    payload = approval.payload_json if isinstance(approval.payload_json, dict) else {}
+    capability = str(payload.get("capability") or "操作")
+    message = str(payload.get("message") or "该操作仍在等待你的确认。")
+    expected = _pending_expected_text(approval)
+    if capability == "delete_project":
+        base = "还没有删除。删除操作仍在等待你的确认，不会自动执行。"
+        if expected:
+            return f"{base}请在确认框输入完整项目名称「{expected}」并点确认，或回复「取消」。"
+        return f"{base}请在确认框点确认，或回复「取消」。"
+    return f"上一步操作仍在等待确认，尚未执行。\n\n{message}"
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:

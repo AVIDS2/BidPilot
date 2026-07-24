@@ -48,6 +48,39 @@ def test_public_formatter_owns_user_facing_summary() -> None:
     assert result.payload == {"count": 2}
 
 
+def test_search_projects_formatter_exposes_ids_for_name_collisions() -> None:
+    result = format_public_result(
+        "search_projects",
+        {
+            "items": [
+                {
+                    "id": "aaaaaaaa-1111-2222-3333-444444444444",
+                    "short_id": "aaaaaaaa",
+                    "name": "AI KIMI投资",
+                    "status": "active",
+                    "created_at": "2026-07-20T00:00:00",
+                    "name_collision": True,
+                },
+                {
+                    "id": "bbbbbbbb-1111-2222-3333-444444444444",
+                    "short_id": "bbbbbbbb",
+                    "name": "AI KIMI投资",
+                    "status": "active",
+                    "created_at": "2026-07-21T00:00:00",
+                    "name_collision": True,
+                },
+            ]
+        },
+    )
+
+    assert "同名" in result.summary
+    assert "aaaaaaaa" in result.summary
+    assert "bbbbbbbb" in result.summary
+    assert result.payload["count"] == 2
+    assert result.payload["projects"][0]["id"].startswith("aaaaaaaa")
+    assert result.payload["projects"][0]["short_id"] == "aaaaaaaa"
+
+
 def test_knowledge_portfolio_formatter_exposes_only_safe_aggregate_fields() -> None:
     result = format_public_result(
         "list_knowledge_portfolio",

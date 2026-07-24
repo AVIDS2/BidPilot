@@ -138,21 +138,41 @@ def search_projects(db: Session, user: CurrentUser, arguments: dict) -> Assistan
         normalized_query = query.casefold()
         projects = [project for project in projects if normalized_query in project.name.casefold()]
     projects = projects[:10]
-    result = {
-        "items": [
-            {
-                "id": project.id,
-                "name": project.name,
-                "status": project.status,
-                "scenario_package": project.scenario_package,
-            }
-            for project in projects
+    items = [
+        {
+            "id": project.id,
+            "short_id": project.id[:8],
+            "name": project.name,
+            "status": project.status,
+            "scenario_package": project.scenario_package,
+            "created_at": project.created_at.isoformat() if project.created_at else None,
+        }
+        for project in projects
+    ]
+    # Surface collisions so the model cannot invent "(1)/(2)" labels without ids.
+    name_counts: dict[str, int] = {}
+    for item in items:
+        name_counts[item["name"]] = name_counts.get(item["name"], 0) + 1
+    for item in items:
+        item["name_collision"] = name_counts.get(item["name"], 0) > 1
+    if not items:
+        summary = "没有找到匹配的项目。"
+    elif any(item["name_collision"] for item in items):
+        lines = [
+            f"- {item['name']} · id={item['short_id']} · {item['status']}"
+            + (f" · 创建于 {item['created_at'][:10]}" if item.get("created_at") else "")
+            for item in items
         ]
-    }
+        summary = "找到 {count} 个项目（存在同名，请用 short_id/id 区分）：\n{lines}".format(
+            count=len(items),
+            lines="\n".join(lines),
+        )
+    else:
+        summary = f"找到 {len(items)} 个项目。"
     return AssistantToolResult(
         tool_name="search_projects",
-        result=result,
-        summary=f"找到 {len(projects)} 个项目。",
+        result={"items": items, "count": len(items)},
+        summary=summary,
     )
 
 

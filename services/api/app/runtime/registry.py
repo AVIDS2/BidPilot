@@ -281,11 +281,28 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
     """Format a bounded, user-facing summary without exposing implementation names."""
     count = _result_count(result)
     if capability_name == "search_projects":
-        projects = _public_items(result.get("items") or result.get("projects"), ("id", "name", "status"))
+        projects = _public_items(
+            result.get("items") or result.get("projects"),
+            ("id", "short_id", "name", "status", "created_at", "name_collision", "scenario_package"),
+        )
         payload: dict[str, Any] = {"count": count}
         if projects:
             payload["projects"] = projects
-        return PublicCapabilityResult(f"找到 {count} 个项目。", payload)
+        if any(item.get("name_collision") for item in projects):
+            lines = [
+                f"- {item.get('name')} · id={item.get('short_id') or str(item.get('id') or '')[:8]}"
+                + (
+                    f" · 创建于 {str(item.get('created_at'))[:10]}"
+                    if item.get("created_at")
+                    else ""
+                )
+                for item in projects
+                if isinstance(item, dict)
+            ]
+            summary = f"找到 {count} 个项目（存在同名，请用 id/short_id 区分，不要编造 (1)/(2) 标签）：\n" + "\n".join(lines)
+        else:
+            summary = f"找到 {count} 个项目。"
+        return PublicCapabilityResult(summary, payload)
     if capability_name == "create_demo_workspace" and isinstance(result.get("name"), str):
         summary = (
             f"演示工作区「{result['name']}」已准备好。"

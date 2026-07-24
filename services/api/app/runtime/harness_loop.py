@@ -717,6 +717,9 @@ class StreamingHarness:
             "用户说「自行完成/拟草」时：无资料用 write_section 直接写入；有资料用 start_draft_section。\n"
             "7. outline/sections 工具结果里的 sections[].section_key 必须原样用于后续工具，"
             "不要声称「没有 section_key」。\n"
+            "8. search_projects 结果若存在同名项目，必须用 projects[].id 或 short_id 区分；"
+            "禁止发明「(1)/(2)」标签；删除/打开前先复述目标 id。\n"
+            "9. 若上一轮已进入待确认删除/写入，优先等待用户确认，不要重复搜索或重新发起同类操作。\n"
             f"可用工具：{capability_list}"
         )
         packet = build_untrusted_context_packet(
