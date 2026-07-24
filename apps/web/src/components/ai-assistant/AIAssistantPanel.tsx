@@ -1,4 +1,13 @@
-import { useRef, useEffect, useCallback, useState, useMemo, type ChangeEvent, type ReactNode, type RefObject } from "react";
+import {
+  useRef,
+  useEffect,
+  useCallback,
+  useState,
+  useMemo,
+  type ChangeEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   HistoryIcon,
   PlusIcon,
@@ -122,8 +131,19 @@ interface QueuedPrompt {
   approvalMode: AssistantApprovalMode;
 }
 
-const REASONING_OPTIONS: AssistantReasoningEffort[] = ["low", "medium", "high", "extra", "max"];
-const APPROVAL_MODES: AssistantApprovalMode[] = ["request_approval", "risky_only", "full_access", "custom"];
+const REASONING_OPTIONS: AssistantReasoningEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "extra",
+  "max",
+];
+const APPROVAL_MODES: AssistantApprovalMode[] = [
+  "request_approval",
+  "risky_only",
+  "full_access",
+  "custom",
+];
 
 function createAttachmentId(file: File, index: number) {
   return `att-${Date.now()}-${index}-${file.name.replace(/[^a-zA-Z0-9]/g, "")}`;
@@ -140,12 +160,18 @@ function getFileExtension(name: string) {
   return ext && ext !== name.toUpperCase() ? ext : "FILE";
 }
 
-function getAttachmentPreviewTone(name: string, kind: ComposerAttachmentKind | ChatMessageAttachment["kind"]) {
+function getAttachmentPreviewTone(
+  name: string,
+  kind: ComposerAttachmentKind | ChatMessageAttachment["kind"],
+) {
   const ext = getFileExtension(name);
-  if (kind === "image") return { label: ext === "FILE" ? "IMG" : ext, tone: "image" as const };
+  if (kind === "image")
+    return { label: ext === "FILE" ? "IMG" : ext, tone: "image" as const };
   if (ext === "PDF") return { label: "PDF", tone: "pdf" as const };
-  if (["DOC", "DOCX", "WPS"].includes(ext)) return { label: ext, tone: "doc" as const };
-  if (["XLS", "XLSX", "CSV"].includes(ext)) return { label: ext, tone: "sheet" as const };
+  if (["DOC", "DOCX", "WPS"].includes(ext))
+    return { label: ext, tone: "doc" as const };
+  if (["XLS", "XLSX", "CSV"].includes(ext))
+    return { label: ext, tone: "sheet" as const };
   return { label: ext, tone: "file" as const };
 }
 
@@ -153,7 +179,12 @@ function useObjectUrl(file: File | undefined, enabled: boolean) {
   const [url, setUrl] = useState<string | undefined>();
 
   useEffect(() => {
-    if (!file || !enabled || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
+    if (
+      !file ||
+      !enabled ||
+      typeof URL === "undefined" ||
+      typeof URL.createObjectURL !== "function"
+    ) {
       setUrl(undefined);
       return;
     }
@@ -165,14 +196,24 @@ function useObjectUrl(file: File | undefined, enabled: boolean) {
   return url;
 }
 
-async function ensureAssistantUploadBundle(projectId: string): Promise<BundleRead> {
+async function ensureAssistantUploadBundle(
+  projectId: string,
+): Promise<BundleRead> {
   const bundles = await listBundles(projectId);
-  const existing = bundles.find((bundle) => bundle.label === "AI uploads") ?? bundles[0];
+  const existing =
+    bundles.find((bundle) => bundle.label === "AI uploads") ?? bundles[0];
   if (existing) return existing;
-  return createBundle({ project_id: projectId, label: "AI uploads", source_type: "upload" });
+  return createBundle({
+    project_id: projectId,
+    label: "AI uploads",
+    source_type: "upload",
+  });
 }
 
-function buildOutgoingPrompt(content: string, attachments: ComposerAttachment[]) {
+function buildOutgoingPrompt(
+  content: string,
+  attachments: ComposerAttachment[],
+) {
   const trimmed = content.trim();
   if (trimmed) return trimmed;
   if (attachments.length > 0) return "请结合我上传的附件进行分析。";
@@ -199,11 +240,14 @@ function buildDisplayContent(
 
 function createAttachmentPreviewUrl(attachment: ComposerAttachment) {
   if (attachment.kind !== "image") return undefined;
-  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function") return undefined;
+  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function")
+    return undefined;
   return URL.createObjectURL(attachment.file);
 }
 
-function toMessageAttachments(attachments: ComposerAttachment[]): ChatMessageAttachment[] {
+function toMessageAttachments(
+  attachments: ComposerAttachment[],
+): ChatMessageAttachment[] {
   return attachments.map((attachment) => ({
     id: attachment.id,
     name: attachment.file.name,
@@ -215,7 +259,9 @@ function toMessageAttachments(attachments: ComposerAttachment[]): ChatMessageAtt
   }));
 }
 
-function toRequestAttachments(attachments: ComposerAttachment[]): AssistantRequestAttachment[] {
+function toRequestAttachments(
+  attachments: ComposerAttachment[],
+): AssistantRequestAttachment[] {
   return attachments.map((attachment) => ({
     id: attachment.assistantAttachmentId ?? attachment.id,
     name: attachment.file.name,
@@ -229,9 +275,15 @@ function toRequestAttachments(attachments: ComposerAttachment[]): AssistantReque
   }));
 }
 
-/** Plain shadcn-style composer shell — no electric border / spark effects. */
-function ComposerFrame({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+/** Keeps the composer aligned with the conversation column in every layout. */
+function ComposerFrame({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={className}>{children}</div>;
 }
 
 /* ─── Quick action chips shown in empty state ─── */
@@ -273,10 +325,20 @@ function normalizeAssistantMarkdown(content: string): string {
     .map((line) => {
       const trimmed = line.trim();
       const looksLikeMath =
-        /\\(frac|sum|int|sqrt|alpha|beta|gamma|theta|pi|sin|cos|tan|lim|cdot|times|leq|geq|neq|infty|to)/.test(trimmed) ||
-        /[=<>]/.test(trimmed);
-      const alreadyDelimited = trimmed.startsWith("$") || trimmed.startsWith("\\(") || trimmed.startsWith("\\[");
-      if (trimmed && looksLikeMath && !alreadyDelimited && !trimmed.startsWith("- ") && !trimmed.startsWith("* ")) {
+        /\\(frac|sum|int|sqrt|alpha|beta|gamma|theta|pi|sin|cos|tan|lim|cdot|times|leq|geq|neq|infty|to)/.test(
+          trimmed,
+        ) || /[=<>]/.test(trimmed);
+      const alreadyDelimited =
+        trimmed.startsWith("$") ||
+        trimmed.startsWith("\\(") ||
+        trimmed.startsWith("\\[");
+      if (
+        trimmed &&
+        looksLikeMath &&
+        !alreadyDelimited &&
+        !trimmed.startsWith("- ") &&
+        !trimmed.startsWith("* ")
+      ) {
         return `$$${trimmed}$$`;
       }
       return line;
@@ -307,7 +369,9 @@ function AttachmentPreviewCard({
   const objectUrl = useObjectUrl(file, isImage && !previewUrl);
   const imageUrl = previewUrl ?? objectUrl;
   const { label, tone } = getAttachmentPreviewTone(name, kind);
-  const statusLabel = status ? t(`attachments.status.${status}`, { defaultValue: status }) : null;
+  const statusLabel = status
+    ? t(`attachments.status.${status}`, { defaultValue: status })
+    : null;
   const iconTone = {
     image: "bg-emerald-500/12 text-emerald-500 border-emerald-500/20",
     pdf: "bg-red-500/12 text-red-500 border-red-500/20",
@@ -340,18 +404,31 @@ function AttachmentPreviewCard({
         </div>
       ) : (
         <>
-          <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border", iconTone)}>
-            {tone === "pdf" || tone === "doc" ? <FileTextIcon className="h-5 w-5" /> : <FileIcon className="h-5 w-5" />}
+          <div
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
+              iconTone,
+            )}
+          >
+            {tone === "pdf" || tone === "doc" ? (
+              <FileTextIcon className="h-5 w-5" />
+            ) : (
+              <FileIcon className="h-5 w-5" />
+            )}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[13px] font-semibold tracking-[-0.01em]">{name}</div>
+            <div className="truncate text-[13px] font-semibold tracking-[-0.01em]">
+              {name}
+            </div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span>{label}</span>
               <span className="h-0.5 w-0.5 rounded-full bg-current opacity-60" />
               <span>{formatFileSize(size)}</span>
             </div>
             {statusLabel && status !== "ready" && (
-              <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{statusLabel}</div>
+              <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                {statusLabel}
+              </div>
             )}
           </div>
         </>
@@ -388,9 +465,15 @@ function MessageBubble({
 }) {
   const isUser = msg.role === "user";
   if (isUser) {
-    const hasAttachments = Boolean(msg.attachments && msg.attachments.length > 0);
+    const hasAttachments = Boolean(
+      msg.attachments && msg.attachments.length > 0,
+    );
     return (
-      <FadeContent duration={260} threshold={0.02} className="flex animate-fade-in flex-col items-end gap-2">
+      <FadeContent
+        duration={260}
+        threshold={0.02}
+        className="flex animate-fade-in flex-col items-end gap-2"
+      >
         {hasAttachments && (
           <div className="flex max-w-[94%] flex-wrap justify-end gap-2 sm:max-w-[88%]">
             {msg.attachments?.map((attachment) => (
@@ -410,12 +493,16 @@ function MessageBubble({
             <MessageContent
               className="rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 text-[14px] leading-7 shadow-[0_12px_32px_oklch(0_0_0/0.10)]"
               style={{
-                background: "color-mix(in oklch, var(--muted) 82%, var(--background) 18%)",
+                background:
+                  "color-mix(in oklch, var(--muted) 82%, var(--background) 18%)",
                 color: "var(--foreground)",
-                borderColor: "color-mix(in oklch, var(--border) 58%, transparent)",
+                borderColor:
+                  "color-mix(in oklch, var(--border) 58%, transparent)",
               }}
             >
-              <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+              <div className="whitespace-pre-wrap break-words">
+                {msg.content}
+              </div>
             </MessageContent>
           </Message>
         )}
@@ -428,7 +515,10 @@ function MessageBubble({
   const parts = msg.transcriptParts ?? [];
   const hasTurnParts = parts.some((part) => part.kind === "turn");
   const turnIds = useMemo(
-    () => new Set(parts.filter((part) => part.kind === "turn").map((part) => part.turnId)),
+    () =>
+      new Set(
+        parts.filter((part) => part.kind === "turn").map((part) => part.turnId),
+      ),
     [parts],
   );
   const toolsByTurn = useMemo(() => {
@@ -465,9 +555,18 @@ function MessageBubble({
 
   const thinkingDots = (
     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "0ms" }} />
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "150ms" }} />
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" style={{ animationDelay: "300ms" }} />
+      <span
+        className="h-1.5 w-1.5 animate-pulse rounded-full bg-current"
+        style={{ animationDelay: "0ms" }}
+      />
+      <span
+        className="h-1.5 w-1.5 animate-pulse rounded-full bg-current"
+        style={{ animationDelay: "150ms" }}
+      />
+      <span
+        className="h-1.5 w-1.5 animate-pulse rounded-full bg-current"
+        style={{ animationDelay: "300ms" }}
+      />
     </span>
   );
 
@@ -498,7 +597,9 @@ function MessageBubble({
                 onConfigureProvider={onConfigureProvider}
               />
             )}
-            {!msg.content && parts.every((part) => part.kind !== "narrative") && thinkingDots}
+            {!msg.content &&
+              parts.every((part) => part.kind !== "narrative") &&
+              thinkingDots}
           </>
         ) : (
           <>
@@ -573,7 +674,9 @@ function HistorySidebar({
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
     const q = searchQuery.toLowerCase();
-    return conversations.filter((c) => (c.title || "").toLowerCase().includes(q));
+    return conversations.filter((c) =>
+      (c.title || "").toLowerCase().includes(q),
+    );
   }, [conversations, searchQuery]);
 
   const groups = useMemo(() => groupConversations(filtered), [filtered]);
@@ -586,41 +689,46 @@ function HistorySidebar({
 
   return (
     <div
+      data-testid={
+        docked ? "assistant-history-rail" : "assistant-history-drawer"
+      }
       className={cn(
         "flex h-full shrink-0 flex-col border-r bg-card",
         docked
-          ? "w-[min(16.5rem,100%)] border-border bg-muted/20 shadow-none"
+          ? "w-72 border-border bg-card shadow-none max-lg:hidden"
           : "w-[min(20rem,calc(100vw-1.25rem))] shadow-xl",
       )}
       style={{ borderColor: "var(--border)" }}
     >
       {/* Header */}
-      <div className="flex shrink-0 flex-col gap-2 border-b p-3" style={{ borderColor: "var(--border)" }}>
+      <div
+        className="flex shrink-0 flex-col gap-2 border-b p-3"
+        style={{ borderColor: "var(--border)" }}
+      >
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-muted-foreground">
             {t("panel.history")}
           </span>
           {!docked && (
-            <Button variant="ghost" size="icon-xs" onClick={onClose} title={t("panel.closeHistory")}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={onClose}
+              title={t("panel.closeHistory")}
+            >
               <PanelRightCloseIcon className="size-3" />
             </Button>
           )}
         </div>
-        {docked ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 w-full justify-start gap-2 rounded-lg text-sm font-normal"
-            onClick={onNew}
-          >
-            <PlusIcon className="size-3.5" />
-            {t("panel.newConversation")}
-          </Button>
-        ) : (
-          <Button variant="ghost" size="icon-xs" onClick={onNew} title={t("panel.newConversation")}>
-            <PlusIcon className="size-3" />
-          </Button>
-        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 w-full justify-start gap-2 rounded-lg text-sm font-normal"
+          onClick={onNew}
+        >
+          <PlusIcon className="size-3.5" />
+          {t("panel.newConversation")}
+        </Button>
       </div>
 
       {/* Search */}
@@ -682,15 +790,25 @@ function HistorySidebar({
                           {isEditing ? (
                             <input
                               ref={renameInputRef}
-                              aria-label={t("history.rename", { defaultValue: "Rename conversation" })}
+                              aria-label={t("history.rename", {
+                                defaultValue: "Rename conversation",
+                              })}
                               value={editingTitle}
-                              onChange={(e) => onEditTitleChange(e.target.value)}
+                              onChange={(e) =>
+                                onEditTitleChange(e.target.value)
+                              }
                               onClick={(e) => e.stopPropagation()}
                               onDoubleClick={(e) => e.stopPropagation()}
                               onBlur={onCommitRename}
                               onKeyDown={(e) => {
-                                if (e.key === "Enter") { e.preventDefault(); onCommitRename(); }
-                                if (e.key === "Escape") { e.preventDefault(); onCancelRename(); }
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  onCommitRename();
+                                }
+                                if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  onCancelRename();
+                                }
                               }}
                               className="w-full rounded border bg-background px-1.5 py-0.5 text-xs font-medium outline-none"
                               style={{ borderColor: "var(--border)" }}
@@ -705,11 +823,14 @@ function HistorySidebar({
                                   onRename(conversation.id, conversation.title);
                                 }}
                               >
-                                {conversation.title || t("panel.untitledConversation")}
+                                {conversation.title ||
+                                  t("panel.untitledConversation")}
                               </div>
                               <div className="text-[10px] mt-0.5 text-muted-foreground/60">
                                 {conversation.created_at
-                                  ? new Date(conversation.created_at).toLocaleDateString()
+                                  ? new Date(
+                                      conversation.created_at,
+                                    ).toLocaleDateString()
                                   : ""}
                               </div>
                               <button
@@ -784,14 +905,18 @@ export function AIAssistantPanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   useEffect(() => {
     if (isWorkspace) {
-      setHistoryOpen(true);
+      setHistoryOpen(false);
       void refreshConversations();
     }
   }, [isWorkspace, refreshConversations]);
   const [historySearch, setHistorySearch] = useState("");
-  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [editingConversationId, setEditingConversationId] = useState<
+    string | null
+  >(null);
   const [editingTitle, setEditingTitle] = useState("");
-  const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
+  const [renamingConversationId, setRenamingConversationId] = useState<
+    string | null
+  >(null);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [configMenuOpen, setConfigMenuOpen] = useState<ConfigMenu>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -799,9 +924,12 @@ export function AIAssistantPanel({
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfig[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const focusComposer = useCallback(() => {
+    if (typeof document === "undefined") return;
     const el =
       inputRef.current ||
-      (document.querySelector('[aria-label="' + t("inputPlaceholder") + '"]') as HTMLTextAreaElement | null);
+      (document.querySelector(
+        '[aria-label="' + t("inputPlaceholder") + '"]',
+      ) as HTMLTextAreaElement | null);
     el?.focus();
   }, [t]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -809,10 +937,16 @@ export function AIAssistantPanel({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const queueDrainingRef = useRef(false);
   const isBusy = isAssistantBusy(state.status);
-  const isUploadingAttachments = attachments.some((attachment) => attachment.status === "uploading");
-  const canSend = Boolean(input.trim() || attachments.length > 0) && !isUploadingAttachments;
+  const isUploadingAttachments = attachments.some(
+    (attachment) => attachment.status === "uploading",
+  );
+  const canSend =
+    Boolean(input.trim() || attachments.length > 0) && !isUploadingAttachments;
   const selectedProvider = useMemo(
-    () => providerConfigs.find((provider) => provider.id === state.selectedProviderConfigId) ?? null,
+    () =>
+      providerConfigs.find(
+        (provider) => provider.id === state.selectedProviderConfigId,
+      ) ?? null,
     [providerConfigs, state.selectedProviderConfigId],
   );
   const openProviderSettings = useCallback(() => {
@@ -820,10 +954,18 @@ export function AIAssistantPanel({
     window.history.pushState({}, "", "/settings/providers");
     window.dispatchEvent(new PopStateEvent("popstate"));
   }, [close]);
-  const modelLabel = selectedProvider?.model ?? t("model.platformDefault", { defaultValue: "Platform default" });
-  const reasoningLabel = t(`reasoning.options.${state.reasoningEffort}`, { defaultValue: state.reasoningEffort });
-  const approvalLabel = t(`approval.options.${state.approvalMode}`, { defaultValue: state.approvalMode });
-  const approvalHint = t(`approval.hints.${state.approvalMode}`, { defaultValue: "" });
+  const modelLabel =
+    selectedProvider?.model ??
+    t("model.platformDefault", { defaultValue: "Platform default" });
+  const reasoningLabel = t(`reasoning.options.${state.reasoningEffort}`, {
+    defaultValue: state.reasoningEffort,
+  });
+  const approvalLabel = t(`approval.options.${state.approvalMode}`, {
+    defaultValue: state.approvalMode,
+  });
+  const approvalHint = t(`approval.hints.${state.approvalMode}`, {
+    defaultValue: "",
+  });
   const executionItemsByMessageId = useMemo(() => {
     const grouped = new Map<string, AssistantExecutionItem[]>();
     for (const item of state.executionItems) {
@@ -851,10 +993,10 @@ export function AIAssistantPanel({
   }, [input, resizeComposer]);
 
   useEffect(() => {
-    if (state.isOpen && state.mode === "panel") {
-      setTimeout(() => focusComposer(), 150);
-    }
-  }, [state.isOpen, state.mode]);
+    if (!state.isOpen || state.mode !== "panel") return;
+    const timeoutId = window.setTimeout(focusComposer, 150);
+    return () => window.clearTimeout(timeoutId);
+  }, [focusComposer, state.isOpen, state.mode]);
 
   useEffect(() => {
     if (!state.isOpen || state.mode !== "panel") return;
@@ -865,7 +1007,9 @@ export function AIAssistantPanel({
         setProviderConfigs(result.data);
         if (
           state.selectedProviderConfigId &&
-          !result.data.some((provider) => provider.id === state.selectedProviderConfigId)
+          !result.data.some(
+            (provider) => provider.id === state.selectedProviderConfigId,
+          )
         ) {
           setSelectedProviderConfig(null);
         }
@@ -876,7 +1020,12 @@ export function AIAssistantPanel({
     return () => {
       cancelled = true;
     };
-  }, [setSelectedProviderConfig, state.isOpen, state.mode, state.selectedProviderConfigId]);
+  }, [
+    setSelectedProviderConfig,
+    state.isOpen,
+    state.mode,
+    state.selectedProviderConfigId,
+  ]);
 
   useEffect(() => {
     if (!state.isOpen) {
@@ -895,68 +1044,83 @@ export function AIAssistantPanel({
     }
   }, [editingConversationId]);
 
-  const uploadAttachmentRecords = useCallback(async (records: ComposerAttachment[], projectId?: string) => {
-    let bundlePromise: Promise<BundleRead> | null = projectId ? ensureAssistantUploadBundle(projectId) : null;
-    for (const record of records) {
-      try {
-        const assistantAttachment = await uploadAssistantAttachment(record.file, record.kind);
-        setAttachments((current) =>
-          current.map((attachment) =>
-            attachment.id === record.id
-              ? {
-                  ...attachment,
-                  status: "uploaded",
-                  assistantAttachmentId: assistantAttachment.id,
-                  mimeType: assistantAttachment.mime_type,
-                  extractionStatus: assistantAttachment.extraction_status,
-                  extractedText: assistantAttachment.extracted_text,
-                  error: assistantAttachment.error ?? undefined,
-                }
-              : attachment,
-          ),
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Attachment upload failed";
-        setAttachments((current) =>
-          current.map((attachment) =>
-            attachment.id === record.id
-              ? { ...attachment, status: "failed", extractionStatus: "failed", error: message }
-              : attachment,
-          ),
-        );
-        continue;
-      }
+  const uploadAttachmentRecords = useCallback(
+    async (records: ComposerAttachment[], projectId?: string) => {
+      let bundlePromise: Promise<BundleRead> | null = projectId
+        ? ensureAssistantUploadBundle(projectId)
+        : null;
+      for (const record of records) {
+        try {
+          const assistantAttachment = await uploadAssistantAttachment(
+            record.file,
+            record.kind,
+          );
+          setAttachments((current) =>
+            current.map((attachment) =>
+              attachment.id === record.id
+                ? {
+                    ...attachment,
+                    status: "uploaded",
+                    assistantAttachmentId: assistantAttachment.id,
+                    mimeType: assistantAttachment.mime_type,
+                    extractionStatus: assistantAttachment.extraction_status,
+                    extractedText: assistantAttachment.extracted_text,
+                    error: assistantAttachment.error ?? undefined,
+                  }
+                : attachment,
+            ),
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Attachment upload failed";
+          setAttachments((current) =>
+            current.map((attachment) =>
+              attachment.id === record.id
+                ? {
+                    ...attachment,
+                    status: "failed",
+                    extractionStatus: "failed",
+                    error: message,
+                  }
+                : attachment,
+            ),
+          );
+          continue;
+        }
 
-      if (!bundlePromise) continue;
+        if (!bundlePromise) continue;
 
-      try {
-        const bundle = await bundlePromise;
-        const document = await uploadDocument(
-          bundle.id,
-          record.file,
-          undefined,
-          record.assistantAttachmentId,
-        );
-        setAttachments((current) =>
-          current.map((attachment) =>
-            attachment.id === record.id
-              ? { ...attachment, documentId: document.id }
-              : attachment,
-          ),
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Upload failed";
-        bundlePromise = null;
-        setAttachments((current) =>
-          current.map((attachment) =>
-            attachment.id === record.id
-              ? { ...attachment, error: attachment.error ?? message }
-              : attachment,
-          ),
-        );
+        try {
+          const bundle = await bundlePromise;
+          const document = await uploadDocument(
+            bundle.id,
+            record.file,
+            undefined,
+            record.assistantAttachmentId,
+          );
+          setAttachments((current) =>
+            current.map((attachment) =>
+              attachment.id === record.id
+                ? { ...attachment, documentId: document.id }
+                : attachment,
+            ),
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Upload failed";
+          bundlePromise = null;
+          setAttachments((current) =>
+            current.map((attachment) =>
+              attachment.id === record.id
+                ? { ...attachment, error: attachment.error ?? message }
+                : attachment,
+            ),
+          );
+        }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   const handleAttachmentInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>, kind: ComposerAttachmentKind) => {
@@ -965,12 +1129,15 @@ export function AIAssistantPanel({
       if (files.length === 0) return;
 
       const projectId = state.currentContext.projectId;
-      const records = files.map((file, index) => ({
-        id: createAttachmentId(file, index),
-        file,
-        kind,
-        status: "uploading",
-      }) satisfies ComposerAttachment);
+      const records = files.map(
+        (file, index) =>
+          ({
+            id: createAttachmentId(file, index),
+            file,
+            kind,
+            status: "uploading",
+          }) satisfies ComposerAttachment,
+      );
 
       setAttachmentMenuOpen(false);
       setConfigMenuOpen(null);
@@ -982,7 +1149,9 @@ export function AIAssistantPanel({
   );
 
   const handleRemoveAttachment = useCallback((id: string) => {
-    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
+    setAttachments((current) =>
+      current.filter((attachment) => attachment.id !== id),
+    );
   }, []);
 
   const handleAddFromProject = useCallback(() => {
@@ -1031,10 +1200,24 @@ export function AIAssistantPanel({
       providerConfigId: state.selectedProviderConfigId,
       reasoningEffort: state.reasoningEffort,
     });
-  }, [attachments, input, isBusy, isUploadingAttachments, sendMessage, state.reasoningEffort, state.selectedProviderConfigId, t]);
+  }, [
+    attachments,
+    input,
+    isBusy,
+    isUploadingAttachments,
+    sendMessage,
+    state.reasoningEffort,
+    state.selectedProviderConfigId,
+    t,
+  ]);
 
   useEffect(() => {
-    if (queueDrainingRef.current || isAssistantBusy(state.status) || queuedPrompts.length === 0) return;
+    if (
+      queueDrainingRef.current ||
+      isAssistantBusy(state.status) ||
+      queuedPrompts.length === 0
+    )
+      return;
 
     const nextPrompt = queuedPrompts[0];
     queueDrainingRef.current = true;
@@ -1085,15 +1268,24 @@ export function AIAssistantPanel({
         approvalMode: state.approvalMode,
       });
     },
-    [isBusy, sendMessage, state.approvalMode, state.reasoningEffort, state.selectedProviderConfigId],
+    [
+      isBusy,
+      sendMessage,
+      state.approvalMode,
+      state.reasoningEffort,
+      state.selectedProviderConfigId,
+    ],
   );
 
-  const beginRenameConversation = useCallback((id: string, title: string | null) => {
-    setAttachmentMenuOpen(false);
-    setConfigMenuOpen(null);
-    setEditingConversationId(id);
-    setEditingTitle(title || "");
-  }, []);
+  const beginRenameConversation = useCallback(
+    (id: string, title: string | null) => {
+      setAttachmentMenuOpen(false);
+      setConfigMenuOpen(null);
+      setEditingConversationId(id);
+      setEditingTitle(title || "");
+    },
+    [],
+  );
 
   const cancelRenameConversation = useCallback(() => {
     setEditingConversationId(null);
@@ -1103,7 +1295,10 @@ export function AIAssistantPanel({
   const commitRenameConversation = useCallback(async () => {
     if (!editingConversationId) return;
     const normalizedTitle = editingTitle.trim();
-    if (!normalizedTitle) { cancelRenameConversation(); return; }
+    if (!normalizedTitle) {
+      cancelRenameConversation();
+      return;
+    }
     try {
       setRenamingConversationId(editingConversationId);
       await renameChatConversation(editingConversationId, normalizedTitle);
@@ -1115,30 +1310,45 @@ export function AIAssistantPanel({
       setRenamingConversationId(null);
       cancelRenameConversation();
     }
-  }, [cancelRenameConversation, editingConversationId, editingTitle, refreshConversations, updateConversationTitle]);
+  }, [
+    cancelRenameConversation,
+    editingConversationId,
+    editingTitle,
+    refreshConversations,
+    updateConversationTitle,
+  ]);
 
   const startConversationOnSurface = useCallback(() => {
     startNewConversation();
-    // Floating panel can hide history; workspace keeps the rail open.
-    if (!isWorkspace) setHistoryOpen(false);
-  }, [isWorkspace, startNewConversation]);
+    setHistoryOpen(false);
+  }, [startNewConversation]);
 
-  const loadConversationOnSurface = useCallback(async (conversationId: string) => {
-    await loadConversation(conversationId);
-    if (!isWorkspace) setHistoryOpen(false);
-  }, [isWorkspace, loadConversation]);
+  const loadConversationOnSurface = useCallback(
+    async (conversationId: string) => {
+      await loadConversation(conversationId);
+      setHistoryOpen(false);
+    },
+    [loadConversation],
+  );
 
-  const handleDeleteConversation = useCallback(async (id: string) => {
-    try {
-      await deleteChatConversation(id);
-      if (state.currentConversationId === id) {
-        startConversationOnSurface();
+  const handleDeleteConversation = useCallback(
+    async (id: string) => {
+      try {
+        await deleteChatConversation(id);
+        if (state.currentConversationId === id) {
+          startConversationOnSurface();
+        }
+        await refreshConversations();
+      } catch (error) {
+        console.error("Failed to delete conversation:", error);
       }
-      await refreshConversations();
-    } catch (error) {
-      console.error("Failed to delete conversation:", error);
-    }
-  }, [refreshConversations, startConversationOnSurface, state.currentConversationId]);
+    },
+    [
+      refreshConversations,
+      startConversationOnSurface,
+      state.currentConversationId,
+    ],
+  );
 
   if (!isWorkspace && (!state.isOpen || state.mode !== "panel")) return null;
 
@@ -1165,53 +1375,94 @@ export function AIAssistantPanel({
           "flex shrink-0 items-center justify-between gap-2 border-b px-3",
           isWorkspace ? "h-12" : "min-h-14 px-3.5",
         )}
-        style={{ borderColor: "var(--border)", background: "var(--background)" }}
+        style={{
+          borderColor: "var(--border)",
+          background: "var(--background)",
+        }}
       >
         <div className="flex min-w-0 items-center gap-2">
-          {!isWorkspace && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn("text-muted-foreground", historyOpen && "bg-muted text-foreground")}
-              onClick={() => {
-                setAttachmentMenuOpen(false);
-                setConfigMenuOpen(null);
-                setHistoryOpen((v) => !v);
-              }}
-              title={t("panel.history")}
-            >
-              <HistoryIcon className="size-4" />
-            </Button>
-          )}
-          <AgentMark decorative className={cn(isWorkspace ? "size-7" : "size-8")} />
+          <Button
+            data-testid="assistant-history-toggle"
+            variant="ghost"
+            size="icon-sm"
+            className={cn(
+              "text-muted-foreground",
+              historyOpen && "bg-muted text-foreground",
+              isWorkspace && "lg:hidden",
+            )}
+            onClick={() => {
+              setAttachmentMenuOpen(false);
+              setConfigMenuOpen(null);
+              setHistoryOpen((v) => !v);
+            }}
+            title={t("panel.history")}
+          >
+            <HistoryIcon className="size-4" />
+          </Button>
+          <AgentMark
+            decorative
+            className={cn(isWorkspace ? "size-7" : "size-8")}
+          />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium text-foreground">
               {state.currentConversationId
                 ? (Array.isArray(state.conversations)
-                  ? state.conversations.find((item) => item.id === state.currentConversationId)?.title
-                  : null) || t("panel.untitledConversation")
+                    ? state.conversations.find(
+                        (item) => item.id === state.currentConversationId,
+                      )?.title
+                    : null) || t("panel.untitledConversation")
                 : t("title")}
             </div>
             {!isWorkspace && (
               <div className="truncate text-[11px] text-muted-foreground">
                 {state.status === "idle"
                   ? t("status.ready", { defaultValue: "Ready" })
-                  : t(`status.${state.status}`, { defaultValue: t("thinking") })}
+                  : t(`status.${state.status}`, {
+                      defaultValue: t("thinking"),
+                    })}
               </div>
             )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          {!isWorkspace && (
-            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={startConversationOnSurface} title={t("panel.newConversation")}>
+          {isWorkspace ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground lg:hidden"
+              onClick={startConversationOnSurface}
+              title={t("panel.newConversation")}
+            >
+              <PlusIcon className="size-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
+              onClick={startConversationOnSurface}
+              title={t("panel.newConversation")}
+            >
               <PlusIcon className="size-4" />
             </Button>
           )}
-          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={() => toggle("command")} title={t("panel.openCommand")}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
+            onClick={() => toggle("command")}
+            title={t("panel.openCommand")}
+          >
             <CommandIcon className="size-4" />
           </Button>
           {!isWorkspace && (
-            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={close} title={t("panel.close")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
+              onClick={close}
+              title={t("panel.close")}
+            >
               <PanelRightCloseIcon className="size-4" />
             </Button>
           )}
@@ -1224,11 +1475,18 @@ export function AIAssistantPanel({
         </div>
       )}
 
-      {/* Body: docked history (workspace) or overlay (panel) + messages */}
-      <div className={cn("relative flex min-h-0 flex-1 overflow-hidden", isWorkspace ? "flex-row" : "flex-col")}>
+      {/* The conversation pane owns both scrolling messages and the composer. */}
+      <div
+        className={cn(
+          "relative flex min-h-0 flex-1 overflow-hidden",
+          isWorkspace ? "flex-row" : "flex-col",
+        )}
+      >
         {isWorkspace && (
           <HistorySidebar
-            conversations={Array.isArray(state.conversations) ? state.conversations : []}
+            conversations={
+              Array.isArray(state.conversations) ? state.conversations : []
+            }
             currentId={state.currentConversationId}
             searchQuery={historySearch}
             onSearchChange={setHistorySearch}
@@ -1249,16 +1507,26 @@ export function AIAssistantPanel({
           />
         )}
 
-        {!isWorkspace && historyOpen && (
+        {historyOpen && (
           <>
             <button
               aria-label={t("panel.closeHistory")}
-              className="absolute inset-0 z-10 bg-black/20 backdrop-blur-[1px]"
+              className={cn(
+                "absolute inset-0 z-10 bg-black/20 backdrop-blur-[1px]",
+                isWorkspace && "lg:hidden",
+              )}
               onClick={() => setHistoryOpen(false)}
             />
-            <div className="absolute inset-y-0 left-0 z-20 max-w-full">
+            <div
+              className={cn(
+                "absolute inset-y-0 left-0 z-20 max-w-full",
+                isWorkspace && "lg:hidden",
+              )}
+            >
               <HistorySidebar
-                conversations={Array.isArray(state.conversations) ? state.conversations : []}
+                conversations={
+                  Array.isArray(state.conversations) ? state.conversations : []
+                }
                 currentId={state.currentConversationId}
                 searchQuery={historySearch}
                 onSearchChange={setHistorySearch}
@@ -1280,404 +1548,521 @@ export function AIAssistantPanel({
           </>
         )}
 
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <ChatContainerRoot className="relative h-full">
-          <ChatContainerContent className="gap-3 px-3 py-3 sm:px-4 sm:py-4">
-            {state.messages.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                <AgentMark decorative className="mx-auto mb-4 size-14 drop-shadow-[0_18px_50px_oklch(0_0_0/0.16)]" />
-                <h3 className="mb-1 text-base font-semibold text-foreground">
-                  {t("welcome.title")}
-                </h3>
-                <p className="mb-6 max-w-[28ch] text-sm leading-6 text-muted-foreground">{t("welcome.description")}</p>
-                <QuickActions onSelect={handleQuickAction} />
-              </div>
-            ) : (
-              <>
-                {state.messages.map((msg) => {
-                  const turnItems = executionItemsByMessageId.get(msg.id) ?? [];
-                  const pendingConfirmation =
-                    state.pendingConfirmation?.messageId === msg.id ? state.pendingConfirmation : null;
+        <div
+          data-testid="assistant-conversation-pane"
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
+        >
+          <div
+            data-testid="assistant-message-pane"
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          >
+            <ChatContainerRoot className="relative min-h-0 flex-1">
+              <ChatContainerContent
+                className={cn(
+                  "gap-3 px-3 py-3 sm:px-4 sm:py-4",
+                  isWorkspace && "mx-auto w-full max-w-4xl px-4 py-5 sm:px-6",
+                )}
+              >
+                {state.messages.length === 0 ? (
+                  <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+                    <AgentMark
+                      decorative
+                      className="mx-auto mb-4 size-14 shadow-sm"
+                    />
+                    <h3 className="mb-1 text-base font-semibold text-foreground">
+                      {t("welcome.title")}
+                    </h3>
+                    <p className="mb-6 max-w-[28ch] text-sm leading-6 text-muted-foreground">
+                      {t("welcome.description")}
+                    </p>
+                    <QuickActions onSelect={handleQuickAction} />
+                  </div>
+                ) : (
+                  <>
+                    {state.messages.map((msg) => {
+                      const turnItems =
+                        executionItemsByMessageId.get(msg.id) ?? [];
+                      const pendingConfirmation =
+                        state.pendingConfirmation?.messageId === msg.id
+                          ? state.pendingConfirmation
+                          : null;
 
-                  return (
-                    <div key={msg.id} className="flex flex-col gap-2">
-                      {msg.role === "assistant" && pendingConfirmation && (
+                      return (
+                        <div key={msg.id} className="flex flex-col gap-2">
+                          {msg.role === "assistant" && pendingConfirmation && (
+                            <AssistantConfirmationCard
+                              confirmation={pendingConfirmation}
+                              onConfirm={(confirmationText) =>
+                                void confirmAssistantAction(
+                                  true,
+                                  confirmationText,
+                                )
+                              }
+                              onCancel={() =>
+                                void confirmAssistantAction(false)
+                              }
+                            />
+                          )}
+                          <MessageBubble
+                            msg={msg}
+                            activityItems={
+                              msg.role === "assistant" ? turnItems : []
+                            }
+                            onCancelWorkflow={
+                              msg.role === "assistant"
+                                ? cancelWorkflow
+                                : undefined
+                            }
+                            onConfigureProvider={
+                              msg.role === "assistant"
+                                ? openProviderSettings
+                                : undefined
+                            }
+                          />
+                        </div>
+                      );
+                    })}
+                    {unassignedExecutionItems.length > 0 && (
+                      <AssistantActivityTimeline
+                        items={unassignedExecutionItems}
+                        onCancelWorkflow={cancelWorkflow}
+                        onConfigureProvider={openProviderSettings}
+                      />
+                    )}
+                    {state.pendingConfirmation &&
+                      !state.pendingConfirmation.messageId && (
                         <AssistantConfirmationCard
-                          confirmation={pendingConfirmation}
-                          onConfirm={(confirmationText) => void confirmAssistantAction(true, confirmationText)}
+                          confirmation={state.pendingConfirmation}
+                          onConfirm={(confirmationText) =>
+                            void confirmAssistantAction(true, confirmationText)
+                          }
                           onCancel={() => void confirmAssistantAction(false)}
                         />
                       )}
-                      <MessageBubble
-                        msg={msg}
-                        activityItems={msg.role === "assistant" ? turnItems : []}
-                        onCancelWorkflow={msg.role === "assistant" ? cancelWorkflow : undefined}
-                        onConfigureProvider={msg.role === "assistant" ? openProviderSettings : undefined}
-                      />
-                    </div>
-                  );
-                })}
-                {unassignedExecutionItems.length > 0 && (
-                  <AssistantActivityTimeline
-                    items={unassignedExecutionItems}
-                    onCancelWorkflow={cancelWorkflow}
-                    onConfigureProvider={openProviderSettings}
-                  />
+                    <ChatContainerScrollAnchor />
+                  </>
                 )}
-                {state.pendingConfirmation && !state.pendingConfirmation.messageId && (
-                  <AssistantConfirmationCard
-                    confirmation={state.pendingConfirmation}
-                    onConfirm={(confirmationText) => void confirmAssistantAction(true, confirmationText)}
-                    onCancel={() => void confirmAssistantAction(false)}
+              </ChatContainerContent>
+              {!historyOpen && state.messages.length > 0 && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+                  <ScrollButton
+                    aria-label={t("panel.scrollToBottom", {
+                      defaultValue: "Scroll to bottom",
+                    })}
+                    className="pointer-events-auto size-9 border bg-background/95 text-muted-foreground shadow-sm backdrop-blur hover:text-foreground"
+                    size="icon"
+                    variant="outline"
                   />
-                )}
-                <ChatContainerScrollAnchor />
-              </>
-            )}
-          </ChatContainerContent>
-          {!historyOpen && state.messages.length > 0 && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
-              <ScrollButton
-                aria-label={t("panel.scrollToBottom", { defaultValue: "Scroll to bottom" })}
-                className="pointer-events-auto h-9 w-9 border bg-background/95 text-muted-foreground shadow-lg backdrop-blur hover:text-foreground"
-                size="icon"
-                variant="outline"
-              />
-            </div>
-          )}
-        </ChatContainerRoot>
-        </div>
-      </div>
+                </div>
+              )}
+            </ChatContainerRoot>
+          </div>
 
-      {/* ─── Input ─── */}
-      <div
-        className={cn(
-          "shrink-0 border-t bg-background px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2",
-          isWorkspace ? "px-4 sm:px-6" : "sm:px-3",
-        )}
-        style={{ borderColor: "var(--border)" }}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(event) => handleAttachmentInputChange(event, "file")}
-        />
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(event) => handleAttachmentInputChange(event, "image")}
-        />
-        <ComposerFrame>
+          {/* ─── Input ─── */}
           <div
-            className="rounded-[1.6rem] border px-2 py-2 shadow-sm sm:rounded-[1.85rem]"
-            style={{
-              background: "color-mix(in oklch, var(--card) 96%, transparent)",
-              borderColor: "var(--border)",
-            }}
+            data-testid="assistant-composer"
+            className={cn(
+              "shrink-0 border-t bg-background px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3",
+              isWorkspace ? "px-4 sm:px-6" : "sm:px-3",
+            )}
           >
-          {(attachments.length > 0 || queuedPrompts.length > 0) && (
-            <div className="mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pb-2 pt-1">
-              {attachments.map((attachment) => (
-                <AttachmentPreviewCard
-                  key={attachment.id}
-                  name={attachment.file.name}
-                  kind={attachment.kind}
-                  size={attachment.file.size}
-                  status={attachment.status}
-                  file={attachment.file}
-                  onRemove={() => handleRemoveAttachment(attachment.id)}
-                />
-              ))}
-              {queuedPrompts.map((queued) => (
-                <div
-                  key={queued.id}
-                  className="flex h-16 w-[min(13.5rem,72vw)] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs"
-                  style={{
-                    background: "color-mix(in oklch, var(--background) 88%, transparent)",
-                    borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
-                    color: "var(--muted-foreground)",
-                  }}
-                >
-                  <Loader2Icon className="h-4 w-4 shrink-0 animate-spin" />
-                  <span className="min-w-0 truncate">
-                    {t("panel.queuedPrompt", { defaultValue: "Queued" })}: {queued.displayContent}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex min-h-10 items-center gap-1.5">
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                aria-label={t("attachments.add", { defaultValue: "Add attachment" })}
-                aria-expanded={attachmentMenuOpen}
-                onClick={() => {
-                  setHistoryOpen(false);
-                  setConfigMenuOpen(null);
-                  setAttachmentMenuOpen((value) => !value);
-                }}
-                className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              >
-                <PlusIcon className="h-4 w-4" />
-              </button>
-              {attachmentMenuOpen && (
-                <div
-                  role="menu"
-                  className="absolute bottom-11 left-0 z-30 w-[min(15rem,calc(100vw-2.25rem))] overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
-                  style={{
-                    borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
-                    color: "var(--popover-foreground)",
-                  }}
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
-                  >
-                    <FileIcon className="h-4 w-4 text-muted-foreground" />
-                    <span>{t("attachments.uploadFile", { defaultValue: "Upload file" })}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => imageInputRef.current?.click()}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
-                  >
-                    <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                    <span>{t("attachments.uploadImage", { defaultValue: "Upload image" })}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleAddFromProject}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
-                  >
-                    <FolderOpenIcon className="h-4 w-4 text-muted-foreground" />
-                    <span>{t("attachments.addFromProject", { defaultValue: "Add from project" })}</span>
-                  </button>
-                </div>
-              )}
-            </div>
-            <PromptInput
-              value={input}
-              onValueChange={(value) => {
-                setInput(value);
-                requestAnimationFrame(resizeComposer);
-              }}
-              onSubmit={handleSend}
-              isLoading={isBusy || isUploadingAttachments}
-              className="min-w-0 flex-1 border-0 bg-transparent p-0 shadow-none"
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => handleAttachmentInputChange(event, "file")}
+            />
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(event) => handleAttachmentInputChange(event, "image")}
+            />
+            <ComposerFrame
+              className={cn("w-full", isWorkspace && "mx-auto max-w-4xl")}
             >
-              <PromptInputTextarea
-                aria-label={t("inputPlaceholder")}
-                placeholder={t("inputPlaceholder")}
-                onKeyDown={handleKeyDown}
-                className="min-h-8 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-[14px]"
-              />
-              <PromptInputActions className="shrink-0">
-                <PromptInputAction tooltip={t("actions.send")}>
-                  <button
-                    type="button"
-                    onClick={handleSend}
-                    disabled={!canSend}
-                    aria-label={t("actions.send")}
-                    className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
-                      canSend
-                        ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {isUploadingAttachments ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
-                  </button>
-                </PromptInputAction>
-              </PromptInputActions>
-            </PromptInput>
-          </div>
-          <div className="mt-1.5 flex min-h-5 items-center justify-between gap-2 px-1">
-            <span className="hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex">
-              <CornerDownLeftIcon className="w-3 h-3" /> {isBusy ? t("panel.enterToQueue", { defaultValue: "Enter queues" }) : t("panel.enterToSend")}
-            </span>
-            <div className="relative ml-auto flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
-              <button
-                type="button"
-                aria-label={t("model.select", { defaultValue: "Select model" })}
-                onClick={() => {
-                  setAttachmentMenuOpen(false);
-                  setHistoryOpen(false);
-                  setConfigMenuOpen((value) => (value === "model" ? null : "model"));
-                }}
-                className="flex max-w-[7.25rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground min-[420px]:max-w-[9.5rem]"
-              >
-                <span className="truncate">{modelLabel}</span>
-                <ChevronDownIcon className="h-3 w-3 shrink-0" />
-              </button>
-              <button
-                type="button"
-                aria-label={t("reasoning.select", { defaultValue: "Select reasoning effort" })}
-                onClick={() => {
-                  setAttachmentMenuOpen(false);
-                  setHistoryOpen(false);
-                  setConfigMenuOpen((value) => (value === "reasoning" ? null : "reasoning"));
-                }}
-                className="flex items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground"
-              >
-                <span>{reasoningLabel}</span>
-                <ChevronDownIcon className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                aria-label={t("approval.select", { defaultValue: "Select approval mode" })}
-                title={approvalHint}
-                onClick={() => {
-                  setAttachmentMenuOpen(false);
-                  setHistoryOpen(false);
-                  setConfigMenuOpen((value) => (value === "approval" ? null : "approval"));
-                }}
-                className={cn(
-                  "flex max-w-[6.75rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground",
-                  state.approvalMode === "full_access" && "text-amber-600 dark:text-amber-300",
-                )}
-              >
-                <span className="truncate">{approvalLabel}</span>
-                <ChevronDownIcon className="h-3 w-3 shrink-0" />
-              </button>
-              {configMenuOpen && (
-                <div
-                  role="menu"
-                  className="absolute bottom-7 right-0 z-30 w-[min(16rem,calc(100vw-2.25rem))] overflow-hidden rounded-3xl border bg-popover/95 p-1.5 text-sm shadow-[0_24px_70px_oklch(0_0_0/0.26)] backdrop-blur-xl"
-                  style={{
-                    borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
-                    color: "var(--popover-foreground)",
-                  }}
-                >
-                  {configMenuOpen === "model" ? (
-                    <>
-                      <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
-                        {t("model.menuTitle", { defaultValue: "Model" })}
-                      </div>
-                      <button
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={!state.selectedProviderConfigId}
-                        onClick={() => {
-                          setSelectedProviderConfig(null);
-                          setConfigMenuOpen(null);
+              <div className="rounded-xl border bg-card px-2 py-2 shadow-sm transition-shadow focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/10">
+                {(attachments.length > 0 || queuedPrompts.length > 0) && (
+                  <div className="mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pb-2 pt-1">
+                    {attachments.map((attachment) => (
+                      <AttachmentPreviewCard
+                        key={attachment.id}
+                        name={attachment.file.name}
+                        kind={attachment.kind}
+                        size={attachment.file.size}
+                        status={attachment.status}
+                        file={attachment.file}
+                        onRemove={() => handleRemoveAttachment(attachment.id)}
+                      />
+                    ))}
+                    {queuedPrompts.map((queued) => (
+                      <div
+                        key={queued.id}
+                        className="flex h-16 w-[min(13.5rem,72vw)] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs"
+                        style={{
+                          background:
+                            "color-mix(in oklch, var(--background) 88%, transparent)",
+                          borderColor:
+                            "color-mix(in oklch, var(--border) 72%, transparent)",
+                          color: "var(--muted-foreground)",
                         }}
-                        className={cn(
-                          "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                          !state.selectedProviderConfigId && "bg-muted text-foreground",
-                        )}
                       >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">
-                            {t("model.platformDefault", { defaultValue: "Platform default" })}
-                          </span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {t("model.platformHint", { defaultValue: "Use BidPilot official model" })}
-                          </span>
+                        <Loader2Icon className="h-4 w-4 shrink-0 animate-spin" />
+                        <span className="min-w-0 truncate">
+                          {t("panel.queuedPrompt", { defaultValue: "Queued" })}:{" "}
+                          {queued.displayContent}
                         </span>
-                        {!state.selectedProviderConfigId && <span className="text-xs">✓</span>}
-                      </button>
-                      {providerConfigs.map((provider) => (
-                        <button
-                          key={provider.id}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={state.selectedProviderConfigId === provider.id}
-                          onClick={() => {
-                            setSelectedProviderConfig(provider.id);
-                            setConfigMenuOpen(null);
-                          }}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                            state.selectedProviderConfigId === provider.id && "bg-muted text-foreground",
-                          )}
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-medium">{provider.label}</span>
-                            <span className="block truncate text-xs text-muted-foreground">{provider.model}</span>
-                          </span>
-                          {state.selectedProviderConfigId === provider.id && <span className="text-xs">✓</span>}
-                        </button>
-                      ))}
-                      {providerConfigs.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-muted-foreground">
-                          {t("model.empty", { defaultValue: "No custom providers yet" })}
-                        </div>
-                      )}
-                    </>
-                  ) : configMenuOpen === "reasoning" ? (
-                    <>
-                      <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
-                        {t("reasoning.menuTitle", { defaultValue: "Reasoning" })}
                       </div>
-                      {REASONING_OPTIONS.map((effort) => (
+                    ))}
+                  </div>
+                )}
+                <div className="flex min-h-10 items-center gap-1.5">
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      aria-label={t("attachments.add", {
+                        defaultValue: "Add attachment",
+                      })}
+                      aria-expanded={attachmentMenuOpen}
+                      onClick={() => {
+                        setHistoryOpen(false);
+                        setConfigMenuOpen(null);
+                        setAttachmentMenuOpen((value) => !value);
+                      }}
+                      className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                    </button>
+                    {attachmentMenuOpen && (
+                      <div
+                        role="menu"
+                        className="absolute bottom-11 left-0 z-30 w-[min(15rem,calc(100vw-2.25rem))] overflow-hidden rounded-xl border bg-popover/95 p-1.5 text-sm shadow-lg backdrop-blur-xl"
+                        style={{
+                          borderColor:
+                            "color-mix(in oklch, var(--border) 72%, transparent)",
+                          color: "var(--popover-foreground)",
+                        }}
+                      >
                         <button
-                          key={effort}
                           type="button"
-                          role="menuitemradio"
-                          aria-checked={state.reasoningEffort === effort}
-                          onClick={() => {
-                            setReasoningEffort(effort);
-                            setConfigMenuOpen(null);
-                          }}
-                          className={cn(
-                            "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                            state.reasoningEffort === effort && "bg-muted text-foreground",
-                          )}
+                          role="menuitem"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
                         >
-                          <span>{t(`reasoning.options.${effort}`, { defaultValue: effort })}</span>
-                          {state.reasoningEffort === effort && <span className="text-xs">✓</span>}
-                        </button>
-                      ))}
-                    </>
-                  ) : (
-                    <>
-                      <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
-                        {t("approval.menuTitle", { defaultValue: "Approval" })}
-                      </div>
-                      {APPROVAL_MODES.map((mode) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={state.approvalMode === mode}
-                          onClick={() => {
-                            setApprovalMode(mode);
-                            setConfigMenuOpen(null);
-                          }}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                            state.approvalMode === mode && "bg-muted text-foreground",
-                          )}
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-medium">
-                              {t(`approval.options.${mode}`, { defaultValue: mode })}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {t(`approval.hints.${mode}`, { defaultValue: "" })}
-                            </span>
+                          <FileIcon className="h-4 w-4 text-muted-foreground" />
+                          <span>
+                            {t("attachments.uploadFile", {
+                              defaultValue: "Upload file",
+                            })}
                           </span>
-                          {state.approvalMode === mode && <span className="text-xs">✓</span>}
                         </button>
-                      ))}
-                    </>
-                  )}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => imageInputRef.current?.click()}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                        >
+                          <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                          <span>
+                            {t("attachments.uploadImage", {
+                              defaultValue: "Upload image",
+                            })}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={handleAddFromProject}
+                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
+                        >
+                          <FolderOpenIcon className="h-4 w-4 text-muted-foreground" />
+                          <span>
+                            {t("attachments.addFromProject", {
+                              defaultValue: "Add from project",
+                            })}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <PromptInput
+                    value={input}
+                    onValueChange={(value) => {
+                      setInput(value);
+                      requestAnimationFrame(resizeComposer);
+                    }}
+                    onSubmit={handleSend}
+                    isLoading={isBusy || isUploadingAttachments}
+                    className="min-w-0 flex-1 rounded-lg border-0 bg-transparent p-0 shadow-none"
+                  >
+                    <PromptInputTextarea
+                      aria-label={t("inputPlaceholder")}
+                      placeholder={t("inputPlaceholder")}
+                      onKeyDown={handleKeyDown}
+                      className="min-h-8 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-[14px]"
+                    />
+                    <PromptInputActions className="shrink-0">
+                      <PromptInputAction tooltip={t("actions.send")}>
+                        <button
+                          type="button"
+                          onClick={handleSend}
+                          disabled={!canSend}
+                          aria-label={t("actions.send")}
+                          className={cn(
+                            "flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
+                            canSend
+                              ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {isUploadingAttachments ? (
+                            <Loader2Icon className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <SendIcon className="w-4 h-4" />
+                          )}
+                        </button>
+                      </PromptInputAction>
+                    </PromptInputActions>
+                  </PromptInput>
                 </div>
-              )}
-            </div>
+                <div className="mt-1.5 flex min-h-5 items-center justify-between gap-2 px-1">
+                  <span className="hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex">
+                    <CornerDownLeftIcon className="w-3 h-3" />{" "}
+                    {isBusy
+                      ? t("panel.enterToQueue", {
+                          defaultValue: "Enter queues",
+                        })
+                      : t("panel.enterToSend")}
+                  </span>
+                  <div className="relative ml-auto flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
+                    <button
+                      type="button"
+                      aria-label={t("model.select", {
+                        defaultValue: "Select model",
+                      })}
+                      onClick={() => {
+                        setAttachmentMenuOpen(false);
+                        setHistoryOpen(false);
+                        setConfigMenuOpen((value) =>
+                          value === "model" ? null : "model",
+                        );
+                      }}
+                      className="flex max-w-[7.25rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground min-[420px]:max-w-[9.5rem]"
+                    >
+                      <span className="truncate">{modelLabel}</span>
+                      <ChevronDownIcon className="h-3 w-3 shrink-0" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t("reasoning.select", {
+                        defaultValue: "Select reasoning effort",
+                      })}
+                      onClick={() => {
+                        setAttachmentMenuOpen(false);
+                        setHistoryOpen(false);
+                        setConfigMenuOpen((value) =>
+                          value === "reasoning" ? null : "reasoning",
+                        );
+                      }}
+                      className="flex items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground"
+                    >
+                      <span>{reasoningLabel}</span>
+                      <ChevronDownIcon className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t("approval.select", {
+                        defaultValue: "Select approval mode",
+                      })}
+                      title={approvalHint}
+                      onClick={() => {
+                        setAttachmentMenuOpen(false);
+                        setHistoryOpen(false);
+                        setConfigMenuOpen((value) =>
+                          value === "approval" ? null : "approval",
+                        );
+                      }}
+                      className={cn(
+                        "flex max-w-[6.75rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground",
+                        state.approvalMode === "full_access" &&
+                          "text-amber-600 dark:text-amber-300",
+                      )}
+                    >
+                      <span className="truncate">{approvalLabel}</span>
+                      <ChevronDownIcon className="h-3 w-3 shrink-0" />
+                    </button>
+                    {configMenuOpen && (
+                      <div
+                        role="menu"
+                        className="absolute bottom-7 right-0 z-30 w-[min(16rem,calc(100vw-2.25rem))] overflow-hidden rounded-xl border bg-popover/95 p-1.5 text-sm shadow-lg backdrop-blur-xl"
+                        style={{
+                          borderColor:
+                            "color-mix(in oklch, var(--border) 72%, transparent)",
+                          color: "var(--popover-foreground)",
+                        }}
+                      >
+                        {configMenuOpen === "model" ? (
+                          <>
+                            <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
+                              {t("model.menuTitle", { defaultValue: "Model" })}
+                            </div>
+                            <button
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={!state.selectedProviderConfigId}
+                              onClick={() => {
+                                setSelectedProviderConfig(null);
+                                setConfigMenuOpen(null);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                                !state.selectedProviderConfigId &&
+                                  "bg-muted text-foreground",
+                              )}
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-medium">
+                                  {t("model.platformDefault", {
+                                    defaultValue: "Platform default",
+                                  })}
+                                </span>
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {t("model.platformHint", {
+                                    defaultValue: "Use BidPilot official model",
+                                  })}
+                                </span>
+                              </span>
+                              {!state.selectedProviderConfigId && (
+                                <span className="text-xs">✓</span>
+                              )}
+                            </button>
+                            {providerConfigs.map((provider) => (
+                              <button
+                                key={provider.id}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={
+                                  state.selectedProviderConfigId === provider.id
+                                }
+                                onClick={() => {
+                                  setSelectedProviderConfig(provider.id);
+                                  setConfigMenuOpen(null);
+                                }}
+                                className={cn(
+                                  "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                                  state.selectedProviderConfigId ===
+                                    provider.id && "bg-muted text-foreground",
+                                )}
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate text-sm font-medium">
+                                    {provider.label}
+                                  </span>
+                                  <span className="block truncate text-xs text-muted-foreground">
+                                    {provider.model}
+                                  </span>
+                                </span>
+                                {state.selectedProviderConfigId ===
+                                  provider.id && (
+                                  <span className="text-xs">✓</span>
+                                )}
+                              </button>
+                            ))}
+                            {providerConfigs.length === 0 && (
+                              <div className="px-3 py-2 text-xs text-muted-foreground">
+                                {t("model.empty", {
+                                  defaultValue: "No custom providers yet",
+                                })}
+                              </div>
+                            )}
+                          </>
+                        ) : configMenuOpen === "reasoning" ? (
+                          <>
+                            <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
+                              {t("reasoning.menuTitle", {
+                                defaultValue: "Reasoning",
+                              })}
+                            </div>
+                            {REASONING_OPTIONS.map((effort) => (
+                              <button
+                                key={effort}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={state.reasoningEffort === effort}
+                                onClick={() => {
+                                  setReasoningEffort(effort);
+                                  setConfigMenuOpen(null);
+                                }}
+                                className={cn(
+                                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                                  state.reasoningEffort === effort &&
+                                    "bg-muted text-foreground",
+                                )}
+                              >
+                                <span>
+                                  {t(`reasoning.options.${effort}`, {
+                                    defaultValue: effort,
+                                  })}
+                                </span>
+                                {state.reasoningEffort === effort && (
+                                  <span className="text-xs">✓</span>
+                                )}
+                              </button>
+                            ))}
+                          </>
+                        ) : (
+                          <>
+                            <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
+                              {t("approval.menuTitle", {
+                                defaultValue: "Approval",
+                              })}
+                            </div>
+                            {APPROVAL_MODES.map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={state.approvalMode === mode}
+                                onClick={() => {
+                                  setApprovalMode(mode);
+                                  setConfigMenuOpen(null);
+                                }}
+                                className={cn(
+                                  "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
+                                  state.approvalMode === mode &&
+                                    "bg-muted text-foreground",
+                                )}
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate text-sm font-medium">
+                                    {t(`approval.options.${mode}`, {
+                                      defaultValue: mode,
+                                    })}
+                                  </span>
+                                  <span className="block truncate text-xs text-muted-foreground">
+                                    {t(`approval.hints.${mode}`, {
+                                      defaultValue: "",
+                                    })}
+                                  </span>
+                                </span>
+                                {state.approvalMode === mode && (
+                                  <span className="text-xs">✓</span>
+                                )}
+                              </button>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </ComposerFrame>
           </div>
-          </div>
-        </ComposerFrame>
+        </div>
       </div>
     </div>
   );

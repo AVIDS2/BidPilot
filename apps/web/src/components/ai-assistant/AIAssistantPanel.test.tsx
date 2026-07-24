@@ -51,14 +51,20 @@ async function expandActivityDetails() {
         screen.queryByRole("button", { name: "Collapse activity details" }),
     ).toBeTruthy();
   });
-  const collapse = screen.queryByRole("button", { name: "Collapse activity details" });
+  const collapse = screen.queryByRole("button", {
+    name: "Collapse activity details",
+  });
   if (collapse) {
     expect(collapse).toHaveAttribute("aria-expanded", "true");
     return;
   }
-  fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Expand activity details" }),
+  );
   await waitFor(() => {
-    expect(screen.getByRole("button", { name: "Collapse activity details" })).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: "Collapse activity details" }),
+    ).toHaveAttribute("aria-expanded", "true");
   });
 }
 
@@ -110,7 +116,13 @@ describe("AIAssistantPanel", () => {
     );
 
     expect(await screen.findByText("Welcome to BidPilot!")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Ask me anything..." })).toBeInTheDocument();
+    const composer = screen.getByTestId("assistant-composer");
+    expect(composer).toContainElement(
+      screen.getByRole("textbox", { name: "Ask me anything..." }),
+    );
+    expect(screen.getByTestId("assistant-conversation-pane")).toContainElement(
+      composer,
+    );
   });
 
   it("opens the created workspace after a governed project action succeeds", async () => {
@@ -253,7 +265,9 @@ describe("AIAssistantPanel", () => {
       expect(fetchMock).toHaveBeenCalled();
     });
 
-    expect(screen.getByPlaceholderText("Ask me anything...")).not.toBeDisabled();
+    expect(
+      screen.getByPlaceholderText("Ask me anything..."),
+    ).not.toBeDisabled();
   });
 
   it("clears an unavailable selected provider without silently retrying on the platform model", async () => {
@@ -262,7 +276,11 @@ describe("AIAssistantPanel", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 404,
-        text: vi.fn().mockResolvedValue(JSON.stringify({ detail: "Provider config not found" })),
+        text: vi
+          .fn()
+          .mockResolvedValue(
+            JSON.stringify({ detail: "Provider config not found" }),
+          ),
       }),
     );
 
@@ -274,13 +292,17 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(
-      await screen.findAllByText("所选模型配置已不可用，已切回平台默认模型。请确认后重新发送。"),
+      await screen.findAllByText(
+        "所选模型配置已不可用，已切回平台默认模型。请确认后重新发送。",
+      ),
     ).toHaveLength(2);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("requests cancellation only for a workflow that exposes its runtime bridge id", async () => {
-    const { cancelRuntimeWorkflow, listRuntimeEvents } = await import("@/lib/api");
+    const { cancelRuntimeWorkflow, listRuntimeEvents } = await import(
+      "@/lib/api"
+    );
     vi.mocked(cancelRuntimeWorkflow).mockResolvedValue({
       id: "workflow-runtime-1",
       kind: "workflow_bridge",
@@ -293,23 +315,22 @@ describe("AIAssistantPanel", () => {
       parent_run_id: null,
     });
     vi.mocked(listRuntimeEvents).mockImplementation(
-      () => new Promise(() => {
-        // Keep the durable workflow live while the cancellation affordance is exercised.
-      }),
+      () =>
+        new Promise(() => {
+          // Keep the durable workflow live while the cancellation affordance is exercised.
+        }),
     );
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          body: streamFrom(
-            [
-              'event: assistant.start\ndata: {"conversation_id":"conversation-1","state":"thinking"}',
-              'event: assistant.workflow_started\ndata: {"tool_name":"start_draft_section","result":{"run_id":"execution-run-1","runtime_run_id":"workflow-runtime-1"},"state":"running_workflow"}',
-            ].join("\n\n") + "\n\n",
-          ),
-        }),
+      vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"conversation-1","state":"thinking"}',
+            'event: assistant.workflow_started\ndata: {"tool_name":"start_draft_section","result":{"run_id":"execution-run-1","runtime_run_id":"workflow-runtime-1"},"state":"running_workflow"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
     );
 
     renderPanel();
@@ -319,13 +340,17 @@ describe("AIAssistantPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    const cancelButton = await screen.findByRole("button", { name: "Cancel workflow" });
+    const cancelButton = await screen.findByRole("button", {
+      name: "Cancel workflow",
+    });
     fireEvent.click(cancelButton);
 
     await waitFor(() => {
       expect(cancelRuntimeWorkflow).toHaveBeenCalledWith("workflow-runtime-1");
     });
-    expect(screen.getByText("Cancellation requested. Stopping at a safe boundary.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Cancellation requested. Stopping at a safe boundary."),
+    ).toBeInTheDocument();
   });
 
   it("shows a safe provider recovery action when a workflow fails", async () => {
@@ -362,18 +387,16 @@ describe("AIAssistantPanel", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          body: streamFrom(
-            [
-              'event: assistant.start\ndata: {"conversation_id":"conversation-provider-error","state":"thinking"}',
-              'event: assistant.workflow_started\ndata: {"tool_name":"start_draft_section","result":{"run_id":"execution-provider-error","runtime_run_id":"workflow-provider-error"},"state":"running_workflow"}',
-              'event: assistant.end\ndata: {"conversation_id":"conversation-provider-error","state":"completed"}',
-            ].join("\n\n") + "\n\n",
-          ),
-        }),
+      vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"conversation-provider-error","state":"thinking"}',
+            'event: assistant.workflow_started\ndata: {"tool_name":"start_draft_section","result":{"run_id":"execution-provider-error","runtime_run_id":"workflow-provider-error"},"state":"running_workflow"}',
+            'event: assistant.end\ndata: {"conversation_id":"conversation-provider-error","state":"completed"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
     );
 
     renderPanel();
@@ -384,9 +407,13 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(
-      await screen.findByText("Model service authentication failed. Check the key and permissions, then test the connection again."),
+      await screen.findByText(
+        "Model service authentication failed. Check the key and permissions, then test the connection again.",
+      ),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open model settings" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open model settings" }),
+    );
     expect(window.location.pathname).toBe("/settings/providers");
     window.history.replaceState({}, "", "/");
   });
@@ -436,11 +463,17 @@ describe("AIAssistantPanel", () => {
     renderPanel();
     fireEvent.click(screen.getByText("Open assistant"));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Select model" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Select model" }),
+    );
     fireEvent.click(await screen.findByText("GPT-5.5"));
-    fireEvent.click(screen.getByRole("button", { name: "Select reasoning effort" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select reasoning effort" }),
+    );
     fireEvent.click(screen.getByText("extra"));
-    fireEvent.click(screen.getByRole("button", { name: "Select approval mode" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select approval mode" }),
+    );
     fireEvent.click(screen.getByText("Request approval"));
 
     fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
@@ -472,12 +505,16 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByText("Open assistant"));
     fireEvent.click(screen.getByTitle("Conversation history"));
 
-    expect(await screen.findByPlaceholderText("Search conversations...")).toBeInTheDocument();
+    expect(
+      await screen.findByPlaceholderText("Search conversations..."),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
 
     expect(screen.getByText("Upload file")).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Search conversations...")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("Search conversations..."),
+    ).not.toBeInTheDocument();
   });
 
   it("renders completed tool activity as a compact expandable event", async () => {
@@ -510,9 +547,13 @@ describe("AIAssistantPanel", () => {
     expect(screen.getByText("Open page completed")).toBeInTheDocument();
     expect(screen.getAllByText("done").length).toBeGreaterThan(0);
     // L2/L3 default open: summary detail is visible without an expand click.
-    expect(screen.getByText("raw detail should be hidden until expanded")).toBeInTheDocument();
     expect(
-      screen.getByText("Open page completed").compareDocumentPosition(screen.getAllByText("已打开项目页。")[0]) &
+      screen.getByText("raw detail should be hidden until expanded"),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByText("Open page completed")
+        .compareDocumentPosition(screen.getAllByText("已打开项目页。")[0]) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
@@ -607,7 +648,8 @@ describe("AIAssistantPanel", () => {
       id: "att-1",
       name: "proposal.docx",
       kind: "file",
-      mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      mime_type:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       size: 5,
       extraction_status: "extracted",
       extracted_text: "",
@@ -628,7 +670,9 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByText("Open assistant"));
     fireEvent.click(screen.getByRole("button", { name: "Add attachment" }));
 
-    const fileInput = container.querySelector('input[type="file"]:not([accept])') as HTMLInputElement;
+    const fileInput = container.querySelector(
+      'input[type="file"]:not([accept])',
+    ) as HTMLInputElement;
     const file = new File(["hello"], "proposal.docx", {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
@@ -713,7 +757,10 @@ describe("AIAssistantPanel", () => {
 
     const firstTool = screen.getAllByText("Open page completed")[0];
     const secondUserMessage = screen.getByText("Search Acme projects");
-    expect(firstTool.compareDocumentPosition(secondUserMessage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      firstTool.compareDocumentPosition(secondUserMessage) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("streams assistant text while tool activity is still running", async () => {
@@ -775,7 +822,9 @@ describe("AIAssistantPanel", () => {
   });
 
   it("supports renaming a conversation from history", async () => {
-    const { listChatConversations, renameChatConversation } = await import("@/lib/api");
+    const { listChatConversations, renameChatConversation } = await import(
+      "@/lib/api"
+    );
     vi.mocked(listChatConversations).mockResolvedValue([
       {
         id: "c1",
@@ -816,7 +865,9 @@ describe("AIAssistantPanel", () => {
   });
 
   it("exposes a visible rename action for history conversations", async () => {
-    const { listChatConversations, renameChatConversation } = await import("@/lib/api");
+    const { listChatConversations, renameChatConversation } = await import(
+      "@/lib/api"
+    );
     vi.mocked(listChatConversations).mockResolvedValue([
       {
         id: "c-visible-rename",
@@ -837,7 +888,9 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByTitle("Conversation history"));
 
     await screen.findByText("Visible rename");
-    const row = screen.getByText("Visible rename").closest("[data-conversation-row]");
+    const row = screen
+      .getByText("Visible rename")
+      .closest("[data-conversation-row]");
     expect(row).not.toBeNull();
     fireEvent.mouseEnter(row as HTMLElement);
     fireEvent.click(screen.getByTitle("Rename conversation"));
@@ -847,12 +900,17 @@ describe("AIAssistantPanel", () => {
     fireEvent.keyDown(input, { key: "Enter" });
 
     await waitFor(() => {
-      expect(renameChatConversation).toHaveBeenCalledWith("c-visible-rename", "Renamed from button");
+      expect(renameChatConversation).toHaveBeenCalledWith(
+        "c-visible-rename",
+        "Renamed from button",
+      );
     });
   });
 
   it("deletes a history conversation and refreshes the list", async () => {
-    const { deleteChatConversation, listChatConversations } = await import("@/lib/api");
+    const { deleteChatConversation, listChatConversations } = await import(
+      "@/lib/api"
+    );
     vi.mocked(listChatConversations)
       .mockResolvedValueOnce([
         {
@@ -870,7 +928,9 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByTitle("Conversation history"));
 
     await screen.findByText("Delete me");
-    const row = screen.getByText("Delete me").closest("[data-conversation-row]");
+    const row = screen
+      .getByText("Delete me")
+      .closest("[data-conversation-row]");
     expect(row).not.toBeNull();
     fireEvent.mouseEnter(row as HTMLElement);
     fireEvent.click(screen.getByTitle("Delete conversation"));
@@ -883,7 +943,9 @@ describe("AIAssistantPanel", () => {
   });
 
   it("switches the active conversation immediately while messages load", async () => {
-    const { getChatConversationMessages, listChatConversations } = await import("@/lib/api");
+    const { getChatConversationMessages, listChatConversations } = await import(
+      "@/lib/api"
+    );
     vi.mocked(listChatConversations).mockResolvedValue([
       {
         id: "c-slow",
@@ -908,7 +970,9 @@ describe("AIAssistantPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("Slow conversation")).toBeInTheDocument();
     });
-    expect(screen.queryByPlaceholderText("Search conversations...")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("Search conversations..."),
+    ).not.toBeInTheDocument();
   });
 
   it("renders LangGraph workflow progress from run stream", async () => {
@@ -953,11 +1017,18 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => {
-      expect(screen.getAllByText("已启动章节起草工作流，运行 ID：run-1。").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText("已启动章节起草工作流，运行 ID：run-1。").length,
+      ).toBeGreaterThan(0);
     });
     await expandActivityDetails();
     await waitFor(() => {
-      expect(screen.getAllByText((_content, element) => element?.textContent === "Draft section · completed").length).toBeGreaterThan(0);
+      expect(
+        screen.getAllByText(
+          (_content, element) =>
+            element?.textContent === "Draft section · completed",
+        ).length,
+      ).toBeGreaterThan(0);
     });
     expect(screen.getByText("1 of 1 steps completed")).toBeInTheDocument();
   });
@@ -989,7 +1060,9 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await expandActivityDetails();
-    const downloadButton = await screen.findByRole("button", { name: "Download DOCX" });
+    const downloadButton = await screen.findByRole("button", {
+      name: "Download DOCX",
+    });
     fireEvent.click(downloadButton);
     await waitFor(() => {
       expect(downloadAssistantArtifact).toHaveBeenCalledWith(
@@ -999,4 +1072,3 @@ describe("AIAssistantPanel", () => {
     });
   });
 });
-
