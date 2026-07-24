@@ -14,7 +14,6 @@ import { useTranslation } from "react-i18next";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import ShinyText from "@/components/ShinyText";
 import { Button } from "@/components/ui/button";
-import { REACTBITS_AURORA } from "@/components/reactbits-theme";
 import { downloadAssistantArtifact } from "@/lib/api";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import { buildTranscriptTurns } from "@/lib/assistant-transcript";
@@ -590,7 +589,7 @@ export function AssistantActivityTimeline({
               text={label}
               speed={2.6}
               color="var(--muted-foreground)"
-              shineColor={REACTBITS_AURORA.accentAlt}
+              shineColor="var(--primary)"
               spread={105}
               className="max-w-full truncate align-bottom"
             />

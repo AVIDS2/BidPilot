@@ -3,7 +3,6 @@ import { XIcon, SparklesIcon, SendIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { getStoredValue } from "@/lib/browser-storage";
-import { REACTBITS_AURORA } from "@/components/reactbits-theme";
 
 interface ChatMessage {
   id: string;
@@ -126,9 +125,9 @@ export function AIAssistant() {
           isOpen ? "rotate-90" : ""
         )}
         style={{
-          background: REACTBITS_AURORA.gradient,
+          background: "var(--primary)",
           backgroundSize: "300% 300%",
-          animation: "gradient-shift 3s ease infinite",
+          animation: "none",
         }}
       >
         {isOpen ? (
@@ -140,8 +139,7 @@ export function AIAssistant() {
 
       {/* 棱镜彩渐变动画 */}
       <style>{`
-        @keyframes gradient-shift {
-          0% { background-position: 0% 50%; }
+        
           50% { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
         }
@@ -160,9 +158,9 @@ export function AIAssistant() {
           <div
             className="flex items-center justify-between p-4"
             style={{
-              background: REACTBITS_AURORA.gradient,
+              background: "var(--primary)",
               backgroundSize: "200% 200%",
-              animation: "gradient-shift 3s ease infinite",
+              animation: "none",
             }}
           >
             <div className="flex items-center gap-2">
@@ -185,9 +183,9 @@ export function AIAssistant() {
                 <div
                   className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
                   style={{
-                    background: REACTBITS_AURORA.gradient,
+                    background: "var(--primary)",
                     backgroundSize: "200% 200%",
-                    animation: "gradient-shift 3s ease infinite",
+                    animation: "none",
                   }}
                 >
                   <SparklesIcon className="w-8 h-8 text-white" />
@@ -216,7 +214,7 @@ export function AIAssistant() {
                     )}
                     style={{
                       background: message.role === "user"
-                        ? REACTBITS_AURORA.gradient
+                        ? "var(--primary)"
                         : "var(--muted)",
                       color: message.role === "user" ? "white" : "var(--foreground)",
                     }}
@@ -274,7 +272,7 @@ export function AIAssistant() {
                 className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200"
                 style={{
                   background: input.trim()
-                    ? REACTBITS_AURORA.gradient
+                    ? "var(--primary)"
                     : "var(--muted)",
                   color: input.trim() ? "white" : "var(--muted-foreground)",
                 }}

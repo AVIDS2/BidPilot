@@ -547,6 +547,7 @@ function HistorySidebar({
   renamingId,
   renameInputRef,
   t,
+  docked = false,
 }: {
   conversations: ChatConversationRead[];
   currentId: string | null;
@@ -565,6 +566,7 @@ function HistorySidebar({
   renamingId: string | null;
   renameInputRef: RefObject<HTMLInputElement | null>;
   t: (key: string, options?: Record<string, unknown>) => string;
+  docked?: boolean;
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -583,11 +585,13 @@ function HistorySidebar({
   };
 
   return (
-    <FadeContent
-      blur
-      duration={240}
-      threshold={0.02}
-      className="flex h-full w-[min(20rem,calc(100vw-1.25rem))] shrink-0 flex-col border-r bg-card shadow-xl"
+    <div
+      className={cn(
+        "flex h-full shrink-0 flex-col border-r bg-card",
+        docked
+          ? "w-[min(17.5rem,100%)] border-border/80 shadow-none"
+          : "w-[min(20rem,calc(100vw-1.25rem))] shadow-xl",
+      )}
       style={{ borderColor: "var(--border)" }}
     >
       {/* Header */}
@@ -599,9 +603,11 @@ function HistorySidebar({
           <Button variant="ghost" size="icon-xs" onClick={onNew} title={t("panel.newConversation")}>
             <PlusIcon className="size-3" />
           </Button>
-          <Button variant="ghost" size="icon-xs" onClick={onClose} title={t("panel.closeHistory")}>
-            <PanelRightCloseIcon className="size-3" />
-          </Button>
+          {!docked && (
+            <Button variant="ghost" size="icon-xs" onClick={onClose} title={t("panel.closeHistory")}>
+              <PanelRightCloseIcon className="size-3" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -734,7 +740,7 @@ function HistorySidebar({
           )}
         </div>
       </ScrollArea>
-    </FadeContent>
+    </div>
   );
 }
 
@@ -764,6 +770,9 @@ export function AIAssistantPanel({
   const isWorkspace = variant === "workspace";
   const [input, setInput] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  useEffect(() => {
+    if (isWorkspace) setHistoryOpen(true);
+  }, [isWorkspace]);
   const [historySearch, setHistorySearch] = useState("");
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -1101,9 +1110,8 @@ export function AIAssistantPanel({
 
   const loadConversationOnSurface = useCallback(async (conversationId: string) => {
     await loadConversation(conversationId);
-    setHistoryOpen(false);
-    if (isWorkspace) close();
-  }, [close, isWorkspace, loadConversation]);
+    if (!isWorkspace) setHistoryOpen(false);
+  }, [isWorkspace, loadConversation]);
 
   const handleDeleteConversation = useCallback(async (id: string) => {
     try {
@@ -1129,12 +1137,14 @@ export function AIAssistantPanel({
           : "fixed inset-0 z-40 h-[100dvh] w-full animate-slide-in border-l sm:left-auto sm:w-[min(100vw,390px)] md:w-[500px] xl:w-[560px]",
       )}
       style={{
-        background: "color-mix(in oklch, var(--background) 94%, transparent)",
-        borderColor: "color-mix(in oklch, var(--border) 78%, transparent)",
+        background: isWorkspace
+          ? "var(--background)"
+          : "color-mix(in oklch, var(--background) 96%, transparent)",
+        borderColor: "var(--border)",
         boxShadow: isWorkspace
-          ? "inset 0 1px 0 color-mix(in oklch, white 5%, transparent)"
-          : "-28px 0 72px oklch(0 0 0 / 0.34), inset 1px 0 0 color-mix(in oklch, white 5%, transparent)",
-        backdropFilter: "blur(22px) saturate(1.18)",
+          ? "none"
+          : "-20px 0 48px oklch(0 0 0 / 0.18)",
+        backdropFilter: isWorkspace ? undefined : "blur(16px) saturate(1.08)",
       }}
     >
       {/* ─── Header ─── */}
@@ -1142,7 +1152,7 @@ export function AIAssistantPanel({
         className="flex min-h-14 shrink-0 items-center justify-between gap-2 border-b px-3.5"
         style={{
           borderColor: "color-mix(in oklch, var(--border) 64%, transparent)",
-          background: "linear-gradient(180deg, color-mix(in oklch, var(--background) 96%, white 4%), color-mix(in oklch, var(--background) 86%, transparent))",
+          background: isWorkspace ? "var(--card)" : "var(--background)",
         }}
       >
         <div className="flex min-w-0 items-center gap-2">
@@ -1198,9 +1208,32 @@ export function AIAssistantPanel({
         </div>
       )}
 
-      {/* ─── Content: Messages with floating history overlay ─── */}
-      <div className="relative flex-1 min-h-0 overflow-hidden">
-        {historyOpen && (
+      {/* Body: docked history (workspace) or overlay (panel) + messages */}
+      <div className={cn("relative flex min-h-0 flex-1 overflow-hidden", isWorkspace ? "flex-row" : "flex-col")}>
+        {isWorkspace && historyOpen && (
+          <HistorySidebar
+            conversations={Array.isArray(state.conversations) ? state.conversations : []}
+            currentId={state.currentConversationId}
+            searchQuery={historySearch}
+            onSearchChange={setHistorySearch}
+            onSelect={loadConversationOnSurface}
+            onNew={startConversationOnSurface}
+            onRename={beginRenameConversation}
+            onDelete={handleDeleteConversation}
+            onClose={() => setHistoryOpen(false)}
+            editingId={editingConversationId}
+            editingTitle={editingTitle}
+            onEditTitleChange={setEditingTitle}
+            onCommitRename={commitRenameConversation}
+            onCancelRename={cancelRenameConversation}
+            renamingId={renamingConversationId}
+            renameInputRef={renameInputRef}
+            t={t}
+            docked
+          />
+        )}
+
+        {!isWorkspace && historyOpen && (
           <>
             <button
               aria-label={t("panel.closeHistory")}
@@ -1231,7 +1264,7 @@ export function AIAssistantPanel({
           </>
         )}
 
-        {/* ─── Messages ─── */}
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <ChatContainerRoot className="relative h-full">
           <ChatContainerContent className="gap-3 px-3 py-3 sm:px-4 sm:py-4">
             {state.messages.length === 0 ? (
@@ -1297,6 +1330,7 @@ export function AIAssistantPanel({
             </div>
           )}
         </ChatContainerRoot>
+        </div>
       </div>
 
       {/* ─── Input ─── */}

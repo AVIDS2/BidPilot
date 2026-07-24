@@ -2,7 +2,15 @@
 
 Updated: 2026-07-24
 
-## Latest (2026-07-24 P0/P1/P2 closeout)
+## Latest (2026-07-24 frontend quieter operate)
+
+- Removed exaggerated ReactBits electric/lightning/glare motion (ElectricBorder/ClickSpark/GlareHover/AnimatedContent/FadeContent/ShinyText are no-op shells; reactbits-product wrappers quiet)
+- Neutralized REACTBITS_AURORA purple/violet tokens to CSS primary/ring
+- Agent workspace: history docked left outside chat column (not overlay inside dialog)
+- Platform shell: agent page edge-to-edge; operate chrome quieter (no purple radial glass shell)
+
+## Previous (2026-07-24 P0/P1/P2 closeout)
+
 
 ### P0 Campaign E2E
 - `run_section_campaign` multi-wave auto_continue (framework drains empty sections)

@@ -895,24 +895,13 @@
   --landing-warm-hover: #8b5cf6;
 }
 
-@keyframes reactbits-aurora-breathe {
-  0%, 100% {
-    filter: saturate(1) brightness(1);
-    opacity: 0.9;
-  }
-  50% {
-    filter: saturate(1.18) brightness(1.12);
-    opacity: 1;
-  }
-}
-
+/* reactbits aurora motion removed */
 .reactbits-aurora-breathe {
-  animation: reactbits-aurora-breathe 5.5s cubic-bezier(0.32, 0.72, 0, 1) infinite;
+  animation: none !important;
 }
-
 @media (prefers-reduced-motion: reduce) {
   .reactbits-aurora-breathe {
-    animation: none;
+    animation: none !important;
   }
 }
 

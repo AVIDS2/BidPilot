@@ -138,11 +138,11 @@ function PlatformShellContent() {
           <div className="@container/main flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div
               className={cn(
-                "flex min-h-0 min-w-0 flex-1 flex-col px-3 sm:px-4 lg:px-6",
-                // Agent workspace is a fixed chat surface; other pages scroll.
+                "flex min-h-0 min-w-0 flex-1 flex-col",
+                // Agent workspace fills the main pane edge-to-edge for history + chat.
                 isAgentWorkspace
-                  ? "overflow-hidden py-2 md:py-3"
-                  : "gap-4 overflow-y-auto py-4 md:gap-6 md:py-6",
+                  ? "overflow-hidden px-0 py-0"
+                  : "gap-4 overflow-y-auto px-3 py-4 sm:px-4 md:gap-6 md:py-6 lg:px-6",
               )}
             >
               <ErrorBoundary>
