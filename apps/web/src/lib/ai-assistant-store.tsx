@@ -459,9 +459,10 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         ) {
           return item;
         }
+        const nextStatus: AssistantExecutionItem["status"] = action.failed ? "failed" : "succeeded";
         return {
           ...item,
-          status: action.failed ? "failed" : "succeeded",
+          status: nextStatus,
           isRunning: false,
           summary:
             item.summary ||

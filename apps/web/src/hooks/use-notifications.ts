@@ -7,16 +7,30 @@ export type NotificationType =
   | "draft_completed"
   | "review_approved"
   | "export_ready"
-  | "hitl_required";
+  | "hitl_required"
+  | "agent_task"
+  | string;
 
 export interface Notification {
   id: string;
   type: NotificationType;
   title: string;
   description: string;
+  body?: string;
   read: boolean;
   created_at: string;
   link?: string;
+}
+
+interface NotificationApiRow {
+  id: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  description?: string | null;
+  read: boolean;
+  created_at?: string | null;
+  link?: string | null;
 }
 
 function getAuthHeaders(): Record<string, string> {
@@ -27,6 +41,20 @@ function getAuthHeaders(): Record<string, string> {
   return {};
 }
 
+function normalizeNotification(row: NotificationApiRow): Notification {
+  const description = (row.description || row.body || "").trim();
+  return {
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    description,
+    body: row.body || undefined,
+    read: Boolean(row.read),
+    created_at: row.created_at || new Date().toISOString(),
+    link: row.link || undefined,
+  };
+}
+
 async function fetchNotifications(): Promise<Notification[]> {
   const res = await fetch(`${API_BASE}/notifications`, {
     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
@@ -35,7 +63,8 @@ async function fetchNotifications(): Promise<Notification[]> {
     const body = await res.text().catch(() => "");
     throw new Error(`API ${res.status}: ${body}`);
   }
-  return res.json();
+  const data = (await res.json()) as NotificationApiRow[];
+  return Array.isArray(data) ? data.map(normalizeNotification) : [];
 }
 
 async function markAsReadApi(id: string): Promise<void> {
@@ -60,16 +89,22 @@ async function markAllAsReadApi(): Promise<void> {
   }
 }
 
-const POLL_INTERVAL_MS = 30_000;
+const DEFAULT_POLL_INTERVAL_MS = 15_000;
 
-export function useNotifications() {
+export function useNotifications(options?: { pollIntervalMs?: number; enabled?: boolean }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollIntervalMs = options?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const enabled = options?.enabled ?? true;
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const load = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     try {
       const data = await fetchNotifications();
       setNotifications(data);
@@ -78,21 +113,20 @@ export function useNotifications() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   const markAsRead = useCallback(
     async (id: string) => {
       setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
       );
       try {
         await markAsReadApi(id);
       } catch {
-        // Revert on failure
         await load();
       }
     },
-    [load]
+    [load],
   );
 
   const markAllAsRead = useCallback(async () => {
@@ -100,18 +134,20 @@ export function useNotifications() {
     try {
       await markAllAsReadApi();
     } catch {
-      // Revert on failure
       await load();
     }
   }, [load]);
 
   useEffect(() => {
-    load();
-    intervalRef.current = setInterval(load, POLL_INTERVAL_MS);
+    if (!enabled) return;
+    void load();
+    intervalRef.current = setInterval(() => {
+      void load();
+    }, pollIntervalMs);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [load]);
+  }, [enabled, load, pollIntervalMs]);
 
   return { notifications, unreadCount, loading, markAsRead, markAllAsRead, refresh: load };
 }

@@ -4,6 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import { zhCN, enUS } from "date-fns/locale";
 import {
   BellIcon,
+  BotIcon,
   CheckCheckIcon,
   FileTextIcon,
   ShieldCheckIcon,
@@ -19,13 +20,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useNotifications, type NotificationType } from "@/hooks/use-notifications";
+import { useNotifications } from "@/hooks/use-notifications";
 
-const typeIcon: Record<NotificationType, React.ReactNode> = {
+const typeIcon: Record<string, React.ReactNode> = {
   draft_completed: <FileTextIcon className="size-4 text-blue-500" />,
   review_approved: <ShieldCheckIcon className="size-4 text-green-500" />,
   export_ready: <DownloadIcon className="size-4 text-purple-500" />,
   hitl_required: <AlertTriangleIcon className="size-4 text-amber-500" />,
+  agent_task: <BotIcon className="size-4 text-sky-500" />,
 };
 
 export function NotificationBell() {
@@ -96,7 +98,7 @@ export function NotificationBell() {
                   }`}
                 >
                   <div className="mt-0.5 shrink-0">
-                    {typeIcon[notification.type]}
+                    {typeIcon[notification.type] ?? <BellIcon className="size-4 text-muted-foreground" />}
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <div className="flex items-center gap-2">

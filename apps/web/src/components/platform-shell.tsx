@@ -19,6 +19,7 @@ import { BrandMark } from "@/components/brand";
 import { CommandPalette } from "@/components/ai-assistant/CommandPalette";
 import { FloatingAssistant } from "@/components/ai-assistant/FloatingAssistant";
 import { InlineSuggestionBar } from "@/components/ai-assistant/InlineSuggestion";
+import { AgentWakeResume } from "@/components/ai-assistant/AgentWakeResume";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
@@ -38,6 +39,7 @@ export function PlatformShell() {
   return (
     <AIAssistantProvider>
       <TooltipProvider>
+        <AgentWakeResume />
         <PlatformShellContent />
       </TooltipProvider>
     </AIAssistantProvider>

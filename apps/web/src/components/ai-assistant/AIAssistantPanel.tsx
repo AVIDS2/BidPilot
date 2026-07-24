@@ -51,7 +51,13 @@ import {
   PromptInputActions,
   PromptInputAction,
 } from "@/components/ui/prompt-input";
-import { Markdown } from "@/components/ui/markdown";
+import {
+  ChatContainerRoot,
+  ChatContainerContent,
+  ChatContainerScrollAnchor,
+} from "@/components/ui/chat-container";
+import { Message, MessageContent } from "@/components/ui/message";
+import { ScrollButton } from "@/components/ui/scroll-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AgentMark } from "@/components/brand";
 import FadeContent from "@/components/FadeContent";
@@ -400,16 +406,18 @@ function MessageBubble({
           </div>
         )}
         {msg.content && (
-          <div
-            className="max-w-[94%] rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 text-[14px] leading-7 shadow-[0_12px_32px_oklch(0_0_0/0.10)] sm:max-w-[88%]"
-            style={{
-              background: "color-mix(in oklch, var(--muted) 82%, var(--background) 18%)",
-              color: "var(--foreground)",
-              borderColor: "color-mix(in oklch, var(--border) 58%, transparent)",
-            }}
-          >
-            <div className="whitespace-pre-wrap break-words">{msg.content}</div>
-          </div>
+          <Message className="w-full max-w-[94%] justify-end sm:max-w-[88%]">
+            <MessageContent
+              className="rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 text-[14px] leading-7 shadow-[0_12px_32px_oklch(0_0_0/0.10)]"
+              style={{
+                background: "color-mix(in oklch, var(--muted) 82%, var(--background) 18%)",
+                color: "var(--foreground)",
+                borderColor: "color-mix(in oklch, var(--border) 58%, transparent)",
+              }}
+            >
+              <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+            </MessageContent>
+          </Message>
         )}
       </FadeContent>
     );
@@ -445,9 +453,14 @@ function MessageBubble({
 
   const renderNarrative = (text: string, key: string) =>
     text ? (
-      <Markdown key={key} variant="assistant" className="[&_code]:break-words">
+      <MessageContent
+        key={key}
+        markdown
+        variant="assistant"
+        className="bg-transparent p-0 text-[14px] leading-7 text-foreground [&_code]:break-words"
+      >
         {normalizeAssistantMarkdown(text)}
-      </Markdown>
+      </MessageContent>
     ) : null;
 
   const thinkingDots = (
@@ -459,7 +472,7 @@ function MessageBubble({
   );
 
   return (
-    <div className="flex w-full max-w-full flex-col items-start gap-2 animate-fade-in sm:max-w-[92%]">
+    <Message className="w-full max-w-full animate-fade-in flex-col items-start gap-2 sm:max-w-[92%]">
       <div className="w-full space-y-3 px-1 py-1 text-[14px] leading-7 break-words text-foreground">
         {hasTurnParts ? (
           <>
@@ -497,16 +510,20 @@ function MessageBubble({
               />
             )}
             {msg.content ? (
-              <Markdown variant="assistant" className="[&_code]:break-words">
+              <MessageContent
+                markdown
+                variant="assistant"
+                className="bg-transparent p-0 text-[14px] leading-7 text-foreground [&_code]:break-words"
+              >
                 {normalizeAssistantMarkdown(msg.content)}
-              </Markdown>
+              </MessageContent>
             ) : (
               thinkingDots
             )}
           </>
         )}
       </div>
-    </div>
+    </Message>
   );
 }
 
@@ -756,9 +773,6 @@ export function AIAssistantPanel({
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([]);
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfig[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const shouldAutoScrollRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const focusComposer = useCallback(() => {
     const el =
@@ -770,7 +784,6 @@ export function AIAssistantPanel({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const queueDrainingRef = useRef(false);
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const isBusy = isAssistantBusy(state.status);
   const isUploadingAttachments = attachments.some((attachment) => attachment.status === "uploading");
   const canSend = Boolean(input.trim() || attachments.length > 0) && !isUploadingAttachments;
@@ -808,27 +821,6 @@ export function AIAssistantPanel({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
   }, []);
-
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior, block: "end" });
-    });
-  }, []);
-
-  const handleMessagesScroll = useCallback(() => {
-    const viewport = scrollContainerRef.current;
-    if (!viewport) return;
-    const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-    const isNearBottom = distanceFromBottom < 120;
-    shouldAutoScrollRef.current = isNearBottom;
-    setShowScrollToBottom(!isNearBottom);
-  }, []);
-
-  useEffect(() => {
-    if (shouldAutoScrollRef.current) {
-      scrollToBottom("smooth");
-    }
-  }, [scrollToBottom, state.messages, state.executionItems, state.pendingConfirmation]);
 
   useEffect(() => {
     resizeComposer();
@@ -1000,8 +992,6 @@ export function AIAssistantPanel({
       approvalMode: state.approvalMode,
     };
 
-    shouldAutoScrollRef.current = true;
-    setShowScrollToBottom(false);
     setInput("");
     setAttachments([]);
 
@@ -1025,8 +1015,6 @@ export function AIAssistantPanel({
     const nextPrompt = queuedPrompts[0];
     queueDrainingRef.current = true;
     setQueuedPrompts((current) => current.slice(1));
-    shouldAutoScrollRef.current = true;
-    setShowScrollToBottom(false);
     void sendMessage(nextPrompt.prompt, {
       displayContent: nextPrompt.displayContent,
       attachments: nextPrompt.attachments,
@@ -1051,8 +1039,6 @@ export function AIAssistantPanel({
 
   const handleQuickAction = useCallback(
     (text: string) => {
-      shouldAutoScrollRef.current = true;
-      setShowScrollToBottom(false);
       if (isBusy) {
         setQueuedPrompts((current) => [
           ...current,
@@ -1246,12 +1232,8 @@ export function AIAssistantPanel({
         )}
 
         {/* ─── Messages ─── */}
-        <div
-          ref={scrollContainerRef}
-          onScroll={handleMessagesScroll}
-          className="h-full overflow-y-auto"
-        >
-          <div className="flex min-h-full flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4">
+        <ChatContainerRoot className="relative h-full">
+          <ChatContainerContent className="gap-3 px-3 py-3 sm:px-4 sm:py-4">
             {state.messages.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                 <AgentMark decorative className="mx-auto mb-4 size-14 drop-shadow-[0_18px_50px_oklch(0_0_0/0.16)]" />
@@ -1300,27 +1282,21 @@ export function AIAssistantPanel({
                     onCancel={() => void confirmAssistantAction(false)}
                   />
                 )}
-                <div ref={messagesEndRef} className="h-px w-full shrink-0" />
+                <ChatContainerScrollAnchor />
               </>
             )}
-          </div>
-        </div>
-
-        {showScrollToBottom && state.messages.length > 0 && !historyOpen && (
-          <button
-            type="button"
-            aria-label={t("panel.scrollToBottom", { defaultValue: "Scroll to bottom" })}
-            onClick={() => {
-              shouldAutoScrollRef.current = true;
-              setShowScrollToBottom(false);
-              scrollToBottom("smooth");
-            }}
-            className="absolute bottom-3 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border bg-background/95 text-muted-foreground shadow-lg backdrop-blur transition hover:text-foreground"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <ChevronDownIcon className="h-4 w-4" />
-          </button>
-        )}
+          </ChatContainerContent>
+          {!historyOpen && state.messages.length > 0 && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+              <ScrollButton
+                aria-label={t("panel.scrollToBottom", { defaultValue: "Scroll to bottom" })}
+                className="pointer-events-auto h-9 w-9 border bg-background/95 text-muted-foreground shadow-lg backdrop-blur hover:text-foreground"
+                size="icon"
+                variant="outline"
+              />
+            </div>
+          )}
+        </ChatContainerRoot>
       </div>
 
       {/* ─── Input ─── */}
