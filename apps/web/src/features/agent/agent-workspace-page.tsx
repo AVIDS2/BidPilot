@@ -1,13 +1,62 @@
+import { useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AIAssistantPanel } from "@/components/ai-assistant/AIAssistantPanel";
+import { isAssistantBusy, useAIAssistant } from "@/lib/ai-assistant-store";
 
 /**
  * The full-page operator reuses the same conversation and Runtime event state
  * as the contextual side panel. It is a workspace surface, not a second chat.
+ *
+ * Query params:
+ * - project: bind assistant project context
+ * - conversation: restore a specific conversation
+ * - wake: if present, auto-send a resume prompt after load so the agent
+ *   continues after a background workflow notification.
  */
 export function AgentWorkspacePage() {
+  const [params] = useSearchParams();
+  const { loadConversation, sendMessage, state } = useAIAssistant();
+  const handledWakeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const conversationId = params.get("conversation");
+    const wake = params.get("wake");
+    if (!conversationId) return;
+
+    const wakeKey = wake ? `${conversationId}:${wake}` : null;
+    const alreadyLoaded =
+      state.currentConversationId === conversationId && state.messages.length > 0;
+
+    const resumeIfNeeded = () => {
+      if (!wakeKey || handledWakeRef.current === wakeKey) return;
+      if (isAssistantBusy(state.status)) return;
+      handledWakeRef.current = wakeKey;
+      void sendMessage(
+        "后台长任务已更新。请根据最新结果继续推进未完成步骤；不要重复发起同一个已完成任务。",
+        {
+          displayContent: "继续后台任务",
+        },
+      );
+    };
+
+    if (alreadyLoaded) {
+      resumeIfNeeded();
+      return;
+    }
+
+    void loadConversation(conversationId).then(() => {
+      resumeIfNeeded();
+    });
+  }, [
+    loadConversation,
+    params,
+    sendMessage,
+    state.currentConversationId,
+    state.messages.length,
+    state.status,
+  ]);
+
   return (
-    // Fill the shell main area completely. The chat panel owns internal scroll;
-    // the page itself must not grow with message history.
     <section
       className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col"
       aria-label="BidPilot Agent workspace"

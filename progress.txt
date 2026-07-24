@@ -2,7 +2,33 @@
 
 Updated: 2026-07-24
 
-## Latest (2026-07-24 long-task tools + hooks/MCP/skills)
+## Latest (2026-07-24 MCP + auto-wake + deploy/UI)
+
+### Four next-layer items
+1. **MCP server** — `scripts/bidpilot_mcp.py`
+   - FastMCP stdio: `list_capabilities` + `invoke_capability(name, arguments_json)`
+   - Auth: `DOCPILOT_MCP_TOKEN` (JWT) or `DOCPILOT_MCP_USER_EMAIL` (local trusted)
+   - Mutations still go through `execute_capability` (approval/quota/tenant/audit)
+2. **Agent auto-wake resume** — `/agent?conversation=...&wake=...`
+   - Loads conversation history, then auto-sends resume prompt once
+   - Works whether conversation was already open or needs load
+3. **Agent UI shadcn converge** — composer uses `PromptInput` / `PromptInputTextarea` / `PromptInputActions`
+4. **Production deploy compose** — `deploy.sh` dual-mode
+   - Derive postgres split vars from `DOCPILOT_DATABASE_URL` when missing
+   - Full production compose only when redis+postgres password vars present
+   - Else `app_services_only` rebuild api/worker/web (passwordless redis safe)
+
+### Infra reality check
+- **Redis cache/queue: yes** — `DOCPILOT_REDIS_URL` for Celery broker/backend + API rate limit
+- **Queue: yes** — Celery worker + task outbox + dead-letter paths
+- **Complex microservices: no** — modular monolith (`api` + `worker` + `web`) + Postgres/Redis/MinIO
+
+### Still later
+- full MCP auto-resume without user opening agent page
+- production redis password migration (unlock full compose)
+- broader Agent UI Message/ChatContainer convergence + impeccable Operate polish
+
+## Previous (2026-07-24 long-task tools + hooks/MCP/skills)
 
 ### Long-task capabilities shipped
 - `web_search` (Tavily if key present, else DuckDuckGo)
@@ -26,11 +52,6 @@ Updated: 2026-07-24
 - registry tests 18 passed
 - local multi-turn delete disambiguation smoke PASS
 - local assistant stream used `web_search` successfully
-
-### Still later
-- full MCP server process
-- auto-resume without user opening agent
-- agent UI shadcn chat primitive convergence + impeccable Operate polish
 
 ## Previous (2026-07-24 master deploy + next backlog)
 

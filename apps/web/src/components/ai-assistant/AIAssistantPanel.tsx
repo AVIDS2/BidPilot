@@ -45,6 +45,12 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  PromptInput,
+  PromptInputTextarea,
+  PromptInputActions,
+  PromptInputAction,
+} from "@/components/ui/prompt-input";
 import { Markdown } from "@/components/ui/markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AgentMark } from "@/components/brand";
@@ -754,6 +760,12 @@ export function AIAssistantPanel({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const focusComposer = useCallback(() => {
+    const el =
+      inputRef.current ||
+      (document.querySelector('[aria-label="' + t("inputPlaceholder") + '"]') as HTMLTextAreaElement | null);
+    el?.focus();
+  }, [t]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -824,7 +836,7 @@ export function AIAssistantPanel({
 
   useEffect(() => {
     if (state.isOpen && state.mode === "panel") {
-      setTimeout(() => inputRef.current?.focus(), 150);
+      setTimeout(() => focusComposer(), 150);
     }
   }, [state.isOpen, state.mode]);
 
@@ -967,7 +979,7 @@ export function AIAssistantPanel({
       });
       return current.trim() ? `${current.trim()}\n${prompt}` : prompt;
     });
-    inputRef.current?.focus();
+    focusComposer();
   }, [t]);
 
   const handleSend = useCallback(() => {
@@ -1426,32 +1438,41 @@ export function AIAssistantPanel({
                 </div>
               )}
             </div>
-            <textarea
-              ref={inputRef}
-              aria-label={t("inputPlaceholder")}
+            <PromptInput
               value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
+              onValueChange={(value) => {
+                setInput(value);
                 requestAnimationFrame(resizeComposer);
               }}
-              onKeyDown={handleKeyDown}
-              placeholder={t("inputPlaceholder")}
-              rows={1}
-              className="min-h-8 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-[14px]"
-            />
-            <button
-              onClick={handleSend}
-              disabled={!canSend}
-              aria-label={t("actions.send")}
-              className={cn(
-                "flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
-                canSend
-                  ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
-                  : "text-muted-foreground"
-            )}
+              onSubmit={handleSend}
+              isLoading={isBusy || isUploadingAttachments}
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 shadow-none"
             >
-              {isUploadingAttachments ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
-            </button>
+              <PromptInputTextarea
+                aria-label={t("inputPlaceholder")}
+                placeholder={t("inputPlaceholder")}
+                onKeyDown={handleKeyDown}
+                className="min-h-8 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-[14px]"
+              />
+              <PromptInputActions className="shrink-0">
+                <PromptInputAction tooltip={t("actions.send")}>
+                  <button
+                    type="button"
+                    onClick={handleSend}
+                    disabled={!canSend}
+                    aria-label={t("actions.send")}
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
+                      canSend
+                        ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {isUploadingAttachments ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="w-4 h-4" />}
+                  </button>
+                </PromptInputAction>
+              </PromptInputActions>
+            </PromptInput>
           </div>
           <div className="mt-1.5 flex min-h-5 items-center justify-between gap-2 px-1">
             <span className="hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex">

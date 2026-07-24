@@ -1,21 +1,114 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# BidPilot public deploy helper.
+# Prefer versioned production compose when the live .env can satisfy it.
+# Otherwise keep the live compose topology and rebuild app services only
+# (safe for the current passwordless redis + DATABASE_URL-only VPS shape).
+#
+# Important: do NOT shell-source .env (password special chars break set -a).
+# Use Python to derive missing split vars and docker compose --env-file for runtime.
+
 APP_ROOT=/app/bidpilot
 REPO_ROOT="$APP_ROOT/repo"
 COMPOSE_FILE="$APP_ROOT/docker-compose.yml"
 NEXT_COMPOSE_FILE="$APP_ROOT/.docker-compose.next.yml"
+ENV_FILE="$APP_ROOT/.env"
 
 cd "$REPO_ROOT"
 git pull --ff-only origin master
 
-# Keep deployment topology outside Git while making the Compose template itself
-# versioned with application code. The server .env is never copied or modified.
-cp docker-compose.production.yml "$NEXT_COMPOSE_FILE"
-trap 'rm -f "$NEXT_COMPOSE_FILE"' EXIT
+# Derive split Postgres/Redis vars from URLs when missing.
+python3 - <<'PY'
+from pathlib import Path
+from urllib.parse import urlparse, unquote
+
+env_path = Path("/app/bidpilot/.env")
+if not env_path.exists():
+    print("derived_env 0")
+    raise SystemExit(0)
+
+text = env_path.read_text(encoding="utf-8", errors="replace")
+vals = {}
+for line in text.splitlines():
+    if not line or line.strip().startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    vals[key.strip()] = value.strip().strip('"').strip("'")
+
+additions = []
+db_url = vals.get("DOCPILOT_DATABASE_URL") or vals.get("DATABASE_URL") or ""
+parsed = urlparse(db_url)
+if parsed.username and not vals.get("DOCPILOT_POSTGRES_USER"):
+    additions.append(f"DOCPILOT_POSTGRES_USER={parsed.username}")
+if parsed.password and not vals.get("DOCPILOT_POSTGRES_PASSWORD"):
+    additions.append(f"DOCPILOT_POSTGRES_PASSWORD={unquote(parsed.password)}")
+db_name = (parsed.path or "").lstrip("/")
+if db_name and not vals.get("DOCPILOT_POSTGRES_DB"):
+    additions.append(f"DOCPILOT_POSTGRES_DB={db_name}")
+
+redis = urlparse(vals.get("DOCPILOT_REDIS_URL") or "")
+if redis.password and not vals.get("DOCPILOT_REDIS_PASSWORD"):
+    additions.append(f"DOCPILOT_REDIS_PASSWORD={unquote(redis.password)}")
+
+if additions:
+    with env_path.open("a", encoding="utf-8") as fh:
+        fh.write("\n# derived by deploy.sh\n")
+        fh.write("\n".join(additions) + "\n")
+print("derived_env", len(additions))
+PY
 
 cd "$APP_ROOT"
-docker compose -f "$NEXT_COMPOSE_FILE" --env-file .env config --quiet
-mv "$NEXT_COMPOSE_FILE" "$COMPOSE_FILE"
-trap - EXIT
-docker compose up -d --build
+
+# Detect whether production compose can be rendered from current .env.
+use_full_compose=0
+if python3 - <<'PY'
+from pathlib import Path
+
+env_path = Path("/app/bidpilot/.env")
+if not env_path.exists():
+    raise SystemExit(1)
+
+text = env_path.read_text(encoding="utf-8", errors="replace")
+keys = set()
+for line in text.splitlines():
+    if not line or line.strip().startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    if value.strip().strip('"').strip("'"):
+        keys.add(key.strip())
+
+need = {
+    "DOCPILOT_REDIS_PASSWORD",
+    "DOCPILOT_POSTGRES_PASSWORD",
+    "DOCPILOT_POSTGRES_USER",
+    "DOCPILOT_POSTGRES_DB",
+    "DOCPILOT_MINIO_ACCESS_KEY",
+    "DOCPILOT_MINIO_SECRET_KEY",
+}
+raise SystemExit(0 if need.issubset(keys) else 1)
+PY
+then
+  cp "$REPO_ROOT/docker-compose.production.yml" "$NEXT_COMPOSE_FILE"
+  if docker compose -f "$NEXT_COMPOSE_FILE" --env-file .env config --quiet; then
+    use_full_compose=1
+  else
+    rm -f "$NEXT_COMPOSE_FILE"
+  fi
+fi
+
+if [[ "$use_full_compose" -eq 1 ]]; then
+  echo "deploy_mode=full_production_compose"
+  mv "$NEXT_COMPOSE_FILE" "$COMPOSE_FILE"
+  docker compose up -d --build
+else
+  echo "deploy_mode=app_services_only"
+  rm -f "$NEXT_COMPOSE_FILE"
+  # Keep current topology (often passwordless redis). Rebuild application services only.
+  docker compose build api worker web
+  docker compose up -d --no-deps api worker web
+fi
+
+sleep 5
+curl -fsS -o /dev/null -w "public_api:%{http_code}\n" https://bidpilot-api.rglens.com/health || true
+curl -fsS -o /dev/null -w "public_web:%{http_code}\n" https://bidpilot.rglens.com/ || true
