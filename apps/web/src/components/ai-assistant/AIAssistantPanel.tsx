@@ -589,26 +589,38 @@ function HistorySidebar({
       className={cn(
         "flex h-full shrink-0 flex-col border-r bg-card",
         docked
-          ? "w-[min(17.5rem,100%)] border-border/80 shadow-none"
+          ? "w-[min(16.5rem,100%)] border-border bg-muted/20 shadow-none"
           : "w-[min(20rem,calc(100vw-1.25rem))] shadow-xl",
       )}
       style={{ borderColor: "var(--border)" }}
     >
       {/* Header */}
-      <div className="p-3 flex items-center justify-between border-b shrink-0" style={{ borderColor: "var(--border)" }}>
-        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {t("panel.history")}
-        </span>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-xs" onClick={onNew} title={t("panel.newConversation")}>
-            <PlusIcon className="size-3" />
-          </Button>
+      <div className="flex shrink-0 flex-col gap-2 border-b p-3" style={{ borderColor: "var(--border)" }}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            {t("panel.history")}
+          </span>
           {!docked && (
             <Button variant="ghost" size="icon-xs" onClick={onClose} title={t("panel.closeHistory")}>
               <PanelRightCloseIcon className="size-3" />
             </Button>
           )}
         </div>
+        {docked ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 w-full justify-start gap-2 rounded-lg text-sm font-normal"
+            onClick={onNew}
+          >
+            <PlusIcon className="size-3.5" />
+            {t("panel.newConversation")}
+          </Button>
+        ) : (
+          <Button variant="ghost" size="icon-xs" onClick={onNew} title={t("panel.newConversation")}>
+            <PlusIcon className="size-3" />
+          </Button>
+        )}
       </div>
 
       {/* Search */}
@@ -771,8 +783,11 @@ export function AIAssistantPanel({
   const [input, setInput] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   useEffect(() => {
-    if (isWorkspace) setHistoryOpen(true);
-  }, [isWorkspace]);
+    if (isWorkspace) {
+      setHistoryOpen(true);
+      void refreshConversations();
+    }
+  }, [isWorkspace, refreshConversations]);
   const [historySearch, setHistorySearch] = useState("");
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -1104,9 +1119,9 @@ export function AIAssistantPanel({
 
   const startConversationOnSurface = useCallback(() => {
     startNewConversation();
-    setHistoryOpen(false);
-    if (isWorkspace) close();
-  }, [close, isWorkspace, startNewConversation]);
+    // Floating panel can hide history; workspace keeps the rail open.
+    if (!isWorkspace) setHistoryOpen(false);
+  }, [isWorkspace, startNewConversation]);
 
   const loadConversationOnSurface = useCallback(async (conversationId: string) => {
     await loadConversation(conversationId);
@@ -1132,65 +1147,66 @@ export function AIAssistantPanel({
       className={cn(
         "flex flex-col overflow-hidden",
         isWorkspace
-          ? // Parent shell is viewport-bounded; fill it and keep composer pinned.
-            "relative flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border"
-          : "fixed inset-0 z-40 h-[100dvh] w-full animate-slide-in border-l sm:left-auto sm:w-[min(100vw,390px)] md:w-[500px] xl:w-[560px]",
+          ? "relative h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-background"
+          : "fixed inset-0 z-40 h-[100dvh] w-full animate-slide-in border-l bg-background sm:left-auto sm:w-[min(100vw,390px)] md:w-[500px] xl:w-[560px]",
       )}
-      style={{
-        background: isWorkspace
-          ? "var(--background)"
-          : "color-mix(in oklch, var(--background) 96%, transparent)",
-        borderColor: "var(--border)",
-        boxShadow: isWorkspace
-          ? "none"
-          : "-20px 0 48px oklch(0 0 0 / 0.18)",
-        backdropFilter: isWorkspace ? undefined : "blur(16px) saturate(1.08)",
-      }}
+      style={
+        isWorkspace
+          ? undefined
+          : {
+              borderColor: "var(--border)",
+              boxShadow: "-20px 0 48px oklch(0 0 0 / 0.18)",
+            }
+      }
     >
-      {/* ─── Header ─── */}
+      {/* Compact chat header — no page marketing chrome */}
       <div
-        className="flex min-h-14 shrink-0 items-center justify-between gap-2 border-b px-3.5"
-        style={{
-          borderColor: "color-mix(in oklch, var(--border) 64%, transparent)",
-          background: isWorkspace ? "var(--card)" : "var(--background)",
-        }}
+        className={cn(
+          "flex shrink-0 items-center justify-between gap-2 border-b px-3",
+          isWorkspace ? "h-12" : "min-h-14 px-3.5",
+        )}
+        style={{ borderColor: "var(--border)", background: "var(--background)" }}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className={cn("text-muted-foreground", historyOpen && "bg-muted text-foreground")}
-            onClick={() => {
-              setAttachmentMenuOpen(false);
-              setConfigMenuOpen(null);
-              setHistoryOpen((v) => !v);
-            }}
-            title={t("panel.history")}
-          >
-            <HistoryIcon className="size-4" />
-          </Button>
-          <AgentMark decorative className="size-8" />
+          {!isWorkspace && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn("text-muted-foreground", historyOpen && "bg-muted text-foreground")}
+              onClick={() => {
+                setAttachmentMenuOpen(false);
+                setConfigMenuOpen(null);
+                setHistoryOpen((v) => !v);
+              }}
+              title={t("panel.history")}
+            >
+              <HistoryIcon className="size-4" />
+            </Button>
+          )}
+          <AgentMark decorative className={cn(isWorkspace ? "size-7" : "size-8")} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-semibold truncate text-foreground">
-                {state.currentConversationId
-                  ? (Array.isArray(state.conversations)
-                    ? state.conversations.find((item) => item.id === state.currentConversationId)?.title
-                    : null) || t("panel.untitledConversation")
-                  : t("title")}
-              </span>
+            <div className="truncate text-sm font-medium text-foreground">
+              {state.currentConversationId
+                ? (Array.isArray(state.conversations)
+                  ? state.conversations.find((item) => item.id === state.currentConversationId)?.title
+                  : null) || t("panel.untitledConversation")
+                : t("title")}
             </div>
-            <div className="truncate text-[11px] text-muted-foreground">
-              {state.status === "idle"
-                ? t("status.ready", { defaultValue: "Ready" })
-                : t(`status.${state.status}`, { defaultValue: t("thinking") })}
-            </div>
+            {!isWorkspace && (
+              <div className="truncate text-[11px] text-muted-foreground">
+                {state.status === "idle"
+                  ? t("status.ready", { defaultValue: "Ready" })
+                  : t(`status.${state.status}`, { defaultValue: t("thinking") })}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={startConversationOnSurface} title={t("panel.newConversation")}>
-            <PlusIcon className="size-4" />
-          </Button>
+          {!isWorkspace && (
+            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={startConversationOnSurface} title={t("panel.newConversation")}>
+              <PlusIcon className="size-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={() => toggle("command")} title={t("panel.openCommand")}>
             <CommandIcon className="size-4" />
           </Button>
@@ -1210,7 +1226,7 @@ export function AIAssistantPanel({
 
       {/* Body: docked history (workspace) or overlay (panel) + messages */}
       <div className={cn("relative flex min-h-0 flex-1 overflow-hidden", isWorkspace ? "flex-row" : "flex-col")}>
-        {isWorkspace && historyOpen && (
+        {isWorkspace && (
           <HistorySidebar
             conversations={Array.isArray(state.conversations) ? state.conversations : []}
             currentId={state.currentConversationId}
@@ -1335,10 +1351,11 @@ export function AIAssistantPanel({
 
       {/* ─── Input ─── */}
       <div
-        className="shrink-0 px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 sm:px-3"
-        style={{
-          background: "linear-gradient(180deg, transparent, color-mix(in oklch, var(--background) 96%, transparent) 28%)",
-        }}
+        className={cn(
+          "shrink-0 border-t bg-background px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2",
+          isWorkspace ? "px-4 sm:px-6" : "sm:px-3",
+        )}
+        style={{ borderColor: "var(--border)" }}
       >
         <input
           ref={fileInputRef}

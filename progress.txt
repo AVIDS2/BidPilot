@@ -2,7 +2,15 @@
 
 Updated: 2026-07-24
 
-## Latest (2026-07-24 login fix)
+## Latest (2026-07-24 modern agent chat layout)
+
+- Removed Operate/BidPilot Agent page title chrome that ate vertical space
+- Workspace chat is now: app nav | history rail | conversation (DeepSeek-style)
+- History list loads on workspace mount (was only loading when floating panel opened)
+- Docked history has full-width new conversation button
+
+## Previous (2026-07-24 login fix)
+
 
 - Root cause of public login "无法连接服务器": emergency local web dist inject baked VITE_API_URL=http://127.0.0.1:8001
 - Rebuilt with VITE_API_URL=https://bidpilot-api.rglens.com and reinjected into bidpilot-web

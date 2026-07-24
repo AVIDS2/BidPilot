@@ -1452,11 +1452,11 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "OPEN", mode: "panel" });
   }, []);
 
+  // Always keep the conversation list warm for both the floating panel and
+  // the full /agent workspace (workspace does not set isOpen).
   useEffect(() => {
-    if (state.isOpen && state.mode === "panel") {
-      void refreshConversations();
-    }
-  }, [state.isOpen, state.mode, refreshConversations]);
+    void refreshConversations();
+  }, [refreshConversations]);
 
   // Auto-restore the last conversation once when the assistant surface mounts.
   const didAutoRestoreRef = useRef(false);
