@@ -59,13 +59,12 @@ Next user turn / wake path injects <task_notification>
 
 ## MCP design (product)
 
-Expose BidPilot capabilities as an **internal MCP server** later, not a second agent:
+Internal MCP server is implemented at `scripts/bidpilot_mcp.py` (stdio FastMCP):
 
-- Transport: local stdio for CLI / HTTP for workspace tools
-- Tools: mirror `CAPABILITY_REGISTRY` names exactly
-- Auth: service token + user JWT; still call `execute_capability`
-- Resources: project outline, readiness summary, latest run events
-- Prompts: outline-first drafting, export readiness, review queue triage
+- Tools: `list_capabilities`, `invoke_capability(name, arguments_json)`
+- Auth: `DOCPILOT_MCP_TOKEN` (JWT) or trusted `DOCPILOT_MCP_USER_EMAIL`
+- Every mutation still goes through `execute_capability` (approval / quota / tenant / audit)
+- Later: HTTP transport for workspace tools; resources (outline/readiness/events); prompt packs
 
 **Do not** let external MCP tools write domain tables directly.
 
@@ -111,13 +110,13 @@ Added:
 
 ## Out of scope for this slice
 
-- Full MCP server process
-- Auto-resume without user open (needs push/SSE fanout product decision)
+- Auto-resume without user opening `/agent?conversation=...&wake=...` (needs push/SSE fanout)
 - Arbitrary shell / computer-use tools
 - YOLO mode for destructive tools
+- Production redis password migration (still app-services-only deploy path)
 
 ## Verification
 
 - unit: registry formatters for new tools
 - local smoke: web_search (DuckDuckGo fallback), search_projects, pending delete path
-- public deploy: api/worker rebuild when ready
+- public deploy: api/worker/web rebuild via dual-mode `deploy.sh`

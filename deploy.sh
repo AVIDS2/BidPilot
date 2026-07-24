@@ -18,6 +18,13 @@ ENV_FILE="$APP_ROOT/.env"
 cd "$REPO_ROOT"
 git pull --ff-only origin master
 
+# Re-exec once so this run uses the just-pulled deploy.sh body
+# (bash keeps the pre-pull script text in memory otherwise).
+if [[ "${DOCPILOT_DEPLOY_REEXEC:-}" != "1" ]]; then
+  export DOCPILOT_DEPLOY_REEXEC=1
+  exec bash "$REPO_ROOT/deploy.sh" "$@"
+fi
+
 # Derive split Postgres/Redis vars from URLs when missing.
 python3 - <<'PY'
 from pathlib import Path
