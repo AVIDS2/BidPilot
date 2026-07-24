@@ -48,6 +48,7 @@ from .registry import (
     CAPABILITY_REGISTRY,
     PublicCapabilityResult,
     get_capability_definition,
+    is_workflow_capability,
     missing_required_capability_arguments,
 )
 from .skills import build_skill_prompt_block
@@ -66,9 +67,9 @@ logger = logging.getLogger(__name__)
 ModelUsageObserver = Callable[[ProviderUsageMeasurement | None], None]
 
 HARNESS_MAX_STEPS = 8
-HARNESS_MAX_TOOLS_PER_TURN = 6
+HARNESS_MAX_TOOLS_PER_TURN = 1
 HARNESS_CAMPAIGN_MAX_STEPS = 16
-HARNESS_CAMPAIGN_MAX_TOOLS_PER_TURN = 10
+HARNESS_CAMPAIGN_MAX_TOOLS_PER_TURN = 1
 _LLM_TOOL_RESULT_MAX_CHARS = 2_000
 
 # Messages / capabilities that justify a higher step budget without global YOLO.
@@ -98,6 +99,63 @@ _CAMPAIGN_CAPABILITIES = frozenset(
         "generate_readiness_pack",
     }
 )
+
+# "Test yourself" must not become permission to randomly create, edit, or
+# delete customer data. Keep those requests useful by limiting the model to
+# read-only diagnostic capabilities unless the user also names a real action.
+_DIAGNOSTIC_MESSAGE_MARKERS = (
+    "随便调用",
+    "随便用",
+    "测试工具",
+    "测试一下",
+    "测试你的",
+    "长任务能力",
+    "多轮调用",
+)
+_MUTATING_REQUEST_MARKERS = (
+    "创建",
+    "删除",
+    "上传",
+    "写入",
+    "起草",
+    "导出",
+    "配置",
+    "修改",
+    "更新",
+    "提交",
+    "审批",
+    "同步",
+    "抓取",
+)
+_SAFE_DIAGNOSTIC_CAPABILITIES = frozenset(
+    {
+        "search_projects",
+        "get_project_summary",
+        "list_project_bundles",
+        "list_sections",
+        "get_project_outline",
+        "list_pending_reviews",
+        "list_requirements",
+        "list_claim_review_queue",
+        "get_readiness_summary",
+        "list_readiness_gaps",
+        "list_evidence",
+        "list_deliverables",
+        "list_documents",
+        "get_section_versions",
+        "semantic_search",
+        "search_bid_wiki",
+        "list_knowledge_portfolio",
+        "get_runtime_status",
+    }
+)
+
+
+def _is_diagnostic_only_request(user_message: str) -> bool:
+    text = (user_message or "").strip()
+    return bool(text) and any(marker in text for marker in _DIAGNOSTIC_MESSAGE_MARKERS) and not any(
+        marker in text for marker in _MUTATING_REQUEST_MARKERS
+    )
 
 
 def resolve_harness_budgets(
@@ -480,10 +538,12 @@ _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 
-def build_capability_tool_specs() -> list[dict[str, Any]]:
+def build_capability_tool_specs(*, allowed_names: frozenset[str] | None = None) -> list[dict[str, Any]]:
     """OpenAI-compatible tool specs derived from the product capability registry."""
     tools: list[dict[str, Any]] = []
     for definition in sorted(CAPABILITY_REGISTRY.values(), key=lambda item: item.name):
+        if allowed_names is not None and definition.name not in allowed_names:
+            continue
         parameters = _TOOL_PARAMETER_SCHEMAS.get(
             definition.name,
             {"type": "object", "properties": {}, "additionalProperties": True},
@@ -571,18 +631,23 @@ class StreamingHarness:
         self.pending_input = pending_input or {}
         self.provider_config_id = provider_config_id
         self.reasoning_effort = reasoning_effort
-        default_steps, default_tools = resolve_harness_budgets(user_message)
+        default_steps, _default_tools = resolve_harness_budgets(user_message)
         self.max_steps = max(1, max_steps if max_steps is not None else default_steps)
-        self.max_tools_per_turn = max(
-            1,
-            max_tools_per_turn if max_tools_per_turn is not None else default_tools,
-        )
+        # Tool calls remain strictly result-driven: one capability per model
+        # turn. Long tasks use more turns or a purpose-built campaign tool.
+        self.max_tools_per_turn = 1
         self.after_sequence = after_sequence
         self._active_reservation_keys: list[str] = []
         self._cursor = after_sequence
         self._streamed_text = False
         self._consecutive_tool_failures = 0
         self._emitted_end = False
+        self._diagnostic_only = _is_diagnostic_only_request(user_message)
+        self._allowed_capability_names = (
+            _SAFE_DIAGNOSTIC_CAPABILITIES
+            if self._diagnostic_only
+            else frozenset(CAPABILITY_REGISTRY)
+        )
 
     async def run(self) -> AsyncGenerator[str, None]:
         register_default_recovery_hooks()
@@ -599,7 +664,7 @@ class StreamingHarness:
                     )
                 )
             )
-        tools = build_capability_tool_specs()
+        tools = build_capability_tool_specs(allowed_names=self._allowed_capability_names)
         bound = self.llm.bind_tools(tools)
         hook_ctx = HookContext(
             conversation_id=self.conversation_id,
@@ -679,10 +744,7 @@ class StreamingHarness:
                 # Raise budget mid-turn when the model starts a campaign/research wave.
                 if any(item.name in _CAMPAIGN_CAPABILITIES for item in tool_calls):
                     self.max_steps = max(self.max_steps, HARNESS_CAMPAIGN_MAX_STEPS)
-                    self.max_tools_per_turn = max(
-                        self.max_tools_per_turn,
-                        HARNESS_CAMPAIGN_MAX_TOOLS_PER_TURN,
-                    )
+                    self.max_tools_per_turn = HARNESS_CAMPAIGN_MAX_TOOLS_PER_TURN
 
                 # Keep the assistant message that requested tools in the transcript.
                 ai_tool_message = AIMessage(
@@ -955,35 +1017,42 @@ class StreamingHarness:
         capability_list = "、".join(
             f"{item.name}（{item.label_zh}）"
             for item in sorted(CAPABILITY_REGISTRY.values(), key=lambda value: value.name)
+            if item.name in self._allowed_capability_names
         )
         system = with_untrusted_context_guard(
             "你是 BidPilot 的平台执行助手。你可以回答问题，也可以调用注册工具。\n"
             "规则：\n"
             "1. 只使用提供的工具；禁止虚构执行结果。\n"
-            "2. 信息不足时先用中文追问一个最关键字段，不要瞎猜 ID。\n"
-            "3. 变更类操作由服务端审批，你仍然可以提出 tool call。\n"
-            "4. 若 active_project_id 存在，项目范围内操作优先使用它。\n"
-            "5. 工具结果返回后，用简洁中文总结并推进下一步。\n"
-            "6. 写作/起草任务：先 get_project_outline 或 list_sections 拿到 section_key，"
+            "2. 每个回合最多调用一个工具；拿到结果后再决定下一步，禁止一次并发或串联猜测多个工具。\n"
+            "3. 信息不足时先用中文追问一个最关键字段，不要瞎猜 ID。\n"
+            "4. 变更类操作由服务端审批，你仍然可以提出 tool call。\n"
+            "5. 若 active_project_id 存在，项目范围内操作优先使用它。\n"
+            "6. 工具结果返回后，用简洁中文总结并推进下一步。\n"
+            "7. 写作/起草任务：先 get_project_outline 或 list_sections 拿到 section_key，"
             "再 start_draft_section 或 write_section；禁止只在聊天里写长文代替章节写入。"
             "用户说「自行完成/拟草」时：无资料用 write_section 直接写入；有资料用 start_draft_section。\n"
-            "7. outline/sections 工具结果里的 sections[].section_key 必须原样用于后续工具，"
+            "8. outline/sections 工具结果里的 sections[].section_key 必须原样用于后续工具，"
             "不要声称「没有 section_key」。\n"
-            "8. search_projects 结果若存在同名项目，必须用 projects[].id 或 short_id 区分；"
+            "9. search_projects 结果若存在同名项目，必须用 projects[].id 或 short_id 区分；"
             "禁止发明「(1)/(2)」标签；删除/打开前先复述目标 id。\n"
-            "9. 若上一轮已进入待确认删除/写入，优先等待用户确认，不要重复搜索或重新发起同类操作。\n"
-            "10. 外部研究：用 web_search 找来源；需要入库时用 fetch_url_to_project；"
+            "10. 若上一轮已进入待确认删除/写入，优先等待用户确认，不要重复搜索或重新发起同类操作。\n"
+            "11. 外部研究：用 web_search 找来源；需要入库时用 fetch_url_to_project；"
             "聊天附件入库用 upload_document(attachment_ids=...)。长工作流完成后会有后台通知，"
             "收到 <task_notification> 后继续，不要空转轮询。\n"
-            "11. 多章节战役：用户要求「全部章节/整本/批量起草」时，优先 run_section_campaign"
+            "12. 多章节战役：用户要求「全部章节/整本/批量起草」时，优先 run_section_campaign"
             "（mode=framework 先写骨架；有资料用 draft_workflow）。不要在一回合里手写 20 章长文。"
             "campaign 返回 remaining_section_keys/has_more 时，同一回合或下一波继续同一 project_id，"
             "直到 has_more=false；不要停在第一波就结束。\n"
-            "12. 删除：用户明确给出 project_id 或唯一 short_id 要求删除时，直接 delete_project，"
+            "13. 删除：用户明确给出 project_id 或唯一 short_id 要求删除时，直接 delete_project，"
             "不要先 search_projects / get_project_summary 兜圈子；服务端会弹出 typed confirmation。\n"
-            "13. 错误恢复：get_project_outline/list_sections 因坏 id 失败时，先 search_projects；"
+            "14. 错误恢复：get_project_outline/list_sections 因坏 id 失败时，先 search_projects；"
             "若结果仅 1 个可访问项目，自动用该 id 重试一次 outline，不要只停在列表询问。\n"
-            f"可用工具：{capability_list}"
+            + (
+                "15. 当前请求是安全诊断；只能执行提供的只读工具，禁止创建、删除、写入、上传、起草或导出。\n"
+                if self._diagnostic_only
+                else ""
+            )
+            + f"可用工具：{capability_list}"
         )
         skill_block = build_skill_prompt_block(self.user_message)
         if skill_block:
@@ -1139,6 +1208,31 @@ class StreamingHarness:
         executed_names: list[str],
     ) -> AsyncGenerator[str, None]:
         arguments = dict(item.arguments)
+        if item.name not in self._allowed_capability_names:
+            message = (
+                "本次是安全诊断，只允许执行只读检查。"
+                "请明确说明需要创建、上传、写入或删除的业务目标后再执行。"
+                if self._diagnostic_only and item.name in CAPABILITY_REGISTRY
+                else f"未知或不可用工具：{item.name}"
+            )
+            messages.append(
+                ToolMessage(
+                    content=json.dumps({"error": message}, ensure_ascii=False),
+                    tool_call_id=item.tool_call_id,
+                )
+            )
+            yield _sse(
+                "assistant.tool_failed",
+                {
+                    "runtime_run_id": self.runtime_run.id,
+                    "turn_id": turn_id,
+                    "tool_call_id": item.tool_call_id,
+                    "tool_name": item.name,
+                    "error_message": message,
+                    "state": "failed",
+                },
+            )
+            return
         if self.active_project_id and "project_id" not in arguments:
             # Prefer durable conversation scope when the model omits it.
             schema = _TOOL_PARAMETER_SCHEMAS.get(item.name, {})
@@ -1252,7 +1346,10 @@ class StreamingHarness:
                     "state": "failed",
                 },
             )
-            async for event in self._flush_new_events(skip_capability_started=True):
+            async for event in self._flush_new_events(
+                skip_capability_started=True,
+                skip_capability_failed=True,
+            ):
                 yield event
             if self._consecutive_tool_failures >= 3:
                 stop = "连续多次工具执行失败，我先停在这里。请换一种说法或检查项目上下文后再试。"
@@ -1264,6 +1361,7 @@ class StreamingHarness:
                 async for event in self._flush_new_events(
                     skip_message_completed=True,
                     skip_capability_started=True,
+                    skip_capability_failed=True,
                     skip_run_terminal=True,
                 ):
                     yield event
@@ -1336,7 +1434,37 @@ class StreamingHarness:
             ensure_ascii=False,
         )[:_LLM_TOOL_RESULT_MAX_CHARS]
         messages.append(ToolMessage(content=llm_content, tool_call_id=item.tool_call_id))
-        async for event in self._flush_new_events(skip_capability_started=True):
+        if is_workflow_capability(item.name):
+            yield _sse(
+                "assistant.workflow_started",
+                {
+                    "runtime_run_id": self.runtime_run.id,
+                    "turn_id": turn_id,
+                    "tool_call_id": item.tool_call_id,
+                    "tool_name": item.name,
+                    "title": definition.label_zh,
+                    "arguments": redact_arguments(arguments),
+                    "result": result.payload,
+                    "state": "running_workflow",
+                },
+            )
+        yield _sse(
+            "assistant.tool_succeeded",
+            {
+                "runtime_run_id": self.runtime_run.id,
+                "turn_id": turn_id,
+                "tool_call_id": item.tool_call_id,
+                "tool_name": item.name,
+                "title": definition.label_zh,
+                "result": result.payload,
+                "summary": result.summary,
+                "state": "completed",
+            },
+        )
+        async for event in self._flush_new_events(
+            skip_capability_started=True,
+            skip_capability_succeeded=True,
+        ):
             yield event
 
     def _maybe_bind_project(self, capability_name: str, payload: dict[str, Any]) -> None:
@@ -1370,6 +1498,7 @@ class StreamingHarness:
         skip_message_completed: bool = False,
         skip_capability_started: bool = False,
         skip_capability_succeeded: bool = False,
+        skip_capability_failed: bool = False,
         skip_run_terminal: bool = False,
     ) -> AsyncGenerator[str, None]:
         from .assistant_adapter import _render_runtime_event
@@ -1403,6 +1532,12 @@ class StreamingHarness:
                 and event.event_type == RuntimeEventType.CAPABILITY_SUCCEEDED.value
             ):
                 # Approval resume path owns a single tool_succeeded event.
+                continue
+            if (
+                skip_capability_failed
+                and event.event_type == RuntimeEventType.CAPABILITY_FAILED.value
+            ):
+                # The harness already emitted a correlated live tool_failed event.
                 continue
             if skip_run_terminal and event.event_type in {
                 RuntimeEventType.RUN_COMPLETED.value,

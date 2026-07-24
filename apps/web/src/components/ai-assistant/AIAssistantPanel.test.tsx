@@ -44,7 +44,7 @@ function renderPanel() {
 }
 
 async function expandActivityDetails() {
-  // L2/L3 now default open (Pi/CC-style). Only click if still collapsed.
+  // Completed trace details stay collapsed until the reader asks for them.
   await waitFor(() => {
     expect(
       screen.queryByRole("button", { name: "Expand activity details" }) ||
@@ -546,7 +546,10 @@ describe("AIAssistantPanel", () => {
     });
     expect(screen.getByText("Open page completed")).toBeInTheDocument();
     expect(screen.getAllByText("done").length).toBeGreaterThan(0);
-    // L2/L3 default open: summary detail is visible without an expand click.
+    expect(
+      screen.queryByText("raw detail should be hidden until expanded"),
+    ).not.toBeInTheDocument();
+    await expandActivityDetails();
     expect(
       screen.getByText("raw detail should be hidden until expanded"),
     ).toBeInTheDocument();
@@ -556,8 +559,6 @@ describe("AIAssistantPanel", () => {
         .compareDocumentPosition(screen.getAllByText("已打开项目页。")[0]) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-
-    await expandActivityDetails();
   });
 
   it("sanitizes raw tool payloads from activity details", async () => {

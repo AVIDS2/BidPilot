@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
 import {
   CheckCircle2Icon,
   ChevronDownIcon,
@@ -11,8 +9,6 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
-import ShinyText from "@/components/ShinyText";
 import { Button } from "@/components/ui/button";
 import { downloadAssistantArtifact } from "@/lib/api";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
@@ -382,11 +378,13 @@ function ActivityDetail({
   onCancelWorkflow,
   onConfigureProvider,
   isCancelling,
+  showHeader = true,
 }: {
   item: AssistantExecutionItem;
   onCancelWorkflow?: (runtimeRunId: string) => void;
   onConfigureProvider?: () => void;
   isCancelling?: boolean;
+  showHeader?: boolean;
 }) {
   const { t } = useTranslation("ai-assistant");
   const Icon = getAssistantToolIcon(item);
@@ -415,20 +413,26 @@ function ActivityDetail({
     !item.isCancellationRequested;
 
   return (
-    <div className="group flex gap-2.5 py-1.5 text-xs">
-      <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/75">
-        <Icon className="h-3.5 w-3.5" />
-      </div>
+    <div className={cn("text-xs", showHeader && "group flex gap-2.5 py-1.5")}>
+      {showHeader && (
+        <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/75">
+          <Icon className="h-3.5 w-3.5" />
+        </div>
+      )}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-medium tracking-[-0.01em] text-foreground/95">{label}</span>
-          <span className="shrink-0 text-[11px] text-muted-foreground/80">
-            {t(`activity.status.${item.status}`, { defaultValue: item.status })}
-          </span>
-        </div>
-        <div className="mt-0.5 leading-5 text-muted-foreground/85">
-          {failureGuidance?.message || safeSummary || summarizeResult(item, t)}
-        </div>
+        {showHeader && (
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate font-medium tracking-[-0.01em] text-foreground/95">{label}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground/80">
+              {t(`activity.status.${item.status}`, { defaultValue: item.status })}
+            </span>
+          </div>
+        )}
+        {(showHeader || failureGuidance) && (
+          <div className="mt-0.5 leading-5 text-muted-foreground/85">
+            {failureGuidance?.message || safeSummary || summarizeResult(item, t)}
+          </div>
+        )}
         {failureGuidance?.canOpenProviderSettings && onConfigureProvider && (
           <Button
             type="button"
@@ -492,6 +496,83 @@ function ActivityDetail({
   );
 }
 
+function TraceToolStep({
+  item,
+  onCancelWorkflow,
+  onConfigureProvider,
+  isCancelling,
+}: {
+  item: AssistantExecutionItem;
+  onCancelWorkflow?: (runtimeRunId: string) => void;
+  onConfigureProvider?: () => void;
+  isCancelling?: boolean;
+}) {
+  const { t } = useTranslation("ai-assistant");
+  const label = getAssistantToolLabel(item.toolName, t);
+  const summary = sanitizeToolText(item.summary) || summarizeResult(item, t);
+  const isActive = item.status === "running" || item.status === "pending";
+  const [expanded, setExpanded] = useState(() => isActive || item.status === "failed");
+  const previousStatus = useRef(item.status);
+
+  useEffect(() => {
+    const wasActive = previousStatus.current === "running" || previousStatus.current === "pending";
+    if (isActive || item.status === "failed") {
+      setExpanded(true);
+    } else if (wasActive) {
+      setExpanded(false);
+    }
+    previousStatus.current = item.status;
+  }, [isActive, item.status]);
+
+  return (
+    <details
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      className="border-b border-border/55 py-1.5 last:border-b-0"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm py-1 text-left text-xs marker:hidden [&::-webkit-details-marker]:hidden">
+        <span
+          className={cn(
+            "flex h-4 w-4 shrink-0 items-center justify-center",
+            isActive && "animate-pulse text-primary",
+            item.status === "failed" && "text-destructive",
+            item.status === "succeeded" && "text-primary",
+          )}
+        >
+          {isActive ? (
+            <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+          ) : item.status === "failed" ? (
+            <XCircleIcon className="h-3.5 w-3.5" />
+          ) : item.status === "succeeded" ? (
+            <CheckCircle2Icon className="h-3.5 w-3.5" />
+          ) : (
+            <CircleDashedIcon className="h-3.5 w-3.5" />
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium text-foreground/90">{label}</span>
+          {summary && <span className="block truncate pt-0.5 text-[11px] text-muted-foreground">{summary}</span>}
+        </span>
+        <span className="shrink-0 text-[11px] text-muted-foreground/75">
+          {t(`activity.status.${item.status}`, { defaultValue: item.status })}
+        </span>
+        <ChevronDownIcon
+          className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform", expanded && "rotate-180")}
+        />
+      </summary>
+      <div className="ml-6 border-l border-border/45 pl-3 pb-1 pt-1">
+        <ActivityDetail
+          item={item}
+          onCancelWorkflow={onCancelWorkflow}
+          onConfigureProvider={onConfigureProvider}
+          isCancelling={isCancelling}
+          showHeader={false}
+        />
+      </div>
+    </details>
+  );
+}
+
 export function AssistantActivityTimeline({
   items,
   onCancelWorkflow,
@@ -503,19 +584,22 @@ export function AssistantActivityTimeline({
 }) {
   const { t } = useTranslation("ai-assistant");
   const tone = getTone(items);
-  // Pi/CC-style: keep L2 tool steps visible by default so the three-level
-  // transcript is not collapsed into a single L1 chip.
-  const defaultExpanded = true;
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const isActive = tone === "running" || tone === "pending";
+  const [expanded, setExpanded] = useState(() => isActive || tone === "failed");
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const [cancellationError, setCancellationError] = useState<string | null>(null);
-  const prefersReducedMotion = usePrefersReducedMotion();
-  const activityRef = useRef<HTMLDivElement | null>(null);
+  const previousTone = useRef(tone);
   const { tools, workflows } = useMemo(() => countByKind(items), [items]);
 
   useEffect(() => {
-    setExpanded(defaultExpanded);
-  }, [defaultExpanded, items.length, tone]);
+    const wasActive = previousTone.current === "running" || previousTone.current === "pending";
+    if (isActive || tone === "failed") {
+      setExpanded(true);
+    } else if (wasActive) {
+      setExpanded(false);
+    }
+    previousTone.current = tone;
+  }, [isActive, tone]);
 
   // L1 header keeps the existing i18n activity label for product polish.
   // Turn grouping still powers stable L2 keys via toolCallId.
@@ -534,46 +618,25 @@ export function AssistantActivityTimeline({
     }
   };
 
-  useGSAP(
-    () => {
-      // Only animate first mount of the L1 chip. Expand/collapse is owned by
-      // CSS grid-rows so open/close stays smooth without mount thrash.
-      if (prefersReducedMotion || !activityRef.current) return;
-      gsap.fromTo(
-        ".assistant-activity-summary",
-        { opacity: 0, y: 5 },
-        { opacity: 1, y: 0, duration: 0.28, ease: "power3.out" },
-      );
-    },
-    { dependencies: [items.length, tone, prefersReducedMotion], scope: activityRef },
-  );
-
   if (items.length === 0) return null;
 
   return (
-    <div
-      ref={activityRef}
-      className={cn(
-        "mb-4 border-b transition-[border-color,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-        expanded ? "pb-3" : "border-transparent pb-0",
-      )}
-      style={{ borderColor: expanded ? "color-mix(in oklch, var(--border) 54%, transparent)" : undefined }}
-    >
+    <div className={cn("mb-4 border-b border-border/55", expanded && "pb-3")}>
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="assistant-activity-summary group flex w-full items-center gap-2 rounded-md py-0.5 text-left text-[12px] text-muted-foreground transition hover:text-foreground"
+        className="group flex w-full items-center gap-2 rounded-md py-1 text-left text-[12px] text-muted-foreground transition hover:text-foreground"
         aria-expanded={expanded}
         aria-label={expanded ? t("activity.collapse") : t("activity.expand")}
       >
         <span
           className={cn(
             "flex h-4 w-4 shrink-0 items-center justify-center",
-            tone === "running" && "animate-pulse",
+            isActive && "animate-pulse",
           )}
           style={{ color: tone === "failed" ? "var(--destructive)" : "var(--primary)" }}
         >
-          {tone === "running" ? (
+          {isActive ? (
             <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
           ) : tone === "failed" ? (
             <XCircleIcon className="h-3.5 w-3.5" />
@@ -583,20 +646,7 @@ export function AssistantActivityTimeline({
             <CircleDashedIcon className="h-3.5 w-3.5" />
           )}
         </span>
-        <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">
-          {tone === "running" && !prefersReducedMotion ? (
-            <ShinyText
-              text={label}
-              speed={2.6}
-              color="var(--muted-foreground)"
-              shineColor="var(--primary)"
-              spread={105}
-              className="max-w-full truncate align-bottom"
-            />
-          ) : (
-            label
-          )}
-        </span>
+        <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">{label}</span>
         <span className="shrink-0 text-[11px] text-muted-foreground/80">{statusLabel}</span>
         <ChevronDownIcon
           className={cn(
@@ -605,32 +655,20 @@ export function AssistantActivityTimeline({
           )}
         />
       </button>
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-        )}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <div
-            className="ml-[7px] mt-2 flex flex-col gap-1 border-l pl-5"
-            style={{ borderColor: "color-mix(in oklch, var(--border) 62%, transparent)" }}
-          >
-            {/* L2: individual tool steps — stay mounted so height can animate. */}
-            {items.map((item) => (
-              <div key={item.toolCallId || item.id} className="assistant-activity-detail">
-                <ActivityDetail
-                  item={item}
-                  onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
-                  onConfigureProvider={onConfigureProvider}
-                  isCancelling={cancellingRunId === item.runtimeRunId}
-                />
-              </div>
-            ))}
-            {cancellationError && <p className="pt-1 text-[11px] text-destructive">{cancellationError}</p>}
-          </div>
+      {expanded && (
+        <div className="ml-[7px] mt-2 border-l border-border/60 pl-4">
+          {items.map((item) => (
+            <TraceToolStep
+              key={item.toolCallId || item.id}
+              item={item}
+              onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
+              onConfigureProvider={onConfigureProvider}
+              isCancelling={cancellingRunId === item.runtimeRunId}
+            />
+          ))}
+          {cancellationError && <p className="pt-2 text-[11px] text-destructive">{cancellationError}</p>}
         </div>
-      </div>
+      )}
     </div>
   );
 }

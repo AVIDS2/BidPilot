@@ -128,7 +128,7 @@ def test_streaming_harness_answers_without_tools(monkeypatch: pytest.MonkeyPatch
     assert llm.calls, "model should be invoked once"
 
 
-def test_streaming_harness_executes_tool_then_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_streaming_harness_executes_one_correlated_tool_then_answers(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
     from app.runtime import harness_loop as module
@@ -147,7 +147,10 @@ def test_streaming_harness_executes_tool_then_answers(monkeypatch: pytest.Monkey
         [
             _FakeAIMessage(
                 content="",
-                tool_calls=[{"id": "call-1", "name": "search_projects", "args": {"query": "demo"}}],
+                tool_calls=[
+                    {"id": "call-1", "name": "search_projects", "args": {"query": "demo"}},
+                    {"id": "call-2", "name": "list_documents", "args": {"project_id": "p1"}},
+                ],
             ),
             _FakeAIMessage(content="我找到了 1 个项目。"),
         ]
@@ -181,21 +184,94 @@ def test_streaming_harness_executes_tool_then_answers(monkeypatch: pytest.Monkey
         user_message="找项目",
     )
 
-    events: list[str] = []
+    events: list[tuple[str, dict[str, Any]]] = []
 
     async def _collect() -> None:
         async for raw in harness.run():
+            event_type = ""
+            payload = ""
             for line in raw.strip().splitlines():
                 if line.startswith("event: "):
-                    events.append(line[7:])
+                    event_type = line[7:]
+                elif line.startswith("data: "):
+                    payload = line[6:]
+            if event_type and payload:
+                events.append((event_type, json.loads(payload)))
 
     asyncio.run(_collect())
 
-    assert "search_projects" in executed
-    assert events.count("assistant.tool_started") == 1
-    assert "assistant.turn_finished" in events
-    assert "assistant.message" in events
+    assert executed == ["search_projects"]
+    started = next(payload for event, payload in events if event == "assistant.tool_started")
+    succeeded = next(payload for event, payload in events if event == "assistant.tool_succeeded")
+    assert started["tool_call_id"] == "call-1"
+    assert succeeded["tool_call_id"] == "call-1"
+    assert started["turn_id"] == succeeded["turn_id"] == "turn-1"
+    assert sum(event == "assistant.tool_started" for event, _ in events) == 1
+    assert "assistant.turn_finished" in [event for event, _ in events]
+    assert "assistant.message" in [event for event, _ in events]
     assert len(llm.calls) == 2
+
+
+def test_streaming_harness_limits_test_requests_to_read_only_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from app.runtime import harness_loop as module
+    from app.usage.schemas import ProviderSource
+
+    llm = _FakeBoundLLM(
+        [
+            _FakeAIMessage(
+                tool_calls=[{"id": "call-create", "name": "create_project", "args": {"name": "不应创建"}}],
+            ),
+            _FakeAIMessage(content="我只完成了安全的只读诊断。"),
+        ]
+    )
+    executed: list[str] = []
+
+    def fake_execute_capability(*args: Any, **kwargs: Any) -> None:
+        executed.append(str(kwargs["capability_name"]))
+        raise AssertionError("diagnostic mode must not execute a write capability")
+
+    monkeypatch.setattr(module, "execute_capability", fake_execute_capability)
+    monkeypatch.setattr(module, "save_message", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "complete_runtime_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "reserve_assistant_model_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
+
+    harness = StreamingHarness(
+        db=object(),  # type: ignore[arg-type]
+        user=_FakeUser(),  # type: ignore[arg-type]
+        run=_FakeRun(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        llm=llm,
+        provider_type="openai",
+        provider_source=ProviderSource.OFFICIAL,
+        model="test",
+        user_message="边说边调用工具，随便调用什么都行，我测试你的长任务能力，必须多轮",
+    )
+
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def _collect() -> None:
+        async for raw in harness.run():
+            event_type = ""
+            payload = ""
+            for line in raw.strip().splitlines():
+                if line.startswith("event: "):
+                    event_type = line[7:]
+                elif line.startswith("data: "):
+                    payload = line[6:]
+            if event_type and payload:
+                events.append((event_type, json.loads(payload)))
+
+    asyncio.run(_collect())
+
+    available_names = {tool["function"]["name"] for tool in llm.tools}
+    assert "search_projects" in available_names
+    assert "create_project" not in available_names
+    assert executed == []
+    failure = next(payload for event, payload in events if event == "assistant.tool_failed")
+    assert "安全诊断" in failure["error_message"]
 
 
 def test_resume_approval_emits_started_before_succeeded(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -734,9 +734,16 @@ function handleAssistantSseEvent(
 
   if (eventType === "assistant.workflow_started") {
     const toolName = String(parsed.tool_name ?? "");
+    const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
+    const turnId =
+      (typeof parsed.turn_id === "string" && parsed.turn_id) ||
+      (runtimeRunId ? `run:${runtimeRunId}` : undefined);
     const result = asRecord(parsed.result);
     const runId = typeof result.run_id === "string" ? result.run_id : undefined;
     const workflowRuntimeRunId = typeof result.runtime_run_id === "string" ? result.runtime_run_id : undefined;
+    if (turnId) {
+      dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
+    }
     dispatch({ type: "CLEAR_TRANSIENT_STATE" });
     dispatch({
       type: "ADD_EXECUTION_ITEM",
@@ -744,6 +751,8 @@ function handleAssistantSseEvent(
         id: `workflow-${Date.now()}`,
         kind: "workflow",
         toolName,
+        toolCallId,
+        turnId,
         runId,
         runtimeRunId: workflowRuntimeRunId,
         status: "running",
@@ -798,64 +807,26 @@ function handleAssistantSseEvent(
     if (turnId) {
       dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
     }
-    if (runtimeRunId) {
-      // This is the parent runtime capability completing. A workflow capability
-      // creates and tracks its child runtime separately in `workflow_started`.
-      // Keeping this parent tool in `running` would indefinitely buffer a
-      // completed assistant response for read-only capabilities.
-      dispatch({
-        type: "UPDATE_EXECUTION_ITEM",
-        toolName,
-        toolCallId,
-        turnId,
-        runtimeRunId,
-        patch: {
-          status: "succeeded",
-          result,
-          summary: String(parsed.summary ?? ""),
-          isRunning: false,
-          toolCallId,
-          turnId,
-          title: typeof parsed.title === "string" && parsed.title ? parsed.title : toolName,
-        },
-      });
-      return;
-    }
-    if (typeof result.run_id === "string") {
-      const childRuntimeRunId = typeof result.runtime_run_id === "string" ? result.runtime_run_id : undefined;
-      dispatch({
-        type: "UPDATE_EXECUTION_ITEM",
-        toolName,
-        toolCallId,
-        turnId,
-        runId: result.run_id,
-        runtimeRunId: childRuntimeRunId,
-        patch: {
-          status: "running",
-          result,
-          runtimeRunId: childRuntimeRunId,
-          summary: String(parsed.summary ?? ""),
-          isRunning: true,
-          toolCallId,
-          turnId,
-        },
-      });
-      dispatch({ type: "SET_STATUS", status: "running_workflow" });
-      return;
-    }
     dispatch({
       type: "UPDATE_EXECUTION_ITEM",
       toolName,
       toolCallId,
       turnId,
+      runtimeRunId,
       patch: {
         status: "succeeded",
         result,
         summary: String(parsed.summary ?? ""),
+        isRunning: false,
         toolCallId,
         turnId,
+        runtimeRunId,
+        title: typeof parsed.title === "string" && parsed.title ? parsed.title : toolName,
       },
     });
+    if (typeof result.run_id === "string" || typeof result.runtime_run_id === "string") {
+      return;
+    }
     if (toolName === "open_page" && typeof result.route === "string") {
       window.history.pushState({}, "", result.route);
       window.dispatchEvent(new PopStateEvent("popstate"));
