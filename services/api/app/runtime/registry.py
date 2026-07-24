@@ -157,6 +157,28 @@ _CAPABILITIES = (
         requires_approval_in_risky_only=True,
     ),
     CapabilityDefinition("semantic_search", "检索资料", "Search project evidence", RuntimeRiskLevel.READ, "project.read"),
+    CapabilityDefinition(
+        "web_search",
+        "联网搜索",
+        "Web search",
+        RuntimeRiskLevel.READ,
+    ),
+    CapabilityDefinition(
+        "fetch_url_to_project",
+        "下载网页到项目",
+        "Fetch URL into project",
+        RuntimeRiskLevel.COSTING,
+        "bundles.write",
+        requires_approval_in_risky_only=True,
+    ),
+    CapabilityDefinition(
+        "upload_document",
+        "上传文档到项目",
+        "Upload document to project",
+        RuntimeRiskLevel.COSTING,
+        "bundles.write",
+        requires_approval_in_risky_only=True,
+    ),
     CapabilityDefinition("search_bid_wiki", "查询 Bid Wiki", "Search Bid Wiki", RuntimeRiskLevel.READ, "memory.read"),
     CapabilityDefinition(
         "list_knowledge_portfolio",
@@ -205,6 +227,9 @@ WORKFLOW_CAPABILITY_NAMES = frozenset(
 _REQUIRED_ARGUMENT_FIELDS: dict[str, tuple[str, ...]] = {
     "create_project": ("name",),
     "write_section": ("project_id", "section_key", "content_markdown"),
+    "web_search": ("query",),
+    "fetch_url_to_project": ("project_id", "url"),
+    "semantic_search": ("project_id", "query"),
 }
 
 
@@ -263,6 +288,13 @@ def format_approval_request(capability_name: str, arguments: dict[str, Any]) -> 
         return "确认重新启动这次工作流吗？"
     if capability_name == "export_deliverable":
         return f"确认导出 {str(arguments.get('format') or 'docx').upper()} 文件吗？"
+    if capability_name == "fetch_url_to_project":
+        url = arguments.get("url")
+        if isinstance(url, str) and url.strip():
+            return f"确认把网页资源下载到项目吗？\n{url.strip()[:120]}"
+        return "确认把网页资源下载到当前项目资料包吗？"
+    if capability_name == "upload_document":
+        return "确认把文件上传/入库到当前项目资料包吗？"
     if capability_name == "generate_readiness_pack":
         return "确认生成当前项目的投标准备度包吗？"
     if capability_name == "propose_memory":
@@ -496,6 +528,50 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
         }
         title = result.get("section_title") or result.get("section_key") or "章节"
         return PublicCapabilityResult(f"已写入章节「{title}」。", payload)
+    if capability_name == "semantic_search":
+        items = _public_items(
+            result.get("items"),
+            ("chunk_id", "source_document_id", "score", "excerpt", "heading", "page"),
+        )
+        payload = {"count": count}
+        if items:
+            payload["items"] = items
+        return PublicCapabilityResult(f"检索到 {count} 条相关资料片段。", payload)
+    if capability_name == "web_search":
+        items = _public_items(result.get("items"), ("title", "url", "snippet"))
+        payload = {"count": count, "provider": result.get("provider"), "query": result.get("query")}
+        if items:
+            payload["items"] = items
+        return PublicCapabilityResult(
+            f"联网搜索返回 {count} 条结果。",
+            {k: v for k, v in payload.items() if v is not None},
+        )
+    if capability_name in {"fetch_url_to_project", "upload_document"}:
+        payload = {
+            key: result[key]
+            for key in (
+                "project_id",
+                "bundle_id",
+                "document_id",
+                "filename",
+                "bytes",
+                "source_url",
+                "parse_status",
+                "attachment_count",
+                "ingest_queued",
+            )
+            if key in result
+        }
+        if capability_name == "fetch_url_to_project":
+            name = result.get("filename") or "资源"
+            return PublicCapabilityResult(f"已下载「{name}」到项目。", payload)
+        name = result.get("filename") or "文档"
+        if "attachment_count" in result:
+            return PublicCapabilityResult(
+                f"已将 {result.get('attachment_count')} 个附件加入资料包。",
+                payload,
+            )
+        return PublicCapabilityResult(f"已上传「{name}」到项目。", payload)
     if capability_name == "resume_draft_run":
         payload = {
             key: result[key]

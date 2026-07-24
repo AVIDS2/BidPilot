@@ -238,6 +238,45 @@ def test_list_sections_formatter_keeps_section_keys() -> None:
     assert "raw_markdown" not in result.payload["sections"][0]
 
 
+def test_web_search_and_upload_formatters_keep_safe_fields() -> None:
+    web = format_public_result(
+        "web_search",
+        {
+            "query": "AI 投标",
+            "provider": "tavily",
+            "count": 1,
+            "items": [
+                {
+                    "title": "示例",
+                    "url": "https://example.com",
+                    "snippet": "摘要",
+                    "raw_score": 0.9,
+                }
+            ],
+        },
+    )
+    assert web.payload["count"] == 1
+    assert web.payload["items"][0]["url"] == "https://example.com"
+    assert "raw_score" not in web.payload["items"][0]
+
+    upload = format_public_result(
+        "fetch_url_to_project",
+        {
+            "project_id": "p1",
+            "bundle_id": "b1",
+            "document_id": "d1",
+            "filename": "policy.pdf",
+            "bytes": 12,
+            "source_url": "https://example.com/policy.pdf",
+            "parse_status": "pending",
+            "secret": "nope",
+        },
+    )
+    assert "policy.pdf" in upload.summary
+    assert upload.payload["document_id"] == "d1"
+    assert "secret" not in upload.payload
+
+
 def test_write_section_formatter_exposes_safe_section_identifiers() -> None:
     result = format_public_result(
         "write_section",

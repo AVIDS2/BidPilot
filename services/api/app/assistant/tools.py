@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from app.access.service import (
@@ -126,8 +128,14 @@ def execute_tool(
         return generate_readiness_pack_tool(db, user, arguments)
     if tool_name == "delete_project":
         return delete_project_tool(db, user, arguments)
+    if tool_name == "semantic_search":
+        return semantic_search_tool(db, user, arguments)
+    if tool_name == "web_search":
+        return web_search_tool(db, user, arguments)
+    if tool_name == "fetch_url_to_project":
+        return fetch_url_to_project_tool(db, user, arguments)
     if tool_name == "upload_document":
-        return upload_document_stub(arguments)
+        return upload_document_tool(db, user, arguments)
     raise ValueError(f"Unsupported assistant tool: {tool_name}")
 
 
@@ -1154,9 +1162,321 @@ def delete_project_tool(db: Session, user: CurrentUser, arguments: dict) -> Assi
     )
 
 
-def upload_document_stub(arguments: dict) -> AssistantToolResult:
+def semantic_search_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """Project-scoped evidence retrieval (same path as /retrieval/search)."""
+    from app.retrieval.service import search_knowledge
+
+    project_id = str(arguments.get("project_id") or "").strip()
+    query = str(arguments.get("query") or "").strip()
+    if not project_id or not query:
+        raise ValueError("project_id and query are required")
+    top_k = arguments.get("top_k")
+    try:
+        k = int(top_k) if top_k is not None else 8
+    except (TypeError, ValueError):
+        k = 8
+    k = max(1, min(k, 20))
+    response = search_knowledge(
+        db,
+        project_id=project_id,
+        query=query,
+        current_user=user,
+        top_k=k,
+    )
+    items = [
+        {
+            "chunk_id": item.chunk_id,
+            "source_document_id": item.source_document_id,
+            "score": item.score,
+            "excerpt": (item.content or "")[:400],
+            "heading": item.citation.heading if item.citation else None,
+            "page": item.citation.page if item.citation else None,
+        }
+        for item in response.results[:k]
+    ]
+    return AssistantToolResult(
+        tool_name="semantic_search",
+        result={
+            "project_id": response.project_id,
+            "count": len(items),
+            "items": items,
+            "degraded_reasons": list(response.degraded_reasons or ()),
+        },
+        summary=f"检索到 {len(items)} 条相关资料片段。",
+    )
+
+
+def web_search_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """External web search for research tasks.
+
+    Prefer Tavily when ``TAVILY_API_KEY`` / ``DOCPILOT_TAVILY_API_KEY`` is set;
+    otherwise fall back to DuckDuckGo Instant Answer (no key, thinner results).
+    """
+    import os
+
+    import httpx
+
+    _ = db, user  # auth already enforced at capability boundary
+    query = str(arguments.get("query") or "").strip()
+    if not query:
+        raise ValueError("query is required")
+    max_results = arguments.get("max_results")
+    try:
+        limit = int(max_results) if max_results is not None else 5
+    except (TypeError, ValueError):
+        limit = 5
+    limit = max(1, min(limit, 10))
+
+    tavily_key = (
+        os.environ.get("DOCPILOT_TAVILY_API_KEY")
+        or os.environ.get("TAVILY_API_KEY")
+        or ""
+    ).strip()
+    items: list[dict] = []
+    provider = "duckduckgo"
+
+    if tavily_key:
+        provider = "tavily"
+        resp = httpx.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": tavily_key,
+                "query": query,
+                "max_results": limit,
+                "include_answer": False,
+                "search_depth": "basic",
+            },
+            timeout=20.0,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        for row in (payload.get("results") or [])[:limit]:
+            if not isinstance(row, dict):
+                continue
+            items.append(
+                {
+                    "title": str(row.get("title") or "")[:200],
+                    "url": str(row.get("url") or "")[:500],
+                    "snippet": str(row.get("content") or row.get("snippet") or "")[:500],
+                }
+            )
+    else:
+        # Key-free fallback for local/dev; quality is lower than Tavily.
+        resp = httpx.get(
+            "https://api.duckduckgo.com/",
+            params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
+            timeout=15.0,
+            headers={"User-Agent": "BidPilotAgent/1.0"},
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        if isinstance(payload.get("AbstractText"), str) and payload.get("AbstractURL"):
+            items.append(
+                {
+                    "title": str(payload.get("Heading") or query)[:200],
+                    "url": str(payload.get("AbstractURL"))[:500],
+                    "snippet": str(payload.get("AbstractText"))[:500],
+                }
+            )
+        for row in (payload.get("RelatedTopics") or [])[:limit]:
+            if not isinstance(row, dict):
+                continue
+            text = str(row.get("Text") or "")
+            url = str(row.get("FirstURL") or "")
+            if not text or not url:
+                continue
+            items.append({"title": text[:120], "url": url[:500], "snippet": text[:500]})
+            if len(items) >= limit:
+                break
+
+    return AssistantToolResult(
+        tool_name="web_search",
+        result={"query": query, "provider": provider, "count": len(items), "items": items},
+        summary=f"联网搜索「{query}」返回 {len(items)} 条结果（{provider}）。",
+    )
+
+
+def _resolve_upload_bundle(db: Session, user: CurrentUser, project_id: str, bundle_id: str | None) -> str:
+    from app.bundles.service import list_bundles_query
+    from app.models import Bundle
+
+    if bundle_id:
+        require_bundle_capability(
+            db,
+            current_user=user,
+            bundle_id=bundle_id,
+            capability="bundles.write",
+        )
+        return bundle_id
+    bundles = list_bundles_query(db, project_id, current_user=user)
+    for bundle in bundles:
+        if getattr(bundle, "ingest_status", None) not in {"queued", "running", "indexing"}:
+            return bundle.id
+    # Create a dedicated agent uploads bundle when none is writable.
+    require_project_capability(
+        db,
+        current_user=user,
+        project_id=project_id,
+        capability="bundles.write",
+    )
+    bundle = Bundle(
+        project_id=project_id,
+        label="Agent uploads",
+        source_type="upload",
+        ingest_status="ready_to_ingest",
+    )
+    db.add(bundle)
+    db.commit()
+    db.refresh(bundle)
+    return bundle.id
+
+
+def fetch_url_to_project_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """Download a remote URL into a project bundle as a source document."""
+    from urllib.parse import urlparse
+
+    import httpx
+
+    from app.documents.service import upload_document_command
+
+    project_id = str(arguments.get("project_id") or "").strip()
+    url = str(arguments.get("url") or "").strip()
+    if not project_id or not url:
+        raise ValueError("project_id and url are required")
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("url must be an http(s) URL")
+
+    require_project_capability(
+        db,
+        current_user=user,
+        project_id=project_id,
+        capability="bundles.write",
+    )
+    bundle_id = _resolve_upload_bundle(
+        db,
+        user,
+        project_id,
+        str(arguments.get("bundle_id") or "").strip() or None,
+    )
+
+    resp = httpx.get(
+        url,
+        timeout=30.0,
+        follow_redirects=True,
+        headers={"User-Agent": "BidPilotAgent/1.0 (+https://bidpilot.rglens.com)"},
+    )
+    resp.raise_for_status()
+    data = resp.content
+    if len(data) > 15 * 1024 * 1024:
+        raise ValueError("Remote file too large (max 15MB)")
+    content_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
+    filename = str(arguments.get("filename") or "").strip()
+    if not filename:
+        filename = Path(parsed.path).name or "downloaded-resource"
+        if "." not in filename:
+            if "html" in content_type:
+                filename += ".html"
+            elif "pdf" in content_type:
+                filename += ".pdf"
+            elif "json" in content_type:
+                filename += ".json"
+            else:
+                filename += ".bin"
+
+    doc = upload_document_command(
+        db,
+        bundle_id=bundle_id,
+        filename=filename[:200],
+        content_type=content_type or "application/octet-stream",
+        data=data,
+        current_user=user,
+    )
+    return AssistantToolResult(
+        tool_name="fetch_url_to_project",
+        result={
+            "project_id": project_id,
+            "bundle_id": bundle_id,
+            "document_id": doc.id,
+            "filename": doc.original_filename,
+            "bytes": len(data),
+            "source_url": url,
+            "parse_status": doc.parse_status,
+        },
+        summary=f"已从 URL 下载「{doc.original_filename}」到项目资料包（{len(data)} 字节）。",
+    )
+
+
+def upload_document_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """Ingest staged chat attachments or raw content into a project bundle.
+
+    Preferred agent path: pass ``attachment_ids`` from chat uploads.
+    Alternate path: ``content_base64`` + ``filename`` for small agent-generated files.
+    """
+    import base64
+
+    from app.documents.service import upload_document_command
+
+    project_id = str(arguments.get("project_id") or "").strip()
+    if not project_id:
+        raise ValueError("project_id is required")
+
+    attachment_ids = arguments.get("attachment_ids")
+    if isinstance(attachment_ids, list) and attachment_ids:
+        return attach_uploaded_documents_tool(
+            db,
+            user,
+            {
+                "project_id": project_id,
+                "attachment_ids": attachment_ids,
+                "bundle_label": arguments.get("bundle_label") or "AI uploads",
+            },
+        )
+
+    content_b64 = str(arguments.get("content_base64") or "").strip()
+    filename = str(arguments.get("filename") or "").strip() or "upload.bin"
+    if not content_b64:
+        raise ValueError(
+            "Provide attachment_ids (from chat uploads) or content_base64+filename. "
+            "Browser file pickers still go through the UI upload control."
+        )
+    try:
+        data = base64.b64decode(content_b64, validate=True)
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError("content_base64 is not valid base64") from exc
+    if len(data) > 10 * 1024 * 1024:
+        raise ValueError("content_base64 payload too large (max 10MB)")
+
+    require_project_capability(
+        db,
+        current_user=user,
+        project_id=project_id,
+        capability="bundles.write",
+    )
+    bundle_id = _resolve_upload_bundle(
+        db,
+        user,
+        project_id,
+        str(arguments.get("bundle_id") or "").strip() or None,
+    )
+    content_type = str(arguments.get("content_type") or "application/octet-stream")
+    doc = upload_document_command(
+        db,
+        bundle_id=bundle_id,
+        filename=filename[:200],
+        content_type=content_type,
+        data=data,
+        current_user=user,
+    )
     return AssistantToolResult(
         tool_name="upload_document",
-        result={"action": "redirect_to_ui"},
-        summary="文档上传需要通过界面操作。请在项目的资料包页面中点击上传按钮。",
+        result={
+            "project_id": project_id,
+            "bundle_id": bundle_id,
+            "document_id": doc.id,
+            "filename": doc.original_filename,
+            "bytes": len(data),
+            "parse_status": doc.parse_status,
+        },
+        summary=f"已上传「{doc.original_filename}」到项目资料包。",
     )

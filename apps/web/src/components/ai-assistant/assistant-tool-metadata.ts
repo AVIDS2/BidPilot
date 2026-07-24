@@ -47,6 +47,8 @@ const TOOL_FALLBACK_LABELS: Record<string, string> = {
   export_deliverable: "导出交付物",
   generate_readiness_pack: "生成投标准备度包",
   semantic_search: "检索资料",
+  web_search: "联网搜索",
+  fetch_url_to_project: "下载网页到项目",
   search_bid_wiki: "查询 Bid Wiki",
   list_knowledge_portfolio: "查看知识资产概览",
   propose_memory: "保存个人偏好",
@@ -60,6 +62,8 @@ const TOOL_FALLBACK_LABELS: Record<string, string> = {
 const TOOL_ICONS: Record<string, LucideIcon> = {
   search_projects: SearchIcon,
   semantic_search: SearchIcon,
+  web_search: SearchIcon,
+  fetch_url_to_project: UploadCloudIcon,
   search_knowledge: SearchIcon,
   get_project_summary: FolderOpenIcon,
   list_project_bundles: PackageIcon,

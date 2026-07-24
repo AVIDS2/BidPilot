@@ -39,6 +39,11 @@ from .model_limits import (
     OPERATOR_PLANNER_MAX_PREVIOUS_RESULT_CHARACTERS,
     OPERATOR_PLANNER_MAX_USER_MESSAGE_CHARACTERS,
 )
+from .background_tasks import (
+    bind_workflow_background_task,
+    collect_completed_notifications,
+)
+from .hooks import HookContext, default_hook_registry, register_default_recovery_hooks
 from .registry import (
     CAPABILITY_REGISTRY,
     PublicCapabilityResult,
@@ -299,8 +304,53 @@ _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "semantic_search": {
         "type": "object",
-        "properties": {"project_id": {"type": "string"}, "query": {"type": "string"}},
+        "properties": {
+            "project_id": {"type": "string"},
+            "query": {"type": "string"},
+            "top_k": {"type": "integer", "minimum": 1, "maximum": 20},
+        },
         "required": ["project_id", "query"],
+        "additionalProperties": False,
+    },
+    "web_search": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query for the public web"},
+            "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
+        },
+        "required": ["query"],
+        "additionalProperties": False,
+    },
+    "fetch_url_to_project": {
+        "type": "object",
+        "properties": {
+            "project_id": {"type": "string"},
+            "url": {"type": "string", "description": "http(s) URL to download into the project bundle"},
+            "filename": {"type": "string"},
+            "bundle_id": {"type": "string"},
+        },
+        "required": ["project_id", "url"],
+        "additionalProperties": False,
+    },
+    "upload_document": {
+        "type": "object",
+        "properties": {
+            "project_id": {"type": "string"},
+            "attachment_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Staged chat attachment IDs to ingest into the project",
+            },
+            "filename": {"type": "string"},
+            "content_base64": {
+                "type": "string",
+                "description": "Small agent-generated file body (base64), max 10MB",
+            },
+            "content_type": {"type": "string"},
+            "bundle_id": {"type": "string"},
+            "bundle_label": {"type": "string"},
+        },
+        "required": ["project_id"],
         "additionalProperties": False,
     },
     "search_bid_wiki": {
@@ -440,12 +490,33 @@ class StreamingHarness:
         self._consecutive_tool_failures = 0
 
     async def run(self) -> AsyncGenerator[str, None]:
+        register_default_recovery_hooks()
         messages = self._initial_messages()
+        # Inject completed background task notifications from prior turns.
+        for note in collect_completed_notifications(self.conversation_id):
+            messages.append(
+                HumanMessage(
+                    content=(
+                        "<task_notification>\n"
+                        f"{json.dumps(note, ensure_ascii=False)}\n"
+                        "</task_notification>\n"
+                        "后台长任务已更新。请根据结果继续推进，不要重复发起同一任务。"
+                    )
+                )
+            )
         tools = build_capability_tool_specs()
         bound = self.llm.bind_tools(tools)
+        hook_ctx = HookContext(
+            conversation_id=self.conversation_id,
+            runtime_run_id=self.runtime_run.id,
+            user_id=self.user.id,
+            project_id=self.active_project_id,
+        )
+        default_hook_registry.trigger("UserPromptSubmit", hook_ctx, self.user_message)
 
         try:
             for step in range(self.max_steps):
+                hook_ctx.step = step
                 turn_id = f"turn-{step + 1}"
                 yield _sse(
                     "assistant.turn_started",
@@ -480,6 +551,19 @@ class StreamingHarness:
 
                 if not tool_calls:
                     final_text = "".join(text_parts).strip() or "我可以继续帮你处理这个请求。"
+                    force_reason = default_hook_registry.first_blocking(
+                        "Stop",
+                        hook_ctx,
+                        open_tools=0,
+                        max_steps=self.max_steps,
+                        step=step,
+                    )
+                    if force_reason and step + 1 < self.max_steps:
+                        hook_ctx.metadata["stop_hook_active"] = True
+                        messages.append(AIMessage(content=final_text))
+                        messages.append(HumanMessage(content=str(force_reason)))
+                        default_hook_registry.trigger("TurnEnd", hook_ctx, final_text=final_text)
+                        continue
                     if not self._streamed_text:
                         yield _sse(
                             "assistant.message",
@@ -513,8 +597,31 @@ class StreamingHarness:
 
                 executed_names: list[str] = []
                 for item in tool_calls[:HARNESS_MAX_TOOLS_PER_TURN]:
+                    blocked = default_hook_registry.first_blocking(
+                        "PreToolUse",
+                        hook_ctx,
+                        tool_name=item.name,
+                        arguments=item.arguments,
+                    )
+                    if blocked is not None:
+                        messages.append(
+                            ToolMessage(
+                                content=json.dumps(
+                                    {"error": str(blocked), "blocked_by_hook": True},
+                                    ensure_ascii=False,
+                                )[:_LLM_TOOL_RESULT_MAX_CHARS],
+                                tool_call_id=item.tool_call_id,
+                            )
+                        )
+                        continue
                     async for event in self._execute_one_tool(item, turn_id, messages, executed_names):
                         yield event
+                        default_hook_registry.trigger(
+                            "PostToolUse",
+                            hook_ctx,
+                            tool_name=item.name,
+                            arguments=item.arguments,
+                        )
                         # Approval pause ends the current stream; client resumes later.
                         if event.startswith("event: assistant.confirmation_requested") or (
                             event.startswith("event: assistant.end") and "needs_confirmation" in event
@@ -525,6 +632,12 @@ class StreamingHarness:
                             return
 
                 summary = build_turn_summary(executed_names)
+                default_hook_registry.trigger(
+                    "TurnEnd",
+                    hook_ctx,
+                    tools=executed_names,
+                    summary=summary,
+                )
                 yield _sse(
                     "assistant.turn_finished",
                     {
@@ -720,6 +833,9 @@ class StreamingHarness:
             "8. search_projects 结果若存在同名项目，必须用 projects[].id 或 short_id 区分；"
             "禁止发明「(1)/(2)」标签；删除/打开前先复述目标 id。\n"
             "9. 若上一轮已进入待确认删除/写入，优先等待用户确认，不要重复搜索或重新发起同类操作。\n"
+            "10. 外部研究：用 web_search 找来源；需要入库时用 fetch_url_to_project；"
+            "聊天附件入库用 upload_document(attachment_ids=...)。长工作流完成后会有后台通知，"
+            "收到 <task_notification> 后继续，不要空转轮询。\n"
             f"可用工具：{capability_list}"
         )
         packet = build_untrusted_context_packet(
@@ -1039,6 +1155,21 @@ class StreamingHarness:
             created_id = result.payload.get("id")
             if isinstance(created_id, str) and created_id:
                 self.active_project_id = created_id
+        # Long workflow tools: track as background tasks so a later turn can wake.
+        if item.name in {"start_draft_section", "start_redraft_section", "propose_memory_graph"}:
+            child_runtime = result.payload.get("runtime_run_id")
+            if isinstance(child_runtime, str) and child_runtime:
+                bind_workflow_background_task(
+                    conversation_id=self.conversation_id,
+                    user_id=self.user.id,
+                    runtime_run_id=child_runtime,
+                    workflow_run_id=(
+                        result.payload.get("run_id")
+                        if isinstance(result.payload.get("run_id"), str)
+                        else None
+                    ),
+                    title=definition.label_zh,
+                )
 
         llm_content = json.dumps(
             {"summary": result.summary, "payload": result.payload},

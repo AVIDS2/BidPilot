@@ -16,7 +16,7 @@ from typing import Any
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
-from app.models import RuntimeEvent, RuntimeRun
+from app.models import Notification, RuntimeEvent, RuntimeRun
 from contracts.runtime import RuntimeEventType
 
 logger = logging.getLogger(__name__)
@@ -177,6 +177,55 @@ def publish_human_approval_resolved(
     )
 
 
+def _publish_agent_wake_notification(
+    runtime_run_id: str | None,
+    *,
+    status: str,
+    summary: str,
+    result: dict[str, Any] | None = None,
+) -> None:
+    """Durable wake signal so the assistant can resume after long workflows.
+
+    Pattern (learn-claude-code s13): background work finishes outside the live
+    chat turn; a notification is enqueued so the next turn / wake path can
+    continue without the model having to busy-wait.
+    """
+    if not runtime_run_id:
+        return
+    db = SessionLocal()
+    try:
+        run = db.get(RuntimeRun, runtime_run_id)
+        if run is None or not run.user_id:
+            return
+        title = "后台任务已完成" if status == "succeeded" else "后台任务失败"
+        body_parts = [summary]
+        if isinstance(result, dict):
+            section_key = result.get("section_key")
+            if isinstance(section_key, str) and section_key:
+                body_parts.append(f"章节：{section_key}")
+            execution_run_id = result.get("execution_run_id")
+            if isinstance(execution_run_id, str) and execution_run_id:
+                body_parts.append(f"运行：{execution_run_id[:8]}")
+        link = f"/agent?wake={runtime_run_id}"
+        if run.conversation_id:
+            link = f"/agent?conversation={run.conversation_id}&wake={runtime_run_id}"
+        db.add(
+            Notification(
+                user_id=run.user_id,
+                type="agent_task",
+                title=title[:255],
+                body="\n".join(body_parts)[:2000],
+                link=link[:500],
+            )
+        )
+        db.commit()
+    except Exception:
+        logger.exception("failed to publish agent wake notification for %s", runtime_run_id)
+        db.rollback()
+    finally:
+        db.close()
+
+
 def complete_runtime_run(
     runtime_run_id: str | None,
     *,
@@ -186,6 +235,12 @@ def complete_runtime_run(
         runtime_run_id,
         status="succeeded",
         event_type=RuntimeEventType.RUN_COMPLETED,
+        summary="工作流已完成。",
+        result=result,
+    )
+    _publish_agent_wake_notification(
+        runtime_run_id,
+        status="succeeded",
         summary="工作流已完成。",
         result=result,
     )
@@ -213,6 +268,12 @@ def fail_runtime_run(
         summary="工作流未能完成。",
         error_code=error_code,
         error_message=message,
+    )
+    _publish_agent_wake_notification(
+        runtime_run_id,
+        status="failed",
+        summary="工作流未能完成。",
+        result={"error": message, "error_code": error_code},
     )
 
 

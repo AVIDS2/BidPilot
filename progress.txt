@@ -2,34 +2,43 @@
 
 Updated: 2026-07-24
 
-## Latest (2026-07-24 master deploy + next backlog)
+## Latest (2026-07-24 long-task tools + hooks/MCP/skills)
 
-Deployed `1c3512b` to public VPS (api/worker/web rebuild; data plane kept).
+### Long-task capabilities shipped
+- `web_search` (Tavily if key present, else DuckDuckGo)
+- `fetch_url_to_project` (http/https download into project bundle)
+- real `upload_document` (attachment_ids or content_base64; not UI-only stub)
+- `semantic_search` wired into assistant execute_tool path
+- multi-step recovery: hooks Pre/Post/Stop + consecutive failure breaker
+
+### Hooks / background wake (learn-claude-code style)
+- `services/api/app/runtime/hooks.py` — UserPromptSubmit/PreToolUse/PostToolUse/TurnEnd/Stop
+- `services/api/app/runtime/background_tasks.py` — bg task tracker + wake notes
+- harness injects `<task_notification>` on next turn
+- worker run complete/fail writes durable `Notification(type=agent_task)`
+
+### Skills / design docs
+- `docs/superpowers/specs/2026-07-24-agent-hooks-mcp-skills-design.md`
+- `docs/agent-skills/bid-research/SKILL.md`
+- `docs/agent-skills/bid-outline-first/SKILL.md`
+
+### Verified
+- registry tests 18 passed
+- local multi-turn delete disambiguation smoke PASS
+- local assistant stream used `web_search` successfully
+
+### Still later
+- full MCP server process
+- auto-resume without user opening agent
+- agent UI shadcn chat primitive convergence + impeccable Operate polish
+
+## Previous (2026-07-24 master deploy + next backlog)
+
+Deployed `1c3512b` / later `704c542` to public VPS (api/worker/web rebuild; data plane kept).
 Public health: `bidpilot-api.rglens.com/health` 200, `bidpilot.rglens.com` 200.
 Note: full `deploy.sh` blocked by production compose requiring
 `DOCPILOT_REDIS_PASSWORD` / postgres split vars not present in live `.env`
 (current redis is passwordless; stack still uses older compose topology).
-
-### Long-task harness backlog (priority)
-
-P0 product multi-step (already mostly wired, needs smoke):
-- project CRUD + outline + write_section + export
-- attach uploaded docs + semantic_search + draft
-- approval/resume loop
-
-P1 missing for "agent-like" long tasks:
-- real `upload_document` (currently UI redirect stub)
-- web/research tool (no tavily/web_search capability)
-- fetch remote URL into project documents
-- stronger multi-step planner prompt + recovery after tool failure
-- history auto-restore + tool replay (done)
-
-P2 agent UI (Operate mode; taste skill is landing-oriented):
-- adopt unused shadcn chat primitives: `message`, `prompt-input`,
-  `prompt-suggestion`, `chat-container`, `scroll-button`, `collapsible`
-- impeccable polish on Agent workspace: density, empty/loading/error,
-  tool L2/L3, composer, history sheet
-- keep product green primary; remove leftover react-bits chrome
 
 ## Previous (2026-07-24 history restore + write_section)
 
