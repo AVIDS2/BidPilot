@@ -23,10 +23,15 @@ Updated: 2026-07-24
 - **Queue: yes** — Celery worker + task outbox + dead-letter paths
 - **Complex microservices: no** — modular monolith (`api` + `worker` + `web`) + Postgres/Redis/MinIO
 
+### Done next (2026-07-24 evening)
+- **Global auto-resume**: `AgentWakeResume` polls `agent_task` notifications and resumes conversation without opening `/agent`
+- **Redis password migration**: live redis now requirepass; worker/api connected; noauth rejected
+- **Message/ChatContainer**: operator transcript uses shadcn Message + ChatContainerRoot/Content + ScrollButton
+
 ### Still later
-- full MCP auto-resume without user opening agent page
-- production redis password migration (unlock full compose)
-- broader Agent UI Message/ChatContainer convergence + impeccable Operate polish
+- full production compose topology swap (optional; live still custom dual topology with passworded redis)
+- SSE fanout for wake (current path is notification poll 8s)
+- deeper Operate polish beyond Message/ChatContainer
 
 ## Previous (2026-07-24 long-task tools + hooks/MCP/skills)
 
