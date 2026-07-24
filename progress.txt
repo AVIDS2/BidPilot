@@ -2,7 +2,36 @@
 
 Updated: 2026-07-24
 
-## Latest (2026-07-24 history restore + write_section)
+## Latest (2026-07-24 master deploy + next backlog)
+
+Deployed `1c3512b` to public VPS (api/worker/web rebuild; data plane kept).
+Public health: `bidpilot-api.rglens.com/health` 200, `bidpilot.rglens.com` 200.
+Note: full `deploy.sh` blocked by production compose requiring
+`DOCPILOT_REDIS_PASSWORD` / postgres split vars not present in live `.env`
+(current redis is passwordless; stack still uses older compose topology).
+
+### Long-task harness backlog (priority)
+
+P0 product multi-step (already mostly wired, needs smoke):
+- project CRUD + outline + write_section + export
+- attach uploaded docs + semantic_search + draft
+- approval/resume loop
+
+P1 missing for "agent-like" long tasks:
+- real `upload_document` (currently UI redirect stub)
+- web/research tool (no tavily/web_search capability)
+- fetch remote URL into project documents
+- stronger multi-step planner prompt + recovery after tool failure
+- history auto-restore + tool replay (done)
+
+P2 agent UI (Operate mode; taste skill is landing-oriented):
+- adopt unused shadcn chat primitives: `message`, `prompt-input`,
+  `prompt-suggestion`, `chat-container`, `scroll-button`, `collapsible`
+- impeccable polish on Agent workspace: density, empty/loading/error,
+  tool L2/L3, composer, history sheet
+- keep product green primary; remove leftover react-bits chrome
+
+## Previous (2026-07-24 history restore + write_section)
 
 Shipped the three remaining assistant closeout items:
 
