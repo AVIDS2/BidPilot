@@ -2,9 +2,10 @@
 set -euo pipefail
 
 # BidPilot public deploy helper.
-# Prefer versioned production compose when the live .env can satisfy it.
-# Otherwise keep the live compose topology and rebuild app services only
-# (safe for the current passwordless redis + DATABASE_URL-only VPS shape).
+# Prefer versioned production compose only when the live .env can satisfy BOTH:
+#   1) production compose interpolation (split passwords / minio keys)
+#   2) scripts/production_readiness.py --target production required variables
+# Otherwise keep the live compose topology and rebuild application services only.
 #
 # Important: do NOT shell-source .env (password special chars break set -a).
 # Use Python to derive missing split vars and docker compose --env-file for runtime.
@@ -58,6 +59,19 @@ redis = urlparse(vals.get("DOCPILOT_REDIS_URL") or "")
 if redis.password and not vals.get("DOCPILOT_REDIS_PASSWORD"):
     additions.append(f"DOCPILOT_REDIS_PASSWORD={unquote(redis.password)}")
 
+# Soft production flags that readiness requires (safe defaults for live VPS).
+soft_defaults = {
+    "DOCPILOT_ENV": "production",
+    "DOCPILOT_AGENT_CHECKPOINTER": vals.get("DOCPILOT_LANGGRAPH_CHECKPOINTER") or "postgres",
+    "DOCPILOT_ASSISTANT_ENGINE": "operator",
+    "USE_LANGGRAPH": "true",
+    "DOCPILOT_RATE_LIMIT": "120/minute",
+    "DOCPILOT_AUTH_REQUIRED": "true",
+}
+for key, value in soft_defaults.items():
+    if not vals.get(key):
+        additions.append(f"{key}={value}")
+
 if additions:
     with env_path.open("a", encoding="utf-8") as fh:
         fh.write("\n# derived by deploy.sh\n")
@@ -67,7 +81,7 @@ PY
 
 cd "$APP_ROOT"
 
-# Detect whether production compose can be rendered from current .env.
+# Detect whether production compose + readiness can be satisfied from current .env.
 use_full_compose=0
 if python3 - <<'PY'
 from pathlib import Path
@@ -85,7 +99,8 @@ for line in text.splitlines():
     if value.strip().strip('"').strip("'"):
         keys.add(key.strip())
 
-need = {
+# Compose interpolation needs.
+compose_need = {
     "DOCPILOT_REDIS_PASSWORD",
     "DOCPILOT_POSTGRES_PASSWORD",
     "DOCPILOT_POSTGRES_USER",
@@ -93,13 +108,46 @@ need = {
     "DOCPILOT_MINIO_ACCESS_KEY",
     "DOCPILOT_MINIO_SECRET_KEY",
 }
-raise SystemExit(0 if need.issubset(keys) else 1)
+# production_readiness.py --target production required variables (subset that
+# commonly blocks the readiness container and freezes the whole stack).
+readiness_need = {
+    "DOCPILOT_DATABASE_URL",
+    "DOCPILOT_REDIS_URL",
+    "DOCPILOT_MINIO_ENDPOINT",
+    "DOCPILOT_MINIO_ACCESS_KEY",
+    "DOCPILOT_MINIO_SECRET_KEY",
+    "DOCPILOT_JWT_SECRET",
+    "DOCPILOT_AUTH_REQUIRED",
+    "DOCPILOT_SECRETS_KEY",
+    "DOCPILOT_APP_URL",
+    "DOCPILOT_CORS_ORIGINS",
+    "DOCPILOT_ENV",
+    "DOCPILOT_LANGGRAPH_CHECKPOINTER",
+    "DOCPILOT_AGENT_CHECKPOINTER",
+    "DOCPILOT_ASSISTANT_ENGINE",
+    "USE_LANGGRAPH",
+    "DOCPILOT_POSTGRES_DB",
+    "DOCPILOT_POSTGRES_USER",
+    "DOCPILOT_POSTGRES_PASSWORD",
+    "DOCPILOT_REDIS_PASSWORD",
+    "DOCPILOT_RATE_LIMIT",
+    "DOCPILOT_TRUSTED_PROXY_CIDRS",
+    "DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING",
+}
+need = compose_need | readiness_need
+missing = sorted(need - keys)
+if missing:
+    print("full_compose_missing", ",".join(missing))
+    raise SystemExit(1)
+print("full_compose_env_ok")
+raise SystemExit(0)
 PY
 then
   cp "$REPO_ROOT/docker-compose.production.yml" "$NEXT_COMPOSE_FILE"
   if docker compose -f "$NEXT_COMPOSE_FILE" --env-file .env config --quiet; then
     use_full_compose=1
   else
+    echo "full_compose_config_invalid"
     rm -f "$NEXT_COMPOSE_FILE"
   fi
 fi
@@ -111,11 +159,12 @@ if [[ "$use_full_compose" -eq 1 ]]; then
 else
   echo "deploy_mode=app_services_only"
   rm -f "$NEXT_COMPOSE_FILE"
-  # Keep current topology (often passwordless redis). Rebuild application services only.
+  # Keep current topology. Rebuild application services only.
+  # Prefer no-deps so a failing one-shot readiness/migrate job cannot strand api/web.
   docker compose build api worker web
   docker compose up -d --no-deps api worker web
 fi
 
-sleep 5
+sleep 8
 curl -fsS -o /dev/null -w "public_api:%{http_code}\n" https://bidpilot-api.rglens.com/health || true
 curl -fsS -o /dev/null -w "public_web:%{http_code}\n" https://bidpilot.rglens.com/ || true
