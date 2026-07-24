@@ -2,7 +2,30 @@
 
 Updated: 2026-07-24
 
-## Latest (2026-07-24 MCP + auto-wake + deploy/UI)
+## Latest (2026-07-24 P0/P1/P2 closeout)
+
+### P0 Campaign E2E
+- `run_section_campaign` multi-wave auto_continue (framework drains empty sections)
+- plan/framework/draft_workflow modes; waves_run/has_more/remaining keys
+- delete first-turn harden in system prompt; confirmation end fixed earlier
+- Live acceptance: campaign processed 5/5 in 3 waves; delete_gate conf+end
+
+### P1 SSE wake + Operate polish + CI
+- `GET /notifications/stream` SSE with access_token query (EventSource-safe)
+- `useNotifications` prefers SSE, falls back to poll
+- Agent workspace Operate chrome polish
+- CI unit suite: harness/campaign/skills/recovery/stress smoke (37 passed)
+
+### P2 planner-worker + skills + recovery
+- campaign `mode=plan` planner worklist
+- skill injection from docs/agent-skills into harness system prompt
+- outline auto-recovery when single accessible project (DOCPILOT_OUTLINE_AUTO_RECOVERY)
+
+### Public
+- Deploy after push; health must stay 200
+
+## Previous (2026-07-24 MCP + auto-wake + deploy/UI)
+
 
 ### Four next-layer items
 1. **MCP server** — `scripts/bidpilot_mcp.py`

@@ -60,7 +60,9 @@ export function AgentWakeResume() {
   const { loadConversation, sendMessage, state } = useAIAssistant();
   const { notifications, markAsRead } = useNotifications({
     enabled: Boolean(user),
-    pollIntervalMs: 8_000,
+    // SSE is primary; poll is backup (60s when SSE healthy, 12s fallback).
+    pollIntervalMs: 12_000,
+    preferSse: true,
   });
   const inFlightRef = useRef<string | null>(null);
   const handledRef = useRef<Set<string>>(readHandledWakeIds());

@@ -89,14 +89,29 @@ async function markAllAsReadApi(): Promise<void> {
   }
 }
 
-const DEFAULT_POLL_INTERVAL_MS = 15_000;
+const DEFAULT_POLL_INTERVAL_MS = 30_000;
 
-export function useNotifications(options?: { pollIntervalMs?: number; enabled?: boolean }) {
+function mergeById(existing: Notification[], incoming: Notification[]): Notification[] {
+  const map = new Map<string, Notification>();
+  for (const item of existing) map.set(item.id, item);
+  for (const item of incoming) map.set(item.id, item);
+  return [...map.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+export function useNotifications(options?: {
+  pollIntervalMs?: number;
+  enabled?: boolean;
+  /** Prefer SSE wake stream; falls back to polling on error. Default true. */
+  preferSse?: boolean;
+}) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [transport, setTransport] = useState<"sse" | "poll">("poll");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sourceRef = useRef<EventSource | null>(null);
   const pollIntervalMs = options?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const enabled = options?.enabled ?? true;
+  const preferSse = options?.preferSse ?? true;
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -141,13 +156,86 @@ export function useNotifications(options?: { pollIntervalMs?: number; enabled?: 
   useEffect(() => {
     if (!enabled) return;
     void load();
-    intervalRef.current = setInterval(() => {
-      void load();
-    }, pollIntervalMs);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [enabled, load, pollIntervalMs]);
 
-  return { notifications, unreadCount, loading, markAsRead, markAllAsRead, refresh: load };
+    const token = getStoredValue("token");
+    let cancelled = false;
+
+    const startPolling = () => {
+      if (cancelled) return;
+      setTransport("poll");
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => {
+        void load();
+      }, pollIntervalMs);
+    };
+
+    const stopPolling = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+
+    const startSse = () => {
+      if (!preferSse || !token || typeof EventSource === "undefined") {
+        startPolling();
+        return;
+      }
+      // EventSource cannot set Authorization headers; pass token as query for wake stream.
+      // REST endpoints still use Bearer headers.
+      const url = `${API_BASE}/notifications/stream?access_token=${encodeURIComponent(token)}`;
+      try {
+        const source = new EventSource(url);
+        sourceRef.current = source;
+        setTransport("sse");
+        // Keep a slow poll as eventual consistency backup while SSE is primary.
+        stopPolling();
+        intervalRef.current = setInterval(() => {
+          void load();
+        }, Math.max(pollIntervalMs, 60_000));
+
+        source.addEventListener("notification", (event) => {
+          try {
+            const raw = JSON.parse((event as MessageEvent).data) as NotificationApiRow;
+            const item = normalizeNotification(raw);
+            setNotifications((prev) => mergeById(prev, [item]));
+            setLoading(false);
+          } catch {
+            // ignore malformed frames
+          }
+        });
+        source.addEventListener("ready", () => {
+          setLoading(false);
+        });
+        source.onerror = () => {
+          source.close();
+          sourceRef.current = null;
+          if (!cancelled) startPolling();
+        };
+      } catch {
+        startPolling();
+      }
+    };
+
+    startSse();
+
+    return () => {
+      cancelled = true;
+      stopPolling();
+      if (sourceRef.current) {
+        sourceRef.current.close();
+        sourceRef.current = null;
+      }
+    };
+  }, [enabled, load, pollIntervalMs, preferSse]);
+
+  return {
+    notifications,
+    unreadCount,
+    loading,
+    markAsRead,
+    markAllAsRead,
+    refresh: load,
+    transport,
+  };
 }

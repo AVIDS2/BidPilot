@@ -35,13 +35,13 @@ def test_campaign_public_formatter() -> None:
             "secret": "nope",
         },
     )
-    assert "本波处理 2 章" in result.summary
+    assert "处理 2 章" in result.summary
     assert "剩余 3 章" in result.summary
     assert result.payload["processed_count"] == 2
     assert "secret" not in result.payload
 
 
-def test_run_section_campaign_framework_wave(monkeypatch) -> None:
+def test_run_section_campaign_framework_auto_continues(monkeypatch) -> None:
     outline_items = [
         {"section_key": "exec-summary", "title": "执行摘要", "has_content": False},
         {"section_key": "solution", "title": "技术方案", "has_content": False},
@@ -66,15 +66,38 @@ def test_run_section_campaign_framework_wave(monkeypatch) -> None:
     monkeypatch.setattr("app.assistant.tools.get_project_outline", fake_outline)
     monkeypatch.setattr("app.assistant.tools.write_section_tool", fake_write)
 
+    # Default framework auto_continue should drain all empty sections across waves.
     result = run_section_campaign_tool(
         db=object(),  # type: ignore[arg-type]
         user=object(),  # type: ignore[arg-type]
         arguments={"project_id": "p1", "mode": "framework", "max_sections": 2},
     )
     assert result.tool_name == "run_section_campaign"
-    assert result.result["processed_count"] == 2
-    assert result.result["remaining_count"] == 1
-    assert result.result["written_section_keys"] == ["exec-summary", "solution"]
-    assert result.result["remaining_section_keys"] == ["pricing"]
-    assert result.result["has_more"] is True
-    assert written == ["exec-summary", "solution"]
+    assert result.result["processed_count"] == 3
+    assert result.result["remaining_count"] == 0
+    assert result.result["has_more"] is False
+    assert result.result["waves_run"] >= 2
+    assert written == ["exec-summary", "solution", "pricing"]
+
+
+def test_run_section_campaign_plan_mode(monkeypatch) -> None:
+    outline_items = [
+        {"section_key": "a", "title": "A", "has_content": False},
+        {"section_key": "b", "title": "B", "has_content": False},
+    ]
+
+    def fake_outline(db, user, arguments):
+        return SimpleNamespace(
+            result={"project_id": "p1", "project_name": "Demo", "items": outline_items}
+        )
+
+    monkeypatch.setattr("app.assistant.tools.get_project_outline", fake_outline)
+    result = run_section_campaign_tool(
+        db=object(),  # type: ignore[arg-type]
+        user=object(),  # type: ignore[arg-type]
+        arguments={"project_id": "p1", "mode": "plan"},
+    )
+    assert result.result["mode"] == "plan"
+    assert result.result["remaining_count"] == 2
+    assert result.result["processed_count"] == 0
+    assert [item["section_key"] for item in result.result["planned_sections"]] == ["a", "b"]

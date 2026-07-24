@@ -6,7 +6,7 @@ from typing import NamedTuple
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -646,18 +646,26 @@ def revoke_refresh_token(db: Session, refresh_token: str) -> None:
 async def require_auth(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
+    access_token: str | None = Query(default=None),
 ) -> CurrentUser:
     """Dependency that enforces auth when DOCPILOT_AUTH_REQUIRED=true.
 
     In dev mode (default), falls back to dev user when no token is provided.
     In production mode, requires a valid Bearer token.
+
+    ``access_token`` query param is accepted for EventSource/SSE clients that
+    cannot set Authorization headers (browser EventSource limitation).
     """
-    if credentials is None:
+    raw_token = credentials.credentials if credentials is not None else None
+    if not raw_token and access_token:
+        raw_token = access_token.strip() or None
+
+    if raw_token is None:
         if AUTH_REQUIRED:
             raise HTTPException(status_code=401, detail="Authentication required")
         return get_dev_user()
 
-    user = get_current_user_from_token(db, credentials.credentials)
+    user = get_current_user_from_token(db, raw_token)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
     return user

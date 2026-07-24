@@ -50,6 +50,7 @@ from .registry import (
     get_capability_definition,
     missing_required_capability_arguments,
 )
+from .skills import build_skill_prompt_block
 from .service import (
     cancel_runtime_run,
     complete_runtime_run,
@@ -442,15 +443,24 @@ _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
             "project_id": {"type": "string"},
             "mode": {
                 "type": "string",
-                "enum": ["framework", "draft_workflow"],
+                "enum": ["plan", "framework", "draft_workflow"],
                 "description": (
+                    "plan: planner-only worklist; "
                     "framework: write short outline-first skeletons into empty sections; "
                     "draft_workflow: start governed draft workflows per empty section"
                 ),
             },
             "max_sections": {
                 "type": "integer",
-                "description": "Max sections to process this wave (1-8, default 3)",
+                "description": "Max sections to process per wave (1-8, default 3)",
+            },
+            "auto_continue": {
+                "type": "boolean",
+                "description": "Process multiple waves in one call until empty or max_waves (default true for framework)",
+            },
+            "max_waves": {
+                "type": "integer",
+                "description": "Max waves when auto_continue is true (1-6, default 4)",
             },
             "section_keys": {
                 "type": "array",
@@ -967,9 +977,17 @@ class StreamingHarness:
             "收到 <task_notification> 后继续，不要空转轮询。\n"
             "11. 多章节战役：用户要求「全部章节/整本/批量起草」时，优先 run_section_campaign"
             "（mode=framework 先写骨架；有资料用 draft_workflow）。不要在一回合里手写 20 章长文。"
-            "campaign 返回 remaining_section_keys 时，下一波继续同一 project_id。\n"
+            "campaign 返回 remaining_section_keys/has_more 时，同一回合或下一波继续同一 project_id，"
+            "直到 has_more=false；不要停在第一波就结束。\n"
+            "12. 删除：用户明确给出 project_id 或唯一 short_id 要求删除时，直接 delete_project，"
+            "不要先 search_projects / get_project_summary 兜圈子；服务端会弹出 typed confirmation。\n"
+            "13. 错误恢复：get_project_outline/list_sections 因坏 id 失败时，先 search_projects；"
+            "若结果仅 1 个可访问项目，自动用该 id 重试一次 outline，不要只停在列表询问。\n"
             f"可用工具：{capability_list}"
         )
+        skill_block = build_skill_prompt_block(self.user_message)
+        if skill_block:
+            system = f"{system}\n\n{skill_block}"
         packet = build_untrusted_context_packet(
             "harness_planning",
             (

@@ -312,8 +312,31 @@ def list_sections(db: Session, user: CurrentUser, arguments: dict) -> AssistantT
 
 def get_project_outline(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     """Outline-first view: scenario sections + drafting/approval progress."""
-    result = list_sections(db, user, arguments)
-    project = _get_project_for_user(db, user, arguments["project_id"])
+    import os
+
+    project_id = str(arguments.get("project_id") or "").strip()
+    recovered_from: str | None = None
+    try:
+        project = _get_project_for_user(db, user, project_id)
+    except Exception as original_exc:
+        # Policy switch: when a bad id fails and the user has exactly one accessible
+        # project, auto-retry once. Disable with DOCPILOT_OUTLINE_AUTO_RECOVERY=false.
+        enabled = os.getenv("DOCPILOT_OUTLINE_AUTO_RECOVERY", "true").lower() not in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }
+        if not enabled:
+            raise
+        accessible = list_accessible_projects(db, current_user=user)
+        if len(accessible) != 1:
+            raise
+        project = accessible[0]
+        recovered_from = project_id or "invalid"
+        project_id = project.id
+        arguments = {**arguments, "project_id": project_id}
+    result = list_sections(db, user, {"project_id": project_id})
     scenario_key = project.scenario_package or "bidpilot"
     try:
         from app.scenarios.templates import get_sections_for_scenario
@@ -350,21 +373,30 @@ def get_project_outline(db: Session, user: CurrentUser, arguments: dict) -> Assi
 
     drafted = sum(1 for item in ordered if item["has_content"])
     approved = sum(1 for item in ordered if item["status"] == "approved")
+    payload = {
+        "project_id": project.id,
+        "project_name": project.name,
+        "scenario_package": scenario_key,
+        "items": ordered,
+        "outline_count": len(ordered),
+        "drafted_count": drafted,
+        "approved_count": approved,
+    }
+    summary = (
+        f"项目「{project.name}」大纲（{scenario_key}）共 {len(ordered)} 章，"
+        f"已起草 {drafted} 章，已批准 {approved} 章。"
+    )
+    if recovered_from is not None:
+        payload["recovered_from_project_id"] = recovered_from
+        payload["auto_recovered"] = True
+        summary = (
+            f"原 project_id 无效，已自动切换到唯一可访问项目「{project.name}」"
+            f"（{project.id[:8]}）。"
+        ) + summary
     return AssistantToolResult(
         tool_name="get_project_outline",
-        result={
-            "project_id": project.id,
-            "project_name": project.name,
-            "scenario_package": scenario_key,
-            "items": ordered,
-            "outline_count": len(ordered),
-            "drafted_count": drafted,
-            "approved_count": approved,
-        },
-        summary=(
-            f"项目「{project.name}」大纲（{scenario_key}）共 {len(ordered)} 章，"
-            f"已起草 {drafted} 章，已批准 {approved} 章。"
-        ),
+        result=payload,
+        summary=summary,
     )
 
 
@@ -579,8 +611,8 @@ def run_section_campaign_tool(db: Session, user: CurrentUser, arguments: dict) -
     if not project_id:
         raise ValueError("project_id is required")
     mode = str(arguments.get("mode") or "framework").strip().lower()
-    if mode not in {"framework", "draft_workflow"}:
-        raise ValueError("mode must be framework or draft_workflow")
+    if mode not in {"framework", "draft_workflow", "plan"}:
+        raise ValueError("mode must be plan, framework, or draft_workflow")
     raw_max = arguments.get("max_sections", 3)
     try:
         max_sections = int(raw_max)
@@ -608,69 +640,123 @@ def run_section_campaign_tool(db: Session, user: CurrentUser, arguments: dict) -
             if isinstance(item, dict) and not bool(item.get("has_content"))
         ]
 
-    wave = candidates[:max_sections]
-    remaining = candidates[max_sections:]
+    # auto_continue: process multiple waves in one capability call (bounded).
+    auto_continue = bool(arguments.get("auto_continue"))
+    if "auto_continue" not in arguments:
+        # Default on for framework skeleton fills so "全部章节" can finish without
+        # forcing the model to re-call for every remaining wave.
+        auto_continue = mode == "framework"
+    raw_max_waves = arguments.get("max_waves", 4 if auto_continue else 1)
+    try:
+        max_waves = int(raw_max_waves)
+    except (TypeError, ValueError):
+        max_waves = 4 if auto_continue else 1
+    max_waves = max(1, min(max_waves, 6))
+
     processed_keys: list[str] = []
     written_keys: list[str] = []
     started_runtime_run_ids: list[str] = []
     failed: list[dict[str, str]] = []
     project_name = outline.result.get("project_name") if isinstance(outline.result, dict) else ""
+    waves_run = 0
+    remaining_keys: list[str] = []
 
-    for item in wave:
-        section_key = str(item.get("section_key") or "").strip()
-        title = str(item.get("title") or section_key).strip() or section_key
-        if not section_key:
-            continue
-        try:
-            if mode == "framework":
-                skeleton = (
-                    f"## {title}\n\n"
-                    f"> 由多章节战役自动生成的框架草稿（项目：{project_name or project_id}）。\n\n"
-                    "### 本章目标\n"
-                    f"- 明确「{title}」需要回应的招标关注点\n"
-                    "- 列出待补充的证据与数据\n\n"
-                    "### 要点提纲\n"
-                    "1. 背景与范围\n"
-                    "2. 方案要点\n"
-                    "3. 交付与保障\n\n"
-                    "### 待补证据\n"
-                    "- [ ] 相关资质 / 案例 / 指标\n"
-                )
-                write_section_tool(
-                    db,
-                    user,
-                    {
+    # Planner-worker split: plan mode only returns the ordered worklist.
+    if mode == "plan":
+        planned = [
+            {
+                "section_key": str(item.get("section_key") or ""),
+                "title": str(item.get("title") or item.get("section_key") or ""),
+                "has_content": bool(item.get("has_content")),
+            }
+            for item in candidates
+            if isinstance(item, dict) and item.get("section_key")
+        ]
+        return AssistantToolResult(
+            tool_name="run_section_campaign",
+            result={
+                "project_id": project_id,
+                "mode": "plan",
+                "processed_count": 0,
+                "remaining_count": len(planned),
+                "processed_section_keys": [],
+                "remaining_section_keys": [item["section_key"] for item in planned],
+                "planned_sections": planned,
+                "written_section_keys": [],
+                "started_runtime_run_ids": [],
+                "failed": [],
+                "has_more": len(planned) > 0,
+                "waves_run": 0,
+                "auto_continue": False,
+            },
+            summary=(
+                f"多章节战役规划完成：待处理 {len(planned)} 章。"
+                "下一步用 mode=framework 或 draft_workflow 执行。"
+            ),
+        )
+
+    queue = list(candidates)
+    while queue and waves_run < max_waves:
+        wave = queue[:max_sections]
+        queue = queue[max_sections:]
+        waves_run += 1
+        for item in wave:
+            section_key = str(item.get("section_key") or "").strip()
+            title = str(item.get("title") or section_key).strip() or section_key
+            if not section_key:
+                continue
+            try:
+                if mode == "framework":
+                    skeleton = (
+                        f"## {title}\n\n"
+                        f"> 由多章节战役自动生成的框架草稿（项目：{project_name or project_id}）。\n\n"
+                        "### 本章目标\n"
+                        f"- 明确「{title}」需要回应的招标关注点\n"
+                        "- 列出待补充的证据与数据\n\n"
+                        "### 要点提纲\n"
+                        "1. 背景与范围\n"
+                        "2. 方案要点\n"
+                        "3. 交付与保障\n\n"
+                        "### 待补证据\n"
+                        "- [ ] 相关资质 / 案例 / 指标\n"
+                    )
+                    write_section_tool(
+                        db,
+                        user,
+                        {
+                            "project_id": project_id,
+                            "section_key": section_key,
+                            "title": title,
+                            "content_markdown": skeleton,
+                        },
+                    )
+                    written_keys.append(section_key)
+                else:
+                    draft_args = {
                         "project_id": project_id,
                         "section_key": section_key,
-                        "title": title,
-                        "content_markdown": skeleton,
-                    },
-                )
-                written_keys.append(section_key)
-            else:
-                draft_args = {
-                    "project_id": project_id,
-                    "section_key": section_key,
-                }
-                if arguments.get("provider_config_id"):
-                    draft_args["provider_config_id"] = arguments.get("provider_config_id")
-                if arguments.get("reasoning_effort"):
-                    draft_args["reasoning_effort"] = arguments.get("reasoning_effort")
-                if arguments.get("allow_empty_evidence"):
-                    draft_args["allow_empty_evidence"] = True
-                if arguments.get("parent_runtime_run_id"):
-                    draft_args["parent_runtime_run_id"] = arguments.get("parent_runtime_run_id")
-                started = start_draft_section(db, user, draft_args)
-                runtime_run_id = started.result.get("runtime_run_id")
-                if isinstance(runtime_run_id, str) and runtime_run_id:
-                    started_runtime_run_ids.append(runtime_run_id)
-            processed_keys.append(section_key)
-        except Exception as exc:  # noqa: BLE001
-            failed.append({"section_key": section_key, "error": str(exc)[:240]})
+                    }
+                    if arguments.get("provider_config_id"):
+                        draft_args["provider_config_id"] = arguments.get("provider_config_id")
+                    if arguments.get("reasoning_effort"):
+                        draft_args["reasoning_effort"] = arguments.get("reasoning_effort")
+                    if arguments.get("allow_empty_evidence"):
+                        draft_args["allow_empty_evidence"] = True
+                    if arguments.get("parent_runtime_run_id"):
+                        draft_args["parent_runtime_run_id"] = arguments.get("parent_runtime_run_id")
+                    started = start_draft_section(db, user, draft_args)
+                    runtime_run_id = started.result.get("runtime_run_id")
+                    if isinstance(runtime_run_id, str) and runtime_run_id:
+                        started_runtime_run_ids.append(runtime_run_id)
+                processed_keys.append(section_key)
+            except Exception as exc:  # noqa: BLE001
+                failed.append({"section_key": section_key, "error": str(exc)[:240]})
+        if not auto_continue:
+            break
 
     remaining_keys = [
         str(item.get("section_key"))
-        for item in remaining
+        for item in queue
         if isinstance(item, dict) and item.get("section_key")
     ]
     result = {
@@ -684,10 +770,12 @@ def run_section_campaign_tool(db: Session, user: CurrentUser, arguments: dict) -
         "started_runtime_run_ids": started_runtime_run_ids,
         "failed": failed,
         "has_more": len(remaining_keys) > 0,
+        "waves_run": waves_run,
+        "auto_continue": auto_continue,
     }
     summary = (
-        f"多章节战役（{mode}）本波处理 {len(processed_keys)} 章"
-        + (f"，剩余 {len(remaining_keys)} 章" if remaining_keys else "，本波已清空待写章节")
+        f"多章节战役（{mode}）完成 {waves_run} 波、处理 {len(processed_keys)} 章"
+        + (f"，剩余 {len(remaining_keys)} 章" if remaining_keys else "，待写章节已清空")
         + (f"，失败 {len(failed)} 章" if failed else "")
         + "。"
     )

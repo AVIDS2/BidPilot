@@ -133,11 +133,28 @@ def test_smoke_I_and_campaign_budget_and_policy() -> None:
             "project_id": "p1",
             "mode": "framework",
             "processed_count": 3,
-            "remaining_count": 2,
+            "remaining_count": 0,
             "processed_section_keys": ["a", "b", "c"],
-            "remaining_section_keys": ["d", "e"],
-            "has_more": True,
+            "remaining_section_keys": [],
+            "has_more": False,
+            "waves_run": 2,
+            "auto_continue": True,
         },
     )
-    assert public.payload["has_more"] is True
+    assert public.payload["has_more"] is False
+    assert public.payload["waves_run"] == 2
     assert "3" in public.summary
+
+    plan = format_public_result(
+        "run_section_campaign",
+        {
+            "project_id": "p1",
+            "mode": "plan",
+            "processed_count": 0,
+            "remaining_count": 5,
+            "planned_sections": [{"section_key": "a", "title": "A"}],
+            "has_more": True,
+            "waves_run": 0,
+        },
+    )
+    assert "规划" in plan.summary

@@ -290,8 +290,10 @@ def format_approval_request(capability_name: str, arguments: dict[str, Any]) -> 
     if capability_name == "run_section_campaign":
         mode = arguments.get("mode") or "framework"
         max_sections = arguments.get("max_sections") or 3
+        if mode == "plan":
+            return "确认生成多章节战役计划（只规划不写入）吗？"
         return (
-            f"确认启动多章节战役吗？模式={mode}，本波最多处理 {max_sections} 章。"
+            f"确认启动多章节战役吗？模式={mode}，每波最多处理 {max_sections} 章。"
             "会写入章节骨架或启动起草工作流，并可能分多波继续。"
         )
     if capability_name == "start_redraft_section":
@@ -555,20 +557,27 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
                 "remaining_count",
                 "processed_section_keys",
                 "remaining_section_keys",
+                "planned_sections",
                 "started_runtime_run_ids",
                 "written_section_keys",
                 "failed",
                 "has_more",
+                "waves_run",
+                "auto_continue",
             )
             if key in result
         }
         processed = result.get("processed_count") or 0
         remaining = result.get("remaining_count") or 0
+        waves = result.get("waves_run") or 0
         mode = result.get("mode") or "framework"
-        summary = f"多章节战役（{mode}）本波处理 {processed} 章"
-        if remaining:
-            summary += f"，剩余 {remaining} 章待下一波"
-        summary += "。"
+        if mode == "plan":
+            summary = f"多章节战役规划完成：待处理 {remaining} 章。"
+        else:
+            summary = f"多章节战役（{mode}）完成 {waves} 波、处理 {processed} 章"
+            if remaining:
+                summary += f"，剩余 {remaining} 章待下一波"
+            summary += "。"
         return PublicCapabilityResult(summary, payload)
     if capability_name == "semantic_search":
         items = _public_items(
