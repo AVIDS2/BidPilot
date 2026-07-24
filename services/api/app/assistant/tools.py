@@ -94,6 +94,8 @@ def execute_tool(
         return start_draft_section(db, user, arguments)
     if tool_name == "write_section":
         return write_section_tool(db, user, arguments)
+    if tool_name == "run_section_campaign":
+        return run_section_campaign_tool(db, user, arguments)
     if tool_name == "start_redraft_section":
         return start_redraft_section(db, user, arguments)
     if tool_name == "resume_draft_run":
@@ -564,6 +566,136 @@ def write_section_tool(db: Session, user: CurrentUser, arguments: dict) -> Assis
             "char_count": len(content),
         },
         summary=f"已写入章节「{section.title}」v{version.version_number}（{len(content)} 字）。",
+    )
+
+
+def run_section_campaign_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """Process a bounded wave of empty outline sections (framework write or draft workflow).
+
+    Designed for multi-section campaigns that resume across turns/wake notifications.
+    Never tries to finish an entire bid book in one unbounded loop.
+    """
+    project_id = str(arguments.get("project_id") or "").strip()
+    if not project_id:
+        raise ValueError("project_id is required")
+    mode = str(arguments.get("mode") or "framework").strip().lower()
+    if mode not in {"framework", "draft_workflow"}:
+        raise ValueError("mode must be framework or draft_workflow")
+    raw_max = arguments.get("max_sections", 3)
+    try:
+        max_sections = int(raw_max)
+    except (TypeError, ValueError):
+        max_sections = 3
+    max_sections = max(1, min(max_sections, 8))
+
+    outline = get_project_outline(db, user, {"project_id": project_id})
+    items = outline.result.get("items") if isinstance(outline.result, dict) else []
+    if not isinstance(items, list):
+        items = []
+
+    requested_keys = arguments.get("section_keys")
+    if isinstance(requested_keys, list) and requested_keys:
+        wanted = {str(key).strip() for key in requested_keys if str(key).strip()}
+        candidates = [
+            item
+            for item in items
+            if isinstance(item, dict) and str(item.get("section_key") or "") in wanted
+        ]
+    else:
+        candidates = [
+            item
+            for item in items
+            if isinstance(item, dict) and not bool(item.get("has_content"))
+        ]
+
+    wave = candidates[:max_sections]
+    remaining = candidates[max_sections:]
+    processed_keys: list[str] = []
+    written_keys: list[str] = []
+    started_runtime_run_ids: list[str] = []
+    failed: list[dict[str, str]] = []
+    project_name = outline.result.get("project_name") if isinstance(outline.result, dict) else ""
+
+    for item in wave:
+        section_key = str(item.get("section_key") or "").strip()
+        title = str(item.get("title") or section_key).strip() or section_key
+        if not section_key:
+            continue
+        try:
+            if mode == "framework":
+                skeleton = (
+                    f"## {title}\n\n"
+                    f"> 由多章节战役自动生成的框架草稿（项目：{project_name or project_id}）。\n\n"
+                    "### 本章目标\n"
+                    f"- 明确「{title}」需要回应的招标关注点\n"
+                    "- 列出待补充的证据与数据\n\n"
+                    "### 要点提纲\n"
+                    "1. 背景与范围\n"
+                    "2. 方案要点\n"
+                    "3. 交付与保障\n\n"
+                    "### 待补证据\n"
+                    "- [ ] 相关资质 / 案例 / 指标\n"
+                )
+                write_section_tool(
+                    db,
+                    user,
+                    {
+                        "project_id": project_id,
+                        "section_key": section_key,
+                        "title": title,
+                        "content_markdown": skeleton,
+                    },
+                )
+                written_keys.append(section_key)
+            else:
+                draft_args = {
+                    "project_id": project_id,
+                    "section_key": section_key,
+                }
+                if arguments.get("provider_config_id"):
+                    draft_args["provider_config_id"] = arguments.get("provider_config_id")
+                if arguments.get("reasoning_effort"):
+                    draft_args["reasoning_effort"] = arguments.get("reasoning_effort")
+                if arguments.get("allow_empty_evidence"):
+                    draft_args["allow_empty_evidence"] = True
+                if arguments.get("parent_runtime_run_id"):
+                    draft_args["parent_runtime_run_id"] = arguments.get("parent_runtime_run_id")
+                started = start_draft_section(db, user, draft_args)
+                runtime_run_id = started.result.get("runtime_run_id")
+                if isinstance(runtime_run_id, str) and runtime_run_id:
+                    started_runtime_run_ids.append(runtime_run_id)
+            processed_keys.append(section_key)
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"section_key": section_key, "error": str(exc)[:240]})
+
+    remaining_keys = [
+        str(item.get("section_key"))
+        for item in remaining
+        if isinstance(item, dict) and item.get("section_key")
+    ]
+    result = {
+        "project_id": project_id,
+        "mode": mode,
+        "processed_count": len(processed_keys),
+        "remaining_count": len(remaining_keys),
+        "processed_section_keys": processed_keys,
+        "remaining_section_keys": remaining_keys,
+        "written_section_keys": written_keys,
+        "started_runtime_run_ids": started_runtime_run_ids,
+        "failed": failed,
+        "has_more": len(remaining_keys) > 0,
+    }
+    summary = (
+        f"多章节战役（{mode}）本波处理 {len(processed_keys)} 章"
+        + (f"，剩余 {len(remaining_keys)} 章" if remaining_keys else "，本波已清空待写章节")
+        + (f"，失败 {len(failed)} 章" if failed else "")
+        + "。"
+    )
+    return AssistantToolResult(
+        tool_name="run_section_campaign",
+        result=result,
+        summary=summary,
+        workflow=mode == "draft_workflow" and bool(started_runtime_run_ids),
     )
 
 

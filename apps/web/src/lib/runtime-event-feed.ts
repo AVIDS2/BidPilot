@@ -21,6 +21,7 @@ const WORKFLOW_CAPABILITIES = new Set([
   "start_redraft_section",
   "retry_run",
   "propose_memory_graph",
+  "run_section_campaign",
 ]);
 
 function asRecord(value: unknown): Record<string, unknown> {

@@ -210,6 +210,14 @@ _CAPABILITIES = (
         requires_approval_in_risky_only=True,
         requires_typed_confirmation=True,
     ),
+    CapabilityDefinition(
+        "run_section_campaign",
+        "多章节起草战役",
+        "Run multi-section draft campaign",
+        RuntimeRiskLevel.COSTING,
+        "workflow.run",
+        requires_approval_in_risky_only=True,
+    ),
 )
 
 CAPABILITY_REGISTRY: dict[str, CapabilityDefinition] = {definition.name: definition for definition in _CAPABILITIES}
@@ -220,6 +228,7 @@ WORKFLOW_CAPABILITY_NAMES = frozenset(
         "resume_draft_run",
         "retry_run",
         "propose_memory_graph",
+        "run_section_campaign",
     }
 )
 
@@ -230,6 +239,7 @@ _REQUIRED_ARGUMENT_FIELDS: dict[str, tuple[str, ...]] = {
     "web_search": ("query",),
     "fetch_url_to_project": ("project_id", "url"),
     "semantic_search": ("project_id", "query"),
+    "run_section_campaign": ("project_id",),
 }
 
 
@@ -277,6 +287,13 @@ def format_approval_request(capability_name: str, arguments: dict[str, Any]) -> 
         return f"确认启动章节「{arguments.get('section_key') or '未指定章节'}」的起草工作流吗？"
     if capability_name == "write_section":
         return f"确认把内容写入章节「{arguments.get('section_key') or '未指定章节'}」吗？"
+    if capability_name == "run_section_campaign":
+        mode = arguments.get("mode") or "framework"
+        max_sections = arguments.get("max_sections") or 3
+        return (
+            f"确认启动多章节战役吗？模式={mode}，本波最多处理 {max_sections} 章。"
+            "会写入章节骨架或启动起草工作流，并可能分多波继续。"
+        )
     if capability_name == "start_redraft_section":
         return f"确认启动章节「{arguments.get('section_key') or '未指定章节'}」的重写工作流吗？"
     if capability_name == "resume_draft_run":
@@ -528,6 +545,31 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
         }
         title = result.get("section_title") or result.get("section_key") or "章节"
         return PublicCapabilityResult(f"已写入章节「{title}」。", payload)
+    if capability_name == "run_section_campaign":
+        payload = {
+            key: result[key]
+            for key in (
+                "project_id",
+                "mode",
+                "processed_count",
+                "remaining_count",
+                "processed_section_keys",
+                "remaining_section_keys",
+                "started_runtime_run_ids",
+                "written_section_keys",
+                "failed",
+                "has_more",
+            )
+            if key in result
+        }
+        processed = result.get("processed_count") or 0
+        remaining = result.get("remaining_count") or 0
+        mode = result.get("mode") or "framework"
+        summary = f"多章节战役（{mode}）本波处理 {processed} 章"
+        if remaining:
+            summary += f"，剩余 {remaining} 章待下一波"
+        summary += "。"
+        return PublicCapabilityResult(summary, payload)
     if capability_name == "semantic_search":
         items = _public_items(
             result.get("items"),

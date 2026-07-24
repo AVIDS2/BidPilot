@@ -66,7 +66,54 @@ ModelUsageObserver = Callable[[ProviderUsageMeasurement | None], None]
 
 HARNESS_MAX_STEPS = 8
 HARNESS_MAX_TOOLS_PER_TURN = 6
+HARNESS_CAMPAIGN_MAX_STEPS = 16
+HARNESS_CAMPAIGN_MAX_TOOLS_PER_TURN = 10
 _LLM_TOOL_RESULT_MAX_CHARS = 2_000
+
+# Messages / capabilities that justify a higher step budget without global YOLO.
+_CAMPAIGN_MESSAGE_MARKERS = (
+    "全部章节",
+    "所有章节",
+    "整本",
+    "多章节",
+    "批量起草",
+    "完整起草",
+    "整包导出",
+    "导出全套",
+    "研究并写入",
+    "run_section_campaign",
+    "section campaign",
+    "all sections",
+    "full draft",
+)
+_CAMPAIGN_CAPABILITIES = frozenset(
+    {
+        "run_section_campaign",
+        "web_search",
+        "fetch_url_to_project",
+        "start_draft_section",
+        "write_section",
+        "export_deliverable",
+        "generate_readiness_pack",
+    }
+)
+
+
+def resolve_harness_budgets(
+    user_message: str,
+    *,
+    force_campaign: bool = False,
+) -> tuple[int, int]:
+    """Return (max_steps, max_tools_per_turn) for this turn.
+
+    Default stays tight for safety. Research / multi-section campaign language
+    (or an explicit force) raises the ceiling without removing the hard cap.
+    """
+    text = (user_message or "").strip()
+    lowered = text.casefold()
+    if force_campaign or any(marker in text or marker in lowered for marker in _CAMPAIGN_MESSAGE_MARKERS):
+        return HARNESS_CAMPAIGN_MAX_STEPS, HARNESS_CAMPAIGN_MAX_TOOLS_PER_TURN
+    return HARNESS_MAX_STEPS, HARNESS_MAX_TOOLS_PER_TURN
 
 # Minimal OpenAI-compatible argument schemas. Keep these product-facing and
 # small; execute_capability remains the real validation boundary.
@@ -389,6 +436,37 @@ _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["project_id"],
         "additionalProperties": False,
     },
+    "run_section_campaign": {
+        "type": "object",
+        "properties": {
+            "project_id": {"type": "string"},
+            "mode": {
+                "type": "string",
+                "enum": ["framework", "draft_workflow"],
+                "description": (
+                    "framework: write short outline-first skeletons into empty sections; "
+                    "draft_workflow: start governed draft workflows per empty section"
+                ),
+            },
+            "max_sections": {
+                "type": "integer",
+                "description": "Max sections to process this wave (1-8, default 3)",
+            },
+            "section_keys": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional explicit section_key list; default = empty template sections",
+            },
+            "allow_empty_evidence": {
+                "type": "boolean",
+                "description": "For draft_workflow mode when project has no parsed materials",
+            },
+            "provider_config_id": {"type": "string"},
+            "reasoning_effort": {"type": "string"},
+        },
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
 }
 
 
@@ -463,7 +541,8 @@ class StreamingHarness:
         pending_input: dict[str, Any] | None = None,
         provider_config_id: str | None = None,
         reasoning_effort: str | None = None,
-        max_steps: int = HARNESS_MAX_STEPS,
+        max_steps: int | None = None,
+        max_tools_per_turn: int | None = None,
         after_sequence: int = 0,
     ) -> None:
         self.db = db
@@ -482,12 +561,18 @@ class StreamingHarness:
         self.pending_input = pending_input or {}
         self.provider_config_id = provider_config_id
         self.reasoning_effort = reasoning_effort
-        self.max_steps = max(1, max_steps)
+        default_steps, default_tools = resolve_harness_budgets(user_message)
+        self.max_steps = max(1, max_steps if max_steps is not None else default_steps)
+        self.max_tools_per_turn = max(
+            1,
+            max_tools_per_turn if max_tools_per_turn is not None else default_tools,
+        )
         self.after_sequence = after_sequence
         self._active_reservation_keys: list[str] = []
         self._cursor = after_sequence
         self._streamed_text = False
         self._consecutive_tool_failures = 0
+        self._emitted_end = False
 
     async def run(self) -> AsyncGenerator[str, None]:
         register_default_recovery_hooks()
@@ -581,6 +666,14 @@ class StreamingHarness:
                         yield event
                     return
 
+                # Raise budget mid-turn when the model starts a campaign/research wave.
+                if any(item.name in _CAMPAIGN_CAPABILITIES for item in tool_calls):
+                    self.max_steps = max(self.max_steps, HARNESS_CAMPAIGN_MAX_STEPS)
+                    self.max_tools_per_turn = max(
+                        self.max_tools_per_turn,
+                        HARNESS_CAMPAIGN_MAX_TOOLS_PER_TURN,
+                    )
+
                 # Keep the assistant message that requested tools in the transcript.
                 ai_tool_message = AIMessage(
                     content="".join(text_parts),
@@ -590,13 +683,13 @@ class StreamingHarness:
                             "name": item.name,
                             "args": item.arguments,
                         }
-                        for item in tool_calls[:HARNESS_MAX_TOOLS_PER_TURN]
+                        for item in tool_calls[: self.max_tools_per_turn]
                     ],
                 )
                 messages.append(ai_tool_message)
 
                 executed_names: list[str] = []
-                for item in tool_calls[:HARNESS_MAX_TOOLS_PER_TURN]:
+                for item in tool_calls[: self.max_tools_per_turn]:
                     blocked = default_hook_registry.first_blocking(
                         "PreToolUse",
                         hook_ctx,
@@ -614,6 +707,7 @@ class StreamingHarness:
                             )
                         )
                         continue
+                    paused_for_approval = False
                     async for event in self._execute_one_tool(item, turn_id, messages, executed_names):
                         yield event
                         default_hook_registry.trigger(
@@ -622,14 +716,15 @@ class StreamingHarness:
                             tool_name=item.name,
                             arguments=item.arguments,
                         )
-                        # Approval pause ends the current stream; client resumes later.
-                        if event.startswith("event: assistant.confirmation_requested") or (
-                            event.startswith("event: assistant.end") and "needs_confirmation" in event
-                        ):
-                            return
-                        # Hard stop after consecutive tool failures.
+                        # Do not return on confirmation_requested alone — the tool
+                        # coroutine still yields assistant.end(needs_confirmation).
+                        # Returning early left clients without a terminal end event.
+                        if event.startswith("event: assistant.end") and "needs_confirmation" in event:
+                            paused_for_approval = True
                         if event.startswith("event: assistant.end") and '"state": "failed"' in event:
                             return
+                    if paused_for_approval:
+                        return
 
                 summary = build_turn_summary(executed_names)
                 default_hook_registry.trigger(
@@ -692,7 +787,7 @@ class StreamingHarness:
         tool_name: str,
         edited_arguments: dict[str, Any] | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Resume a paused approval and optionally continue the harness."""
+        """Resume a paused approval with a single clean tool lifecycle + end."""
         try:
             if not approved:
                 from contracts.runtime import RuntimeApprovalDecisionType as Decision
@@ -706,9 +801,39 @@ class StreamingHarness:
                 message = "已取消这次操作。"
                 cancel_runtime_run(self.db, self.runtime_run.id, message)
                 save_message(self.db, self.conversation_id, "assistant", message)
-                async for event in self._flush_new_events():
+                async for event in self._flush_new_events(
+                    skip_message_completed=True,
+                    skip_capability_started=True,
+                    skip_run_terminal=True,
+                ):
+                    yield event
+                yield _sse(
+                    "assistant.message",
+                    {
+                        "runtime_run_id": self.runtime_run.id,
+                        "content": message,
+                        "state": "completed",
+                    },
+                )
+                async for event in self._emit_end_once(state="completed"):
                     yield event
                 return
+
+            # Emit started first so UI never sees succeeded-before-started.
+            try:
+                title = get_capability_definition(tool_name).label_zh
+            except Exception:
+                title = tool_name
+            yield _sse(
+                "assistant.tool_started",
+                {
+                    "runtime_run_id": self.runtime_run.id,
+                    "tool_name": tool_name,
+                    "title": title,
+                    "arguments": redact_arguments(edited_arguments or {}),
+                    "state": "executing_tool",
+                },
+            )
 
             # Typed confirmation and other user edits arrive as confirmation.arguments.
             # Prefer EDIT so execute_capability sees confirmation_text / edited fields.
@@ -729,8 +854,15 @@ class StreamingHarness:
                 )
             result = execution.result or PublicCapabilityResult("操作已完成。", {})
             self._maybe_bind_project(tool_name, result.payload)
-            # Surface success immediately, then let a short continuation turn
-            # summarize / offer next steps instead of hard-stopping the loop.
+            # Suppress durable started/succeeded/run.completed remaps — we own the
+            # live SSE lifecycle here to avoid double tool_succeeded + double end.
+            async for event in self._flush_new_events(
+                skip_message_completed=True,
+                skip_capability_started=True,
+                skip_capability_succeeded=True,
+                skip_run_terminal=True,
+            ):
+                yield event
             yield _sse(
                 "assistant.tool_succeeded",
                 {
@@ -748,7 +880,12 @@ class StreamingHarness:
                 result.summary,
                 result_json={"summary": result.summary, "payload": result.payload},
             )
-            async for event in self._flush_new_events(skip_message_completed=True):
+            async for event in self._flush_new_events(
+                skip_message_completed=True,
+                skip_capability_started=True,
+                skip_capability_succeeded=True,
+                skip_run_terminal=True,
+            ):
                 yield event
             yield _sse(
                 "assistant.message",
@@ -758,14 +895,8 @@ class StreamingHarness:
                     "state": "completed",
                 },
             )
-            yield _sse(
-                "assistant.end",
-                {
-                    "conversation_id": self.conversation_id,
-                    "runtime_run_id": self.runtime_run.id,
-                    "state": "completed",
-                },
-            )
+            async for event in self._emit_end_once(state="completed"):
+                yield event
         except Exception as exc:
             safe_error = redact_text(str(exc))
             message = f"执行失败：{safe_error}"
@@ -793,7 +924,11 @@ class StreamingHarness:
                     "请再次发起删除，并在确认框中输入完整项目名。"
                 )
             save_message(self.db, self.conversation_id, "assistant", guidance)
-            async for event in self._flush_new_events(skip_message_completed=True):
+            async for event in self._flush_new_events(
+                skip_message_completed=True,
+                skip_capability_started=True,
+                skip_run_terminal=True,
+            ):
                 yield event
             yield _sse(
                 "assistant.message",
@@ -803,14 +938,8 @@ class StreamingHarness:
                     "state": "failed",
                 },
             )
-            yield _sse(
-                "assistant.end",
-                {
-                    "conversation_id": self.conversation_id,
-                    "runtime_run_id": self.runtime_run.id,
-                    "state": "failed",
-                },
-            )
+            async for event in self._emit_end_once(state="failed"):
+                yield event
 
     def _initial_messages(self) -> list[Any]:
         capability_list = "、".join(
@@ -836,6 +965,9 @@ class StreamingHarness:
             "10. 外部研究：用 web_search 找来源；需要入库时用 fetch_url_to_project；"
             "聊天附件入库用 upload_document(attachment_ids=...)。长工作流完成后会有后台通知，"
             "收到 <task_notification> 后继续，不要空转轮询。\n"
+            "11. 多章节战役：用户要求「全部章节/整本/批量起草」时，优先 run_section_campaign"
+            "（mode=framework 先写骨架；有资料用 draft_workflow）。不要在一回合里手写 20 章长文。"
+            "campaign 返回 remaining_section_keys 时，下一波继续同一 project_id。\n"
             f"可用工具：{capability_list}"
         )
         packet = build_untrusted_context_packet(
@@ -1057,7 +1189,8 @@ class StreamingHarness:
             )
             return
 
-        # Emit a started event early for live UI even before durable capability.started.
+        # Single live UI started event. Durable capability.started is suppressed on
+        # flush so the client does not render a second ghost tool card.
         yield _sse(
             "assistant.tool_started",
             {
@@ -1101,7 +1234,7 @@ class StreamingHarness:
                     "state": "failed",
                 },
             )
-            async for event in self._flush_new_events():
+            async for event in self._flush_new_events(skip_capability_started=True):
                 yield event
             if self._consecutive_tool_failures >= 3:
                 stop = "连续多次工具执行失败，我先停在这里。请换一种说法或检查项目上下文后再试。"
@@ -1110,29 +1243,21 @@ class StreamingHarness:
                     fail_runtime_run(self.db, self.runtime_run.id, stop, error_code="harness_tool_failures")
                 except ValueError:
                     pass
-                async for event in self._flush_new_events(skip_message_completed=True):
+                async for event in self._flush_new_events(
+                    skip_message_completed=True,
+                    skip_capability_started=True,
+                    skip_run_terminal=True,
+                ):
                     yield event
-                yield _sse(
-                    "assistant.end",
-                    {
-                        "conversation_id": self.conversation_id,
-                        "runtime_run_id": self.runtime_run.id,
-                        "state": "failed",
-                    },
-                )
+                async for event in self._emit_end_once(state="failed"):
+                    yield event
             return
 
         if execution.approval is not None:
-            async for event in self._flush_new_events():
+            async for event in self._flush_new_events(skip_capability_started=True):
                 yield event
-            yield _sse(
-                "assistant.end",
-                {
-                    "conversation_id": self.conversation_id,
-                    "runtime_run_id": self.runtime_run.id,
-                    "state": "needs_confirmation",
-                },
-            )
+            async for event in self._emit_end_once(state="needs_confirmation"):
+                yield event
             return
 
         if execution.action.status == "denied":
@@ -1143,7 +1268,7 @@ class StreamingHarness:
                     tool_call_id=item.tool_call_id,
                 )
             )
-            async for event in self._flush_new_events():
+            async for event in self._flush_new_events(skip_capability_started=True):
                 yield event
             return
 
@@ -1155,8 +1280,13 @@ class StreamingHarness:
             created_id = result.payload.get("id")
             if isinstance(created_id, str) and created_id:
                 self.active_project_id = created_id
-        # Long workflow tools: track as background tasks so a later turn can wake.
-        if item.name in {"start_draft_section", "start_redraft_section", "propose_memory_graph"}:
+        # Long workflow / campaign tools: track as background tasks so a later turn can wake.
+        if item.name in {
+            "start_draft_section",
+            "start_redraft_section",
+            "propose_memory_graph",
+            "run_section_campaign",
+        }:
             child_runtime = result.payload.get("runtime_run_id")
             if isinstance(child_runtime, str) and child_runtime:
                 bind_workflow_background_task(
@@ -1170,13 +1300,25 @@ class StreamingHarness:
                     ),
                     title=definition.label_zh,
                 )
+            # Campaign may spawn multiple child workflows.
+            child_runs = result.payload.get("started_runtime_run_ids")
+            if isinstance(child_runs, list):
+                for child in child_runs:
+                    if isinstance(child, str) and child:
+                        bind_workflow_background_task(
+                            conversation_id=self.conversation_id,
+                            user_id=self.user.id,
+                            runtime_run_id=child,
+                            workflow_run_id=None,
+                            title=definition.label_zh,
+                        )
 
         llm_content = json.dumps(
             {"summary": result.summary, "payload": result.payload},
             ensure_ascii=False,
         )[:_LLM_TOOL_RESULT_MAX_CHARS]
         messages.append(ToolMessage(content=llm_content, tool_call_id=item.tool_call_id))
-        async for event in self._flush_new_events():
+        async for event in self._flush_new_events(skip_capability_started=True):
             yield event
 
     def _maybe_bind_project(self, capability_name: str, payload: dict[str, Any]) -> None:
@@ -1191,10 +1333,26 @@ class StreamingHarness:
                 project_id=project_id,
             )
 
+    async def _emit_end_once(self, *, state: str) -> AsyncGenerator[str, None]:
+        if self._emitted_end:
+            return
+        self._emitted_end = True
+        yield _sse(
+            "assistant.end",
+            {
+                "conversation_id": self.conversation_id,
+                "runtime_run_id": self.runtime_run.id,
+                "state": state,
+            },
+        )
+
     async def _flush_new_events(
         self,
         *,
         skip_message_completed: bool = False,
+        skip_capability_started: bool = False,
+        skip_capability_succeeded: bool = False,
+        skip_run_terminal: bool = False,
     ) -> AsyncGenerator[str, None]:
         from .assistant_adapter import _render_runtime_event
         from .events import list_events_after
@@ -1209,7 +1367,38 @@ class StreamingHarness:
                 # Text was already streamed as assistant.message deltas; do not
                 # re-append the durable final message into the live transcript.
                 continue
+            if (
+                skip_capability_started
+                and event.event_type == RuntimeEventType.CAPABILITY_STARTED.value
+            ):
+                # Harness already emitted live assistant.tool_started for this action.
+                continue
+            if (
+                skip_capability_started
+                and event.event_type == RuntimeEventType.APPROVAL_RESOLVED.value
+            ):
+                # Approval resume path already emitted live tool_started; durable
+                # APPROVAL_RESOLVED would remap to a second started card.
+                continue
+            if (
+                skip_capability_succeeded
+                and event.event_type == RuntimeEventType.CAPABILITY_SUCCEEDED.value
+            ):
+                # Approval resume path owns a single tool_succeeded event.
+                continue
+            if skip_run_terminal and event.event_type in {
+                RuntimeEventType.RUN_COMPLETED.value,
+                RuntimeEventType.RUN_FAILED.value,
+                RuntimeEventType.RUN_CANCELLED.value,
+            }:
+                # Avoid durable run.* remapping into a second assistant.end.
+                continue
             for rendered in _render_runtime_event(event, self.conversation_id):
+                # If a rendered end slipped through, still dedupe.
+                if rendered.startswith("event: assistant.end"):
+                    if self._emitted_end:
+                        continue
+                    self._emitted_end = True
                 yield rendered
 
     def _reserve_model_capacity(self) -> None:

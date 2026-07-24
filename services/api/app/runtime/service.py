@@ -690,7 +690,11 @@ def _execute_action(
     execute = executor or _legacy_executor(action.capability_name)
     try:
         execution_arguments = dict(action.arguments_json or {})
-        if action.capability_name in {"start_draft_section", "start_redraft_section"}:
+        if action.capability_name in {
+            "start_draft_section",
+            "start_redraft_section",
+            "run_section_campaign",
+        }:
             execution_arguments.setdefault("parent_runtime_run_id", run.id)
         raw_result = execute(db, user, execution_arguments)
         public_result = format_public_result(action.capability_name, raw_result)

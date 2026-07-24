@@ -8,10 +8,12 @@ from typing import Any
 import pytest
 
 from app.runtime.harness_loop import (
+    HARNESS_CAMPAIGN_MAX_STEPS,
     HARNESS_MAX_STEPS,
     StreamingHarness,
     build_capability_tool_specs,
     build_turn_summary,
+    resolve_harness_budgets,
 )
 
 
@@ -59,6 +61,7 @@ def test_build_capability_tool_specs_covers_registry() -> None:
     assert "search_projects" in names
     assert "create_project" in names
     assert "list_requirements" in names
+    assert "run_section_campaign" in names
     assert all(tool["type"] == "function" for tool in tools)
 
 
@@ -67,6 +70,14 @@ def test_build_turn_summary_is_rule_based() -> None:
     assert "搜索项目" in summary
     assert "×2" in summary
     assert "查看需求" in summary
+
+
+def test_resolve_harness_budgets_raises_for_campaign_language() -> None:
+    default_steps, default_tools = resolve_harness_budgets("搜索项目")
+    campaign_steps, campaign_tools = resolve_harness_budgets("请把全部章节批量起草")
+    assert default_steps == HARNESS_MAX_STEPS
+    assert campaign_steps == HARNESS_CAMPAIGN_MAX_STEPS
+    assert campaign_tools >= default_tools
 
 
 def test_streaming_harness_answers_without_tools(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -181,15 +192,83 @@ def test_streaming_harness_executes_tool_then_answers(monkeypatch: pytest.Monkey
     asyncio.run(_collect())
 
     assert "search_projects" in executed
-    assert "assistant.tool_started" in events
+    assert events.count("assistant.tool_started") == 1
     assert "assistant.turn_finished" in events
     assert "assistant.message" in events
     assert len(llm.calls) == 2
 
 
+def test_resume_approval_emits_started_before_succeeded(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from app.runtime import harness_loop as module
+    from app.runtime.registry import PublicCapabilityResult
+    from app.usage.schemas import ProviderSource
+    from contracts.runtime import RuntimeApprovalDecisionType
+
+    class _Action:
+        status = "succeeded"
+
+    class _Execution:
+        approval = None
+        action = _Action()
+        result = PublicCapabilityResult("项目已删除。", {"id": "p1"})
+
+    def fake_resolve_approval(db, user, *, approval_id, decision, edited_arguments=None, executor=None):
+        assert decision in {
+            RuntimeApprovalDecisionType.APPROVE,
+            RuntimeApprovalDecisionType.EDIT,
+        }
+        return _Execution()
+
+    monkeypatch.setattr(module, "resolve_approval", fake_resolve_approval)
+    monkeypatch.setattr(module, "save_message", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "complete_runtime_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        "app.runtime.assistant_adapter._render_runtime_event",
+        lambda *args, **kwargs: [],
+    )
+
+    harness = StreamingHarness(
+        db=object(),  # type: ignore[arg-type]
+        user=_FakeUser(),  # type: ignore[arg-type]
+        run=_FakeRun(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        llm=_FakeBoundLLM([]),
+        provider_type="openai",
+        provider_source=ProviderSource.OFFICIAL,
+        model="test",
+        user_message="确认执行",
+    )
+
+    events: list[str] = []
+
+    async def _collect() -> None:
+        async for raw in harness.resume_approval(
+            approval_id="appr-1",
+            approved=True,
+            tool_name="delete_project",
+            edited_arguments={"project_id": "p1", "confirmation_text": "Demo"},
+        ):
+            for line in raw.strip().splitlines():
+                if line.startswith("event: "):
+                    events.append(line[7:])
+
+    asyncio.run(_collect())
+
+    assert events.count("assistant.tool_started") == 1
+    assert events.count("assistant.tool_succeeded") == 1
+    assert events.count("assistant.end") == 1
+    assert events.index("assistant.tool_started") < events.index("assistant.tool_succeeded")
+    assert events.index("assistant.tool_succeeded") < events.index("assistant.end")
+
+
 def test_harness_max_steps_is_bounded() -> None:
     assert HARNESS_MAX_STEPS >= 4
     assert HARNESS_MAX_STEPS <= 12
+    assert HARNESS_CAMPAIGN_MAX_STEPS > HARNESS_MAX_STEPS
+    assert HARNESS_CAMPAIGN_MAX_STEPS <= 24
 
 
 def test_product_tool_schemas_include_redraft_feedback_and_export_project() -> None:
@@ -199,3 +278,5 @@ def test_product_tool_schemas_include_redraft_feedback_and_export_project() -> N
     assert "run_id" in tools["resume_draft_run"]["properties"]
     assert "decision" in tools["resume_draft_run"]["properties"]
     assert set(tools["resume_draft_run"]["required"]) == {"run_id", "decision"}
+    assert "mode" in tools["run_section_campaign"]["properties"]
+    assert "project_id" in tools["run_section_campaign"]["required"]
