@@ -93,6 +93,12 @@
     "summaryRunningWorkflowsOnly": "Running {{workflows}} workflows",
     "expand": "Expand activity details",
     "collapse": "Collapse activity details",
+    "showToolDetails": "Show {{label}} details",
+    "hideToolDetails": "Hide {{label}} details",
+    "countTools": "{{tools}} actions",
+    "countWithWorkflows": "{{tools}} actions · {{workflows}} workflows",
+    "workflowProgress": "Workflow steps",
+    "providerNeedsAttention": "Model configuration needs attention",
     "status": {
       "pending": "pending",
       "running": "running",

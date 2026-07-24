@@ -10,6 +10,11 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { downloadAssistantArtifact } from "@/lib/api";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import { buildTranscriptTurns } from "@/lib/assistant-transcript";
@@ -50,6 +55,48 @@ function getTone(items: AssistantExecutionItem[]): ActivityTone {
   if (items.some((item) => item.status === "pending")) return "pending";
   if (items.some((item) => item.status === "cancelled")) return "cancelled";
   return "succeeded";
+}
+
+function ActivityStatusMark({
+  status,
+  className,
+}: {
+  status: ActivityTone;
+  className?: string;
+}) {
+  const isActive = status === "running" || status === "pending";
+
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full border bg-background shadow-[0_1px_2px_oklch(0_0_0/0.05)]",
+        isActive && "border-primary/35 bg-primary/[0.08] text-primary",
+        status === "succeeded" && "border-primary/25 bg-primary/[0.06] text-primary",
+        status === "failed" && "border-destructive/35 bg-destructive/[0.07] text-destructive",
+        status === "cancelled" && "border-border/80 bg-muted/45 text-muted-foreground",
+        className,
+      )}
+    >
+      {isActive && (
+        <span className="absolute inset-0 rounded-full border border-primary/35 animate-ping motion-reduce:hidden" />
+      )}
+      {isActive ? (
+        <Loader2Icon className="relative size-3 animate-spin" />
+      ) : status === "failed" ? (
+        <XCircleIcon className="size-3.5" />
+      ) : status === "succeeded" ? (
+        <CheckCircle2Icon className="size-3.5" />
+      ) : (
+        <CircleDashedIcon className="size-3.5" />
+      )}
+    </span>
+  );
+}
+
+function getNodeTone(status: "pending" | "running" | "completed" | "failed"): ActivityTone {
+  if (status === "completed") return "succeeded";
+  return status;
 }
 
 function getWorkflowNodeLabel(nodeName: string, t: Translate) {
@@ -391,6 +438,7 @@ function ActivityDetail({
   const label = getAssistantToolLabel(item.toolName, t);
   const safeSummary = sanitizeToolText(item.summary);
   const failureGuidance = item.status === "failed" ? getFailureGuidance(item.errorCode, t) : null;
+  const detailSummary = failureGuidance?.message || safeSummary || summarizeResult(item, t);
   // Only real workflow cards own node progress. Plain tools must never show
   // "0/1 steps" just because a stale nodes array leaked onto the item.
   const workflowNodes = item.kind === "workflow" ? item.nodes ?? [] : [];
@@ -413,13 +461,13 @@ function ActivityDetail({
     !item.isCancellationRequested;
 
   return (
-    <div className={cn("text-xs", showHeader && "group flex gap-2.5 py-1.5")}>
+    <div className={cn("min-w-0 text-xs", showHeader && "grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2.5 py-1.5")}>
       {showHeader && (
-        <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground/75">
-          <Icon className="h-3.5 w-3.5" />
+        <div className="mt-0.5 flex size-4 items-center justify-center text-muted-foreground/75">
+          <Icon className="size-3.5" />
         </div>
       )}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         {showHeader && (
           <div className="flex items-center justify-between gap-2">
             <span className="truncate font-medium tracking-[-0.01em] text-foreground/95">{label}</span>
@@ -428,10 +476,10 @@ function ActivityDetail({
             </span>
           </div>
         )}
-        {(showHeader || failureGuidance) && (
-          <div className="mt-0.5 leading-5 text-muted-foreground/85">
-            {failureGuidance?.message || safeSummary || summarizeResult(item, t)}
-          </div>
+        {detailSummary && (
+          <p className="mt-1 whitespace-pre-wrap break-words leading-5 text-muted-foreground/85">
+            {detailSummary}
+          </p>
         )}
         {failureGuidance?.canOpenProviderSettings && onConfigureProvider && (
           <Button
@@ -439,47 +487,61 @@ function ActivityDetail({
             variant="outline"
             size="sm"
             onClick={onConfigureProvider}
-            className="mt-2 h-7 px-2 text-[11px]"
+            className="mt-3 h-7 rounded-md px-2 text-[11px] shadow-none"
           >
             <Settings2Icon data-icon="inline-start" />
             {t("activity.openProviderSettings", { defaultValue: "Open model settings" })}
           </Button>
         )}
         {totalNodes > 0 && (
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            {t("execution.nodesCompleted", {
-              completed: completedNodes,
-              total: totalNodes,
-              defaultValue: `${completedNodes} of ${totalNodes} steps completed`,
-            })}
+          <div className="mt-3 border-t border-border/55 pt-3">
+            <p className="text-[10px] font-medium tracking-wide text-muted-foreground/80">
+              {t("activity.workflowProgress", { defaultValue: "Workflow progress" })}
+              <span className="ml-2 font-normal">
+                {t("execution.nodesCompleted", {
+                  completed: completedNodes,
+                  total: totalNodes,
+                  defaultValue: `${completedNodes} of ${totalNodes} steps completed`,
+                })}
+              </span>
+            </p>
+            <ol className="mt-2 space-y-1.5">
+              {workflowNodes.map((node) => (
+                <li
+                  key={node.name}
+                  className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-2"
+                >
+                  <ActivityStatusMark status={getNodeTone(node.status)} className="size-4" />
+                  <span className="min-w-0 truncate text-[11px] text-foreground/85">
+                    {getWorkflowNodeLabel(node.name, t)}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/70">
+                    {t(`execution.nodeStatus.${node.status}`, { defaultValue: node.status })}
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
         {detailRows.length > 0 && (
-          <div className="mt-1.5 flex flex-col gap-1 text-[11px] leading-5 text-muted-foreground">
+          <dl className="mt-3 grid grid-cols-[minmax(0,6.75rem)_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-border/55 pt-3 text-[11px] leading-5">
             {detailRows.map(({ key, value }) => (
-              <div key={`${item.id}-${key}`} className="flex gap-1.5">
-                <span className="shrink-0 text-muted-foreground/65">{getFieldLabel(key, t)}</span>
-                <DetailValue value={value} />
+              <div key={`${item.id}-${key}`} className="contents">
+                <dt className="truncate text-muted-foreground/65">{getFieldLabel(key, t)}</dt>
+                <dd className="min-w-0 break-words text-muted-foreground">
+                  <DetailValue value={value} />
+                </dd>
               </div>
             ))}
-          </div>
+          </dl>
         )}
         <ResultDownloadActions result={item.result} t={t} />
-        {workflowNodes.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {workflowNodes.map((node) => (
-              <span key={node.name} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                {getWorkflowNodeLabel(node.name, t)} · {t(`execution.nodeStatus.${node.status}`, { defaultValue: node.status })}
-              </span>
-            ))}
-          </div>
-        )}
         {canCancel && onCancelWorkflow && (
           <button
             type="button"
             onClick={() => onCancelWorkflow(item.runtimeRunId!)}
             disabled={isCancelling}
-            className="mt-2 rounded-md border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:border-foreground/25 hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+            className="mt-3 inline-flex h-7 items-center rounded-md border border-border/80 px-2.5 text-[11px] font-medium text-muted-foreground transition hover:border-foreground/25 hover:bg-muted hover:text-foreground active:translate-y-px disabled:cursor-wait disabled:opacity-60"
           >
             {isCancelling
               ? t("activity.cancelling", { defaultValue: "Cancelling..." })
@@ -487,7 +549,7 @@ function ActivityDetail({
           </button>
         )}
         {item.isCancellationRequested && item.status !== "cancelled" && (
-          <p className="mt-2 text-[11px] text-muted-foreground">
+          <p className="mt-3 text-[11px] text-muted-foreground">
             {t("activity.cancellationRequested", { defaultValue: "Cancellation requested. Stopping at a safe boundary." })}
           </p>
         )}
@@ -508,8 +570,14 @@ function TraceToolStep({
   isCancelling?: boolean;
 }) {
   const { t } = useTranslation("ai-assistant");
+  const ToolIcon = getAssistantToolIcon(item);
   const label = getAssistantToolLabel(item.toolName, t);
-  const summary = sanitizeToolText(item.summary) || summarizeResult(item, t);
+  const failureGuidance = item.status === "failed" ? getFailureGuidance(item.errorCode, t) : null;
+  const summary = failureGuidance?.canOpenProviderSettings
+    ? t("activity.providerNeedsAttention", {
+        defaultValue: "Model configuration needs attention",
+      })
+    : sanitizeToolText(item.summary) || summarizeResult(item, t);
   const isActive = item.status === "running" || item.status === "pending";
   const [expanded, setExpanded] = useState(() => isActive || item.status === "failed");
   const previousStatus = useRef(item.status);
@@ -525,51 +593,78 @@ function TraceToolStep({
   }, [isActive, item.status]);
 
   return (
-    <details
+    <Collapsible
       open={expanded}
-      onToggle={(event) => setExpanded(event.currentTarget.open)}
-      className="border-b border-border/55 py-1.5 last:border-b-0"
+      onOpenChange={(open) => setExpanded(open)}
+      data-testid={`assistant-activity-step-${item.toolCallId || item.id}`}
+      data-status={item.status}
+      className="relative grid grid-cols-[1.25rem_minmax(0,1fr)] gap-x-3 py-2.5 before:absolute before:bottom-[-0.65rem] before:left-[9px] before:top-7 before:w-px before:bg-border/65 last:before:hidden"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm py-1 text-left text-xs marker:hidden [&::-webkit-details-marker]:hidden">
-        <span
-          className={cn(
-            "flex h-4 w-4 shrink-0 items-center justify-center",
-            isActive && "animate-pulse text-primary",
-            item.status === "failed" && "text-destructive",
-            item.status === "succeeded" && "text-primary",
-          )}
-        >
-          {isActive ? (
-            <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-          ) : item.status === "failed" ? (
-            <XCircleIcon className="h-3.5 w-3.5" />
-          ) : item.status === "succeeded" ? (
-            <CheckCircle2Icon className="h-3.5 w-3.5" />
-          ) : (
-            <CircleDashedIcon className="h-3.5 w-3.5" />
-          )}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-foreground/90">{label}</span>
-          {summary && <span className="block truncate pt-0.5 text-[11px] text-muted-foreground">{summary}</span>}
-        </span>
-        <span className="shrink-0 text-[11px] text-muted-foreground/75">
-          {t(`activity.status.${item.status}`, { defaultValue: item.status })}
-        </span>
-        <ChevronDownIcon
-          className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform", expanded && "rotate-180")}
-        />
-      </summary>
-      <div className="ml-6 border-l border-border/45 pl-3 pb-1 pt-1">
-        <ActivityDetail
-          item={item}
-          onCancelWorkflow={onCancelWorkflow}
-          onConfigureProvider={onConfigureProvider}
-          isCancelling={isCancelling}
-          showHeader={false}
-        />
+      <div className="pt-0.5">
+        <ActivityStatusMark status={item.status} />
       </div>
-    </details>
+      <div
+        className={cn(
+          "min-w-0 rounded-lg transition-colors duration-200 motion-reduce:transition-none",
+          isActive && "bg-primary/[0.055] shadow-[inset_0_0_0_1px_oklch(0_0_0/0.035)]",
+          item.status === "failed" && "bg-destructive/[0.045] shadow-[inset_0_0_0_1px_oklch(0_0_0/0.045)]",
+        )}
+      >
+        <CollapsibleTrigger
+          className="group/step flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-px"
+          aria-label={
+            expanded
+              ? t("activity.hideToolDetails", {
+                  label,
+                  defaultValue: `Hide ${label} details`,
+                })
+              : t("activity.showToolDetails", {
+                  label,
+                  defaultValue: `Show ${label} details`,
+                })
+          }
+          aria-busy={isActive || undefined}
+        >
+          <ToolIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/75" />
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-[12px] font-medium tracking-[-0.01em] text-foreground/92">
+                {label}
+              </span>
+              <span
+                className={cn(
+                  "hidden shrink-0 text-[10px] sm:inline",
+                  isActive ? "text-primary" : "text-muted-foreground/75",
+                  item.status === "failed" && "text-destructive",
+                )}
+              >
+                {t(`activity.status.${item.status}`, { defaultValue: item.status })}
+              </span>
+            </span>
+            {summary && (
+              <span
+                title={summary}
+                className="mt-0.5 block line-clamp-2 break-words text-[11px] leading-4 text-muted-foreground/82"
+              >
+                {summary}
+              </span>
+            )}
+          </span>
+          <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 ease-out group-data-open/step:rotate-180 motion-reduce:transition-none" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="overflow-hidden data-open:animate-accordion-down data-closed:animate-accordion-up motion-reduce:animate-none">
+          <div className="h-(--collapsible-panel-height) min-h-0 overflow-hidden px-2.5 pb-2.5 pt-0.5">
+            <ActivityDetail
+              item={item}
+              onCancelWorkflow={onCancelWorkflow}
+              onConfigureProvider={onConfigureProvider}
+              isCancelling={isCancelling}
+              showHeader={false}
+            />
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 }
 
@@ -621,54 +716,67 @@ export function AssistantActivityTimeline({
   if (items.length === 0) return null;
 
   return (
-    <div className={cn("mb-4 border-b border-border/55", expanded && "pb-3")}>
-      <button
-        type="button"
-        onClick={() => setExpanded((value) => !value)}
-        className="group flex w-full items-center gap-2 rounded-md py-1 text-left text-[12px] text-muted-foreground transition hover:text-foreground"
+    <Collapsible
+      open={expanded}
+      onOpenChange={(open) => setExpanded(open)}
+      data-testid="assistant-activity-timeline"
+      data-status={tone}
+      className="mb-4 border-b border-border/55 pb-2.5"
+    >
+      <CollapsibleTrigger
+        className="group/timeline flex w-full items-center gap-2.5 rounded-md px-0.5 py-1.5 text-left outline-none transition-colors hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-px"
         aria-expanded={expanded}
         aria-label={expanded ? t("activity.collapse") : t("activity.expand")}
+        aria-live={isActive ? "polite" : "off"}
       >
+        <ActivityStatusMark status={tone} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[12px] font-medium tracking-[-0.01em] text-foreground/90">
+            {label}
+          </span>
+          <span className="mt-0.5 block text-[10px] text-muted-foreground/75">
+            {workflows > 0
+              ? t("activity.countWithWorkflows", {
+                  tools,
+                  workflows,
+                  defaultValue: `${tools} actions · ${workflows} workflows`,
+                })
+              : t("activity.countTools", {
+                  tools,
+                  defaultValue: `${tools} actions`,
+                })}
+          </span>
+        </span>
         <span
           className={cn(
-            "flex h-4 w-4 shrink-0 items-center justify-center",
-            isActive && "animate-pulse",
+            "flex shrink-0 items-center gap-1.5 text-[10px]",
+            isActive ? "text-primary" : "text-muted-foreground/80",
+            tone === "failed" && "text-destructive",
           )}
-          style={{ color: tone === "failed" ? "var(--destructive)" : "var(--primary)" }}
         >
-          {isActive ? (
-            <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-          ) : tone === "failed" ? (
-            <XCircleIcon className="h-3.5 w-3.5" />
-          ) : tone === "succeeded" ? (
-            <CheckCircle2Icon className="h-3.5 w-3.5" />
-          ) : (
-            <CircleDashedIcon className="h-3.5 w-3.5" />
-          )}
+          {isActive && <Loader2Icon className="size-3 animate-spin" />}
+          {statusLabel}
         </span>
-        <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">{label}</span>
-        <span className="shrink-0 text-[11px] text-muted-foreground/80">{statusLabel}</span>
-        <ChevronDownIcon
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:opacity-100",
-            expanded && "rotate-180",
-          )}
-        />
-      </button>
-      {expanded && (
-        <div className="ml-[7px] mt-2 border-l border-border/60 pl-4">
-          {items.map((item) => (
-            <TraceToolStep
-              key={item.toolCallId || item.id}
-              item={item}
-              onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
-              onConfigureProvider={onConfigureProvider}
-              isCancelling={cancellingRunId === item.runtimeRunId}
-            />
-          ))}
-          {cancellationError && <p className="pt-2 text-[11px] text-destructive">{cancellationError}</p>}
+        <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200 ease-out group-data-open/timeline:rotate-180 motion-reduce:transition-none" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="overflow-hidden data-open:animate-accordion-down data-closed:animate-accordion-up motion-reduce:animate-none">
+        <div className="h-(--collapsible-panel-height) min-h-0 overflow-hidden">
+          <div className="pt-1">
+            {items.map((item) => (
+              <TraceToolStep
+                key={item.toolCallId || item.id}
+                item={item}
+                onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
+                onConfigureProvider={onConfigureProvider}
+                isCancelling={cancellingRunId === item.runtimeRunId}
+              />
+            ))}
+            {cancellationError && (
+              <p className="ml-8 pt-2 text-[11px] text-destructive">{cancellationError}</p>
+            )}
+          </div>
         </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

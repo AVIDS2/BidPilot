@@ -174,33 +174,72 @@ export function AgentProgress({ runId, onApprove, onReject }: AgentProgressProps
             </div>
           )}
 
-          {/* Node timeline */}
-          <div className="flex flex-col gap-1">
-            {stream.nodes.map((node) => (
-              <div
-                key={node.name}
-                className={cn(
-                  "flex min-w-0 items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors",
-                  node.status === "running" && "bg-primary/5 border border-primary/20",
-                  node.status === "completed" && "opacity-80",
-                  node.status === "failed" && "bg-destructive/5 border border-destructive/20",
-                  node.status === "pending" && "opacity-50",
-                )}
-              >
-                <NodeStatusIcon status={node.status} />
-                <span className={cn("min-w-0 flex-1 truncate", node.status === "pending" && "text-muted-foreground")}>
-                  {getNodeLabel(node.name)}
+          {/* Workflow rail: status first, details on the right. */}
+          <div className="border-t border-border/60 pt-3">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-medium tracking-wide text-muted-foreground">
+                {t("agent.progress")}
+              </p>
+              {stream.isRunning && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-primary">
+                  <Spinner className="size-3" />
+                  {t("agent.running")}
                 </span>
-                {node.status === "completed" && node.completed_at && (
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(node.completed_at).toLocaleTimeString()}
-                  </span>
-                )}
-                {node.status === "failed" && node.error && (
-                  <span className="max-w-[45%] truncate text-xs text-destructive sm:max-w-[200px]">{node.error}</span>
-                )}
-              </div>
-            ))}
+              )}
+            </div>
+            <ol className="pt-1">
+              {stream.nodes.map((node) => {
+                const active = node.status === "running";
+                const failed = node.status === "failed";
+
+                return (
+                  <li
+                    key={node.name}
+                    data-status={node.status}
+                    className="relative grid grid-cols-[1.25rem_minmax(0,1fr)] gap-x-3 py-2.5 before:absolute before:bottom-[-0.65rem] before:left-[9px] before:top-7 before:w-px before:bg-border/65 last:before:hidden"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "relative z-10 mt-0.5 flex size-5 items-center justify-center rounded-full border bg-card shadow-[0_1px_2px_oklch(0_0_0/0.05)]",
+                        active && "border-primary/35 bg-primary/[0.08] text-primary",
+                        node.status === "completed" && "border-primary/25 bg-primary/[0.06] text-primary",
+                        failed && "border-destructive/35 bg-destructive/[0.07] text-destructive",
+                        node.status === "pending" && "border-border/80 bg-muted/45 text-muted-foreground",
+                      )}
+                    >
+                      {active && (
+                        <span className="absolute inset-0 rounded-full border border-primary/35 animate-ping motion-reduce:hidden" />
+                      )}
+                      <span className="relative"><NodeStatusIcon status={node.status} /></span>
+                    </span>
+                    <div
+                      className={cn(
+                        "min-w-0 rounded-lg px-2.5 py-2 transition-colors duration-200 motion-reduce:transition-none",
+                        active && "bg-primary/[0.055] shadow-[inset_0_0_0_1px_oklch(0_0_0/0.035)]",
+                        failed && "bg-destructive/[0.045] shadow-[inset_0_0_0_1px_oklch(0_0_0/0.045)]",
+                      )}
+                    >
+                      <div className="flex min-w-0 items-center justify-between gap-2">
+                        <span className={cn("min-w-0 truncate text-sm font-medium", node.status === "pending" && "text-muted-foreground")}>
+                          {getNodeLabel(node.name)}
+                        </span>
+                        {active && <span className="shrink-0 text-[11px] text-primary">{t("agent.running")}</span>}
+                        {failed && <span className="shrink-0 text-[11px] text-destructive">{t("agent.failed")}</span>}
+                        {node.status === "completed" && node.completed_at && (
+                          <time className="shrink-0 text-[11px] text-muted-foreground" dateTime={node.completed_at}>
+                            {new Date(node.completed_at).toLocaleTimeString()}
+                          </time>
+                        )}
+                      </div>
+                      {failed && node.error && (
+                        <p className="mt-1 break-words text-xs leading-5 text-destructive/90">{node.error}</p>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
 
           {stream.currentNode && (

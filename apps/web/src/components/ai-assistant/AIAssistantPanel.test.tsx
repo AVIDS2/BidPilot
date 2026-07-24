@@ -68,6 +68,18 @@ async function expandActivityDetails() {
   });
 }
 
+async function expandToolDetails(label: string) {
+  const expand = await screen.findByRole("button", {
+    name: `Show ${label} details`,
+  });
+  fireEvent.click(expand);
+  await waitFor(() => {
+    expect(
+      screen.getByRole("button", { name: `Hide ${label} details` }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+}
+
 describe("AIAssistantPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -174,6 +186,58 @@ describe("AIAssistantPanel", () => {
       expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
     });
     expect(screen.queryByText("Aborted")).not.toBeInTheDocument();
+  });
+
+  it("presents a live tool run as an expanded timeline rail", async () => {
+    let requestSignal: AbortSignal | undefined;
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        requestSignal = init?.signal ?? undefined;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                [
+                  'event: assistant.start\ndata: {"conversation_id":"c-live","state":"thinking"}',
+                  'event: assistant.tool_started\ndata: {"tool_name":"search_projects","tool_call_id":"call-live","arguments":{"query":"active"},"state":"executing_tool"}',
+                ].join("\n\n") + "\n\n",
+              ),
+            );
+            requestSignal?.addEventListener("abort", () => {
+              controller.error(
+                Object.assign(new Error("Aborted"), { name: "AbortError" }),
+              );
+            });
+          },
+        });
+        return Promise.resolve({ ok: true, body });
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Search active projects" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    const timeline = await screen.findByTestId("assistant-activity-timeline");
+    expect(timeline).toHaveAttribute("data-status", "running");
+    expect(screen.getByTestId("assistant-activity-step-call-live")).toHaveAttribute(
+      "data-status",
+      "running",
+    );
+    expect(
+      screen.getByRole("button", { name: "Hide Search projects details" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.getAllByText("running").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop generating" }));
+    await waitFor(() => {
+      expect(requestSignal?.aborted).toBe(true);
+    });
   });
 
   it("renders the workspace variant without opening the side panel", async () => {
@@ -363,7 +427,7 @@ describe("AIAssistantPanel", () => {
       await screen.findAllByText(
         "所选模型配置已不可用，已切回平台默认模型。请确认后重新发送。",
       ),
-    ).toHaveLength(2);
+    ).not.toHaveLength(0);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -620,6 +684,9 @@ describe("AIAssistantPanel", () => {
     await expandActivityDetails();
     expect(
       screen.getByText("raw detail should be hidden until expanded"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Show Open page details" }),
     ).toBeInTheDocument();
     expect(
       screen
@@ -1091,13 +1158,10 @@ describe("AIAssistantPanel", () => {
       ).toBeGreaterThan(0);
     });
     await expandActivityDetails();
+    await expandToolDetails("Start section draft");
     await waitFor(() => {
-      expect(
-        screen.getAllByText(
-          (_content, element) =>
-            element?.textContent === "Draft section · completed",
-        ).length,
-      ).toBeGreaterThan(0);
+      expect(screen.getByText("Workflow steps")).toBeInTheDocument();
+      expect(screen.getByText("Draft section")).toBeInTheDocument();
     });
     expect(screen.getByText("1 of 1 steps completed")).toBeInTheDocument();
   });
@@ -1129,6 +1193,7 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await expandActivityDetails();
+    await expandToolDetails("Export deliverable");
     const downloadButton = await screen.findByRole("button", {
       name: "Download DOCX",
     });

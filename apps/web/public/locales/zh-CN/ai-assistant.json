@@ -93,6 +93,12 @@
     "summaryRunningWorkflowsOnly": "正在运行 {{workflows}} 个工作流",
     "expand": "展开执行细节",
     "collapse": "收起执行细节",
+    "showToolDetails": "查看 {{label}} 的详细信息",
+    "hideToolDetails": "收起 {{label}} 的详细信息",
+    "countTools": "{{tools}} 项操作",
+    "countWithWorkflows": "{{tools}} 项操作 · {{workflows}} 个工作流",
+    "workflowProgress": "工作流步骤",
+    "providerNeedsAttention": "模型配置需要处理",
     "status": {
       "pending": "等待中",
       "running": "运行中",
