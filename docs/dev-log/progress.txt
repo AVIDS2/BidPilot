@@ -1,0 +1,53 @@
+# BidPilot Development Memory
+
+## Agent UI and runtime rule (2026-07-25)
+
+The product must not treat Agent UI as a generic chat widget. It is the visual
+projection of a durable execution trace. Do not make isolated visual fixes or
+swap component libraries before the execution contract and acceptance states
+are defined.
+
+### Required implementation order
+
+1. Define and version the Agent Run event contract before implementation.
+   Every event needs stable `run_id`, `event_id`, `sequence`, `timestamp`, and
+   an optional `parent_id`.
+2. Provide typed events for at least: `run.started`, `plan.updated`,
+   `tool.started`, `tool.progress`, `tool.completed`, `tool.failed`,
+   `approval.requested`, `approval.resolved`, `message.delta`,
+   `message.completed`, `run.cancelled`, and `run.completed`.
+3. Build a frontend state gallery using fixtures before wiring live SSE:
+   idle, planning, running, streaming, approval, failed, cancelled,
+   background-completed, and restored-session.
+4. Implement backend producers and frontend consumers against the same
+   contract. Avoid optimistic duplicate messages and deduplicate by event ID.
+5. Verify visual behavior at desktop and mobile sizes before deployment.
+
+### UX requirements
+
+- Prefer an independent `/agent` workbench for the full interaction. A sidebar
+  is an entry point, not the full execution surface.
+- Render activity as a compact execution summary followed by expandable,
+  chronological trace rows. Never leak raw tool payloads, internal tool names,
+  or JSON by default.
+- Approval, cancellation, background execution, artifacts, retries, and
+  failures are first-class states, not text embedded in an assistant message.
+- Use a coherent design system and exact visual references. A library does not
+  automatically provide its demo-level visual quality.
+- Avoid stacks of decorative cards, arbitrary palette changes, hard-coded
+  widths, and changes that are not checked against overflow and responsive
+  layouts.
+
+### Dependency policy
+
+- `@jetv/chat-widget` may be studied for ideas only. It is too new and lacks
+  public source, license, and declared repository metadata, so it must not be
+  a core production dependency.
+- Evaluate mature libraries only through a contained proof of concept using
+  the real event contract. Do not transplant a chat library across the product.
+
+### Working agreement
+
+Before further Agent UI or runtime changes, read this file and present the
+event contract, fixture coverage, and acceptance criteria. Do not deploy
+unverified visual changes merely to iterate in production.
