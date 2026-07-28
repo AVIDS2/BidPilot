@@ -62,6 +62,16 @@ from .embedding_config import (
     embedding_model,
     embedding_provider_family,
 )
+from .document_ingestion import (
+    BundleIngestStatus,
+    DocumentIndexStatus,
+    DocumentParseStatus,
+    MAX_DOCUMENT_PARSE_ATTEMPTS,
+    MAX_SOURCE_DOCUMENT_BYTES,
+    SUPPORTED_SOURCE_DOCUMENT_MIME_TYPES,
+    canonical_source_document_mime_type,
+    source_document_validation_error,
+)
 from .memory import (
     MemoryCitation,
     MemoryCitationSource,
@@ -136,6 +146,14 @@ __all__ = [
     "embedding_dimensions",
     "embedding_model",
     "embedding_provider_family",
+    "BundleIngestStatus",
+    "DocumentIndexStatus",
+    "DocumentParseStatus",
+    "MAX_DOCUMENT_PARSE_ATTEMPTS",
+    "MAX_SOURCE_DOCUMENT_BYTES",
+    "SUPPORTED_SOURCE_DOCUMENT_MIME_TYPES",
+    "canonical_source_document_mime_type",
+    "source_document_validation_error",
     "MemoryCitation",
     "MemoryCitationSource",
     "MemoryContextItem",

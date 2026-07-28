@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -69,6 +70,7 @@ class RuntimeRiskLevel(StrEnum):
 class RuntimeEventType(StrEnum):
     RUN_STARTED = "run.started"
     PLAN_PROPOSED = "plan.proposed"
+    PLAN_UPDATED = "plan.updated"
     CAPABILITY_STARTED = "capability.started"
     CAPABILITY_PROGRESSED = "capability.progressed"
     CAPABILITY_SUCCEEDED = "capability.succeeded"
@@ -76,6 +78,7 @@ class RuntimeEventType(StrEnum):
     APPROVAL_REQUESTED = "approval.requested"
     APPROVAL_RESOLVED = "approval.resolved"
     WORKFLOW_LINKED = "workflow.linked"
+    MESSAGE_DELTA = "message.delta"
     MESSAGE_COMPLETED = "message.completed"
     RUN_COMPLETED = "run.completed"
     RUN_FAILED = "run.failed"
@@ -118,12 +121,14 @@ class RuntimePolicyDecision(_RuntimeContract):
 
 
 class RuntimeEventRecord(_RuntimeContract):
+    event_id: str = Field(default_factory=lambda: str(uuid4()), min_length=1, max_length=36)
     run_id: str = Field(min_length=1, max_length=36)
+    parent_event_id: str | None = Field(default=None, min_length=1, max_length=36)
     sequence: int = Field(ge=1)
     type: RuntimeEventType
     public_summary: str = Field(min_length=1, max_length=2000)
     payload: dict[str, Any] = Field(default_factory=dict)
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.0", "1.1"] = "1.1"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

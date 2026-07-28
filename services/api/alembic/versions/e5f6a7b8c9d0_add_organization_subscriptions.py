@@ -18,43 +18,77 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "organization_subscription",
-        sa.Column("id", sa.String(length=36), primary_key=True),
-        sa.Column(
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    # Some pre-Alembic environments created this model from SQLAlchemy metadata.
+    # Keep that deployment path upgradeable without silently accepting a partial table.
+    if not inspector.has_table("organization_subscription"):
+        op.create_table(
+            "organization_subscription",
+            sa.Column("id", sa.String(length=36), primary_key=True),
+            sa.Column(
+                "org_id",
+                sa.String(length=36),
+                sa.ForeignKey("organization.id", ondelete="CASCADE"),
+                nullable=False,
+                unique=True,
+            ),
+            sa.Column("plan", sa.String(length=30), nullable=False, server_default="starter"),
+            sa.Column("status", sa.String(length=30), nullable=False, server_default="active"),
+            sa.Column("seat_limit", sa.Integer(), nullable=False, server_default="1"),
+            sa.Column("billable_seat_count", sa.Integer(), nullable=False, server_default="1"),
+            sa.Column(
+                "billing_owner_user_id",
+                sa.String(length=36),
+                sa.ForeignKey("user.id", ondelete="RESTRICT"),
+                nullable=False,
+            ),
+            sa.Column("stripe_customer_id", sa.String(length=255), nullable=True),
+            sa.Column("stripe_subscription_id", sa.String(length=255), nullable=True, unique=True),
+            sa.Column("stripe_subscription_item_id", sa.String(length=255), nullable=True, unique=True),
+            sa.Column("stripe_state_event_created_at", sa.Integer(), nullable=True),
+            sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+            sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+            sa.CheckConstraint("seat_limit >= 1", name="ck_organization_subscription_seat_limit"),
+            sa.CheckConstraint(
+                "billable_seat_count >= 0",
+                name="ck_organization_subscription_billable_seat_count",
+            ),
+        )
+        inspector = sa.inspect(bind)
+    else:
+        required_columns = {
+            "id",
             "org_id",
-            sa.String(length=36),
-            sa.ForeignKey("organization.id", ondelete="CASCADE"),
-            nullable=False,
-            unique=True,
-        ),
-        sa.Column("plan", sa.String(length=30), nullable=False, server_default="starter"),
-        sa.Column("status", sa.String(length=30), nullable=False, server_default="active"),
-        sa.Column("seat_limit", sa.Integer(), nullable=False, server_default="1"),
-        sa.Column("billable_seat_count", sa.Integer(), nullable=False, server_default="1"),
-        sa.Column(
+            "plan",
+            "status",
+            "seat_limit",
+            "billable_seat_count",
             "billing_owner_user_id",
-            sa.String(length=36),
-            sa.ForeignKey("user.id", ondelete="RESTRICT"),
-            nullable=False,
-        ),
-        sa.Column("stripe_customer_id", sa.String(length=255), nullable=True),
-        sa.Column("stripe_subscription_id", sa.String(length=255), nullable=True, unique=True),
-        sa.Column("stripe_subscription_item_id", sa.String(length=255), nullable=True, unique=True),
-        sa.Column("stripe_state_event_created_at", sa.Integer(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.CheckConstraint("seat_limit >= 1", name="ck_organization_subscription_seat_limit"),
-        sa.CheckConstraint(
-            "billable_seat_count >= 0",
-            name="ck_organization_subscription_billable_seat_count",
-        ),
-    )
-    op.create_index(
-        "ix_organization_subscription_billing_owner",
-        "organization_subscription",
-        ["billing_owner_user_id"],
-    )
+            "stripe_customer_id",
+            "stripe_subscription_id",
+            "stripe_subscription_item_id",
+            "stripe_state_event_created_at",
+            "created_at",
+            "updated_at",
+        }
+        existing_columns = {column["name"] for column in inspector.get_columns("organization_subscription")}
+        missing_columns = sorted(required_columns - existing_columns)
+        if missing_columns:
+            raise RuntimeError(
+                "organization_subscription already exists but is missing required columns: "
+                + ", ".join(missing_columns)
+            )
+
+    if "ix_organization_subscription_billing_owner" not in {
+        index["name"] for index in inspector.get_indexes("organization_subscription")
+    }:
+        op.create_index(
+            "ix_organization_subscription_billing_owner",
+            "organization_subscription",
+            ["billing_owner_user_id"],
+        )
 
 
 def downgrade() -> None:

@@ -18,15 +18,22 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "deliverable_section",
-        sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
-    )
-    op.create_index(
-        "ix_deliverable_section_deliverable_sort",
-        "deliverable_section",
-        ["deliverable_id", "sort_order"],
-    )
+    bind = op.get_bind()
+    if "sort_order" not in {
+        column["name"] for column in sa.inspect(bind).get_columns("deliverable_section")
+    }:
+        op.add_column(
+            "deliverable_section",
+            sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
+        )
+    if "ix_deliverable_section_deliverable_sort" not in {
+        index["name"] for index in sa.inspect(bind).get_indexes("deliverable_section")
+    }:
+        op.create_index(
+            "ix_deliverable_section_deliverable_sort",
+            "deliverable_section",
+            ["deliverable_id", "sort_order"],
+        )
 
 
 def downgrade() -> None:

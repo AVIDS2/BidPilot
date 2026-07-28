@@ -18,7 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("provider_config", sa.Column("provider_id", sa.String(length=64), nullable=True))
+    if "provider_id" not in {
+        column["name"] for column in sa.inspect(op.get_bind()).get_columns("provider_config")
+    }:
+        op.add_column("provider_config", sa.Column("provider_id", sa.String(length=64), nullable=True))
     op.execute(
         """
         UPDATE provider_config

@@ -411,9 +411,43 @@ class SourceDocument(Base):
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)
     page_count: Mapped[int | None] = mapped_column(Integer)
     parse_status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
+    parse_attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    # Each row is an immutable uploaded version. A replacement is explicit via
+    # supersedes_document_id; filename matching is never used as implicit lineage.
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    supersedes_document_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("source_document.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    parse_error_code: Mapped[str | None] = mapped_column(String(100))
+    parsed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    index_status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+    )
+    index_error_code: Mapped[str | None] = mapped_column(String(100))
+    indexed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     bundle: Mapped["Bundle"] = relationship(back_populates="source_documents")
     parsed_assets: Mapped[list["ParsedAsset"]] = relationship(back_populates="source_document", cascade="all, delete-orphan")
+
+    # Replacements form a linear lineage (v1 -> v2 -> v3), never a fan-out of
+    # conflicting successor versions for the same immutable source document.
+    __table_args__ = (
+        UniqueConstraint(
+            "supersedes_document_id",
+            name="uq_source_document_supersedes_document",
+        ),
+    )
 
 
 class AssistantAttachment(Base):
@@ -487,6 +521,9 @@ class KnowledgeChunk(Base):
     project_id: Mapped[str] = mapped_column(String(36), ForeignKey("project.id"), nullable=False)
     source_document_id: Mapped[str] = mapped_column(String(36), ForeignKey("source_document.id"), nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Stable per immutable source-document version. Retries can safely replay a
+    # parser result without creating a second chunk at the same locator.
+    chunk_key: Mapped[str | None] = mapped_column(String(64))
     content: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_json: Mapped[dict | None] = mapped_column(JSON)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
@@ -506,8 +543,101 @@ class KnowledgeChunk(Base):
     embedding_updated_at: Mapped[datetime | None] = mapped_column(DateTime)
     embedding_error_code: Mapped[str | None] = mapped_column(String(100))
 
+    __table_args__ = (
+        UniqueConstraint(
+            "source_document_id",
+            "chunk_key",
+            name="uq_knowledge_chunk_document_key",
+        ),
+    )
+
 
 # ── Requirements & Evidence ──────────────────────────────────────────────────
+
+
+class EvidenceSet(Base):
+    """Immutable, project-scoped evidence snapshot selected before a draft."""
+
+    __tablename__ = "evidence_set"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("project.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    execution_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("execution_run.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    section_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    retrieval_profile_id: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="ready")
+    degraded_reasons_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    rejected_reasons_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    unmet_requirement_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    items: Mapped[list["EvidenceSetItem"]] = relationship(
+        back_populates="evidence_set",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "execution_run_id",
+            "section_key",
+            name="uq_evidence_set_run_section",
+        ),
+        Index("ix_evidence_set_project_section", "project_id", "section_key"),
+    )
+
+
+class EvidenceSetItem(Base):
+    """One validated source/chunk snapshot belonging to an ``EvidenceSet``."""
+
+    __tablename__ = "evidence_set_item"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    evidence_set_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("evidence_set.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_document_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("source_document.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    chunk_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("knowledge_chunk.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source_document_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_document_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    locator_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    quote_text: Mapped[str] = mapped_column(Text, nullable=False)
+    retrieval_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    retrieval_score: Mapped[float] = mapped_column(Float, nullable=False)
+    retrieval_methods_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    selected_reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    evidence_set: Mapped["EvidenceSet"] = relationship(back_populates="items")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "evidence_set_id",
+            "chunk_id",
+            name="uq_evidence_set_item_chunk",
+        ),
+    )
 
 
 class RequirementItem(Base):
@@ -523,8 +653,16 @@ class RequirementItem(Base):
         ForeignKey("source_document.id", ondelete="SET NULL"),
     )
     source_locator_json: Mapped[dict | None] = mapped_column(JSON)
+    # Stable identity for one extracted requirement from one immutable source
+    # document version. Manual requirements intentionally keep this null.
+    extraction_key: Mapped[str | None] = mapped_column(String(64))
     priority: Mapped[str] = mapped_column(String(30), nullable=False, default="normal")
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="untriaged",
+        server_default="untriaged",
+    )
     owner_user_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("user.id", ondelete="SET NULL"),
@@ -578,6 +716,12 @@ class RequirementItem(Base):
     __mapper_args__ = {"version_id_col": lock_version}
     __table_args__ = (
         Index("ix_requirement_item_project_verification", "project_id", "verification_status"),
+        Index(
+            "uq_requirement_item_project_extraction_key",
+            "project_id",
+            "extraction_key",
+            unique=True,
+        ),
     )
 
 
@@ -589,6 +733,11 @@ class Evidence(Base):
     section_version_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("section_version.id"))
     source_document_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("source_document.id"))
     chunk_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("knowledge_chunk.id"))
+    evidence_set_item_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("evidence_set_item.id", ondelete="SET NULL"),
+        index=True,
+    )
     quote_text: Mapped[str] = mapped_column(Text, nullable=False)
     locator_json: Mapped[dict | None] = mapped_column(JSON)
     confidence: Mapped[float | None] = mapped_column(Float)
@@ -861,6 +1010,61 @@ class Deliverable(Base):
     sections: Mapped[list["DeliverableSection"]] = relationship(back_populates="deliverable", cascade="all, delete-orphan")
 
 
+class DeliverableExport(Base):
+    """An immutable, storage-backed snapshot of approved deliverable content."""
+
+    __tablename__ = "deliverable_export"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("project.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    deliverable_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("deliverable.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="generating")
+    snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    approved_versions_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    docx_storage_key: Mapped[str | None] = mapped_column(String(500))
+    pdf_storage_key: Mapped[str | None] = mapped_column(String(500))
+    docx_sha256: Mapped[str | None] = mapped_column(String(64))
+    pdf_sha256: Mapped[str | None] = mapped_column(String(64))
+    requested_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        index=True,
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(128))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "deliverable_id",
+            "version_number",
+            name="uq_deliverable_export_version",
+        ),
+        UniqueConstraint(
+            "deliverable_id",
+            "snapshot_hash",
+            name="uq_deliverable_export_snapshot",
+        ),
+        UniqueConstraint(
+            "requested_by_user_id",
+            "client_request_id",
+            name="uq_deliverable_export_client_request",
+        ),
+    )
+
+
 class DeliverableSection(Base):
     __tablename__ = "deliverable_section"
 
@@ -870,11 +1074,234 @@ class DeliverableSection(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
     assignee_type: Mapped[str] = mapped_column(String(30), nullable=False, default="ai")
+    # The reviewed snapshot is distinct from the latest draft. Export must use
+    # this immutable pointer rather than whichever version was written last.
+    approved_version_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "section_version.id",
+            ondelete="SET NULL",
+            name="fk_deliverable_section_approved_version",
+            use_alter=True,
+        ),
+        nullable=True,
+        index=True,
+    )
     # Outline editor order (OpenBidKit-style chapter board). Lower = earlier.
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     deliverable: Mapped["Deliverable"] = relationship(back_populates="sections")
-    versions: Mapped[list["SectionVersion"]] = relationship(back_populates="section", cascade="all, delete-orphan")
+    versions: Mapped[list["SectionVersion"]] = relationship(
+        back_populates="section",
+        cascade="all, delete-orphan",
+        foreign_keys="SectionVersion.deliverable_section_id",
+    )
+
+
+class ResponsePlan(Base):
+    """An immutable structural response-plan revision for one deliverable.
+
+    Requirements and ownership can change as a proposal evolves.  Instead of
+    mutating the historical plan used by a draft, a source-fingerprint change
+    creates a new revision and supersedes the active one.
+    """
+
+    __tablename__ = "response_plan"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("project.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    deliverable_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("deliverable.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="active",
+        server_default="active",
+        index=True,
+    )
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # These requirements are intentionally visible as a plan gap instead of
+    # being guessed into an unrelated section.
+    unmapped_requirement_ids_json: Mapped[list] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+    created_by_actor: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="workflow",
+        server_default="workflow",
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    sections: Mapped[list["ResponsePlanSection"]] = relationship(
+        back_populates="response_plan",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "deliverable_id",
+            "version_number",
+            name="uq_response_plan_deliverable_version",
+        ),
+        Index(
+            "ix_response_plan_project_deliverable_status",
+            "project_id",
+            "deliverable_id",
+            "status",
+        ),
+    )
+
+
+class ResponsePlanSection(Base):
+    """A durable section assignment inside one response-plan revision."""
+
+    __tablename__ = "response_plan_section"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    response_plan_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("response_plan.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    deliverable_section_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("deliverable_section.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    section_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    title_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    sort_order_snapshot: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="planned",
+        server_default="planned",
+    )
+
+    response_plan: Mapped["ResponsePlan"] = relationship(back_populates="sections")
+    requirements: Mapped[list["ResponsePlanRequirement"]] = relationship(
+        back_populates="response_plan_section",
+        cascade="all, delete-orphan",
+    )
+    evidence_bindings: Mapped[list["ResponsePlanEvidenceBinding"]] = relationship(
+        back_populates="response_plan_section",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "response_plan_id",
+            "deliverable_section_id",
+            name="uq_response_plan_section",
+        ),
+    )
+
+
+class ResponsePlanRequirement(Base):
+    """Requirement and owner snapshot assigned to a response-plan section."""
+
+    __tablename__ = "response_plan_requirement"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    response_plan_section_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("response_plan_section.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requirement_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("requirement_item.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    requirement_lock_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    requirement_text_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    priority_snapshot: Mapped[str] = mapped_column(String(30), nullable=False)
+    owner_user_id_snapshot: Mapped[str | None] = mapped_column(String(36))
+    verification_status_snapshot: Mapped[str] = mapped_column(String(30), nullable=False)
+    assignment_reason: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        default="section_key_exact_match",
+        server_default="section_key_exact_match",
+    )
+
+    response_plan_section: Mapped["ResponsePlanSection"] = relationship(
+        back_populates="requirements"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "response_plan_section_id",
+            "requirement_id",
+            name="uq_response_plan_section_requirement",
+        ),
+    )
+
+
+class ResponsePlanEvidenceBinding(Base):
+    """The exact evidence and writing plan used for one draft candidate."""
+
+    __tablename__ = "response_plan_evidence_binding"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    response_plan_section_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("response_plan_section.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    evidence_set_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("evidence_set.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    execution_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("execution_run.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    generation_iteration: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+    )
+    content_plan_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    evidence_set_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    unmet_requirement_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    degraded_reasons_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    response_plan_section: Mapped["ResponsePlanSection"] = relationship(
+        back_populates="evidence_bindings"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "execution_run_id",
+            "generation_iteration",
+            name="uq_response_plan_binding_run_iteration",
+        ),
+    )
 
 
 class SectionVersion(Base):
@@ -887,8 +1314,44 @@ class SectionVersion(Base):
     content_markdown: Mapped[str | None] = mapped_column(Text)
     created_by_actor: Mapped[str] = mapped_column(String(30), nullable=False, default="ai")
     generation_run_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("execution_run.id"))
+    evidence_set_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("evidence_set.id", ondelete="SET NULL"),
+        index=True,
+    )
+    response_plan_section_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("response_plan_section.id", ondelete="SET NULL"),
+        index=True,
+    )
+    response_plan_evidence_binding_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("response_plan_evidence_binding.id", ondelete="SET NULL"),
+        index=True,
+    )
+    # A single LangGraph run can produce multiple review candidates after a
+    # human rejection. Keep the candidate iteration durable so retries are
+    # idempotent without collapsing a later revision onto the first version.
+    generation_iteration: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
 
-    section: Mapped["DeliverableSection"] = relationship(back_populates="versions")
+    section: Mapped["DeliverableSection"] = relationship(
+        back_populates="versions",
+        foreign_keys=[deliverable_section_id],
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "deliverable_section_id",
+            "generation_run_id",
+            "generation_iteration",
+            name="uq_section_version_run_iteration",
+        ),
+    )
 
 
 class ExecutionRun(Base):
@@ -971,6 +1434,12 @@ class ReviewThread(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     deliverable_section_id: Mapped[str] = mapped_column(String(36), ForeignKey("deliverable_section.id"), nullable=False)
+    section_version_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("section_version.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="open")
     opened_by: Mapped[str] = mapped_column(String(36), nullable=False)
     resolved_by: Mapped[str | None] = mapped_column(String(36))
@@ -1265,11 +1734,12 @@ class RuntimeEvent(Base):
         ForeignKey("runtime_run.id", ondelete="CASCADE"),
         nullable=False,
     )
+    parent_event_id: Mapped[str | None] = mapped_column(String(36))
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     public_summary: Mapped[str] = mapped_column(Text, nullable=False)
     payload_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    schema_version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0")
+    schema_version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.1")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     __table_args__ = (
