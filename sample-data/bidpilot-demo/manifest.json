@@ -1,0 +1,49 @@
+{
+  "dataset_id": "bidpilot-demo-v1",
+  "dataset_version": 1,
+  "origin": "synthetic",
+  "license": "LicenseRef-BidPilot-Synthetic-Demo",
+  "license_note": "Repository-maintained synthetic materials for BidPilot testing and demonstrations only. They do not describe a real procurement, supplier, customer, or bid.",
+  "documents": [
+    {
+      "id": "rfp",
+      "path": "01-招标文件-智慧社区AI治理平台.md",
+      "role": "rfp",
+      "sha256": "4279eaea41dacf7c99bc79af6bd83f12c579367b4534720d35f33b549a7a0915",
+      "expected_anchors": ["三、功能要求", "五、项目实施要求", "七、评分办法"]
+    },
+    {
+      "id": "supplier-capability",
+      "path": "02-供应商能力资料-星河云智科技.md",
+      "role": "supplier_capability",
+      "sha256": "5156c9bbba279277a4a0d0e1da592845f459bf494ec436e8fb778334991382b8",
+      "expected_anchors": ["二、核心能力", "三、产品架构", "五、服务承诺"]
+    },
+    {
+      "id": "case-study",
+      "path": "03-同类案例-智慧园区治理平台.md",
+      "role": "case_study",
+      "sha256": "ad32a433a23a263b8a985e111b8cd8a9ae09160f08c2485bf47adc628ef2a88f",
+      "expected_anchors": ["二、建设内容", "五、项目成效", "七、客户评价"]
+    }
+  ],
+  "acceptance_expectations": {
+    "minimum_documents": 3,
+    "required_roles": ["rfp", "supplier_capability", "case_study"],
+    "locator_contract": "source_document_id + chunk_index + source_checksum + document_version",
+    "expected_requirements": [
+      {"key": "event-governance", "source": "rfp", "heading": "3.1 事件治理", "anchor": "自动派单、人工改派、超时提醒"},
+      {"key": "ai-capabilities", "source": "rfp", "heading": "3.2 AI 辅助能力", "anchor": "自动分类"},
+      {"key": "security-and-localization", "source": "rfp", "heading": "3.5 权限与安全", "anchor": "基于角色的权限控制"},
+      {"key": "delivery-milestones", "source": "rfp", "heading": "五、项目实施要求", "anchor": "第 90 天完成验收交付"},
+      {"key": "support-service", "source": "rfp", "heading": "六、服务要求", "anchor": "重大故障 2 小时内响应"},
+      {"key": "submission-structure", "source": "rfp", "heading": "八、投标文件章节要求", "anchor": "技术响应表"}
+    ],
+    "expected_evidence": [
+      {"source": "supplier-capability", "heading": "二、核心能力", "anchor": "工单派发"},
+      {"source": "supplier-capability", "heading": "二、核心能力", "anchor": "文本分类"},
+      {"source": "supplier-capability", "heading": "二、核心能力", "anchor": "RBAC 角色权限控制"},
+      {"source": "case-study", "heading": "四、实施周期", "anchor": "项目建设周期为 75 天"}
+    ]
+  }
+}

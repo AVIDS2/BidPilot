@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 
 BUILTIN_DEMO_STORAGE_PREFIX = "builtin://bidpilot-demo/"
 DEMO_PROJECT_NAME = "演示 · 智慧社区 AI 治理平台投标"
 DEMO_BUNDLE_LABEL = "内置演示资料包"
+
+_DEMO_DATA_ROOT = Path(__file__).resolve().parents[4] / "sample-data" / "bidpilot-demo"
 
 
 @dataclass(frozen=True)
@@ -44,61 +47,27 @@ class DemoEvidence:
     requirement_keys: tuple[str, ...]
 
 
+def _load_demo_document_text(filename: str) -> str:
+    """Load the tracked synthetic source used by both demo and regression tests."""
+
+    return (_DEMO_DATA_ROOT / filename).read_text(encoding="utf-8")
+
+
 DEMO_DOCUMENTS = (
     DemoDocument(
         key="rfp",
         filename="01-招标文件-智慧社区AI治理平台.md",
-        content="""# 智慧社区 AI 治理平台建设项目招标文件（演示）
-
-## 项目概况
-
-采购人计划建设一套智慧社区 AI 治理平台，服务街道、社区、物业、网格员与居民。项目预算为 280 万元，建设周期为 90 个自然日，质保期不少于 3 年。
-
-## 功能与技术要求
-
-- 支持居民、网格员、物业人员提交事件，并覆盖派单、改派、超时提醒、处理反馈与满意度评价。
-- 支持 AI 自动分类、处理建议、周报月报生成与自然语言查询。
-- 支持街道、社区、小区三级数据看板，并可按时间、社区、事件类型和处理状态筛选。
-- 支持国产化数据库与国产操作系统适配，文件存储采用对象存储并提供标准 REST API。
-
-## 实施与服务要求
-
-- 第 10 天完成需求调研与实施计划，第 90 天完成验收交付。
-- 提供 7x12 小时远程技术支持；重大故障 2 小时内响应，8 小时内给出解决方案。
-- 提供源码、部署文档、接口文档和用户手册。
-
-## 评分与提交
-
-技术部分 60 分，其中 AI 能力方案 12 分、总体架构设计 10 分、数据安全与权限方案 8 分。投标文件应包含技术响应表、项目理解与总体方案、AI 能力建设方案、实施计划、运维服务方案和项目团队与案例证明。
-""",
+        content=_load_demo_document_text("01-招标文件-智慧社区AI治理平台.md"),
     ),
     DemoDocument(
         key="supplier",
         filename="02-供应商能力资料-星河云智科技.md",
-        content="""# 星河云智科技能力资料（演示）
-
-## 平台能力
-
-星河云智提供基于容器化部署的社区治理平台，支持 PostgreSQL、对象存储、标准 REST API、角色权限控制、操作审计和数据访问日志。
-
-## AI 与安全
-
-平台可对社区事件进行文本分类、趋势分析和处置建议生成。敏感配置采用服务端加密管理，平台支持登录保护、访问审计、备份恢复演练和最小权限访问。
-
-## 交付方式
-
-项目采用调研、原型确认、开发测试、试运行、培训和验收交接的分阶段实施方式，并提供部署文档、接口文档和管理员培训材料。
-""",
+        content=_load_demo_document_text("02-供应商能力资料-星河云智科技.md"),
     ),
     DemoDocument(
         key="case-study",
         filename="03-同类案例-智慧园区治理平台.md",
-        content="""# 智慧园区治理平台同类案例（演示）
-
-项目为多个园区提供事件闭环、设施巡检、移动协同和运营看板能力。交付团队在 12 周内完成需求梳理、核心原型、联调试运行和管理员培训。
-
-案例中沉淀了项目实施计划、权限矩阵、运维值守和交接清单，可作为本项目的同类交付经验参考，但不能替代本次招标文件中的强制要求。
-""",
+        content=_load_demo_document_text("03-同类案例-智慧园区治理平台.md"),
     ),
 )
 
@@ -108,7 +77,7 @@ DEMO_REQUIREMENTS = (
         document_key="rfp",
         section_key="technical-approach",
         text="建设覆盖事件上报、派单、改派、超时提醒、处理反馈和满意度评价的事件治理闭环。",
-        heading="功能与技术要求",
+        heading="3.1 事件治理",
         priority="high",
         category="technical",
         mandatory=True,
@@ -123,7 +92,7 @@ DEMO_REQUIREMENTS = (
         document_key="rfp",
         section_key="technical-approach",
         text="提供事件自动分类、处理建议、周报月报生成与自然语言查询能力。",
-        heading="功能与技术要求",
+        heading="3.2 AI 辅助能力",
         priority="high",
         category="technical",
         mandatory=False,
@@ -138,7 +107,7 @@ DEMO_REQUIREMENTS = (
         document_key="rfp",
         section_key="technical-approach",
         text="支持国产化数据库与操作系统适配，并提供角色权限、操作审计、数据访问日志和基础安全能力。",
-        heading="功能与技术要求",
+        heading="3.5 权限与安全",
         priority="high",
         category="technical",
         mandatory=True,
@@ -153,7 +122,7 @@ DEMO_REQUIREMENTS = (
         document_key="rfp",
         section_key="staffing-plan",
         text="在 90 个自然日内完成建设与验收，并按里程碑完成调研、原型、开发和试运行。",
-        heading="实施与服务要求",
+        heading="五、项目实施要求",
         priority="high",
         category="delivery",
         mandatory=True,
@@ -168,7 +137,7 @@ DEMO_REQUIREMENTS = (
         document_key="rfp",
         section_key="staffing-plan",
         text="提供 7x12 小时远程支持，重大故障 2 小时内响应、8 小时内给出解决方案。",
-        heading="实施与服务要求",
+        heading="六、服务要求",
         priority="high",
         category="delivery",
         mandatory=True,
@@ -183,7 +152,7 @@ DEMO_REQUIREMENTS = (
         document_key="rfp",
         section_key="exec-summary",
         text="投标文件应包含技术响应表、总体方案、AI 建设方案、实施计划、运维服务方案和案例证明。",
-        heading="评分与提交",
+        heading="八、投标文件章节要求",
         priority="high",
         category="submission",
         mandatory=True,
@@ -199,26 +168,34 @@ DEMO_EVIDENCE = (
     DemoEvidence(
         key="platform-capability",
         document_key="supplier",
-        quote="星河云智提供基于容器化部署的社区治理平台，支持 PostgreSQL、对象存储、标准 REST API、角色权限控制、操作审计和数据访问日志。",
-        heading="平台能力",
+        quote="公司已形成事件上报、工单派发、网格协同、移动巡检、居民评价、数据看板和运维监管一体化能力。",
+        heading="2.1 社区治理平台能力",
         confidence=0.96,
-        requirement_keys=("event-governance", "security-and-localization"),
+        requirement_keys=("event-governance",),
     ),
     DemoEvidence(
         key="ai-security",
         document_key="supplier",
-        quote="平台可对社区事件进行文本分类、趋势分析和处置建议生成。敏感配置采用服务端加密管理。",
-        heading="AI 与安全",
+        quote="公司建设了面向社区事件的文本分类、智能摘要、风险识别、处理建议推荐和报表自动生成能力。",
+        heading="2.2 AI 辅助治理能力",
         confidence=0.86,
-        requirement_keys=("ai-capabilities", "security-and-localization"),
+        requirement_keys=("ai-capabilities",),
     ),
     DemoEvidence(
         key="delivery-experience",
         document_key="case-study",
-        quote="交付团队在 12 周内完成需求梳理、核心原型、联调试运行和管理员培训。",
-        heading="同类案例",
+        quote="项目建设周期为 75 天：",
+        heading="四、实施周期",
         confidence=0.78,
         requirement_keys=("delivery-milestones",),
+    ),
+    DemoEvidence(
+        key="security-capability",
+        document_key="supplier",
+        quote="公司平台支持以下安全机制：",
+        heading="2.3 数据安全能力",
+        confidence=0.9,
+        requirement_keys=("security-and-localization",),
     ),
 )
 

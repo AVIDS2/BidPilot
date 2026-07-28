@@ -22,6 +22,7 @@ from app.models import (
     RequirementItem,
     SourceDocument,
 )
+from contracts.document_ingestion import DocumentIndexStatus, DocumentParseStatus
 
 from .demo_data import (
     BUILTIN_DEMO_STORAGE_PREFIX,
@@ -70,25 +71,31 @@ def create_demo_project_command(
     db.flush()
 
     documents: dict[str, SourceDocument] = {}
-    for definition in DEMO_DOCUMENTS:
+    for document_definition in DEMO_DOCUMENTS:
         document = SourceDocument(
             bundle_id=bundle.id,
-            storage_key=f"{BUILTIN_DEMO_STORAGE_PREFIX}{definition.key}",
+            storage_key=f"{BUILTIN_DEMO_STORAGE_PREFIX}{document_definition.key}",
             mime_type="text/markdown; charset=utf-8",
-            checksum=hashlib.sha256(definition.content.encode("utf-8")).hexdigest(),
-            original_filename=definition.filename,
+            checksum=hashlib.sha256(document_definition.content.encode("utf-8")).hexdigest(),
+            original_filename=document_definition.filename,
             page_count=1,
-            parse_status="completed",
+            parse_status=DocumentParseStatus.PARSED.value,
+            # The opt-in demo deliberately ships with deterministic sparse
+            # retrieval only. It must not masquerade as a fully embedded live
+            # upload while still remaining usable without any provider key.
+            index_status=DocumentIndexStatus.DEGRADED.value,
+            index_error_code="builtin_demo_sparse_only",
+            version_number=1,
         )
         db.add(document)
         db.flush()
-        documents[definition.key] = document
+        documents[document_definition.key] = document
         db.add(
             ParsedAsset(
                 source_document_id=document.id,
                 parser_name="bidpilot_builtin_demo",
                 parser_version="1",
-                content_json={"text": definition.content, "source_kind": "builtin_demo"},
+                content_json={"text": document_definition.content, "source_kind": "builtin_demo"},
                 layout_json={"format": "markdown", "source_kind": "builtin_demo"},
             )
         )
@@ -97,61 +104,76 @@ def create_demo_project_command(
                 project_id=project.id,
                 source_document_id=document.id,
                 chunk_index=0,
-                content=definition.content,
-                metadata_json={"source_kind": "builtin_demo", "document_key": definition.key},
-                retrieval_text=definition.content,
+                chunk_key=hashlib.sha256(
+                    f"{document.id}:{document.checksum}:0".encode("utf-8")
+                ).hexdigest(),
+                content=document_definition.content,
+                metadata_json={
+                    "source_kind": "builtin_demo",
+                    "document_key": document_definition.key,
+                    "locator": {
+                        "source_document_id": document.id,
+                        "chunk_index": 0,
+                        "heading": None,
+                        "table": None,
+                        "text_anchor": document_definition.content[:240],
+                        "source_checksum": document.checksum,
+                        "document_version": document.version_number,
+                    },
+                },
+                retrieval_text=document_definition.content,
                 embedding_status="not_indexed",
             )
         )
 
     requirements: dict[str, RequirementItem] = {}
-    for definition in DEMO_REQUIREMENTS:
+    for requirement_definition in DEMO_REQUIREMENTS:
         requirement = RequirementItem(
             project_id=project.id,
-            section_key=definition.section_key,
-            requirement_text=definition.text,
-            original_text=definition.text,
-            source_document_id=documents[definition.document_key].id,
+            section_key=requirement_definition.section_key,
+            requirement_text=requirement_definition.text,
+            original_text=requirement_definition.text,
+            source_document_id=documents[requirement_definition.document_key].id,
             source_locator_json={
                 "source_kind": "builtin_demo",
-                "document": documents[definition.document_key].original_filename,
-                "heading": definition.heading,
+                "document": documents[requirement_definition.document_key].original_filename,
+                "heading": requirement_definition.heading,
             },
-            priority=definition.priority,
+            priority=requirement_definition.priority,
             status="confirmed",
-            verification_status=definition.verification_status,
+            verification_status=requirement_definition.verification_status,
             extraction_confidence=1.0,
         )
         db.add(requirement)
         db.flush()
-        requirements[definition.key] = requirement
+        requirements[requirement_definition.key] = requirement
         db.add(
             BidRequirementProfile(
                 requirement_id=requirement.id,
-                bid_category=definition.category,
-                is_mandatory=definition.mandatory,
-                score_weight=definition.score_weight,
-                risk_level=definition.risk_level,
-                coverage_status=definition.coverage_status,
-                evidence_status=definition.evidence_status,
+                bid_category=requirement_definition.category,
+                is_mandatory=requirement_definition.mandatory,
+                score_weight=requirement_definition.score_weight,
+                risk_level=requirement_definition.risk_level,
+                coverage_status=requirement_definition.coverage_status,
+                evidence_status=requirement_definition.evidence_status,
             )
         )
 
-    for definition in DEMO_EVIDENCE:
+    for evidence_definition in DEMO_EVIDENCE:
         evidence = Evidence(
             project_id=project.id,
-            source_document_id=documents[definition.document_key].id,
-            quote_text=definition.quote,
+            source_document_id=documents[evidence_definition.document_key].id,
+            quote_text=evidence_definition.quote,
             locator_json={
                 "source_kind": "builtin_demo",
-                "document": documents[definition.document_key].original_filename,
-                "heading": definition.heading,
+                "document": documents[evidence_definition.document_key].original_filename,
+                "heading": evidence_definition.heading,
             },
-            confidence=definition.confidence,
+            confidence=evidence_definition.confidence,
         )
         db.add(evidence)
         db.flush()
-        for requirement_key in definition.requirement_keys:
+        for requirement_key in evidence_definition.requirement_keys:
             db.add(
                 RequirementEvidenceLink(
                     requirement_id=requirements[requirement_key].id,

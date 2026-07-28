@@ -108,7 +108,7 @@ def test_create_demo_project_is_idempotent_and_traceable(client) -> None:
 
     evidence = client.get(f"/evidence?project_id={project['id']}")
     assert evidence.status_code == 200
-    assert len(evidence.json()) == 3
+    assert len(evidence.json()) == 4
 
     events = client.get(f"/audit/events?project_id={project['id']}")
     assert events.status_code == 200
