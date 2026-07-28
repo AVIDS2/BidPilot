@@ -16,7 +16,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.assistant.audit import redact_text
 from app.assistant.runtime import AssistantRuntime
 from app.assistant.schemas import AssistantConfirmation, AssistantIntent, AssistantRequest
 from app.auth.schemas import CurrentUser
@@ -24,17 +23,21 @@ from app.chat.service import create_conversation, get_conversation, save_message
 from app.models import RuntimeAction, RuntimeApproval, RuntimeEvent, RuntimeRun
 from contracts.runtime import RuntimeApprovalDecisionType, RuntimeEventType
 
-from .events import latest_event_sequence, list_events_after
+from . import events as runtime_events
+from .failures import classify_capability_failure
 from .registry import get_capability_definition, is_workflow_capability
 from .service import (
     RuntimeApprovalExpiredError,
     RuntimeApprovalResolvedError,
+    assistant_turn_idempotency_key,
     cancel_runtime_run,
     complete_runtime_run,
-    create_runtime_run,
+    create_or_get_runtime_run,
     execute_capability,
     fail_runtime_run,
+    find_idempotent_runtime_run,
     find_pending_approval_for_conversation,
+    reconcile_runtime_run_for_replay,
     resolve_approval,
 )
 
@@ -55,6 +58,25 @@ async def stream_runtime_assistant_response(
     intent_override: AssistantIntent | None = None,
 ) -> AsyncGenerator[str, None]:
     """Handle one deterministic assistant turn through ``RuntimeRun`` records."""
+    idempotency_key = assistant_turn_idempotency_key(
+        user_id=user.id,
+        client_request_id=payload.client_request_id,
+    )
+    if payload.confirmation is None:
+        existing = find_idempotent_runtime_run(
+            db,
+            user,
+            idempotency_key=idempotency_key,
+        )
+        if existing is not None:
+            async for event in _replay_existing_run(
+                db,
+                existing,
+                conversation_id=existing.conversation_id or payload.conversation_id or "",
+            ):
+                yield event
+            return
+
     conversation_id = _ensure_conversation(db, user, payload)
 
     if payload.confirmation is not None and payload.confirmation.approval_id:
@@ -82,6 +104,8 @@ async def stream_runtime_assistant_response(
     if pending is not None and _matches_typed_confirmation(pending, payload.message):
         save_message(db, conversation_id, "user", payload.message)
         payload_json = pending.payload_json if isinstance(pending.payload_json, dict) else {}
+        pending_arguments = payload_json.get("arguments")
+        confirmed_arguments = pending_arguments if isinstance(pending_arguments, dict) else {}
         async for event in _resume_approval(
             db,
             user,
@@ -91,7 +115,7 @@ async def stream_runtime_assistant_response(
                 tool_name=_approval_capability(db, pending),
                 approval_id=pending.id,
                 arguments={
-                    **(payload_json.get("arguments") if isinstance(payload_json.get("arguments"), dict) else {}),
+                    **confirmed_arguments,
                     "confirmation_text": payload.message.strip(),
                 },
             ),
@@ -121,7 +145,7 @@ async def stream_runtime_assistant_response(
         return
 
     save_message(db, conversation_id, "user", payload.message)
-    run = create_runtime_run(
+    creation = create_or_get_runtime_run(
         db,
         user,
         kind="assistant_turn",
@@ -131,11 +155,23 @@ async def stream_runtime_assistant_response(
         provider_config_id=payload.provider_config_id,
         reasoning_effort=payload.reasoning_effort,
         approval_mode=payload.approval_mode,
+        idempotency_key=idempotency_key,
         input_json={
             "message": payload.message,
+            "client_request_id": payload.client_request_id,
             "attachment_names": [attachment.name for attachment in payload.attachments],
         },
     )
+    if not creation.created:
+        async for event in _replay_existing_run(
+            db,
+            creation.run,
+            conversation_id=creation.run.conversation_id or conversation_id,
+        ):
+            yield event
+        return
+
+    run = creation.run
     yield _sse(
         "assistant.start",
         {
@@ -197,15 +233,63 @@ async def stream_runtime_assistant_response(
         for event in _render_runtime_events(db, run.id, after_sequence=1, conversation_id=conversation_id):
             yield event
     except Exception as exc:
-        safe_error = redact_text(str(exc))
+        failure = classify_capability_failure(exc)
+        message = f"执行失败：{failure.message}"
         try:
-            fail_runtime_run(db, run.id, f"执行失败：{safe_error}", error_code="assistant_turn_failed")
+            fail_runtime_run(db, run.id, message, error_code=failure.error_code)
         except ValueError:
             # A terminal approval expiry already has its own durable state.
             pass
-        save_message(db, conversation_id, "assistant", f"执行失败：{safe_error}")
+        save_message(db, conversation_id, "assistant", message)
         for event in _render_runtime_events(db, run.id, after_sequence=1, conversation_id=conversation_id):
             yield event
+
+
+async def _replay_existing_run(
+    db: Session,
+    run: RuntimeRun,
+    *,
+    conversation_id: str,
+) -> AsyncGenerator[str, None]:
+    """Render the durable trace instead of executing a retried deterministic turn."""
+    run = reconcile_runtime_run_for_replay(db, run.id)
+    state_by_status = {
+        "awaiting_approval": "needs_confirmation",
+        "failed": "failed",
+        "expired": "failed",
+        "cancelled": "completed",
+        "succeeded": "completed",
+    }
+    state = state_by_status.get(run.status, "thinking")
+    yield _sse(
+        "assistant.start",
+        {
+            "conversation_id": conversation_id,
+            "runtime_run_id": run.id,
+            "state": state,
+            "replayed": True,
+        },
+    )
+    emitted_end = False
+    for event in _render_runtime_events(
+        db,
+        run.id,
+        after_sequence=0,
+        conversation_id=conversation_id,
+    ):
+        if event.startswith("event: assistant.end"):
+            emitted_end = True
+        yield event
+    if not emitted_end:
+        yield _sse(
+            "assistant.end",
+            {
+                "conversation_id": conversation_id,
+                "runtime_run_id": run.id,
+                "state": state,
+                "replayed": True,
+            },
+        )
 
 
 async def _resume_approval(
@@ -230,7 +314,7 @@ async def _resume_approval(
         yield _sse("assistant.end", {"conversation_id": conversation_id, "state": "failed"})
         return
 
-    before_sequence = latest_event_sequence(db, run.id)
+    before_sequence = runtime_events.latest_event_sequence(db, run.id)
     yield _sse(
         "assistant.start",
         {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "thinking"},
@@ -262,20 +346,40 @@ async def _resume_approval(
             conversation_id=conversation_id,
         ):
             yield event
-    except (RuntimeApprovalExpiredError, RuntimeApprovalResolvedError) as exc:
-        safe_error = redact_text(str(exc))
+    except RuntimeApprovalExpiredError:
+        safe_error = "审批已过期，未执行该操作。"
+        error_code = "approval_expired"
         yield _sse(
             "assistant.tool_failed",
-            {"tool_name": action.capability_name, "error_message": safe_error, "state": "failed"},
+            {
+                "tool_name": action.capability_name,
+                "error_code": error_code,
+                "error_message": safe_error,
+                "state": "failed",
+            },
+        )
+        yield _sse("assistant.end", {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "failed"})
+    except RuntimeApprovalResolvedError:
+        safe_error = "该审批已经处理，无法重复执行。"
+        error_code = "approval_already_resolved"
+        yield _sse(
+            "assistant.tool_failed",
+            {
+                "tool_name": action.capability_name,
+                "error_code": error_code,
+                "error_message": safe_error,
+                "state": "failed",
+            },
         )
         yield _sse("assistant.end", {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "failed"})
     except Exception as exc:
-        safe_error = redact_text(str(exc))
+        failure = classify_capability_failure(exc)
+        message = f"执行失败：{failure.message}"
         try:
-            fail_runtime_run(db, run.id, f"执行失败：{safe_error}", error_code="approval_execution_failed")
+            fail_runtime_run(db, run.id, message, error_code=failure.error_code)
         except ValueError:
             pass
-        save_message(db, conversation_id, "assistant", f"执行失败：{safe_error}")
+        save_message(db, conversation_id, "assistant", message)
         for event in _render_runtime_events(
             db,
             run.id,
@@ -293,7 +397,7 @@ def _render_runtime_events(
     conversation_id: str,
 ) -> list[str]:
     rendered: list[str] = []
-    for event in list_events_after(db, run_id, after_sequence=after_sequence):
+    for event in runtime_events.list_events_after(db, run_id, after_sequence=after_sequence):
         rendered.extend(_render_runtime_event(event, conversation_id))
     return rendered
 
@@ -301,11 +405,20 @@ def _render_runtime_events(
 def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str]:
     payload = event.payload_json or {}
     capability = str(payload.get("capability") or "")
-    runtime_metadata = {"runtime_run_id": event.run_id, "runtime_sequence": event.sequence}
-    if event.event_type == RuntimeEventType.PLAN_PROPOSED.value:
+    runtime_metadata = {
+        "runtime_run_id": event.run_id,
+        "runtime_event_id": event.id,
+        "runtime_parent_event_id": event.parent_event_id,
+        "runtime_sequence": event.sequence,
+        "runtime_timestamp": event.created_at.isoformat() if event.created_at else None,
+    }
+    if event.event_type in {
+        RuntimeEventType.PLAN_PROPOSED.value,
+        RuntimeEventType.PLAN_UPDATED.value,
+    }:
         plan_mode = str(payload.get("mode") or "answer")
         assistant_mode = "tool_action" if plan_mode == "tool" else plan_mode
-        events = [
+        plan_events = [
             _sse(
                 "assistant.intent_detected",
                 {
@@ -321,7 +434,7 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                 for field in (payload.get("missing_fields") or [])
                 if isinstance(field, str) and field
             ]
-            events.append(
+            plan_events.append(
                 _sse(
                     "assistant.missing_input",
                     {
@@ -333,7 +446,7 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                     },
                 )
             )
-        return events
+        return plan_events
     if event.event_type == RuntimeEventType.CAPABILITY_STARTED.value:
         try:
             title = get_capability_definition(capability).label_zh if capability else capability
@@ -352,15 +465,15 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
         ]
     if event.event_type == RuntimeEventType.CAPABILITY_SUCCEEDED.value:
         result = {key: value for key, value in payload.items() if key != "capability"}
-        events: list[str] = []
+        completion_events: list[str] = []
         if is_workflow_capability(capability):
-            events.append(
+            completion_events.append(
                 _sse(
                     "assistant.workflow_started",
                     {**runtime_metadata, "tool_name": capability, "result": result, "state": "running_workflow"},
                 )
             )
-        events.append(
+        completion_events.append(
             _sse(
                 "assistant.tool_succeeded",
                 {
@@ -372,7 +485,7 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                 },
             )
         )
-        return events
+        return completion_events
     if event.event_type == RuntimeEventType.CAPABILITY_FAILED.value:
         return [
             _sse(
@@ -380,6 +493,7 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                 {
                     **runtime_metadata,
                     "tool_name": capability or "unknown",
+                    "error_code": payload.get("reason_code"),
                     "error_message": event.public_summary,
                     "state": "failed",
                 },
@@ -409,11 +523,18 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                 )
             ]
         return []
-    if event.event_type == RuntimeEventType.MESSAGE_COMPLETED.value:
+    if event.event_type in {
+        RuntimeEventType.MESSAGE_DELTA.value,
+        RuntimeEventType.MESSAGE_COMPLETED.value,
+    }:
         return [
             _sse(
                 "assistant.message",
-                {**runtime_metadata, "content": event.public_summary, "state": "completed"},
+                {
+                    **runtime_metadata,
+                    "content": event.public_summary,
+                    "state": "thinking" if event.event_type == RuntimeEventType.MESSAGE_DELTA.value else "completed",
+                },
             )
         ]
     if event.event_type in {

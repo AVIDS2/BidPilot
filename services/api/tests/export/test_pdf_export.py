@@ -35,7 +35,6 @@ def test_export_deliverable_pdf_with_sections() -> None:
     try:
         section = db.get(DeliverableSection, section_id)
         assert section is not None
-        section.status = "approved"
         v = SectionVersion(
             deliverable_section_id=section_id,
             version_number=1,
@@ -43,6 +42,9 @@ def test_export_deliverable_pdf_with_sections() -> None:
             created_by_actor="ai",
         )
         db.add(v)
+        db.flush()
+        section.status = "approved"
+        section.approved_version_id = v.id
         db.commit()
     finally:
         db.close()

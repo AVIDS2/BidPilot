@@ -3,7 +3,9 @@
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 
-from app.agent.llm import get_agent_llm
+import pytest
+
+from app.agent.llm import AgentModelConfigurationError, get_agent_llm, resolve_agent_model
 
 
 def test_agent_llm_uses_openai_compatible_provider() -> None:
@@ -49,3 +51,23 @@ def test_agent_llm_adds_profile_header_for_mimo(monkeypatch) -> None:
 
     assert captured["base_url"] == "https://mimo.example.test/v1"
     assert captured["default_headers"] == {"api-key": "test-mimo-key"}
+
+
+def test_resolve_agent_model_requires_an_explicit_platform_model() -> None:
+    with pytest.raises(AgentModelConfigurationError, match="尚未配置"):
+        resolve_agent_model(environment={})
+
+
+def test_resolve_agent_model_uses_configured_deepseek_values_without_guessing() -> None:
+    resolved = resolve_agent_model(
+        environment={
+            "DEEPSEEK_API_KEY": "test-key",
+            "DEEPSEEK_BASE_URL": "https://gateway.example.test/v1",
+            "DEEPSEEK_MODEL": "deepseek-v4-flash",
+        }
+    )
+
+    assert resolved.provider_type == "openai"
+    assert resolved.provider_id == "deepseek"
+    assert resolved.base_url == "https://gateway.example.test/v1"
+    assert resolved.model == "deepseek-v4-flash"

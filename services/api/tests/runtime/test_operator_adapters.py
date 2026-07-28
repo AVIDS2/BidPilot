@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 import json
+from typing import Any
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
@@ -14,6 +15,7 @@ from app.auth.schemas import CurrentUser
 from app.memory.schemas import MemoryContextRead
 from app.models import (
     ChatConversation,
+    ChatMessage,
     ChatTaskState,
     ModelUsageRecord,
     ModelUsageReservation,
@@ -21,6 +23,7 @@ from app.models import (
     Project,
     RuntimeAction,
     RuntimeRun,
+    UsageEvent,
 )
 from app.runtime.events import list_events_after
 from app.runtime.operator_graph import (
@@ -32,6 +35,7 @@ from app.runtime.operator_graph import (
     get_operator_checkpointer,
 )
 from app.runtime.service import create_runtime_run
+from app.usage.service import ASSISTANT_MESSAGE_STARTED
 from contracts.memory import MemoryCitation, MemoryCitationSource, MemoryContextItem, MemoryKind, MemoryScope
 from contracts.untrusted_context import UNTRUSTED_CONTEXT_SYSTEM_GUARD
 
@@ -61,6 +65,40 @@ def _sse_events(response_text: str) -> list[tuple[str, dict]]:
     return events
 
 
+class _HarnessResponse:
+    """Small LangChain-shaped response double for public Harness endpoint tests."""
+
+    def __init__(
+        self,
+        content: str = "",
+        *,
+        tool_calls: list[dict[str, Any]] | None = None,
+        usage_metadata: dict[str, int] | None = None,
+    ) -> None:
+        self.content = content
+        self.tool_calls = tool_calls or []
+        self.usage_metadata = usage_metadata
+
+
+class _HarnessLLM:
+    def __init__(self, responses: list[_HarnessResponse]) -> None:
+        self.responses = list(responses)
+        self.calls: list[list[Any]] = []
+        self.tools: list[Any] = []
+
+    def bind_tools(self, tools: list[Any]) -> "_HarnessLLM":
+        self.tools = tools
+        return self
+
+    def invoke(self, messages: list[Any]) -> _HarnessResponse:
+        # The Harness appends tool results after invocation; retain a snapshot
+        # so endpoint tests inspect the actual prompt sent to this model turn.
+        self.calls.append(list(messages))
+        if not self.responses:
+            return _HarnessResponse("已完成。")
+        return self.responses.pop(0)
+
+
 @pytest.fixture(autouse=True)
 def _reset_operator_checkpointer() -> None:
     close_operator_checkpointer()
@@ -68,10 +106,174 @@ def _reset_operator_checkpointer() -> None:
     close_operator_checkpointer()
 
 
-def test_default_assistant_engine_is_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_assistant_engine_is_harness(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DOCPILOT_ASSISTANT_ENGINE", raising=False)
 
-    assert assistant_router._assistant_engine() == "operator"
+    assert assistant_router._assistant_engine() == "harness"
+
+
+@pytest.mark.parametrize("configured", ["operator", "streaming_harness"])
+def test_legacy_assistant_engine_aliases_resolve_to_the_single_harness(
+    monkeypatch: pytest.MonkeyPatch,
+    configured: str,
+) -> None:
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", configured)
+
+    assert assistant_router._assistant_engine() == "harness"
+    assert assistant_router.LEGACY_ASSISTANT_ENGINE_ALIAS_RETIREMENT_DATE == "2026-09-30"
+
+
+def test_harness_replay_happens_before_allocating_a_conversation(
+    monkeypatch: pytest.MonkeyPatch,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    """A transport retry must not create a second conversation or turn."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from app.assistant.schemas import AssistantRequest
+    from app.runtime import operator_adapter
+    from app.usage.schemas import ProviderSource
+
+    existing = SimpleNamespace(id="run-retry", status="succeeded", conversation_id="conv-original")
+    monkeypatch.setattr(operator_adapter, "find_idempotent_runtime_run", lambda *args, **kwargs: existing)
+    monkeypatch.setattr(
+        operator_adapter,
+        "_ensure_conversation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("retry allocated a conversation")),
+    )
+
+    async def replay(_db, run, *, conversation_id):
+        assert run is existing
+        assert conversation_id == "conv-original"
+        yield operator_adapter._sse(
+            "assistant.end",
+            {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "completed", "replayed": True},
+        )
+
+    monkeypatch.setattr(operator_adapter, "_replay_existing_run", replay)
+    payload = AssistantRequest(message="重试", client_request_id="retry-request-1")
+    events: list[str] = []
+
+    async def collect() -> None:
+        async for event in operator_adapter.stream_operator_assistant_response(
+            object(),  # type: ignore[arg-type]
+            _user(default_org_id, default_user_id),
+            payload,
+            provider_type="openai",
+            provider_id=None,
+            provider_source=ProviderSource.OFFICIAL,
+            api_key=None,
+            base_url=None,
+            model="test",
+        ):
+            events.append(event)
+
+    asyncio.run(collect())
+    assert len(events) == 1
+    assert "conv-original" in events[0]
+
+
+def test_harness_endpoint_retry_replays_without_duplicate_usage_or_messages(
+    client,
+    test_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One browser request ID has one model call, trace, transcript, and cost."""
+    llm = _HarnessLLM([_HarnessResponse("只应生成一次。")])
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
+    monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
+
+    request_body = {
+        "message": "幂等重试测试",
+        "client_request_id": f"retry-{uuid.uuid4().hex}",
+    }
+    first = client.post("/assistant/stream", json=request_body)
+
+    assert first.status_code == 200
+    first_events = _sse_events(first.text)
+    first_start = next(payload for event, payload in first_events if event == "assistant.start")
+    conversation_id = first_start["conversation_id"]
+    run_id = first_start["runtime_run_id"]
+    message_count = test_db.query(ChatMessage).filter_by(conversation_id=conversation_id).count()
+    conversation_count = test_db.query(ChatConversation).count()
+    usage_count = test_db.query(UsageEvent).filter_by(event_type=ASSISTANT_MESSAGE_STARTED).count()
+
+    # Retry without a conversation ID to model a connection loss before the
+    # browser received the initial SSE start event.
+    second = client.post("/assistant/stream", json=request_body)
+
+    assert second.status_code == 200
+    second_events = _sse_events(second.text)
+    replay_start = next(payload for event, payload in second_events if event == "assistant.start")
+    assert replay_start["replayed"] is True
+    assert replay_start["runtime_run_id"] == run_id
+    assert len(llm.calls) == 1
+    assert test_db.query(ChatMessage).filter_by(conversation_id=conversation_id).count() == message_count
+    assert test_db.query(ChatConversation).count() == conversation_count
+    assert test_db.query(UsageEvent).filter_by(event_type=ASSISTANT_MESSAGE_STARTED).count() == usage_count
+
+
+def test_harness_persists_content_free_prompt_assembly_trace(
+    client,
+    test_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prompt traces prove assembly without retaining model-facing text again."""
+    sensitive_marker = "test-sensitive-marker"
+    llm = _HarnessLLM([_HarnessResponse("已收到。")])
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
+    monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
+
+    response = client.post("/assistant/stream", json={"message": sensitive_marker})
+
+    assert response.status_code == 200
+    run = test_db.query(RuntimeRun).order_by(RuntimeRun.created_at.desc()).first()
+    assert run is not None
+    trace = (run.input_json or {}).get("context_assembly")
+    assert isinstance(trace, dict)
+    assert trace["assembly_order"][:4] == [
+        "system_policy",
+        "authorization_scope",
+        "selected_procedural_skills",
+        "unresolved_task_and_approval_state",
+    ]
+    assert trace["assembly_order"][-1] == "current_user_request"
+    assert sensitive_marker not in json.dumps(trace, ensure_ascii=False)
+    assert trace["segments"]
+
+
+def test_harness_client_construction_failure_stays_inside_sse_contract(
+    client,
+    test_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An invalid provider profile must not abort a response after headers start."""
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
+
+    def fail_client(**_kwargs):
+        raise ValueError("Unknown provider profile: internal-gateway-detail")
+
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", fail_client)
+
+    response = client.post("/assistant/stream", json={"message": "查看当前项目"})
+
+    assert response.status_code == 200
+    assert "Unknown provider profile" not in response.text
+    assert "internal-gateway-detail" not in response.text
+    events = _sse_events(response.text)
+    assert any(
+        event_type == "assistant.message" and "模型服务暂时无法完成" in payload.get("content", "")
+        for event_type, payload in events
+    )
+    event_type, payload = events[-1]
+    assert event_type == "assistant.end"
+    assert payload["state"] == "failed"
+    run = test_db.query(RuntimeRun).order_by(RuntimeRun.created_at.desc()).first()
+    assert run is not None
+    assert run.status == "failed"
 
 
 def test_operator_checkpointer_rejects_memory_mode_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -580,18 +782,17 @@ def test_operator_engine_renders_durable_events_for_existing_assistant_client(
     test_db,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "operator")
-    monkeypatch.setattr("app.runtime.operator_adapter.get_operator_checkpointer", lambda: InMemorySaver())
-    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: object())
-    monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        "app.runtime.operator_adapter.build_langchain_planner",
-        lambda _llm, **_kwargs: lambda _context: OperatorPlan(
-            mode="tool",
-            capability_name="open_page",
-            arguments={"route": "/projects"},
-        ),
+    llm = _HarnessLLM(
+        [
+            _HarnessResponse(
+                tool_calls=[{"id": "call-open", "name": "open_page", "args": {"route": "/projects"}}],
+            ),
+            _HarnessResponse("已准备好跳转到项目页面。"),
+        ]
     )
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
+    monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
 
     response = client.post("/assistant/stream", json={"message": "打开项目页面"})
 
@@ -603,10 +804,9 @@ def test_operator_engine_renders_durable_events_for_existing_assistant_client(
     start = next(payload for event, payload in events if event == "assistant.start")
     run = test_db.get(RuntimeRun, start["runtime_run_id"])
     assert run is not None
-    assert run.engine == "langgraph_operator"
+    assert run.engine == "streaming_harness"
     assert [event.event_type for event in list_events_after(test_db, run.id)] == [
         "run.started",
-        "plan.proposed",
         "capability.started",
         "capability.succeeded",
         "message.completed",
@@ -619,34 +819,33 @@ def test_operator_engine_persists_and_reuses_structured_missing_input(
     test_db,
     monkeypatch,
 ) -> None:
-    captured_contexts: list[OperatorPlanningContext] = []
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "operator")
-    monkeypatch.setattr("app.runtime.operator_adapter.get_operator_checkpointer", lambda: InMemorySaver())
-    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: object())
+    project_name = f"智慧园区投标项目-{uuid.uuid4().hex[:8]}"
+    llm = _HarnessLLM(
+        [
+            _HarnessResponse(
+                tool_calls=[{"id": "call-missing", "name": "create_project", "args": {}}],
+            ),
+            _HarnessResponse(
+                tool_calls=[
+                    {
+                        "id": "call-create",
+                        "name": "create_project",
+                        "args": {"name": project_name, "scenario_package": "bidpilot"},
+                    }
+                ],
+            ),
+            _HarnessResponse("项目已创建。接下来可以上传资料。"),
+        ]
+    )
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
     monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
-
-    def planner_factory(_llm, **_kwargs):
-        def planner(context: OperatorPlanningContext) -> OperatorPlan:
-            captured_contexts.append(context)
-            if len(captured_contexts) == 1:
-                return OperatorPlan(
-                    mode="needs_input",
-                    capability_name="create_project",
-                    missing_fields=("name",),
-                    message="请告诉我项目名称。",
-                )
-            return OperatorPlan(mode="answer", message="已收到项目名称。")
-
-        return planner
-
-    monkeypatch.setattr("app.runtime.operator_adapter.build_langchain_planner", planner_factory)
 
     first = client.post("/assistant/stream", json={"message": "创建项目"})
 
     assert first.status_code == 200
     first_events = _sse_events(first.text)
     first_names = [event for event, _payload in first_events]
-    assert first_names.index("assistant.intent_detected") < first_names.index("assistant.missing_input")
     assert first_names.index("assistant.missing_input") < first_names.index("assistant.message")
     missing = next(payload for event, payload in first_events if event == "assistant.missing_input")
     assert missing["tool_name"] == "create_project"
@@ -660,17 +859,19 @@ def test_operator_engine_persists_and_reuses_structured_missing_input(
 
     second = client.post(
         "/assistant/stream",
-        json={"message": "智慧园区投标项目", "conversation_id": conversation_id},
+        json={
+            "message": project_name,
+            "conversation_id": conversation_id,
+            "approval_mode": "full_access",
+        },
     )
 
     assert second.status_code == 200
-    assert captured_contexts[1].pending_input == {
-        "capability_name": "create_project",
-        "arguments": {},
-        "missing_fields": ["name"],
-    }
+    assert "pending_input_json" in str(llm.calls[1][-1].content)
+    assert "create_project" in str(llm.calls[1][-1].content)
     test_db.expire_all()
     assert test_db.get(ChatTaskState, conversation_id) is None
+    assert test_db.query(Project).filter_by(name=project_name).count() == 1
 
 
 def test_operator_engine_routes_demo_workspace_through_provider_free_runtime(
@@ -748,20 +949,14 @@ def test_operator_reserves_and_settles_each_planner_call(
 ) -> None:
     from app.runtime.model_limits import OPERATOR_PLANNER_RESERVATION_TOKENS
 
-    class FakeRaw:
-        usage_metadata = {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18}
-
-    class FakeStructuredPlanner:
-        def invoke(self, _messages):
-            return {
-                "raw": FakeRaw(),
-                "parsed": OperatorPlan(mode="answer", message="已完成。"),
-            }
-
-    class FakeLLM:
-        def with_structured_output(self, _schema, *, include_raw: bool = False):
-            assert include_raw is True
-            return FakeStructuredPlanner()
+    llm = _HarnessLLM(
+        [
+            _HarnessResponse(
+                "已完成。",
+                usage_metadata={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
+            )
+        ]
+    )
 
     test_db.add(
         OrganizationUsageBudget(
@@ -770,9 +965,8 @@ def test_operator_reserves_and_settles_each_planner_call(
         )
     )
     test_db.commit()
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "operator")
-    monkeypatch.setattr("app.runtime.operator_adapter.get_operator_checkpointer", lambda: InMemorySaver())
-    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: FakeLLM())
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
     monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
 
     response = client.post("/assistant/stream", json={"message": "查看当前项目"})
@@ -791,24 +985,14 @@ def test_operator_returns_safe_message_when_next_planner_call_exceeds_budget(
 ) -> None:
     from app.usage.service import UsageLimitExceeded
 
-    class FakeStructuredPlanner:
-        def invoke(self, _messages):
-            return {"mode": "answer", "message": "不应调用模型。"}
-
-    class FakeLLM:
-        def with_structured_output(self, _schema, *, include_raw: bool = False):
-            assert include_raw is True
-            return FakeStructuredPlanner()
-
     def exhausted(*_args, **_kwargs):
         raise UsageLimitExceeded("工作区本月 AI token 预算已用尽，请联系工作区管理员。")
 
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "operator")
-    monkeypatch.setattr("app.runtime.operator_adapter.get_operator_checkpointer", lambda: InMemorySaver())
-    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: FakeLLM())
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: _HarnessLLM([]))
     monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        "app.runtime.operator_adapter.reserve_assistant_model_tokens",
+        "app.runtime.harness_loop.reserve_assistant_model_tokens",
         exhausted,
     )
 
@@ -824,9 +1008,9 @@ def test_operator_engine_loads_prior_chat_and_authorized_memory_context(
     client,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "operator")
-    monkeypatch.setattr("app.runtime.operator_adapter.get_operator_checkpointer", lambda: InMemorySaver())
-    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: object())
+    llm = _HarnessLLM([_HarnessResponse("已记录上下文。"), _HarnessResponse("会延续刚才的要求。")])
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
     monkeypatch.setattr("app.chat.service._generate_conversation_title", lambda *_args: None)
     memory_context = MemoryContextRead(
         project_id=None,
@@ -849,19 +1033,6 @@ def test_operator_engine_loads_prior_chat_and_authorized_memory_context(
             ),
         ),
     )
-    captured_contexts: list[OperatorPlanningContext] = []
-    captured_memory: list[MemoryContextRead | None] = []
-
-    def planner_factory(_llm, *, memory_context=None, **_kwargs):
-        captured_memory.append(memory_context)
-
-        def planner(context: OperatorPlanningContext) -> OperatorPlan:
-            captured_contexts.append(context)
-            return OperatorPlan(mode="answer", message="已记录上下文。")
-
-        return planner
-
-    monkeypatch.setattr("app.runtime.operator_adapter.build_langchain_planner", planner_factory)
     monkeypatch.setattr(
         "app.runtime.operator_adapter.memory_context_for_agent",
         lambda *_args, **_kwargs: memory_context,
@@ -877,42 +1048,40 @@ def test_operator_engine_loads_prior_chat_and_authorized_memory_context(
 
     assert first.status_code == 200
     assert second.status_code == 200
-    assert captured_contexts[0].conversation_context == ()
-    assert [item["content"] for item in captured_contexts[1].conversation_context] == [
-        "第一轮：采用简洁表达。",
-        "已记录上下文。",
-    ]
-    assert captured_memory == [memory_context, memory_context]
+    first_contents = [str(message.content) for message in llm.calls[0]]
+    second_contents = [str(message.content) for message in llm.calls[1]]
+    assert "第一轮：采用简洁表达。" not in "\n".join(first_contents[:-1])
+    assert "第一轮：采用简洁表达。" in "\n".join(second_contents)
+    assert "已记录上下文。" in "\n".join(second_contents)
+    assert UNTRUSTED_CONTEXT_SYSTEM_GUARD in first_contents[0]
+    assert "表达偏好" in second_contents[-1]
+    assert "回答要简洁。" in second_contents[-1]
 
 
-def test_operator_engine_resumes_same_checkpoint_for_approved_action(
+def test_harness_engine_resumes_approved_action_and_recovers_project_scope(
     client,
     test_db,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "operator")
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
     monkeypatch.setattr("app.assistant.tools.check_plan_limit", lambda *_args, **_kwargs: None)
-    checkpointer = InMemorySaver()
     project_name = f"Endpoint Graph Project {uuid.uuid4().hex[:8]}"
-    captured_contexts: list[OperatorPlanningContext] = []
-    monkeypatch.setattr("app.runtime.operator_adapter.get_operator_checkpointer", lambda: checkpointer)
-    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: object())
+    llm = _HarnessLLM(
+        [
+            _HarnessResponse(
+                tool_calls=[
+                    {
+                        "id": "call-create",
+                        "name": "create_project",
+                        "args": {"name": project_name, "scenario_package": "bidpilot"},
+                    }
+                ],
+            ),
+            _HarnessResponse("当前项目可以继续上传资料。"),
+        ]
+    )
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
     monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
-
-    def planner_factory(_llm, **_kwargs):
-        def planner(context: OperatorPlanningContext) -> OperatorPlan:
-            captured_contexts.append(context)
-            if "创建项目" in context.user_message:
-                return OperatorPlan(
-                    mode="tool",
-                    capability_name="create_project",
-                    arguments={"name": project_name, "scenario_package": "bidpilot"},
-                )
-            return OperatorPlan(mode="answer", message="当前项目可以继续上传资料。")
-
-        return planner
-
-    monkeypatch.setattr("app.runtime.operator_adapter.build_langchain_planner", planner_factory)
 
     requested = client.post("/assistant/stream", json={"message": f"创建项目 {project_name}"})
 
@@ -949,8 +1118,7 @@ def test_operator_engine_resumes_same_checkpoint_for_approved_action(
     run = test_db.get(RuntimeRun, confirmation["runtime_run_id"])
     assert run is not None
     assert run.status == "succeeded"
-    assert list(checkpointer.list({"configurable": {"thread_id": confirmation["conversation_id"]}}))
-    assert list(checkpointer.list({"configurable": {"thread_id": run.id}})) == []
+    assert run.engine == "streaming_harness"
 
     followup = client.post(
         "/assistant/stream",
@@ -958,7 +1126,7 @@ def test_operator_engine_resumes_same_checkpoint_for_approved_action(
     )
 
     assert followup.status_code == 200
-    assert captured_contexts[-1].active_project_id == project.id
+    assert project.id in str(llm.calls[-1][-1].content)
     test_db.refresh(conversation)
     assert conversation.project_id == project.id
     followup_events = _sse_events(followup.text)

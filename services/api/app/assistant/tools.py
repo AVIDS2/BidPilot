@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -40,7 +41,9 @@ from app.projects.demo import create_demo_project_command
 from app.projects.service import create_project_command, delete_project_command_for_user
 from app.readiness.service import generate_readiness_pack_command, get_readiness_summary_query, select_readiness_gaps
 from app.review.schemas import ReviewDecisionCreate
+from app.review.decision_service import canonical_review_decision
 from app.review.service import submit_review_decision_command
+from app.runtime.failures import classify_capability_failure
 from app.requirements.service import (
     get_claim_review_queue_query,
     get_requirement_query,
@@ -318,7 +321,7 @@ def get_project_outline(db: Session, user: CurrentUser, arguments: dict) -> Assi
     recovered_from: str | None = None
     try:
         project = _get_project_for_user(db, user, project_id)
-    except Exception as original_exc:
+    except Exception:
         # Policy switch: when a bad id fails and the user has exactly one accessible
         # project, auto-retry once. Disable with DOCPILOT_OUTLINE_AUTO_RECOVERY=false.
         enabled = os.getenv("DOCPILOT_OUTLINE_AUTO_RECOVERY", "true").lower() not in {
@@ -428,6 +431,7 @@ def list_pending_reviews(db: Session, user: CurrentUser, arguments: dict) -> Ass
                 {
                     "review_thread_id": thread.id,
                     "section_id": section.id,
+                    "section_version_id": thread.section_version_id,
                     "section_key": section.section_key,
                     "project_id": deliverable.project_id,
                 }
@@ -543,7 +547,7 @@ def write_section_tool(db: Session, user: CurrentUser, arguments: dict) -> Assis
     Intended for empty-material / outline-first drafting when the user asks the
     agent to 自行拟草. Still goes through execute_capability (approval/audit).
     """
-    from sqlalchemy import func, select
+    from sqlalchemy import select
 
     project = require_project_capability(
         db,
@@ -732,7 +736,7 @@ def run_section_campaign_tool(db: Session, user: CurrentUser, arguments: dict) -
                     )
                     written_keys.append(section_key)
                 else:
-                    draft_args = {
+                    draft_args: dict[str, Any] = {
                         "project_id": project_id,
                         "section_key": section_key,
                     }
@@ -750,7 +754,16 @@ def run_section_campaign_tool(db: Session, user: CurrentUser, arguments: dict) -
                         started_runtime_run_ids.append(runtime_run_id)
                 processed_keys.append(section_key)
             except Exception as exc:  # noqa: BLE001
-                failed.append({"section_key": section_key, "error": str(exc)[:240]})
+                # A campaign can continue after one section fails, but raw
+                # exceptions may contain provider, storage, or database details.
+                # Persist only the stable runtime failure code for later retry.
+                failure = classify_capability_failure(exc)
+                failed.append(
+                    {
+                        "section_key": section_key,
+                        "error_code": failure.error_code,
+                    }
+                )
         if not auto_continue:
             break
 
@@ -837,11 +850,13 @@ def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> Assi
 def submit_review_decision_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     project_id = str(arguments.get("project_id") or "").strip()
     section_id = str(arguments.get("section_id") or "").strip()
+    section_version_id = str(arguments.get("section_version_id") or "").strip()
     decision = str(arguments.get("decision") or "").strip().lower()
-    if not project_id or not section_id:
-        raise ValueError("project_id and section_id are required")
+    if not project_id or not section_id or not section_version_id:
+        raise ValueError("project_id, section_id, and section_version_id are required")
     if decision not in {"approved", "rejected"}:
         raise ValueError("decision must be approved or rejected")
+    decision = canonical_review_decision(decision)
     section = require_deliverable_section_capability(
         db,
         current_user=user,
@@ -855,6 +870,7 @@ def submit_review_decision_tool(db: Session, user: CurrentUser, arguments: dict)
         db,
         ReviewDecisionCreate(
             section_id=section_id,
+            section_version_id=section_version_id,
             decision=decision,
             comment=str(arguments.get("comment") or "").strip() or None,
         ),
@@ -865,6 +881,7 @@ def submit_review_decision_tool(db: Session, user: CurrentUser, arguments: dict)
         tool_name="submit_review_decision",
         result={
             "section_id": review.section_id,
+            "section_version_id": review.section_version_id,
             "decision": review.decision,
             "review_thread_id": review.id,
         },
@@ -1135,11 +1152,13 @@ def attach_uploaded_documents_tool(db: Session, user: CurrentUser, arguments: di
         attachment_ids=attachment_ids,
         bundle_label=arguments.get("bundle_label"),
     )
-    count = int(result["attachment_count"])
+    attachment_count = result.get("attachment_count")
+    if not isinstance(attachment_count, int):
+        raise RuntimeError("attachment staging returned an invalid attachment count")
     summary = (
-        f"已将 {count} 个附件加入资料包，并开始解析。"
+        f"已将 {attachment_count} 个附件加入资料包，并开始解析。"
         if result.get("ingest_queued") is not False
-        else f"已将 {count} 个附件加入资料包；解析任务等待重新提交。"
+        else f"已将 {attachment_count} 个附件加入资料包；解析任务等待重新提交。"
     )
     return AssistantToolResult(
         tool_name="attach_uploaded_documents",
@@ -1331,6 +1350,7 @@ def export_deliverable_tool(db: Session, user: CurrentUser, arguments: dict) -> 
         tool_name="export_deliverable",
         result={
             "deliverable_id": deliverable_id,
+            "export_id": artifact.export_id,
             "format": str(fmt).lower(),
             "status": "ready",
             "download_path": artifact.download_path,

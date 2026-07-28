@@ -468,21 +468,29 @@ def test_readiness_pack_intent_routes_to_a_governed_project_action() -> None:
     assert routed.arguments == {"project_id": "project-alpha"}
 
 
-def test_review_decision_intent_requires_section_then_routes_with_project_context() -> None:
+def test_review_decision_intent_requires_an_explicit_candidate_version() -> None:
     from app.assistant.runtime import classify_locally
 
     section_id = "11111111-1111-1111-1111-111111111111"
+    section_version_id = "22222222-2222-2222-2222-222222222222"
     missing = classify_locally("审核通过这个章节", "project-alpha")
-    routed = classify_locally(f"审核通过章节 {section_id}", "project-alpha")
+    missing_version = classify_locally(f"审核通过章节 {section_id}", "project-alpha")
+    routed = classify_locally(
+        f"审核通过章节 {section_id} 候选版本 {section_version_id}",
+        "project-alpha",
+    )
 
     assert missing.mode == "needs_input"
     assert missing.tool_name == "submit_review_decision"
     assert missing.missing_fields == ["section_id"]
+    assert missing_version.mode == "needs_input"
+    assert missing_version.missing_fields == ["section_version_id"]
     assert routed.mode == "tool_action"
     assert routed.tool_name == "submit_review_decision"
     assert routed.arguments == {
         "project_id": "project-alpha",
         "section_id": section_id,
+        "section_version_id": section_version_id,
         "decision": "approved",
     }
 

@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from uuid import uuid4
 
@@ -8,8 +9,9 @@ from contracts.usage_ledger import release_model_reservation
 from app.access.service import require_execution_run_capability, require_project_capability
 from app.auth.schemas import CurrentUser
 from app.audit.service import record_audit_event
-from app.models import ExecutionRun, ProviderConfig
+from app.models import DeliverableSection, ExecutionRun, ProviderConfig, SectionVersion
 from app.outbox.service import enqueue_workflow_task, request_task_outbox_dispatch
+from app.review.decision_service import apply_review_decision
 from app.runtime.service import create_workflow_bridge_run
 
 from .schemas import DraftSectionRequest, DraftSectionResponse, RedraftSectionRequest, ResumeRunRequest
@@ -292,6 +294,76 @@ def redraft_section_command(
     return DraftSectionResponse(run_id=run.id, status=run.status, runtime_run_id=runtime_run.id)
 
 
+def queue_resume_draft_run(
+    db: Session,
+    *,
+    run: ExecutionRun,
+    current_user: CurrentUser,
+    decision: str,
+    feedback: str | None,
+    review_thread_id: str | None = None,
+    section_version_id: str | None = None,
+):
+    """Write one sequenced, version-bound resume intent without dispatching it.
+
+    The broker payload remains intentionally small, but a LangGraph resume must
+    be anchored to the immutable candidate and final ReviewThread decision that
+    caused it. The worker re-reads this durable reference before resuming a
+    checkpoint, rather than trusting an at-least-once queue payload.
+    """
+    if run.status != "awaiting_human":
+        raise RuntimeError(
+            f"ExecutionRun {run.id} is in state '{run.status}' and is not awaiting human approval"
+        )
+
+    graph_decision = "rejected_with_feedback" if decision == "rejected" else "approved"
+    input_json = dict(run.input_json or {})
+    existing_sequence = input_json.get("resume_sequence")
+    resume_sequence = existing_sequence + 1 if type(existing_sequence) is int and existing_sequence >= 0 else 1
+    input_json["resume_sequence"] = resume_sequence
+    if review_thread_id and section_version_id:
+        input_json["review_resume"] = {
+            "sequence": resume_sequence,
+            "review_thread_id": review_thread_id,
+            "section_version_id": section_version_id,
+        }
+    else:
+        # Keep legacy resume support explicit and avoid inheriting a stale
+        # candidate reference when a non-review interruption is resumed.
+        input_json.pop("review_resume", None)
+    run.input_json = input_json
+    run.status = "running"
+    db.flush()
+
+    runtime_run_id = input_json.get("runtime_run_id")
+    outbox_event = enqueue_workflow_task(
+        db,
+        org_id=current_user.org_id,
+        project_id=run.project_id,
+        execution_run_id=run.id,
+        runtime_run_id=runtime_run_id if isinstance(runtime_run_id, str) else None,
+        task_name="worker.resume_draft",
+        args=[run.id, graph_decision, feedback],
+        kwargs={},
+        deduplication_key=f"workflow-resume:{run.id}:{resume_sequence}",
+    )
+    record_audit_event(
+        db,
+        project_id=run.project_id,
+        event_type="draft.resumed",
+        actor_type="user",
+        actor_id=current_user.id,
+        payload={
+            "run_id": run.id,
+            "decision": decision,
+            "has_feedback": feedback is not None,
+            "review_thread_id": review_thread_id,
+            "section_version_id": section_version_id,
+        },
+    )
+    return outbox_event
+
+
 def resume_run_command(
     db: Session,
     run_id: str,
@@ -327,48 +399,34 @@ def resume_run_command(
             f"ExecutionRun {run_id} is in state '{run.status}' and is not awaiting human approval"
         )
 
-    # Map the API decision to the internal HITL decision value.
-    # API uses "approved"/"rejected"; graph uses "approved"/"rejected_with_feedback".
-    decision = payload.decision
-    if decision == "rejected":
-        decision = "rejected_with_feedback"
-
-    # The sequence distinguishes a later approval cycle for the same graph run.
-    input_json = dict(run.input_json or {})
-    existing_sequence = input_json.get("resume_sequence")
-    resume_sequence = existing_sequence + 1 if type(existing_sequence) is int and existing_sequence >= 0 else 1
-    input_json["resume_sequence"] = resume_sequence
-    run.input_json = input_json
-
-    # Update run status to indicate it is being resumed, then persist the task intent.
-    run.status = "running"
-    db.flush()
-
-    runtime_run_id = input_json.get("runtime_run_id")
-    outbox_event = enqueue_workflow_task(
-        db,
-        org_id=current_user.org_id,
-        project_id=run.project_id,
-        execution_run_id=run.id,
-        runtime_run_id=runtime_run_id if isinstance(runtime_run_id, str) else None,
-        task_name="worker.resume_draft",
-        args=[run_id, decision, payload.feedback],
-        kwargs={},
-        deduplication_key=f"workflow-resume:{run_id}:{resume_sequence}",
+    candidate = db.scalar(
+        select(SectionVersion)
+        .where(SectionVersion.generation_run_id == run.id)
+        .order_by(SectionVersion.generation_iteration.desc(), SectionVersion.version_number.desc())
+        .limit(1)
     )
+    review_thread_id: str | None = None
+    if candidate is not None:
+        section = db.get(DeliverableSection, candidate.deliverable_section_id)
+        if section is not None:
+            review_thread, _, _ = apply_review_decision(
+                db,
+                section=section,
+                version=candidate,
+                decision=payload.decision,
+                current_user=current_user,
+                comment=payload.feedback,
+            )
+            review_thread_id = review_thread.id
 
-    # Record audit event
-    record_audit_event(
+    outbox_event = queue_resume_draft_run(
         db,
-        project_id=run.project_id,
-        event_type="draft.resumed",
-        actor_type="user",
-        actor_id=current_user.id,
-        payload={
-            "run_id": run_id,
-            "decision": payload.decision,
-            "has_feedback": payload.feedback is not None,
-        },
+        run=run,
+        current_user=current_user,
+        decision=payload.decision,
+        feedback=payload.feedback,
+        review_thread_id=review_thread_id,
+        section_version_id=candidate.id if candidate is not None else None,
     )
     db.commit()
     request_task_outbox_dispatch(outbox_event.id)

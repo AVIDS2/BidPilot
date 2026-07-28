@@ -82,6 +82,7 @@ class SSEHumanApprovalRequiredEvent(BaseModel):
 
     draft_preview: str
     review_score: float | None = None
+    section_version_id: str | None = None
     timestamp: str
 
 

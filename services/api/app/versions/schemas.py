@@ -8,3 +8,6 @@ class SectionVersionRead(BaseModel):
     content_markdown: str | None = None
     created_by_actor: str
     generation_run_id: str | None = None
+    evidence_set_id: str | None = None
+    response_plan_section_id: str | None = None
+    response_plan_evidence_binding_id: str | None = None

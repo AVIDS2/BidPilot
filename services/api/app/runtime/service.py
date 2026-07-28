@@ -5,17 +5,21 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+import logging
 from typing import Any
 import uuid
 
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.assistant.audit import redact_arguments, redact_text
 from app.access.service import require_project_capability
+from app.audit.service import record_audit_event
 from app.auth.schemas import CurrentUser
-from app.models import ExecutionRun, RuntimeAction, RuntimeApproval, RuntimeRun
+from app.models import ExecutionRun, Project, RuntimeAction, RuntimeApproval, RuntimeRun
 from contracts.runtime import (
     RuntimeActionStatus,
     RuntimeApprovalDecisionType,
@@ -24,6 +28,7 @@ from contracts.runtime import (
     RuntimePolicyOutcome,
 )
 
+from .failures import classify_capability_failure
 from .events import RuntimeEventDraft, append_events, publish_event
 from .policy import evaluate_policy
 from .registry import (
@@ -39,6 +44,9 @@ from .repository import (
     get_visible_runtime_run,
     list_visible_runtime_runs,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 CapabilityExecutor = Callable[[Session, CurrentUser, dict[str, Any]], dict[str, Any]]
@@ -59,6 +67,14 @@ class RuntimeCapabilityExecution:
     result: PublicCapabilityResult | None = None
 
 
+@dataclass(frozen=True)
+class RuntimeRunCreation:
+    """Result of an idempotent runtime-run creation attempt."""
+
+    run: RuntimeRun
+    created: bool
+
+
 def list_runtime_runs_query(
     db: Session,
     current_user: CurrentUser,
@@ -76,7 +92,40 @@ def list_runtime_runs_query(
     )
 
 
-def create_runtime_run(
+def assistant_turn_idempotency_key(*, user_id: str, client_request_id: str | None) -> str | None:
+    """Build an opaque, user-scoped key for one browser-originated assistant turn."""
+    if not client_request_id:
+        return None
+    material = f"assistant-turn:{user_id}:{client_request_id}".encode("utf-8")
+    return f"assistant:{sha256(material).hexdigest()}"
+
+
+def find_idempotent_runtime_run(
+    db: Session,
+    user: CurrentUser,
+    *,
+    idempotency_key: str | None,
+) -> RuntimeRun | None:
+    """Find a caller's prior run for a client-generated request identifier.
+
+    This is intentionally scoped to both the organization and the initiating
+    user. A repeated browser request can resume its own durable trace, while a
+    guessed key can never reveal another member's run.
+    """
+    if not idempotency_key:
+        return None
+    existing = db.scalar(
+        select(RuntimeRun).where(
+            RuntimeRun.org_id == user.org_id,
+            RuntimeRun.idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None and existing.user_id != user.id:
+        raise HTTPException(status_code=409, detail="Idempotency key is already in use")
+    return existing
+
+
+def create_or_get_runtime_run(
     db: Session,
     user: CurrentUser,
     *,
@@ -93,8 +142,13 @@ def create_runtime_run(
     idempotency_key: str | None = None,
     input_json: dict[str, Any] | None = None,
     commit: bool = True,
-) -> RuntimeRun:
-    """Create one visible runtime run, or return the caller's prior idempotent run."""
+) -> RuntimeRunCreation:
+    """Atomically create one runtime run or return the prior idempotent run.
+
+    The read before insert handles normal browser retries cheaply. The unique
+    constraint plus savepoint handles concurrent retries, where two requests
+    observe no prior run at the same time.
+    """
     if approval_mode not in {"request_approval", "risky_only", "full_access", "custom"}:
         raise ValueError(f"Invalid approval mode: {approval_mode}")
     if project_id is not None:
@@ -104,17 +158,13 @@ def create_runtime_run(
             project_id=project_id,
             capability="project.read",
         )
-    if idempotency_key:
-        existing = db.scalar(
-            select(RuntimeRun).where(
-                RuntimeRun.org_id == user.org_id,
-                RuntimeRun.idempotency_key == idempotency_key,
-            )
-        )
-        if existing is not None:
-            if existing.user_id != user.id:
-                raise HTTPException(status_code=409, detail="Idempotency key is already in use")
-            return existing
+    existing = find_idempotent_runtime_run(
+        db,
+        user,
+        idempotency_key=idempotency_key,
+    )
+    if existing is not None:
+        return RuntimeRunCreation(run=existing, created=False)
 
     run = RuntimeRun(
         kind=kind,
@@ -135,19 +185,88 @@ def create_runtime_run(
         input_json=redact_arguments(input_json or {}),
         started_at=_now(),
     )
-    db.add(run)
-    db.flush()
+    try:
+        # A savepoint keeps the outer request transaction usable when another
+        # request wins the unique (org_id, idempotency_key) race.
+        with db.begin_nested():
+            db.add(run)
+            db.flush()
+    except IntegrityError:
+        existing = find_idempotent_runtime_run(
+            db,
+            user,
+            idempotency_key=idempotency_key,
+        )
+        if existing is None:
+            raise
+        return RuntimeRunCreation(run=existing, created=False)
+
     started_event = RuntimeEventDraft(
         type=RuntimeEventType.RUN_STARTED,
         public_summary="任务已开始。",
         payload={"kind": run.kind, "engine": run.engine},
     )
     if commit:
+        # The run and its initial event become visible together. A replay can
+        # therefore never attach to a run that has no durable trace yet.
+        append_events(db, run.id, [started_event])
         db.commit()
         db.refresh(run)
-        publish_event(db, run.id, started_event)
     else:
         append_events(db, run.id, [started_event])
+    return RuntimeRunCreation(run=run, created=True)
+
+
+def create_runtime_run(
+    db: Session,
+    user: CurrentUser,
+    *,
+    kind: str,
+    engine: str,
+    project_id: str | None = None,
+    conversation_id: str | None = None,
+    execution_run_id: str | None = None,
+    parent_run_id: str | None = None,
+    provider_config_id: str | None = None,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+    approval_mode: str = "risky_only",
+    idempotency_key: str | None = None,
+    input_json: dict[str, Any] | None = None,
+    commit: bool = True,
+) -> RuntimeRun:
+    """Compatibility wrapper for callers that do not need creation state."""
+    return create_or_get_runtime_run(
+        db,
+        user,
+        kind=kind,
+        engine=engine,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        execution_run_id=execution_run_id,
+        parent_run_id=parent_run_id,
+        provider_config_id=provider_config_id,
+        model=model,
+        reasoning_effort=reasoning_effort,
+        approval_mode=approval_mode,
+        idempotency_key=idempotency_key,
+        input_json=input_json,
+        commit=commit,
+    ).run
+
+
+def record_runtime_context_trace(
+    db: Session,
+    run: RuntimeRun,
+    *,
+    trace: dict[str, Any],
+) -> RuntimeRun:
+    """Persist content-free prompt assembly metadata for one runtime turn."""
+    input_json = dict(run.input_json or {})
+    input_json["context_assembly"] = redact_arguments(trace)
+    run.input_json = input_json
+    db.commit()
+    db.refresh(run)
     return run
 
 
@@ -214,6 +333,36 @@ def create_workflow_bridge_run(
     return bridge
 
 
+def list_linked_workflow_runs(
+    db: Session,
+    current_user: CurrentUser,
+    *,
+    parent_run_id: str,
+    limit: int = 50,
+) -> list[RuntimeRun]:
+    """Return the durable workflow children owned by one assistant run.
+
+    A single harness turn may start several governed workflows (for example a
+    bounded draft campaign).  The child rows, not transient task objects, are
+    the source of truth for that one-to-many relationship and each child has
+    its own replayable RuntimeEvent timeline.
+    """
+    parent = get_visible_runtime_run(db, parent_run_id, current_user)
+    return list(
+        db.scalars(
+            select(RuntimeRun)
+            .where(
+                RuntimeRun.parent_run_id == parent.id,
+                RuntimeRun.kind == "workflow_bridge",
+                RuntimeRun.org_id == current_user.org_id,
+                RuntimeRun.user_id == current_user.id,
+            )
+            .order_by(RuntimeRun.created_at.asc(), RuntimeRun.id.asc())
+            .limit(max(1, min(limit, 100)))
+        )
+    )
+
+
 def complete_runtime_run(
     db: Session,
     run_id: str,
@@ -271,6 +420,81 @@ def cancel_runtime_run(db: Session, run_id: str, message: str = "已取消这次
         terminal_event=RuntimeEventType.RUN_CANCELLED,
         terminal_summary="任务已取消。",
         allowed_statuses={"queued", "running", "awaiting_approval", "cancel_requested"},
+    )
+
+
+def request_runtime_cancellation(
+    db: Session,
+    user: CurrentUser,
+    *,
+    run_id: str,
+) -> RuntimeRun:
+    """Request a governed stop for either an assistant turn or workflow bridge.
+
+    Workflow bridges keep their worker-safe cancellation protocol. Assistant
+    turns are stopped at the next model/tool boundary; a paused approval has
+    no in-flight side effect and can be cancelled immediately.
+    """
+    visible_run = get_visible_runtime_run(db, run_id, user)
+    if visible_run.kind == "workflow_bridge":
+        return request_workflow_cancellation(db, user, run_id=run_id)
+    if visible_run.kind != "assistant_turn":
+        raise ValueError("Only assistant turns and linked workflow runs can be cancelled")
+    if visible_run.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only the initiating user or an administrator can cancel this run")
+
+    run = get_runtime_run_for_update(db, visible_run.id)
+    if run is None:
+        raise ValueError("Runtime run not found")
+    if run.status in {"succeeded", "failed", "cancelled", "expired", "cancel_requested"}:
+        return run
+    if run.status == "awaiting_approval":
+        return cancel_runtime_run(db, run.id, "已取消这次操作。")
+    if run.status not in {"queued", "running"}:
+        raise ValueError(f"Cannot request cancellation for runtime run in status: {run.status}")
+
+    run.status = "cancel_requested"
+    append_events(
+        db,
+        run.id,
+        [
+            RuntimeEventDraft(
+                type=RuntimeEventType.CAPABILITY_PROGRESSED,
+                public_summary="已收到取消请求，将在当前步骤结束后停止。",
+                payload={"phase": "cancellation_requested"},
+            )
+        ],
+    )
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def runtime_cancellation_requested(db: Session, run_id: str) -> bool:
+    """Read the durable cancellation flag without trusting an in-memory Run."""
+    return db.scalar(select(RuntimeRun.status).where(RuntimeRun.id == run_id)) == "cancel_requested"
+
+
+def finalize_requested_runtime_cancellation(
+    db: Session,
+    run_id: str,
+    *,
+    message: str = "已取消这次操作。",
+) -> RuntimeRun:
+    """Close a cooperative assistant cancellation at a safe execution boundary."""
+    run = get_runtime_run_for_update(db, run_id)
+    if run is None:
+        raise ValueError("Runtime run not found")
+    if run.status != "cancel_requested":
+        return run
+    return _finish_runtime_run(
+        db,
+        run.id,
+        message,
+        terminal_status="cancelled",
+        terminal_event=RuntimeEventType.RUN_CANCELLED,
+        terminal_summary="任务已取消。",
+        allowed_statuses={"cancel_requested"},
     )
 
 
@@ -339,18 +563,24 @@ def find_pending_approval_for_conversation(
     conversation_id: str,
 ) -> RuntimeApproval | None:
     """Return the latest still-actionable approval in a user conversation."""
-    return db.scalar(
-        select(RuntimeApproval)
-        .join(RuntimeAction, RuntimeApproval.action_id == RuntimeAction.id)
-        .join(RuntimeRun, RuntimeAction.run_id == RuntimeRun.id)
-        .where(
-            RuntimeApproval.status == RuntimeApprovalStatus.PENDING.value,
-            RuntimeApproval.user_id == user.id,
-            RuntimeApproval.org_id == user.org_id,
-            RuntimeRun.conversation_id == conversation_id,
+    while True:
+        pending = db.scalar(
+            select(RuntimeApproval)
+            .join(RuntimeAction, RuntimeApproval.action_id == RuntimeAction.id)
+            .join(RuntimeRun, RuntimeAction.run_id == RuntimeRun.id)
+            .where(
+                RuntimeApproval.status == RuntimeApprovalStatus.PENDING.value,
+                RuntimeApproval.user_id == user.id,
+                RuntimeApproval.org_id == user.org_id,
+                RuntimeRun.conversation_id == conversation_id,
+            )
+            .order_by(RuntimeApproval.created_at.desc())
         )
-        .order_by(RuntimeApproval.created_at.desc())
-    )
+        if pending is None:
+            return None
+        if pending.expires_at > _now():
+            return pending
+        expire_runtime_approval_if_due(db, approval_id=pending.id)
 
 
 def _finish_runtime_run(
@@ -377,6 +607,7 @@ def _finish_runtime_run(
     if run.status not in allowed_statuses:
         raise ValueError(f"Cannot finish runtime run in status: {run.status}")
 
+    cancellation_events = _cancel_pending_approvals(db, run) if terminal_status == "cancelled" else []
     persisted_result = dict(result_json or {})
     persisted_result["message"] = safe_message
     run.status = terminal_status
@@ -388,6 +619,7 @@ def _finish_runtime_run(
         db,
         run.id,
         [
+            *cancellation_events,
             RuntimeEventDraft(
                 type=RuntimeEventType.MESSAGE_COMPLETED,
                 public_summary=safe_message,
@@ -401,6 +633,129 @@ def _finish_runtime_run(
         ],
     )
     db.commit()
+    db.refresh(run)
+    return run
+
+
+def _cancel_pending_approvals(db: Session, run: RuntimeRun) -> list[RuntimeEventDraft]:
+    """Close approvals before terminal cancellation so they cannot execute later."""
+    rows = db.execute(
+        select(RuntimeApproval, RuntimeAction)
+        .join(RuntimeAction, RuntimeApproval.action_id == RuntimeAction.id)
+        .where(
+            RuntimeAction.run_id == run.id,
+            RuntimeApproval.status == RuntimeApprovalStatus.PENDING.value,
+        )
+        .with_for_update()
+    ).all()
+    now = _now()
+    events: list[RuntimeEventDraft] = []
+    for approval, action in rows:
+        approval.status = RuntimeApprovalStatus.CANCELLED.value
+        approval.decision_json = {"decision": "cancel"}
+        approval.resolved_at = now
+        action.status = RuntimeActionStatus.CANCELLED.value
+        action.completed_at = now
+        events.append(
+            RuntimeEventDraft(
+                type=RuntimeEventType.APPROVAL_RESOLVED,
+                public_summary="已取消待确认操作。",
+                payload={
+                    "approval_id": approval.id,
+                    "capability": action.capability_name,
+                    "status": RuntimeApprovalStatus.CANCELLED.value,
+                },
+            )
+        )
+    return events
+
+
+def expire_runtime_approval_if_due(
+    db: Session,
+    *,
+    approval_id: str,
+) -> RuntimeApproval | None:
+    """Expire one pending approval and leave a terminal, replayable trace."""
+    approval = db.scalar(select(RuntimeApproval).where(RuntimeApproval.id == approval_id).with_for_update())
+    if approval is None or approval.status != RuntimeApprovalStatus.PENDING.value:
+        return approval
+    if approval.expires_at > _now():
+        return approval
+
+    action = db.get(RuntimeAction, approval.action_id)
+    run = get_runtime_run_for_update(db, action.run_id) if action is not None else None
+    if action is None or run is None:
+        raise ValueError("Runtime approval action is unavailable")
+
+    message = "审批已过期，未执行该操作。"
+    now = _now()
+    approval.status = RuntimeApprovalStatus.EXPIRED.value
+    approval.resolved_at = now
+    action.status = RuntimeActionStatus.EXPIRED.value
+    action.completed_at = now
+    run.status = "expired"
+    run.result_json = redact_arguments({"message": message})
+    run.error_code = "approval_expired"
+    run.error_message = message
+    run.finished_at = now
+    append_events(
+        db,
+        run.id,
+        [
+            RuntimeEventDraft(
+                type=RuntimeEventType.APPROVAL_RESOLVED,
+                public_summary=message,
+                payload={
+                    "approval_id": approval.id,
+                    "capability": action.capability_name,
+                    "status": RuntimeApprovalStatus.EXPIRED.value,
+                },
+            ),
+            RuntimeEventDraft(
+                type=RuntimeEventType.MESSAGE_COMPLETED,
+                public_summary=message,
+                payload={"message": message},
+            ),
+            RuntimeEventDraft(
+                type=RuntimeEventType.RUN_FAILED,
+                public_summary="任务因审批过期而结束。",
+                payload={"status": "expired", "error_code": "approval_expired"},
+            ),
+        ],
+    )
+    db.commit()
+    db.refresh(approval)
+    return approval
+
+
+def reconcile_runtime_run_for_replay(db: Session, run_id: str) -> RuntimeRun:
+    """Resolve durable cancellation or expired approval before replaying a run.
+
+    Browser reconnects must never resurrect a run that was cancelled while its
+    stream was disconnected, nor keep presenting an approval that can no
+    longer be accepted. This function performs only lifecycle reconciliation;
+    adapters remain responsible for rendering the resulting event trace.
+    """
+    run = db.get(RuntimeRun, run_id)
+    if run is None:
+        raise ValueError("Runtime run not found")
+    if run.status == "cancel_requested":
+        return finalize_requested_runtime_cancellation(db, run.id)
+    if run.status != "awaiting_approval":
+        return run
+
+    approval_ids = list(
+        db.scalars(
+            select(RuntimeApproval.id)
+            .join(RuntimeAction, RuntimeApproval.action_id == RuntimeAction.id)
+            .where(
+                RuntimeAction.run_id == run.id,
+                RuntimeApproval.status == RuntimeApprovalStatus.PENDING.value,
+            )
+        )
+    )
+    for approval_id in approval_ids:
+        expire_runtime_approval_if_due(db, approval_id=approval_id)
     db.refresh(run)
     return run
 
@@ -511,26 +866,8 @@ def resolve_approval(
     if approval.status != RuntimeApprovalStatus.PENDING.value:
         raise RuntimeApprovalResolvedError("Approval is no longer pending")
     if approval.expires_at <= _now():
-        approval.status = RuntimeApprovalStatus.EXPIRED.value
-        approval.resolved_at = _now()
-        action.status = RuntimeActionStatus.EXPIRED.value
-        action.completed_at = _now()
-        run.status = "expired"
-        db.commit()
-        publish_event(
-            db,
-            run.id,
-            RuntimeEventDraft(
-                type=RuntimeEventType.APPROVAL_RESOLVED,
-                public_summary="审批已过期，未执行该操作。",
-                payload={
-                    "approval_id": approval.id,
-                    "capability": action.capability_name,
-                    "status": RuntimeApprovalStatus.EXPIRED.value,
-                },
-            ),
-        )
-        raise RuntimeApprovalExpiredError("Approval has expired")
+        expire_runtime_approval_if_due(db, approval_id=approval.id)
+        raise RuntimeApprovalExpiredError("审批已过期，未执行该操作。")
 
     if decision is RuntimeApprovalDecisionType.REJECT:
         approval.status = RuntimeApprovalStatus.REJECTED.value
@@ -699,18 +1036,32 @@ def _execute_action(
         raw_result = execute(db, user, execution_arguments)
         public_result = format_public_result(action.capability_name, raw_result)
     except Exception as exc:
-        safe_error = redact_text(str(exc))
+        failure = classify_capability_failure(exc)
+        logger.warning(
+            "Runtime capability execution failed: run_id=%s capability=%s error_type=%s error_code=%s",
+            run.id,
+            action.capability_name,
+            type(exc).__name__,
+            failure.error_code,
+        )
         action.status = RuntimeActionStatus.FAILED.value
-        action.error_code = "capability_execution_failed"
-        action.error_message = safe_error
+        action.error_code = failure.error_code
+        action.error_message = failure.message
         action.completed_at = _now()
+        _record_runtime_action_audit(
+            db,
+            run=run,
+            action=action,
+            actor_id=user.id,
+            outcome="failed",
+        )
         db.commit()
         publish_event(
             db,
             run.id,
             RuntimeEventDraft(
                 type=RuntimeEventType.CAPABILITY_FAILED,
-                public_summary="操作未能完成。",
+                public_summary=failure.message,
                 payload={"capability": action.capability_name, "reason_code": action.error_code},
             ),
         )
@@ -722,6 +1073,14 @@ def _execute_action(
     action.error_code = None
     action.error_message = None
     action.completed_at = _now()
+    _record_runtime_action_audit(
+        db,
+        run=run,
+        action=action,
+        actor_id=user.id,
+        outcome="succeeded",
+        raw_result=raw_result,
+    )
     db.commit()
     publish_event(
         db,
@@ -733,6 +1092,51 @@ def _execute_action(
         ),
     )
     return RuntimeCapabilityExecution(action=action, result=public_result)
+
+
+def _record_runtime_action_audit(
+    db: Session,
+    *,
+    run: RuntimeRun,
+    action: RuntimeAction,
+    actor_id: str,
+    outcome: str,
+    raw_result: dict[str, Any] | None = None,
+) -> None:
+    """Persist only correlation metadata for a project-scoped runtime action.
+
+    The action itself retains redacted operational state.  The project audit
+    trail is deliberately narrower: it exists to join a user-visible project
+    change to its durable RuntimeRun without duplicating arguments, results,
+    provider output, or exception text.
+    """
+    project_id = run.project_id
+    if project_id is None and action.capability_name == "create_project":
+        candidate_id = (raw_result or {}).get("id")
+        if isinstance(candidate_id, str):
+            project = db.get(Project, candidate_id)
+            if project is not None and project.org_id == run.org_id:
+                project_id = project.id
+    if project_id is None:
+        return
+
+    payload: dict[str, str] = {
+        "runtime_run_id": run.id,
+        "trace_id": run.trace_id,
+        "runtime_action_id": action.id,
+        "capability": action.capability_name,
+        "status": outcome,
+    }
+    if outcome == "failed" and action.error_code:
+        payload["error_code"] = action.error_code
+    record_audit_event(
+        db,
+        project_id=project_id,
+        event_type=f"runtime.capability.{outcome}",
+        actor_type="user",
+        actor_id=actor_id,
+        payload=payload,
+    )
 
 
 def _legacy_executor(capability_name: str) -> CapabilityExecutor:

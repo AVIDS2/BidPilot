@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from app.assistant.tools import run_section_campaign_tool
@@ -32,13 +33,13 @@ def test_campaign_public_formatter() -> None:
             "started_runtime_run_ids": [],
             "failed": [],
             "has_more": True,
-            "secret": "nope",
+            "sensitive_marker": "nope",
         },
     )
     assert "处理 2 章" in result.summary
     assert "剩余 3 章" in result.summary
     assert result.payload["processed_count"] == 2
-    assert "secret" not in result.payload
+    assert "sensitive_marker" not in result.payload
 
 
 def test_run_section_campaign_framework_auto_continues(monkeypatch) -> None:
@@ -101,3 +102,56 @@ def test_run_section_campaign_plan_mode(monkeypatch) -> None:
     assert result.result["remaining_count"] == 2
     assert result.result["processed_count"] == 0
     assert [item["section_key"] for item in result.result["planned_sections"]] == ["a", "b"]
+
+
+def test_campaign_failure_never_returns_the_raw_exception(monkeypatch) -> None:
+    sensitive_marker = "test-sensitive-marker"
+    def fake_outline(db, user, arguments):
+        return SimpleNamespace(
+            result={
+                "project_id": arguments["project_id"],
+                "project_name": "Demo",
+                "items": [{"section_key": "technical", "title": "技术方案", "has_content": False}],
+            }
+        )
+
+    def fail_write(*_args, **_kwargs):
+        raise RuntimeError(f"Authorization: Bearer {sensitive_marker}")
+
+    monkeypatch.setattr("app.assistant.tools.get_project_outline", fake_outline)
+    monkeypatch.setattr("app.assistant.tools.write_section_tool", fail_write)
+
+    result = run_section_campaign_tool(
+        db=object(),  # type: ignore[arg-type]
+        user=object(),  # type: ignore[arg-type]
+        arguments={"project_id": "p1", "mode": "framework"},
+    )
+    public = format_public_result("run_section_campaign", result.result)
+
+    assert result.result["failed"] == [
+        {"section_key": "technical", "error_code": "capability_execution_failed"}
+    ]
+    assert public.payload["failed"] == result.result["failed"]
+    assert sensitive_marker not in json.dumps({"result": result.result, "payload": public.payload})
+
+
+def test_campaign_public_formatter_drops_raw_failure_details() -> None:
+    sensitive_marker = "test-sensitive-marker"
+    public = format_public_result(
+        "run_section_campaign",
+        {
+            "project_id": "p1",
+            "failed": [
+                {
+                    "section_key": "technical",
+                    "error": f"Authorization: Bearer {sensitive_marker}",
+                    "error_code": "not a safe public code",
+                }
+            ],
+        },
+    )
+
+    assert public.payload["failed"] == [
+        {"section_key": "technical", "error_code": "capability_execution_failed"}
+    ]
+    assert sensitive_marker not in json.dumps(public.payload)

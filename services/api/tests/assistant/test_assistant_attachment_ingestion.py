@@ -296,7 +296,7 @@ def test_expired_staged_attachment_is_not_usable(
     assert exc_info.value.status_code == 410
 
 
-def test_operator_stream_hydrates_attachment_metadata_before_planning(
+def test_harness_stream_hydrates_attachment_metadata_before_model_turn(
     client,
     test_db,
     default_org_id: str,
@@ -305,19 +305,27 @@ def test_operator_stream_hydrates_attachment_metadata_before_planning(
 ) -> None:
     user = _user(default_org_id, default_user_id)
     record, _ = _stage_text_attachment(test_db, user, monkeypatch)
-    captured: list[OperatorPlanningContext] = []
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
 
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "operator")
-    monkeypatch.setattr("app.runtime.operator_adapter.get_operator_checkpointer", lambda: InMemorySaver())
+    class Response:
+        content = "已收到附件。"
+        tool_calls: list[dict] = []
+        usage_metadata = None
 
-    def planner_factory(_llm, **_kwargs):
-        def planner(context: OperatorPlanningContext) -> OperatorPlan:
-            captured.append(context)
-            return OperatorPlan(mode="answer", message="已收到附件。")
+    class CapturingHarnessLLM:
+        def __init__(self) -> None:
+            self.calls: list[list[object]] = []
 
-        return planner
+        def bind_tools(self, _tools):
+            return self
 
-    monkeypatch.setattr("app.runtime.operator_adapter.build_langchain_planner", planner_factory)
+        def invoke(self, messages):
+            self.calls.append(list(messages))
+            return Response()
+
+    llm = CapturingHarnessLLM()
+    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
+    monkeypatch.setattr("app.runtime.operator_adapter._load_authorized_memory_context", lambda *_args, **_kwargs: None)
 
     response = client.post(
         "/assistant/stream",
@@ -336,13 +344,12 @@ def test_operator_stream_hydrates_attachment_metadata_before_planning(
 
     assert response.status_code == 200
     assert "浏览器伪造正文" not in response.text
-    assert captured and captured[0].available_attachments[0] == {
-        "id": record.id,
-        "name": "requirements.txt",
-        "kind": "file",
-        "mime_type": "text/plain",
-        "size": record.size,
-    }
+    assert llm.calls
+    prompt = "\n".join(str(getattr(message, "content", "")) for message in llm.calls[0])
+    assert "requirements.txt (file, text/plain" in prompt
+    assert "强制项：提供近三年类似项目业绩。" in prompt
+    assert "browser-spoofed-name.txt" not in prompt
+    assert "浏览器伪造正文" not in prompt
 
 
 def test_operator_preserves_staged_attachment_through_governed_project_setup(

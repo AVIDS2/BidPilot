@@ -4,19 +4,23 @@ from datetime import UTC, datetime, timedelta
 import uuid
 
 import pytest
+from sqlalchemy import select
 
 from app.auth.schemas import CurrentUser
-from app.models import ExecutionRun, Project, RuntimeRun
+from app.models import AuditEvent, ExecutionRun, Project, RuntimeAction, RuntimeRun
 from app.runtime.events import list_events_after
 from app.runtime.service import (
     RuntimeApprovalExpiredError,
     RuntimeApprovalResolvedError,
     cancel_runtime_run,
     complete_runtime_run,
+    create_or_get_runtime_run,
     create_runtime_run,
     create_workflow_bridge_run,
     execute_capability,
     fail_runtime_run,
+    reconcile_runtime_run_for_replay,
+    request_runtime_cancellation,
     resolve_approval,
     request_workflow_cancellation,
 )
@@ -85,6 +89,98 @@ def test_action_key_executes_mutation_once_after_replay(
     assert calls == [{"name": "Only Once"}]
 
 
+def test_project_scoped_runtime_action_writes_correlation_only_audit_event(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    suffix = uuid.uuid4().hex[:8]
+    project = Project(
+        org_id=default_org_id,
+        name=f"Audit Project {suffix}",
+        slug=f"audit-project-{suffix}",
+        scenario_package="bidpilot",
+    )
+    test_db.add(project)
+    test_db.flush()
+    run = RuntimeRun(
+        kind="assistant_turn",
+        status="running",
+        org_id=default_org_id,
+        user_id=default_user_id,
+        project_id=project.id,
+        engine="deterministic",
+        trace_id=f"trace-{uuid.uuid4().hex}",
+        policy_snapshot_json={"approval_mode": "full_access"},
+    )
+    test_db.add(run)
+    test_db.commit()
+
+    completed = execute_capability(
+        test_db,
+        _user(default_org_id, default_user_id),
+        run_id=run.id,
+        capability_name="create_project",
+        arguments={"name": "Correlation only"},
+        action_key="correlation-audit",
+        executor=lambda *_args: {
+            "id": project.id,
+            "name": "Correlation only",
+            "status": "created",
+            "access_token": "must-not-enter-audit",
+        },
+    )
+
+    audit = test_db.scalar(
+        select(AuditEvent).where(
+            AuditEvent.project_id == project.id,
+            AuditEvent.event_type == "runtime.capability.succeeded",
+        )
+    )
+    assert audit is not None
+    assert audit.payload_json == {
+        "runtime_run_id": run.id,
+        "trace_id": run.trace_id,
+        "runtime_action_id": completed.action.id,
+        "capability": "create_project",
+        "status": "succeeded",
+    }
+    assert "Correlation only" not in str(audit.payload_json)
+    assert "must-not-enter-audit" not in str(audit.payload_json)
+
+
+def test_capability_failure_persists_a_safe_classified_error(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    run = _runtime_run(test_db, default_org_id, default_user_id, approval_mode="full_access")
+
+    def executor(_db, _user, _arguments: dict) -> dict:
+        raise RuntimeError("psycopg failure: password=super-secret host=db.internal")
+
+    with pytest.raises(RuntimeError):
+        execute_capability(
+            test_db,
+            _user(default_org_id, default_user_id),
+            run_id=run.id,
+            capability_name="create_project",
+            arguments={"name": "Safe Failure"},
+            action_key="safe-failure",
+            executor=executor,
+        )
+
+    action = test_db.query(RuntimeAction).filter_by(run_id=run.id).one()
+    assert action.status == RuntimeActionStatus.FAILED.value
+    assert action.error_code == "capability_execution_failed"
+    assert action.error_message == "操作未能完成，请稍后重试。"
+    assert "super-secret" not in action.error_message
+
+    failure_event = [event for event in list_events_after(test_db, run.id) if event.event_type == "capability.failed"][-1]
+    assert failure_event.public_summary == action.error_message
+    assert failure_event.payload_json["reason_code"] == action.error_code
+
+
 def test_idempotent_runtime_run_reuses_the_original_started_event(
     test_db,
     default_org_id: str,
@@ -111,6 +207,36 @@ def test_idempotent_runtime_run_reuses_the_original_started_event(
 
     assert first.id == second.id
     assert first.status == "running"
+
+
+def test_create_or_get_runtime_run_reports_whether_it_created_the_run(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = _user(default_org_id, default_user_id)
+
+    first = create_or_get_runtime_run(
+        test_db,
+        user,
+        kind="assistant_turn",
+        engine="streaming_harness",
+        idempotency_key=f"assistant-request-{uuid.uuid4()}",
+        input_json={"message": "查看项目"},
+    )
+    second = create_or_get_runtime_run(
+        test_db,
+        user,
+        kind="assistant_turn",
+        engine="streaming_harness",
+        idempotency_key=first.run.idempotency_key,
+        input_json={"message": "查看项目"},
+    )
+
+    assert first.created is True
+    assert second.created is False
+    assert second.run.id == first.run.id
+    assert [event.event_type for event in list_events_after(test_db, first.run.id)] == ["run.started"]
 
 
 def test_complete_runtime_run_persists_message_and_terminal_event(
@@ -184,6 +310,95 @@ def test_failed_and_cancelled_runtime_runs_preserve_distinct_terminal_evidence(
     ]
 
 
+def test_cancelling_waiting_approval_closes_the_action_before_it_can_execute(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = _user(default_org_id, default_user_id)
+    run = _runtime_run(test_db, default_org_id, default_user_id, approval_mode="risky_only")
+    calls: list[dict] = []
+
+    def executor(_db, _user, arguments: dict) -> dict:
+        calls.append(arguments)
+        return {"id": "project-1", "name": arguments["name"], "status": "created"}
+
+    pending = execute_capability(
+        test_db,
+        user,
+        run_id=run.id,
+        capability_name="create_project",
+        arguments={"name": "Cancelled Before Approval"},
+        action_key="cancel-waiting-approval",
+        executor=executor,
+    )
+    assert pending.approval is not None
+
+    cancelled = request_runtime_cancellation(test_db, user, run_id=run.id)
+
+    test_db.refresh(run)
+    test_db.refresh(pending.action)
+    test_db.refresh(pending.approval)
+    assert cancelled.status == "cancelled"
+    assert run.status == "cancelled"
+    assert pending.action.status == RuntimeActionStatus.CANCELLED.value
+    assert pending.approval.status == RuntimeApprovalStatus.CANCELLED.value
+    assert calls == []
+    with pytest.raises(RuntimeApprovalResolvedError):
+        resolve_approval(
+            test_db,
+            user,
+            approval_id=pending.approval.id,
+            decision=RuntimeApprovalDecisionType.APPROVE,
+            executor=executor,
+        )
+    assert calls == []
+    assert [event.event_type for event in list_events_after(test_db, run.id)] == [
+        "capability.started",
+        "approval.requested",
+        "approval.resolved",
+        "message.completed",
+        "run.cancelled",
+    ]
+
+
+def test_running_assistant_cancellation_is_durable_and_replayable_at_safe_boundary(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = _user(default_org_id, default_user_id)
+    run = _runtime_run(test_db, default_org_id, default_user_id, approval_mode="full_access")
+
+    requested = request_runtime_cancellation(test_db, user, run_id=run.id)
+    assert requested.status == "cancel_requested"
+
+    cancelled = reconcile_runtime_run_for_replay(test_db, run.id)
+    test_db.refresh(run)
+    assert cancelled.status == "cancelled"
+    assert run.status == "cancelled"
+    assert [event.event_type for event in list_events_after(test_db, run.id)] == [
+        "capability.progressed",
+        "message.completed",
+        "run.cancelled",
+    ]
+
+
+def test_runtime_cancel_api_accepts_an_assistant_turn(
+    client,
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    run = _runtime_run(test_db, default_org_id, default_user_id, approval_mode="full_access")
+
+    response = client.post(f"/runtime/runs/{run.id}/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == run.id
+    assert response.json()["status"] == "cancel_requested"
+
+
 def test_pending_approval_is_reused_and_expired_approval_cannot_execute(
     test_db,
     default_org_id: str,
@@ -234,8 +449,19 @@ def test_pending_approval_is_reused_and_expired_approval_cannot_execute(
         )
 
     test_db.refresh(first.approval)
+    test_db.refresh(first.action)
+    test_db.refresh(run)
     assert first.approval.status == RuntimeApprovalStatus.EXPIRED.value
+    assert first.action.status == RuntimeActionStatus.EXPIRED.value
+    assert run.status == "expired"
     assert calls == []
+    assert [event.event_type for event in list_events_after(test_db, run.id)] == [
+        "capability.started",
+        "approval.requested",
+        "approval.resolved",
+        "message.completed",
+        "run.failed",
+    ]
 
 
 def test_approved_pending_action_executes_once_and_cannot_be_approved_twice(

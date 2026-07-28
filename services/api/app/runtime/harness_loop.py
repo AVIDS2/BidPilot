@@ -14,17 +14,17 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from sqlalchemy.orm import Session
 
 from app.assistant.audit import redact_arguments, redact_text
+from app.assistant.task_state import clear_task_state, set_task_state
 from app.auth.schemas import CurrentUser
 from app.chat.service import bind_conversation_project_context, save_message
 from app.models import RuntimeRun
 from app.usage.schemas import ProviderSource
 from app.usage.service import UsageLimitExceeded, reserve_assistant_model_tokens
 from contracts.model_usage import ProviderUsageMeasurement, normalize_langchain_usage
-from contracts.untrusted_context import build_untrusted_context_packet, with_untrusted_context_guard
 from contracts.usage_ledger import (
     mark_model_reservation_uncertain,
     record_model_usage,
@@ -32,17 +32,8 @@ from contracts.usage_ledger import (
     settle_model_reservation,
 )
 
-from .model_limits import (
-    OPERATOR_PLANNER_MAX_ATTACHMENT_CONTEXT_CHARACTERS,
-    OPERATOR_PLANNER_MAX_CONVERSATION_CONTEXT_CHARACTERS,
-    OPERATOR_PLANNER_MAX_MEMORY_CONTEXT_CHARACTERS,
-    OPERATOR_PLANNER_MAX_PREVIOUS_RESULT_CHARACTERS,
-    OPERATOR_PLANNER_MAX_USER_MESSAGE_CHARACTERS,
-)
-from .background_tasks import (
-    bind_workflow_background_task,
-    collect_completed_notifications,
-)
+from .background_tasks import collect_completed_notifications
+from .failures import PublicRuntimeFailure, classify_capability_failure
 from .hooks import HookContext, default_hook_registry, register_default_recovery_hooks
 from .registry import (
     CAPABILITY_REGISTRY,
@@ -51,12 +42,16 @@ from .registry import (
     is_workflow_capability,
     missing_required_capability_arguments,
 )
-from .skills import build_skill_prompt_block
+from .prompt_assembly import ConversationContextWindow, assemble_harness_prompt
+from .skills import build_skill_prompt_block, select_skill_names
 from .service import (
     cancel_runtime_run,
     complete_runtime_run,
     execute_capability,
     fail_runtime_run,
+    finalize_requested_runtime_cancellation,
+    record_runtime_context_trace,
+    runtime_cancellation_requested,
     resolve_approval,
 )
 from contracts.runtime import RuntimeApprovalDecisionType
@@ -70,6 +65,7 @@ HARNESS_MAX_STEPS = 8
 HARNESS_MAX_TOOLS_PER_TURN = 1
 HARNESS_CAMPAIGN_MAX_STEPS = 16
 HARNESS_CAMPAIGN_MAX_TOOLS_PER_TURN = 1
+HARNESS_MAX_CONSECUTIVE_TOOL_FAILURES = 3
 _LLM_TOOL_RESULT_MAX_CHARS = 2_000
 
 # Messages / capabilities that justify a higher step budget without global YOLO.
@@ -151,6 +147,48 @@ _SAFE_DIAGNOSTIC_CAPABILITIES = frozenset(
 )
 
 
+def classify_model_failure(exc: Exception) -> PublicRuntimeFailure:
+    """Translate provider failures without exposing raw gateway responses."""
+    raw = redact_text(str(exc))
+    normalized = raw.lower()
+    if "supported api model names" in normalized or (
+        "invalid_request" in normalized and "model" in normalized
+    ):
+        return PublicRuntimeFailure(
+            "provider_model_incompatible",
+            "所选模型与当前提供商端点不兼容。请在模型配置中选择该端点支持的模型后重试。",
+        )
+    if "response_format" in normalized or "json_schema" in normalized:
+        return PublicRuntimeFailure(
+            "provider_structured_output_unsupported",
+            "当前模型或端点不支持所需的结构化输出。请切换到支持工具调用的兼容模型或端点。",
+        )
+    if any(marker in normalized for marker in ("invalid api key", "authentication", "unauthorized", "401")):
+        return PublicRuntimeFailure(
+            "provider_auth_failed",
+            "模型提供商认证失败。请检查平台模型配置或自定义提供商密钥。",
+        )
+    if any(marker in normalized for marker in ("rate limit", "too many requests", "429")):
+        return PublicRuntimeFailure(
+            "provider_rate_limited",
+            "模型服务当前繁忙或已达到提供商限额，请稍后重试。",
+        )
+    if any(marker in normalized for marker in ("timeout", "timed out", "connection", "connect")):
+        return PublicRuntimeFailure(
+            "provider_unavailable",
+            "模型服务暂时不可用，已停止本次执行。请稍后重试。",
+        )
+    return PublicRuntimeFailure(
+        "provider_request_failed",
+        "模型服务暂时无法完成本次请求，已停止执行。请稍后重试或切换模型。",
+    )
+
+
+def public_model_failure_message(exc: Exception) -> str:
+    """Compatibility helper for callers that only need the public text."""
+    return classify_model_failure(exc).message
+
+
 def _is_diagnostic_only_request(user_message: str) -> bool:
     text = (user_message or "").strip()
     return bool(text) and any(marker in text for marker in _DIAGNOSTIC_MESSAGE_MARKERS) and not any(
@@ -227,10 +265,14 @@ _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
         "properties": {
             "project_id": {"type": "string"},
             "section_id": {"type": "string"},
+            "section_version_id": {
+                "type": "string",
+                "description": "Immutable candidate version selected from list_pending_reviews",
+            },
             "decision": {"type": "string", "enum": ["approved", "rejected"]},
             "comment": {"type": "string"},
         },
-        "required": ["project_id", "section_id", "decision"],
+        "required": ["project_id", "section_id", "section_version_id", "decision"],
         "additionalProperties": False,
     },
     "list_requirements": {
@@ -605,10 +647,16 @@ class StreamingHarness:
         model: str | None,
         user_message: str,
         conversation_context: list[dict[str, str]] | None = None,
+        conversation_summary: str = "",
+        conversation_history_truncated: bool = False,
+        conversation_window: ConversationContextWindow | None = None,
         memory_context_records: list[dict[str, Any]] | None = None,
+        memory_context_version: str | None = None,
         available_attachments: list[dict[str, Any]] | None = None,
+        attachment_context: str = "",
         active_project_id: str | None = None,
         pending_input: dict[str, Any] | None = None,
+        approval_mode: str = "risky_only",
         provider_config_id: str | None = None,
         reasoning_effort: str | None = None,
         max_steps: int | None = None,
@@ -625,10 +673,20 @@ class StreamingHarness:
         self.model = model
         self.user_message = user_message
         self.conversation_context = conversation_context or []
+        self.conversation_window = conversation_window or ConversationContextWindow(
+            summary=conversation_summary,
+            recent_turns=tuple(self.conversation_context),
+            source_message_count=len(self.conversation_context),
+            history_window_truncated=conversation_history_truncated,
+            summary_truncated=False,
+        )
         self.memory_context_records = memory_context_records or []
+        self.memory_context_version = memory_context_version
         self.available_attachments = available_attachments or []
+        self.attachment_context = attachment_context
         self.active_project_id = active_project_id
         self.pending_input = pending_input or {}
+        self.approval_mode = approval_mode
         self.provider_config_id = provider_config_id
         self.reasoning_effort = reasoning_effort
         default_steps, _default_tools = resolve_harness_budgets(user_message)
@@ -642,6 +700,7 @@ class StreamingHarness:
         self._streamed_text = False
         self._consecutive_tool_failures = 0
         self._emitted_end = False
+        self._context_trace: dict[str, Any] | None = None
         self._diagnostic_only = _is_diagnostic_only_request(user_message)
         self._allowed_capability_names = (
             _SAFE_DIAGNOSTIC_CAPABILITIES
@@ -651,19 +710,16 @@ class StreamingHarness:
 
     async def run(self) -> AsyncGenerator[str, None]:
         register_default_recovery_hooks()
-        messages = self._initial_messages()
-        # Inject completed background task notifications from prior turns.
-        for note in collect_completed_notifications(self.conversation_id):
-            messages.append(
-                HumanMessage(
-                    content=(
-                        "<task_notification>\n"
-                        f"{json.dumps(note, ensure_ascii=False)}\n"
-                        "</task_notification>\n"
-                        "后台长任务已更新。请根据结果继续推进，不要重复发起同一任务。"
-                    )
-                )
-            )
+        # Inject workflow wakes from durable notifications. API restarts cannot
+        # lose this context because Worker commits the notification with the
+        # terminal RuntimeEvent. They remain untrusted model-facing data.
+        notifications = collect_completed_notifications(
+            self.db,
+            conversation_id=self.conversation_id,
+            user_id=self.user.id,
+        )
+        messages = self._initial_messages(background_notifications=notifications)
+        self._persist_context_trace()
         tools = build_capability_tool_specs(allowed_names=self._allowed_capability_names)
         bound = self.llm.bind_tools(tools)
         hook_ctx = HookContext(
@@ -676,6 +732,10 @@ class StreamingHarness:
 
         try:
             for step in range(self.max_steps):
+                if runtime_cancellation_requested(self.db, self.runtime_run.id):
+                    async for event in self._emit_requested_cancellation():
+                        yield event
+                    return
                 hook_ctx.step = step
                 turn_id = f"turn-{step + 1}"
                 yield _sse(
@@ -708,6 +768,11 @@ class StreamingHarness:
                 except Exception:
                     self._mark_active_reservations_uncertain()
                     raise
+
+                if runtime_cancellation_requested(self.db, self.runtime_run.id):
+                    async for event in self._emit_requested_cancellation():
+                        yield event
+                    return
 
                 if not tool_calls:
                     final_text = "".join(text_parts).strip() or "我可以继续帮你处理这个请求。"
@@ -762,6 +827,10 @@ class StreamingHarness:
 
                 executed_names: list[str] = []
                 for item in tool_calls[: self.max_tools_per_turn]:
+                    if runtime_cancellation_requested(self.db, self.runtime_run.id):
+                        async for event in self._emit_requested_cancellation():
+                            yield event
+                        return
                     blocked = default_hook_registry.first_blocking(
                         "PreToolUse",
                         hook_ctx,
@@ -769,17 +838,40 @@ class StreamingHarness:
                         arguments=item.arguments,
                     )
                     if blocked is not None:
+                        try:
+                            title = get_capability_definition(item.name).label_zh
+                        except ValueError:
+                            title = item.name
+                        message = "该工具请求被当前安全策略阻止。"
                         messages.append(
                             ToolMessage(
                                 content=json.dumps(
-                                    {"error": str(blocked), "blocked_by_hook": True},
+                                    {"error": message, "blocked_by_hook": True},
                                     ensure_ascii=False,
                                 )[:_LLM_TOOL_RESULT_MAX_CHARS],
                                 tool_call_id=item.tool_call_id,
                             )
                         )
+                        self._consecutive_tool_failures += 1
+                        yield _sse(
+                            "assistant.tool_failed",
+                            {
+                                "runtime_run_id": self.runtime_run.id,
+                                "turn_id": turn_id,
+                                "tool_call_id": item.tool_call_id,
+                                "tool_name": item.name,
+                                "title": title,
+                                "error_code": "capability_policy_blocked",
+                                "error_message": message,
+                                "state": "failed",
+                            },
+                        )
+                        async for event in self._stop_after_repeated_tool_failures():
+                            yield event
+                        if self._emitted_end:
+                            return
                         continue
-                    paused_for_approval = False
+                    paused_for_user_input = False
                     async for event in self._execute_one_tool(item, turn_id, messages, executed_names):
                         yield event
                         default_hook_registry.trigger(
@@ -788,14 +880,19 @@ class StreamingHarness:
                             tool_name=item.name,
                             arguments=item.arguments,
                         )
-                        # Do not return on confirmation_requested alone — the tool
-                        # coroutine still yields assistant.end(needs_confirmation).
-                        # Returning early left clients without a terminal end event.
-                        if event.startswith("event: assistant.end") and "needs_confirmation" in event:
-                            paused_for_approval = True
+                        # The tool coroutine owns its terminal end event for
+                        # confirmations and missing input alike.
+                        if event.startswith("event: assistant.end") and (
+                            "needs_confirmation" in event or "needs_input" in event
+                        ):
+                            paused_for_user_input = True
                         if event.startswith("event: assistant.end") and '"state": "failed"' in event:
                             return
-                    if paused_for_approval:
+                    if paused_for_user_input:
+                        return
+                    if runtime_cancellation_requested(self.db, self.runtime_run.id):
+                        async for event in self._emit_requested_cancellation():
+                            yield event
                         return
 
                 summary = build_turn_summary(executed_names)
@@ -841,13 +938,23 @@ class StreamingHarness:
                 yield event
         except Exception as exc:
             self._mark_active_reservations_uncertain()
-            safe_error = redact_text(str(exc))
-            message = f"执行失败：{safe_error}"
+            logger.warning(
+                "Harness model loop failed: runtime_run=%s provider_type=%s error_type=%s",
+                self.runtime_run.id,
+                self.provider_type,
+                type(exc).__name__,
+            )
+            failure = classify_model_failure(exc)
             try:
-                fail_runtime_run(self.db, self.runtime_run.id, message, error_code="harness_loop_failed")
+                fail_runtime_run(
+                    self.db,
+                    self.runtime_run.id,
+                    failure.message,
+                    error_code=failure.error_code,
+                )
             except ValueError:
                 pass
-            save_message(self.db, self.conversation_id, "assistant", message)
+            save_message(self.db, self.conversation_id, "assistant", failure.message)
             async for event in self._flush_new_events():
                 yield event
 
@@ -870,6 +977,7 @@ class StreamingHarness:
                     approval_id=approval_id,
                     decision=Decision.REJECT,
                 )
+                clear_task_state(self.db, self.conversation_id)
                 message = "已取消这次操作。"
                 cancel_runtime_run(self.db, self.runtime_run.id, message)
                 save_message(self.db, self.conversation_id, "assistant", message)
@@ -924,6 +1032,7 @@ class StreamingHarness:
                     approval_id=approval_id,
                     decision=RuntimeApprovalDecisionType.APPROVE,
                 )
+            clear_task_state(self.db, self.conversation_id)
             result = execution.result or PublicCapabilityResult("操作已完成。", {})
             self._maybe_bind_project(tool_name, result.payload)
             # Suppress durable started/succeeded/run.completed remaps — we own the
@@ -970,8 +1079,8 @@ class StreamingHarness:
             async for event in self._emit_end_once(state="completed"):
                 yield event
         except Exception as exc:
-            safe_error = redact_text(str(exc))
-            message = f"执行失败：{safe_error}"
+            failure = classify_capability_failure(exc)
+            message = f"执行失败：{failure.message}"
             # Keep the failure visible as a tool card, but do not strand the UI
             # without a clear next step. Typed confirmation mismatches should
             # tell the user exactly what to type, not look like a fake sandbox.
@@ -980,16 +1089,23 @@ class StreamingHarness:
                 {
                     "runtime_run_id": self.runtime_run.id,
                     "tool_name": tool_name,
-                    "error_message": safe_error,
+                    "error_code": failure.error_code,
+                    "error_message": failure.message,
                     "state": "failed",
                 },
             )
             try:
-                fail_runtime_run(self.db, self.runtime_run.id, message, error_code="harness_approval_failed")
+                fail_runtime_run(
+                    self.db,
+                    self.runtime_run.id,
+                    message,
+                    error_code=failure.error_code,
+                )
             except ValueError:
                 pass
             guidance = message
-            if "完整项目名称" in safe_error or "confirmation" in safe_error.lower():
+            raw_error = str(exc)
+            if "完整项目名称" in raw_error or "confirmation" in raw_error.lower():
                 guidance = (
                     f"{message}\n\n"
                     "这不是沙箱假失败：删除属于破坏性操作，即使在「完全访问」下也需要输入完整项目名称确认。"
@@ -1013,13 +1129,17 @@ class StreamingHarness:
             async for event in self._emit_end_once(state="failed"):
                 yield event
 
-    def _initial_messages(self) -> list[Any]:
+    def _initial_messages(
+        self,
+        *,
+        background_notifications: list[dict[str, Any]],
+    ) -> list[Any]:
         capability_list = "、".join(
             f"{item.name}（{item.label_zh}）"
             for item in sorted(CAPABILITY_REGISTRY.values(), key=lambda value: value.name)
             if item.name in self._allowed_capability_names
         )
-        system = with_untrusted_context_guard(
+        system_policy = (
             "你是 BidPilot 的平台执行助手。你可以回答问题，也可以调用注册工具。\n"
             "规则：\n"
             "1. 只使用提供的工具；禁止虚构执行结果。\n"
@@ -1055,49 +1175,40 @@ class StreamingHarness:
             + f"可用工具：{capability_list}"
         )
         skill_block = build_skill_prompt_block(self.user_message)
-        if skill_block:
-            system = f"{system}\n\n{skill_block}"
-        packet = build_untrusted_context_packet(
-            "harness_planning",
-            (
-                {
-                    "user_message": self.user_message[:OPERATOR_PLANNER_MAX_USER_MESSAGE_CHARACTERS],
-                    "conversation_context_json": json.dumps(self.conversation_context, ensure_ascii=False)[
-                        :OPERATOR_PLANNER_MAX_CONVERSATION_CONTEXT_CHARACTERS
-                    ],
-                    "active_project_id": self.active_project_id,
-                    "pending_input_json": json.dumps(self.pending_input, ensure_ascii=False)[
-                        :OPERATOR_PLANNER_MAX_PREVIOUS_RESULT_CHARACTERS
-                    ],
-                    "available_attachments_json": json.dumps(self.available_attachments, ensure_ascii=False)[
-                        :OPERATOR_PLANNER_MAX_ATTACHMENT_CONTEXT_CHARACTERS
-                    ],
-                    "long_term_memory_json": json.dumps(self.memory_context_records, ensure_ascii=False)[
-                        :OPERATOR_PLANNER_MAX_MEMORY_CONTEXT_CHARACTERS
-                    ],
-                },
-            ),
+        assembly = assemble_harness_prompt(
+            system_policy=system_policy,
+            actor_id=self.user.id,
+            org_id=self.user.org_id,
+            actor_role=self.user.role,
+            active_project_id=self.active_project_id,
+            approval_mode=self.approval_mode,
+            selected_skill_names=select_skill_names(self.user_message),
+            skill_prompt_block=skill_block,
+            pending_input=self.pending_input,
+            conversation=self.conversation_window,
+            staged_attachments=self.available_attachments,
+            attachment_context=self.attachment_context,
+            memory_context_records=self.memory_context_records,
+            memory_version=self.memory_context_version,
+            background_notifications=background_notifications,
+            user_message=self.user_message,
         )
-        messages: list[Any] = [SystemMessage(content=system)]
-        for item in self.conversation_context:
-            role = item.get("role")
-            content = (item.get("content") or "").strip()
-            if not content:
-                continue
-            if role == "assistant":
-                messages.append(AIMessage(content=content))
-            else:
-                messages.append(HumanMessage(content=content))
-        messages.append(
-            HumanMessage(
-                content=(
-                    "Use tools when a platform action is needed. "
-                    "Attachment IDs may be selected only from the listed staged attachments.\n\n"
-                    f"UNTRUSTED_CONTEXT_JSON:\n{packet}"
-                )
+        self._context_trace = assembly.trace
+        return list(assembly.messages)
+
+    def _persist_context_trace(self) -> None:
+        if self._context_trace is None:
+            return
+        try:
+            record_runtime_context_trace(self.db, self.runtime_run, trace=self._context_trace)
+        except Exception:
+            rollback = getattr(self.db, "rollback", None)
+            if callable(rollback):
+                rollback()
+            logger.warning(
+                "Harness context trace persistence failed: runtime_run=%s",
+                self.runtime_run.id,
             )
-        )
-        return messages
 
     async def _stream_model_step(
         self,
@@ -1190,12 +1301,13 @@ class StreamingHarness:
         for tc in getattr(response, "tool_calls", None) or []:
             if isinstance(tc, dict):
                 name = str(tc.get("name") or "")
-                args = tc.get("args") if isinstance(tc.get("args"), dict) else {}
+                raw_args = tc.get("args")
+                args = {str(key): value for key, value in raw_args.items()} if isinstance(raw_args, dict) else {}
                 tool_call_id = str(tc.get("id") or f"call_{uuid4().hex[:12]}")
             else:
                 name = str(getattr(tc, "name", "") or "")
                 raw_args = getattr(tc, "args", {}) or {}
-                args = raw_args if isinstance(raw_args, dict) else {}
+                args = {str(key): value for key, value in raw_args.items()} if isinstance(raw_args, dict) else {}
                 tool_call_id = str(getattr(tc, "id", None) or f"call_{uuid4().hex[:12]}")
             if name:
                 tool_calls.append(_BufferedToolCall(tool_call_id=tool_call_id, name=name, arguments=args))
@@ -1213,8 +1325,9 @@ class StreamingHarness:
                 "本次是安全诊断，只允许执行只读检查。"
                 "请明确说明需要创建、上传、写入或删除的业务目标后再执行。"
                 if self._diagnostic_only and item.name in CAPABILITY_REGISTRY
-                else f"未知或不可用工具：{item.name}"
+                else "请求了不可用的工具，请调整操作目标后重试。"
             )
+            self._consecutive_tool_failures += 1
             messages.append(
                 ToolMessage(
                     content=json.dumps({"error": message}, ensure_ascii=False),
@@ -1228,10 +1341,17 @@ class StreamingHarness:
                     "turn_id": turn_id,
                     "tool_call_id": item.tool_call_id,
                     "tool_name": item.name,
+                    "error_code": (
+                        "capability_policy_blocked"
+                        if self._diagnostic_only and item.name in CAPABILITY_REGISTRY
+                        else "capability_unavailable"
+                    ),
                     "error_message": message,
                     "state": "failed",
                 },
             )
+            async for event in self._stop_after_repeated_tool_failures():
+                yield event
             return
         if self.active_project_id and "project_id" not in arguments:
             # Prefer durable conversation scope when the model omits it.
@@ -1246,7 +1366,7 @@ class StreamingHarness:
             if self.reasoning_effort and not arguments.get("reasoning_effort"):
                 arguments["reasoning_effort"] = self.reasoning_effort
 
-        missing = ()
+        missing: tuple[str, ...] = ()
         try:
             missing = missing_required_capability_arguments(item.name, arguments)
         except Exception:
@@ -1257,31 +1377,62 @@ class StreamingHarness:
                 if item.name == "create_project" and missing == ("name",)
                 else f"还需要补充：{'、'.join(missing)}"
             )
-            tool_payload = {"error": message, "missing_fields": list(missing)}
-            messages.append(
-                ToolMessage(
-                    content=json.dumps(tool_payload, ensure_ascii=False)[:_LLM_TOOL_RESULT_MAX_CHARS],
-                    tool_call_id=item.tool_call_id,
-                )
+            # Missing input is a durable pause boundary, not a failed tool.
+            # Persist only the capability and validated missing fields so the
+            # next Harness turn can continue without replaying this call.
+            set_task_state(
+                self.db,
+                self.conversation_id,
+                status="needs_input",
+                tool_name=item.name,
+                arguments=arguments,
+                missing_fields=missing,
             )
+            save_message(self.db, self.conversation_id, "assistant", message)
+            complete_runtime_run(self.db, self.runtime_run.id, message)
             yield _sse(
-                "assistant.tool_failed",
+                "assistant.missing_input",
                 {
                     "runtime_run_id": self.runtime_run.id,
                     "turn_id": turn_id,
                     "tool_call_id": item.tool_call_id,
                     "tool_name": item.name,
-                    "error_message": message,
-                    "state": "failed",
+                    "missing_fields": list(missing),
+                    "message": message,
+                    "state": "needs_input",
                 },
             )
+            yield _sse(
+                "assistant.message",
+                {
+                    "runtime_run_id": self.runtime_run.id,
+                    "turn_id": turn_id,
+                    "content": message,
+                    "state": "needs_input",
+                },
+            )
+            async for event in self._flush_new_events(
+                skip_message_completed=True,
+                skip_run_terminal=True,
+            ):
+                yield event
+            async for event in self._emit_end_once(state="needs_input"):
+                yield event
             return
+
+        # Once all required business fields are present, the pending-input
+        # pause has served its purpose. Clear it before policy evaluation so a
+        # subsequent approval pause cannot leave stale missing-field state.
+        if self.pending_input.get("capability_name") == item.name:
+            clear_task_state(self.db, self.conversation_id)
+            self.pending_input = {}
 
         action_key = f"harness:{turn_id}:{item.tool_call_id}:{item.name}"
         try:
             definition = get_capability_definition(item.name)
         except ValueError:
-            message = f"未知工具：{item.name}"
+            message = "请求了不可用的工具，请调整操作目标后重试。"
+            self._consecutive_tool_failures += 1
             messages.append(
                 ToolMessage(
                     content=json.dumps({"error": message}, ensure_ascii=False),
@@ -1295,10 +1446,13 @@ class StreamingHarness:
                     "turn_id": turn_id,
                     "tool_call_id": item.tool_call_id,
                     "tool_name": item.name,
+                    "error_code": "capability_unavailable",
                     "error_message": message,
                     "state": "failed",
                 },
             )
+            async for event in self._stop_after_repeated_tool_failures():
+                yield event
             return
 
         # Single live UI started event. Durable capability.started is suppressed on
@@ -1326,11 +1480,11 @@ class StreamingHarness:
                 action_key=action_key,
             )
         except Exception as exc:
-            safe_error = redact_text(str(exc))
+            failure = classify_capability_failure(exc)
             self._consecutive_tool_failures += 1
             messages.append(
                 ToolMessage(
-                    content=json.dumps({"error": safe_error}, ensure_ascii=False)[:_LLM_TOOL_RESULT_MAX_CHARS],
+                    content=json.dumps({"error": failure.message}, ensure_ascii=False)[:_LLM_TOOL_RESULT_MAX_CHARS],
                     tool_call_id=item.tool_call_id,
                 )
             )
@@ -1342,7 +1496,8 @@ class StreamingHarness:
                     "tool_call_id": item.tool_call_id,
                     "tool_name": item.name,
                     "title": definition.label_zh,
-                    "error_message": safe_error,
+                    "error_code": failure.error_code,
+                    "error_message": failure.message,
                     "state": "failed",
                 },
             )
@@ -1351,22 +1506,8 @@ class StreamingHarness:
                 skip_capability_failed=True,
             ):
                 yield event
-            if self._consecutive_tool_failures >= 3:
-                stop = "连续多次工具执行失败，我先停在这里。请换一种说法或检查项目上下文后再试。"
-                save_message(self.db, self.conversation_id, "assistant", stop)
-                try:
-                    fail_runtime_run(self.db, self.runtime_run.id, stop, error_code="harness_tool_failures")
-                except ValueError:
-                    pass
-                async for event in self._flush_new_events(
-                    skip_message_completed=True,
-                    skip_capability_started=True,
-                    skip_capability_failed=True,
-                    skip_run_terminal=True,
-                ):
-                    yield event
-                async for event in self._emit_end_once(state="failed"):
-                    yield event
+            async for event in self._stop_after_repeated_tool_failures():
+                yield event
             return
 
         if execution.approval is not None:
@@ -1378,6 +1519,7 @@ class StreamingHarness:
 
         if execution.action.status == "denied":
             message = execution.action.error_message or "操作被拒绝。"
+            self._consecutive_tool_failures += 1
             messages.append(
                 ToolMessage(
                     content=json.dumps({"error": message}, ensure_ascii=False)[:_LLM_TOOL_RESULT_MAX_CHARS],
@@ -1385,6 +1527,8 @@ class StreamingHarness:
                 )
             )
             async for event in self._flush_new_events(skip_capability_started=True):
+                yield event
+            async for event in self._stop_after_repeated_tool_failures():
                 yield event
             return
 
@@ -1396,39 +1540,6 @@ class StreamingHarness:
             created_id = result.payload.get("id")
             if isinstance(created_id, str) and created_id:
                 self.active_project_id = created_id
-        # Long workflow / campaign tools: track as background tasks so a later turn can wake.
-        if item.name in {
-            "start_draft_section",
-            "start_redraft_section",
-            "propose_memory_graph",
-            "run_section_campaign",
-        }:
-            child_runtime = result.payload.get("runtime_run_id")
-            if isinstance(child_runtime, str) and child_runtime:
-                bind_workflow_background_task(
-                    conversation_id=self.conversation_id,
-                    user_id=self.user.id,
-                    runtime_run_id=child_runtime,
-                    workflow_run_id=(
-                        result.payload.get("run_id")
-                        if isinstance(result.payload.get("run_id"), str)
-                        else None
-                    ),
-                    title=definition.label_zh,
-                )
-            # Campaign may spawn multiple child workflows.
-            child_runs = result.payload.get("started_runtime_run_ids")
-            if isinstance(child_runs, list):
-                for child in child_runs:
-                    if isinstance(child, str) and child:
-                        bind_workflow_background_task(
-                            conversation_id=self.conversation_id,
-                            user_id=self.user.id,
-                            runtime_run_id=child,
-                            workflow_run_id=None,
-                            title=definition.label_zh,
-                        )
-
         llm_content = json.dumps(
             {"summary": result.summary, "payload": result.payload},
             ensure_ascii=False,
@@ -1491,6 +1602,57 @@ class StreamingHarness:
                 "state": state,
             },
         )
+
+    async def _emit_requested_cancellation(self) -> AsyncGenerator[str, None]:
+        """Finalize a browser/API cancellation only at a model or tool boundary."""
+        run = finalize_requested_runtime_cancellation(self.db, self.runtime_run.id)
+        if run.status != "cancelled":
+            return
+        message = str((run.result_json or {}).get("message") or "已取消这次操作。")
+        save_message(self.db, self.conversation_id, "assistant", message)
+        async for event in self._flush_new_events():
+            yield event
+        # The terminal RuntimeEvent renders assistant.end during the flush.
+        self._emitted_end = True
+
+    async def _stop_after_repeated_tool_failures(self) -> AsyncGenerator[str, None]:
+        """End a Harness turn after a bounded run of rejected/failed tools."""
+        if self._consecutive_tool_failures < HARNESS_MAX_CONSECUTIVE_TOOL_FAILURES:
+            return
+
+        message = "连续多次工具执行失败，我先停在这里。请换一种说法或检查项目上下文后再试。"
+        save_message(self.db, self.conversation_id, "assistant", message)
+        try:
+            fail_runtime_run(
+                self.db,
+                self.runtime_run.id,
+                message,
+                error_code="harness_tool_failures",
+            )
+        except ValueError:
+            # A concurrent cancellation can win the terminal transition. The
+            # regular replay path will render that durable terminal event.
+            return
+
+        # The live tool failure was already emitted above. Suppress its durable
+        # replay while still persisting the final message/run for reconnects.
+        async for event in self._flush_new_events(
+            skip_message_completed=True,
+            skip_capability_started=True,
+            skip_capability_failed=True,
+            skip_run_terminal=True,
+        ):
+            yield event
+        yield _sse(
+            "assistant.message",
+            {
+                "runtime_run_id": self.runtime_run.id,
+                "content": message,
+                "state": "failed",
+            },
+        )
+        async for event in self._emit_end_once(state="failed"):
+            yield event
 
     async def _flush_new_events(
         self,
@@ -1653,10 +1815,16 @@ async def stream_harness_assistant_response(
     model: str | None,
     user_message: str,
     conversation_context: list[dict[str, str]] | None = None,
+    conversation_summary: str = "",
+    conversation_history_truncated: bool = False,
+    conversation_window: ConversationContextWindow | None = None,
     memory_context_records: list[dict[str, Any]] | None = None,
+    memory_context_version: str | None = None,
     available_attachments: list[dict[str, Any]] | None = None,
+    attachment_context: str = "",
     active_project_id: str | None = None,
     pending_input: dict[str, Any] | None = None,
+    approval_mode: str = "risky_only",
     provider_config_id: str | None = None,
     reasoning_effort: str | None = None,
     after_sequence: int = 0,
@@ -1672,10 +1840,16 @@ async def stream_harness_assistant_response(
         model=model,
         user_message=user_message,
         conversation_context=conversation_context,
+        conversation_summary=conversation_summary,
+        conversation_history_truncated=conversation_history_truncated,
+        conversation_window=conversation_window,
         memory_context_records=memory_context_records,
+        memory_context_version=memory_context_version,
         available_attachments=available_attachments,
+        attachment_context=attachment_context,
         active_project_id=active_project_id,
         pending_input=pending_input,
+        approval_mode=approval_mode,
         provider_config_id=provider_config_id,
         reasoning_effort=reasoning_effort,
         after_sequence=after_sequence,

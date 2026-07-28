@@ -122,12 +122,12 @@ def test_runtime_event_api_replays_only_events_after_cursor(
     default_user_id: str,
 ) -> None:
     run = _runtime_run(test_db, default_org_id, default_user_id)
-    publish_event(
+    second = publish_event(
         test_db,
         run.id,
         RuntimeEventDraft(type=RuntimeEventType.RUN_STARTED, public_summary="任务已开始。"),
     )
-    publish_event(
+    second = publish_event(
         test_db,
         run.id,
         RuntimeEventDraft(
@@ -143,12 +143,15 @@ def test_runtime_event_api_replays_only_events_after_cursor(
     assert response.json() == {
         "items": [
             {
+                "event_id": second.id,
                 "run_id": run.id,
+                "parent_event_id": None,
                 "sequence": 2,
                 "type": "capability.succeeded",
                 "public_summary": "已找到 2 个项目。",
                 "payload": {"count": 2},
-                "schema_version": "1.0",
+                "schema_version": "1.1",
+                "timestamp": second.created_at.isoformat(),
             }
         ]
     }

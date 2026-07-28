@@ -17,14 +17,16 @@ from .schemas import (
     RuntimeApprovalResolveRequest,
     RuntimeEventRead,
     RuntimeEventsResponse,
+    RuntimeLinkedWorkflowRun,
     RuntimeRunListItem,
     RuntimeRunRead,
 )
 from .service import (
     RuntimeApprovalExpiredError,
     RuntimeApprovalResolvedError,
+    list_linked_workflow_runs,
     list_runtime_runs_query,
-    request_workflow_cancellation,
+    request_runtime_cancellation,
     resolve_approval,
 )
 
@@ -68,6 +70,11 @@ def get_runtime_run(
     current_user: CurrentUser = Depends(require_auth),
 ) -> RuntimeRunRead:
     run = get_visible_runtime_run(db, run_id, current_user)
+    linked_workflow_runs = list_linked_workflow_runs(
+        db,
+        current_user,
+        parent_run_id=run.id,
+    )
     return RuntimeRunRead(
         id=run.id,
         kind=run.kind,
@@ -78,6 +85,19 @@ def get_runtime_run(
         engine=run.engine,
         trace_id=run.trace_id,
         parent_run_id=run.parent_run_id,
+        linked_workflow_runs=[
+            RuntimeLinkedWorkflowRun(
+                id=child.id,
+                status=child.status,
+                project_id=child.project_id,
+                execution_run_id=child.execution_run_id,
+                engine=child.engine,
+                created_at=child.created_at,
+                started_at=child.started_at,
+                finished_at=child.finished_at,
+            )
+            for child in linked_workflow_runs
+        ],
     )
 
 
@@ -93,12 +113,15 @@ def replay_runtime_events(
     return RuntimeEventsResponse(
         items=[
             RuntimeEventRead(
+                event_id=event.id,
                 run_id=event.run_id,
+                parent_event_id=event.parent_event_id,
                 sequence=event.sequence,
                 type=event.event_type,
                 public_summary=event.public_summary,
                 payload=event.payload_json or {},
                 schema_version=event.schema_version,
+                timestamp=event.created_at,
             )
             for event in events
         ]
@@ -106,13 +129,13 @@ def replay_runtime_events(
 
 
 @router.post("/runs/{run_id}/cancel", response_model=RuntimeRunRead)
-def cancel_runtime_workflow(
+def cancel_runtime_run_request(
     run_id: str,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_auth),
 ) -> RuntimeRunRead:
     try:
-        run = request_workflow_cancellation(db, current_user, run_id=run_id)
+        run = request_runtime_cancellation(db, current_user, run_id=run_id)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RuntimeRunRead(

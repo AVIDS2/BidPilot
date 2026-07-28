@@ -27,6 +27,9 @@ def list_versions_query(
             content_markdown=v.content_markdown,
             created_by_actor=v.created_by_actor,
             generation_run_id=v.generation_run_id,
+            evidence_set_id=v.evidence_set_id,
+            response_plan_section_id=v.response_plan_section_id,
+            response_plan_evidence_binding_id=v.response_plan_evidence_binding_id,
         )
         for v in versions
     ]

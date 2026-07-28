@@ -45,6 +45,7 @@ from app.projects.schemas import ProjectCreate
 from app.projects.service import create_project_command
 from app.readiness.service import generate_readiness_pack_command, get_readiness_summary_query, select_readiness_gaps
 from app.review.schemas import ReviewDecisionCreate
+from app.review.decision_service import canonical_review_decision
 from app.review.service import submit_review_decision_command
 from app.requirements.service import (
     get_claim_review_queue_query,
@@ -55,6 +56,25 @@ from app.versions.service import list_versions_query
 from contracts import MemoryKind, MemoryScope
 
 from .policy import ApprovalMode, get_tool_policy, tool_requires_approval
+from .llm import ReasoningEffort
+
+
+def _normalize_reasoning_effort(value: str | None) -> ReasoningEffort | None:
+    if value == "low":
+        return "low"
+    if value == "medium":
+        return "medium"
+    if value == "high":
+        return "high"
+    if value == "extra":
+        return "extra"
+    if value == "max":
+        return "max"
+    # Legacy clients called the highest setting "ultra". Preserve intent
+    # without carrying a sixth value into the current assistant contract.
+    if value == "ultra":
+        return "max"
+    return None
 
 
 def _get_project_for_user(db: Session, user: CurrentUser, project_id: str) -> Project:
@@ -74,6 +94,7 @@ def create_tools(
     approval_mode: ApprovalMode = "risky_only",
 ) -> list:
     """Create tool list with injected db session and user context."""
+    normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort)
 
     def _confirmation_response(
         tool_name: str,
@@ -213,7 +234,13 @@ def create_tools(
             query = query.filter(Deliverable.project_id.in_(project_ids))
         rows = query.limit(20).all()
         items = [
-            {"thread_id": t.id, "section_key": s.section_key, "project_id": d.project_id}
+            {
+                "thread_id": t.id,
+                "section_id": s.id,
+                "section_version_id": t.section_version_id,
+                "section_key": s.section_key,
+                "project_id": d.project_id,
+            }
             for t, s, d in rows
         ]
         return json.dumps({"reviews": items, "count": len(items)}, ensure_ascii=False)
@@ -222,6 +249,7 @@ def create_tools(
     def submit_review_decision(
         project_id: str,
         section_id: str,
+        section_version_id: str,
         decision: str,
         comment: str = "",
     ) -> str:
@@ -229,6 +257,7 @@ def create_tools(
         normalized_decision = decision.strip().lower()
         if normalized_decision not in {"approved", "rejected"}:
             return json.dumps({"error": "decision 必须是 approved 或 rejected"}, ensure_ascii=False)
+        normalized_decision = canonical_review_decision(normalized_decision)
         section = require_deliverable_section_capability(
             db,
             current_user=user,
@@ -241,6 +270,7 @@ def create_tools(
         arguments = {
             "project_id": project_id,
             "section_id": section_id,
+            "section_version_id": section_version_id,
             "decision": normalized_decision,
             "comment": comment.strip(),
         }
@@ -255,6 +285,7 @@ def create_tools(
             db,
             ReviewDecisionCreate(
                 section_id=section_id,
+                section_version_id=section_version_id,
                 decision=normalized_decision,
                 comment=comment.strip() or None,
             ),
@@ -263,6 +294,7 @@ def create_tools(
         return json.dumps(
             {
                 "section_id": review.section_id,
+                "section_version_id": review.section_version_id,
                 "decision": review.decision,
                 "review_thread_id": review.id,
             },
@@ -518,7 +550,7 @@ def create_tools(
                 project_id=project_id,
                 section_key=section_key,
                 provider_config_id=provider_config_id,
-                reasoning_effort=reasoning_effort,
+                reasoning_effort=normalized_reasoning_effort,
             ),
             user,
         )
@@ -547,7 +579,7 @@ def create_tools(
                 section_key=section_key,
                 review_feedback=review_feedback or None,
                 provider_config_id=provider_config_id,
-                reasoning_effort=reasoning_effort,
+                reasoning_effort=normalized_reasoning_effort,
             ),
             user,
         )
@@ -756,7 +788,7 @@ def create_tools(
                 project_id=project_id,
                 memory_record_id=memory_record_id,
                 provider_config_id=provider_config_id,
-                reasoning_effort=reasoning_effort,
+                reasoning_effort=normalized_reasoning_effort,
             ),
             user,
         )

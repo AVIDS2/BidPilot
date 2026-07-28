@@ -20,6 +20,7 @@ class RuntimeEventDraft(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     type: RuntimeEventType
+    parent_event_id: str | None = Field(default=None, min_length=1, max_length=36)
     public_summary: str = Field(min_length=1, max_length=2000)
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -47,11 +48,12 @@ def append_events(
     rows = [
         RuntimeEvent(
             run_id=run.id,
+            parent_event_id=event.parent_event_id,
             sequence=(latest_sequence or 0) + offset,
             event_type=event.type.value,
             public_summary=event.public_summary,
             payload_json=redact_arguments(event.payload),
-            schema_version="1.0",
+            schema_version="1.1",
         )
         for offset, event in enumerate(events, start=1)
     ]
@@ -101,7 +103,9 @@ def latest_event_sequence(db: Session, run_id: str) -> int:
 
 def to_contract_event(event: RuntimeEvent) -> RuntimeEventRecord:
     return RuntimeEventRecord(
+        event_id=event.id,
         run_id=event.run_id,
+        parent_event_id=event.parent_event_id,
         sequence=event.sequence,
         type=RuntimeEventType(event.event_type),
         public_summary=event.public_summary,

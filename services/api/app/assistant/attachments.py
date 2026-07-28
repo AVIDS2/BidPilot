@@ -392,6 +392,11 @@ def extract_attachment_text(
                 error="暂不支持解析该附件格式。",
             )
     except Exception as exc:  # Defensive: never let a bad attachment break chat.
+        logger.warning(
+            "Assistant attachment extraction failed: filename=%s error_type=%s",
+            safe_name,
+            type(exc).__name__,
+        )
         return _response(
             name=safe_name,
             kind=attachment_kind,
@@ -399,7 +404,7 @@ def extract_attachment_text(
             size=len(data),
             status="failed",
             text="",
-            error=str(exc),
+            error="附件内容解析失败，请确认文件完整后重新上传。",
         )
 
     text = _normalize_text(text)
@@ -544,7 +549,10 @@ def _extract_pdf(data: bytes) -> str:
 
     doc = pymupdf.open(stream=data, filetype="pdf")
     try:
-        return "\n\n".join(page.get_text() for page in doc)
+        return "\n\n".join(
+            doc.load_page(page_number).get_text()
+            for page_number in range(doc.page_count)
+        )
     finally:
         doc.close()
 

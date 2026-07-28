@@ -1,176 +1,107 @@
-"""Background long-task tracker for the assistant harness.
+"""Durable background-work notifications for the assistant harness.
 
-Pattern from learn-claude-code s13:
-- start slow work in background
-- return a placeholder tool result immediately
-- on completion, enqueue a wake notification for the conversation
-- next assistant turn (or wake endpoint) injects TaskCompleted context
-
-BidPilot maps "slow work" to governed Runtime/workflow child runs rather than
-raw shell. The first concrete producer is draft/export workflow completion.
+Long-running workflow state belongs to ``RuntimeRun`` / ``RuntimeEvent`` and
+the user-facing wake signal belongs to ``Notification``.  This module only
+projects those persisted records into the next assistant turn; it deliberately
+keeps no process-local task registry, so an API restart cannot lose a wake.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from threading import Lock
 from typing import Any
-from uuid import uuid4
+from urllib.parse import parse_qs, urlparse
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Notification
+from app.models import Notification, RuntimeEvent, RuntimeRun
 
 
-@dataclass
-class BackgroundTask:
-    id: str
-    conversation_id: str
-    user_id: str
-    kind: str
-    status: str = "running"  # running | succeeded | failed
-    title: str = ""
-    detail: dict[str, Any] = field(default_factory=dict)
-    error: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    finished_at: datetime | None = None
+_TERMINAL_WORKFLOW_STATUSES = frozenset({"succeeded", "failed", "cancelled", "expired"})
 
 
-_LOCK = Lock()
-_TASKS: dict[str, BackgroundTask] = {}
-_PENDING_WAKES: dict[str, list[str]] = {}  # conversation_id -> [task_id]
-
-
-def start_background_task(
-    *,
-    conversation_id: str,
-    user_id: str,
-    kind: str,
-    title: str,
-    detail: dict[str, Any] | None = None,
-    task_id: str | None = None,
-) -> BackgroundTask:
-    task = BackgroundTask(
-        id=task_id or f"bg_{uuid4().hex[:10]}",
-        conversation_id=conversation_id,
-        user_id=user_id,
-        kind=kind,
-        title=title,
-        detail=detail or {},
-    )
-    with _LOCK:
-        _TASKS[task.id] = task
-    return task
-
-
-def complete_background_task(
-    task_id: str,
-    *,
-    status: str = "succeeded",
-    detail: dict[str, Any] | None = None,
-    error: str | None = None,
-) -> BackgroundTask | None:
-    with _LOCK:
-        task = _TASKS.get(task_id)
-        if task is None:
-            return None
-        task.status = status
-        task.finished_at = datetime.now(UTC)
-        if detail:
-            task.detail.update(detail)
-        task.error = error
-        _PENDING_WAKES.setdefault(task.conversation_id, []).append(task.id)
-        return task
-
-
-def collect_completed_notifications(conversation_id: str) -> list[dict[str, Any]]:
-    """Drain completed task notifications for the next agent turn."""
-    with _LOCK:
-        task_ids = list(_PENDING_WAKES.get(conversation_id) or [])
-        _PENDING_WAKES[conversation_id] = []
-        notifications: list[dict[str, Any]] = []
-        for task_id in task_ids:
-            task = _TASKS.get(task_id)
-            if task is None:
-                continue
-            notifications.append(
-                {
-                    "task_id": task.id,
-                    "kind": task.kind,
-                    "status": task.status,
-                    "title": task.title,
-                    "detail": task.detail,
-                    "error": task.error,
-                }
-            )
-        return notifications
-
-
-def bind_workflow_background_task(
-    *,
-    conversation_id: str,
-    user_id: str,
-    runtime_run_id: str,
-    workflow_run_id: str | None,
-    title: str,
-) -> BackgroundTask:
-    return start_background_task(
-        conversation_id=conversation_id,
-        user_id=user_id,
-        kind="workflow",
-        title=title,
-        task_id=f"wf_{runtime_run_id[:12]}",
-        detail={
-            "runtime_run_id": runtime_run_id,
-            "workflow_run_id": workflow_run_id,
-        },
-    )
-
-
-def mark_workflow_task_finished(
-    runtime_run_id: str,
-    *,
-    status: str,
-    summary: str | None = None,
-    error: str | None = None,
-) -> BackgroundTask | None:
-    task_id = f"wf_{runtime_run_id[:12]}"
-    return complete_background_task(
-        task_id,
-        status=status,
-        detail={"summary": summary} if summary else None,
-        error=error,
-    )
-
-
-def persist_wake_notification(
+def collect_completed_notifications(
     db: Session,
     *,
+    conversation_id: str,
     user_id: str,
-    title: str,
-    body: str,
-    link: str | None = None,
-) -> None:
-    """Durable user-visible wake signal (bell / inbox)."""
-    db.add(
-        Notification(
-            user_id=user_id,
-            type="agent_task",
-            title=title[:255],
-            body=body,
-            link=link,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Consume durable workflow wakes for one conversation.
+
+    Worker terminal transitions commit the ``agent_task`` notification in the
+    same transaction as the terminal runtime event.  Marking a matching wake
+    read after it is added to the model context gives the next turn exactly-once
+    delivery semantics without a second in-memory queue.
+    """
+    notifications = list(
+        db.scalars(
+            select(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.type == "agent_task",
+                Notification.read.is_(False),
+            )
+            .order_by(Notification.created_at.asc(), Notification.id.asc())
+            .limit(max(1, min(limit, 50)))
         )
     )
-    db.commit()
+    updates: list[dict[str, Any]] = []
+    for notification in notifications:
+        runtime_run_id = _runtime_run_id_from_wake_link(notification.link, conversation_id)
+        if runtime_run_id is None:
+            continue
+        runtime_run = db.scalar(
+            select(RuntimeRun).where(
+                RuntimeRun.id == runtime_run_id,
+                RuntimeRun.user_id == user_id,
+                RuntimeRun.conversation_id == conversation_id,
+                RuntimeRun.kind == "workflow_bridge",
+            )
+        )
+        if runtime_run is None or runtime_run.status not in _TERMINAL_WORKFLOW_STATUSES:
+            continue
+        terminal_event = db.scalar(
+            select(RuntimeEvent)
+            .where(RuntimeEvent.run_id == runtime_run.id)
+            .order_by(RuntimeEvent.sequence.desc())
+            .limit(1)
+        )
+        updates.append(
+            {
+                "task_id": notification.id,
+                "kind": "workflow",
+                "status": runtime_run.status,
+                "title": notification.title,
+                "detail": {
+                    "runtime_run_id": runtime_run.id,
+                    "workflow_run_id": runtime_run.execution_run_id,
+                    "project_id": runtime_run.project_id,
+                    "summary": (
+                        terminal_event.public_summary
+                        if terminal_event is not None
+                        else notification.body or "后台工作流已更新。"
+                    ),
+                },
+            }
+        )
+        notification.read = True
+    if updates:
+        db.commit()
+    return updates
 
 
-__all__ = [
-    "BackgroundTask",
-    "bind_workflow_background_task",
-    "collect_completed_notifications",
-    "complete_background_task",
-    "mark_workflow_task_finished",
-    "persist_wake_notification",
-    "start_background_task",
-]
+def _runtime_run_id_from_wake_link(link: str | None, conversation_id: str) -> str | None:
+    if not link:
+        return None
+    parsed = urlparse(link)
+    if not parsed.path.startswith("/agent"):
+        return None
+    query = parse_qs(parsed.query)
+    if query.get("conversation", [None])[0] != conversation_id:
+        return None
+    runtime_run_id = query.get("wake", [None])[0]
+    return runtime_run_id if isinstance(runtime_run_id, str) and runtime_run_id else None
+
+
+__all__ = ["collect_completed_notifications"]

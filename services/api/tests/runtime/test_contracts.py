@@ -23,6 +23,8 @@ def test_runtime_event_requires_a_monotonic_sequence_and_public_summary() -> Non
 
     assert event.sequence == 2
     assert event.payload["count"] == 2
+    assert event.event_id
+    assert event.schema_version == "1.1"
 
     with pytest.raises(ValidationError):
         RuntimeEventRecord(

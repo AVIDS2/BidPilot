@@ -102,7 +102,13 @@ def test_harness_tools_only_search_and_read_member_projects(agent_db) -> None:
 
     db, users, project, _deliverable = agent_db
     result = execute_tool(db, _current(users["contributor"]), "search_projects", {"query": "restricted"})
-    assert result.result["items"] == [
+    assert [
+        {
+            key: item[key]
+            for key in ("id", "name", "status", "scenario_package")
+        }
+        for item in result.result["items"]
+    ] == [
         {
             "id": project.id,
             "name": "Restricted Bid",
@@ -112,7 +118,8 @@ def test_harness_tools_only_search_and_read_member_projects(agent_db) -> None:
     ]
 
     no_projects = execute_tool(db, _current(users["non_member"]), "search_projects", {})
-    assert no_projects.result == {"items": []}
+    assert no_projects.result["items"] == []
+    assert no_projects.result["count"] == 0
 
     with pytest.raises(HTTPException) as exc_info:
         execute_tool(
@@ -155,6 +162,22 @@ def test_harness_tools_do_not_turn_approval_into_permission(agent_db) -> None:
             {"project_id": project.id, "confirmation_text": project.name},
         )
     assert delete_error.value.status_code == 403
+
+
+def test_harness_export_denies_a_cross_org_project(agent_db) -> None:
+    from app.assistant.tools import execute_tool
+
+    db, users, project, deliverable = agent_db
+
+    with pytest.raises(HTTPException) as export_error:
+        execute_tool(
+            db,
+            _current(users["outsider"]),
+            "export_deliverable",
+            {"project_id": project.id, "deliverable_id": deliverable.id, "format": "docx"},
+        )
+
+    assert export_error.value.status_code == 404
 
 
 def test_langgraph_tools_use_the_same_accessible_project_set(agent_db) -> None:
@@ -260,14 +283,15 @@ def test_agent_can_generate_governed_export_and_readiness_artifacts(agent_db, mo
         status="approved",
     )
     db.add(section)
-    db.add(
-        SectionVersion(
-            deliverable_section_id=section.id,
-            version_number=1,
-            content_markdown="已审核的技术响应。",
-            created_by_actor="user-owner",
-        )
+    approved_version = SectionVersion(
+        deliverable_section_id=section.id,
+        version_number=1,
+        content_markdown="已审核的技术响应。",
+        created_by_actor="user-owner",
     )
+    db.add(approved_version)
+    db.flush()
+    section.approved_version_id = approved_version.id
     db.commit()
 
     monkeypatch.setattr(
@@ -293,7 +317,7 @@ def test_agent_can_generate_governed_export_and_readiness_artifacts(agent_db, mo
     )
 
     assert export.result["status"] == "ready"
-    assert export.result["download_path"] == f"/export/deliverables/{deliverable.id}/docx"
+    assert export.result["download_path"] == f"/export/records/{export.result['export_id']}/docx"
     assert export.result["persisted"] is True
     assert readiness.result["status"] == "generated"
     assert readiness.result["xlsx_download_path"].endswith("/xlsx")
@@ -312,6 +336,13 @@ def test_agent_review_decision_keeps_human_role_and_project_boundary(agent_db) -
         status="pending_review",
     )
     db.add(section)
+    version = SectionVersion(
+        deliverable_section_id=section.id,
+        version_number=1,
+        content_markdown="待审核的商务响应。",
+        created_by_actor="ai",
+    )
+    db.add(version)
     db.commit()
 
     result = execute_tool(
@@ -321,6 +352,7 @@ def test_agent_review_decision_keeps_human_role_and_project_boundary(agent_db) -
         {
             "project_id": project.id,
             "section_id": section.id,
+            "section_version_id": version.id,
             "decision": "approved",
             "comment": "已核对投标要求。",
         },

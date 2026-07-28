@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import uuid
 
-from app.models import AssistantActionAudit, Project, RuntimeApproval, RuntimeRun
+from app.models import AssistantActionAudit, ChatMessage, Project, RuntimeApproval, RuntimeRun
+from app.runtime.service import assistant_turn_idempotency_key
 
 
 def _events(response_text: str) -> list[tuple[str, dict]]:
@@ -54,6 +55,41 @@ def test_runtime_adapter_persists_safe_read_before_final_message(
         "run.completed",
     ]
     assert test_db.query(AssistantActionAudit).filter_by(conversation_id=start["conversation_id"]).count() == 0
+
+
+def test_runtime_adapter_replays_duplicate_client_request_without_second_message(
+    client,
+    test_db,
+    default_user_id: str,
+    monkeypatch,
+) -> None:
+    """The deterministic compatibility path keeps the same retry contract as Harness."""
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "deterministic")
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_RUNTIME_V1", "true")
+    request_id = f"deterministic-retry-{uuid.uuid4().hex}"
+    request_body = {"message": "打开项目页面", "client_request_id": request_id}
+
+    first = client.post("/assistant/stream", json=request_body)
+    assert first.status_code == 200, first.text
+    first_events = _events(first.text)
+    first_start = next(payload for event, payload in first_events if event == "assistant.start")
+    conversation_id = first_start["conversation_id"]
+    runtime_run_id = first_start["runtime_run_id"]
+    message_count = test_db.query(ChatMessage).filter_by(conversation_id=conversation_id).count()
+
+    second = client.post("/assistant/stream", json=request_body)
+    assert second.status_code == 200, second.text
+    second_events = _events(second.text)
+    replay_start = next(payload for event, payload in second_events if event == "assistant.start")
+
+    assert replay_start["replayed"] is True
+    assert replay_start["runtime_run_id"] == runtime_run_id
+    assert test_db.query(ChatMessage).filter_by(conversation_id=conversation_id).count() == message_count
+    idempotency_key = assistant_turn_idempotency_key(
+        user_id=default_user_id,
+        client_request_id=request_id,
+    )
+    assert test_db.query(RuntimeRun).filter_by(idempotency_key=idempotency_key).count() == 1
 
 
 def test_runtime_adapter_resumes_generic_approval_without_legacy_audit(

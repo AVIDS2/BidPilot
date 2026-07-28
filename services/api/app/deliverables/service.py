@@ -34,6 +34,7 @@ def _section_read(section: DeliverableSection) -> DeliverableSectionRead:
         section_key=section.section_key,
         title=section.title,
         status=section.status,
+        approved_version_id=section.approved_version_id,
         sort_order=int(getattr(section, "sort_order", 0) or 0),
     )
 

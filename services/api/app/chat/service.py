@@ -384,6 +384,25 @@ def get_conversation_messages(
     )
 
 
+def get_recent_conversation_messages(
+    db: Session,
+    conversation_id: str,
+    *,
+    limit: int,
+) -> tuple[list[ChatMessageModel], bool]:
+    """Return chronological recent messages plus an explicit older-history flag."""
+    if limit < 1:
+        raise ValueError("limit must be positive")
+    rows = (
+        db.query(ChatMessageModel)
+        .filter(ChatMessageModel.conversation_id == conversation_id)
+        .order_by(ChatMessageModel.created_at.desc())
+        .limit(limit + 1)
+        .all()
+    )
+    return list(reversed(rows[:limit])), len(rows) > limit
+
+
 def list_conversations(
     db: Session,
     user_id: str,

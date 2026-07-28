@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -98,16 +99,17 @@ async def stream_agent_events(
 
             # Tool execution completed
             elif kind == "on_tool_end":
-                tool_name = event.get("name", "") or current_tool_name
+                tool_name = str(event.get("name") or current_tool_name or "")
                 audit = active_audits.pop(str(event.get("run_id") or tool_name), current_audit)
                 output = event.get("data", {}).get("output", "")
 
                 # Parse tool output
-                result = {}
+                result: dict[str, Any] = {}
                 summary = ""
                 if isinstance(output, str):
                     try:
-                        result = json.loads(output)
+                        parsed_output = json.loads(output)
+                        result = parsed_output if isinstance(parsed_output, dict) else {}
                         if "error" in result:
                             result = {**result, "error": redact_text(str(result["error"]))}
                         summary = _extract_summary(tool_name, result)

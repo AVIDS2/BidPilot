@@ -10,14 +10,18 @@ from __future__ import annotations
 
 import os
 import re
+from typing import Any
 
 from .schemas import AssistantIntent
+
+Agent: Any
+Runner: Any
 
 try:  # pragma: no cover - import availability depends on optional dependency sync.
     from agents import Agent, Runner
 except Exception:  # pragma: no cover
-    Agent = None  # type: ignore[assignment]
-    Runner = None  # type: ignore[assignment]
+    Agent = None
+    Runner = None
 
 
 _ASSISTANT_INSTRUCTIONS = """
@@ -228,7 +232,10 @@ def classify_locally(message: str, project_id: str | None = None) -> AssistantIn
         )
 
     if _looks_like_review_decision(text):
-        section_id = _extract_requirement_id(text)
+        review_ids = _extract_uuid_ids(text)
+        section_id = review_ids[0] if review_ids else None
+        section_version_id = review_ids[1] if len(review_ids) > 1 else None
+        decision = "approved" if any(word in text.lower() for word in ("通过", "批准", "approve")) else "rejected"
         if not project_id:
             return AssistantIntent(
                 mode="needs_input",
@@ -240,14 +247,31 @@ def classify_locally(message: str, project_id: str | None = None) -> AssistantIn
             return AssistantIntent(
                 mode="needs_input",
                 tool_name="submit_review_decision",
+                arguments={"project_id": project_id, "decision": decision},
                 missing_fields=["section_id"],
                 response="请提供要审核的章节 ID，或先让我列出待审核章节。",
             )
-        decision = "approved" if any(word in text.lower() for word in ("通过", "批准", "approve")) else "rejected"
+        if not section_version_id:
+            return AssistantIntent(
+                mode="needs_input",
+                tool_name="submit_review_decision",
+                arguments={
+                    "project_id": project_id,
+                    "section_id": section_id,
+                    "decision": decision,
+                },
+                missing_fields=["section_version_id"],
+                response="请提供要审核的候选版本 ID，或先让我列出待审核章节。",
+            )
         return AssistantIntent(
             mode="tool_action",
             tool_name="submit_review_decision",
-            arguments={"project_id": project_id, "section_id": section_id, "decision": decision},
+            arguments={
+                "project_id": project_id,
+                "section_id": section_id,
+                "section_version_id": section_version_id,
+                "decision": decision,
+            },
         )
 
     if "项目" in text and any(word in text for word in ("找", "搜索", "查询", "列出", "看看")):
@@ -539,11 +563,15 @@ def _looks_like_review_decision(text: str) -> bool:
 
 
 def _extract_requirement_id(text: str) -> str | None:
-    match = re.search(
+    ids = _extract_uuid_ids(text)
+    return ids[0] if ids else None
+
+
+def _extract_uuid_ids(text: str) -> list[str]:
+    return re.findall(
         r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
         text,
     )
-    return match.group(0) if match else None
 
 
 def _extract_deliverable_id(text: str) -> str | None:

@@ -1,4 +1,9 @@
-"""LangGraph ReAct agent graph builder."""
+"""Compatibility-only legacy ReAct graph.
+
+The public Assistant route no longer imports or creates this graph; it is
+retained temporarily for legacy checkpoint-policy coverage and must be deleted
+after 2026-09-30 unless a documented migration dependency remains.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.memory.schemas import MemoryContextRead
 
-from .llm import get_agent_llm
+from .llm import ReasoningEffort, get_agent_llm
 from .tools import create_tools
 
 logger = logging.getLogger(__name__)
@@ -147,7 +152,7 @@ def build_agent(
     base_url: str | None = None,
     model: str | None = None,
     provider_config_id: str | None = None,
-    reasoning_effort: str | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
     approval_mode: str = "risky_only",
     memory_context: MemoryContextRead | None = None,
 ):

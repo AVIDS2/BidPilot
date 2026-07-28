@@ -6,9 +6,9 @@ from __future__ import annotations
 def test_assistant_request_accepts_reasoning_effort() -> None:
     from app.assistant.schemas import AssistantRequest
 
-    payload = AssistantRequest(message="帮我看项目", reasoning_effort="ultra")
+    payload = AssistantRequest(message="帮我看项目", reasoning_effort="extra")
 
-    assert payload.reasoning_effort == "ultra"
+    assert payload.reasoning_effort == "extra"
 
 
 def test_agent_llm_maps_openai_reasoning_effort(monkeypatch) -> None:
@@ -27,7 +27,7 @@ def test_agent_llm_maps_openai_reasoning_effort(monkeypatch) -> None:
         "sk-test",
         "https://api.openai.com/v1",
         "gpt-5.5",
-        reasoning_effort="ultra",
+        reasoning_effort="extra",
     )
 
     assert captured["reasoning_effort"] == "high"
@@ -50,7 +50,7 @@ def test_agent_llm_does_not_send_openai_reasoning_to_compatible_gateways(monkeyp
         "sk-test",
         "https://api.deepseek.com/v1",
         "deepseek-chat",
-        reasoning_effort="ultra",
+        reasoning_effort="extra",
     )
 
     assert "reasoning_effort" not in captured

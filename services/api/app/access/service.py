@@ -3,6 +3,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
+from contracts.access import (
+    PROJECT_CAPABILITIES,
+    ROLE_CAPABILITIES as ROLE_CAPABILITIES,
+    project_role_has_capability,
+)
 from app.models import (
     Bundle,
     Deliverable,
@@ -16,66 +21,6 @@ from app.models import (
 )
 
 from .schemas import ProjectAccess
-
-
-PROJECT_CAPABILITIES = frozenset(
-    {
-        "project.read",
-        "project.manage",
-        "project.delete",
-        "project.members.manage",
-        "requirements.write",
-        "requirements.assign",
-        "requirements.review",
-        "bundles.write",
-        "memory.read",
-        "memory.propose",
-        "memory.approve",
-        "workflow.run",
-        "review.write",
-        "deliverables.export",
-    }
-)
-
-ROLE_CAPABILITIES: dict[str, frozenset[str]] = {
-    "owner": PROJECT_CAPABILITIES,
-    "manager": frozenset(
-        {
-            "project.read",
-            "project.manage",
-            "requirements.write",
-            "requirements.assign",
-            "requirements.review",
-            "bundles.write",
-            "memory.read",
-            "memory.propose",
-            "memory.approve",
-            "workflow.run",
-            "review.write",
-            "deliverables.export",
-        }
-    ),
-    "contributor": frozenset(
-        {
-            "project.read",
-            "requirements.write",
-            "bundles.write",
-            "memory.read",
-            "memory.propose",
-            "workflow.run",
-        }
-    ),
-    "reviewer": frozenset(
-        {
-            "project.read",
-            "memory.read",
-            "requirements.review",
-            "review.write",
-            "deliverables.export",
-        }
-    ),
-    "viewer": frozenset({"project.read", "memory.read"}),
-}
 
 
 def resolve_project_access(
@@ -148,7 +93,7 @@ def require_project_capability(
         raise HTTPException(status_code=404, detail="Project not found")
     if access.used_admin_bypass:
         return access
-    if capability not in ROLE_CAPABILITIES.get(access.effective_role, frozenset()):
+    if not project_role_has_capability(access.effective_role, capability):
         raise HTTPException(status_code=403, detail="Project capability required")
     return access
 

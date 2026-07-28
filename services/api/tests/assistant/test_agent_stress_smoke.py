@@ -120,7 +120,10 @@ def test_smoke_D_outline_and_write_keep_section_keys() -> None:
 def test_smoke_I_and_campaign_budget_and_policy() -> None:
     steps, tools = resolve_harness_budgets("请把全部章节批量起草并导出")
     assert steps >= 12
-    assert tools >= 8
+    # A campaign is deliberately represented by one purpose-built tool per
+    # model turn. The tool owns its internal waves, which avoids issuing many
+    # independent mutating calls from one assistant response.
+    assert tools == 1
 
     campaign = get_capability_definition("run_section_campaign")
     decision = evaluate_policy(campaign, approval_mode="risky_only")

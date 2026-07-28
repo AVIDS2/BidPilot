@@ -235,6 +235,7 @@ WORKFLOW_CAPABILITY_NAMES = frozenset(
 
 _REQUIRED_ARGUMENT_FIELDS: dict[str, tuple[str, ...]] = {
     "create_project": ("name",),
+    "submit_review_decision": ("project_id", "section_id", "section_version_id", "decision"),
     "write_section": ("project_id", "section_key", "content_markdown"),
     "web_search": ("query",),
     "fetch_url_to_project": ("project_id", "url"),
@@ -373,7 +374,11 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
         summary = "章节审核已通过。" if result["decision"] == "approved" else "章节已退回修改。"
         return PublicCapabilityResult(
             summary,
-            {key: result[key] for key in ("section_id", "decision", "review_thread_id") if key in result},
+            {
+                key: result[key]
+                for key in ("section_id", "section_version_id", "decision", "review_thread_id")
+                if key in result
+            },
         )
     if capability_name == "get_project_summary" and isinstance(result.get("name"), str):
         return PublicCapabilityResult(
@@ -386,35 +391,35 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
             {key: result[key] for key in ("id", "title", "status") if key in result},
         )
     if capability_name == "attach_uploaded_documents":
-        count = result.get("attachment_count")
-        if isinstance(count, int):
-            payload = {
+        attachment_count = result.get("attachment_count")
+        if isinstance(attachment_count, int):
+            attachment_payload: dict[str, Any] = {
                 key: result[key]
                 for key in ("bundle_id", "bundle_label", "attachment_count", "ingest_queued")
                 if key in result
             }
             summary = (
-                f"已将 {count} 个附件加入资料包，并开始解析。"
+                f"已将 {attachment_count} 个附件加入资料包，并开始解析。"
                 if result.get("ingest_queued") is not False
-                else f"已将 {count} 个附件加入资料包；解析任务等待重新提交。"
+                else f"已将 {attachment_count} 个附件加入资料包；解析任务等待重新提交。"
             )
-            return PublicCapabilityResult(summary, payload)
+            return PublicCapabilityResult(summary, attachment_payload)
     if capability_name == "list_requirements":
         return PublicCapabilityResult(f"找到 {count} 条需求。", {"count": count})
     if capability_name == "list_claim_review_queue":
         ready_count = result.get("ready_to_verify_count")
         blocked_count = result.get("blocked_by_evidence_count")
-        payload = {"count": count}
+        review_queue_payload: dict[str, Any] = {"count": count}
         if isinstance(ready_count, int):
-            payload["ready_to_verify_count"] = ready_count
+            review_queue_payload["ready_to_verify_count"] = ready_count
         if isinstance(blocked_count, int):
-            payload["blocked_by_evidence_count"] = blocked_count
+            review_queue_payload["blocked_by_evidence_count"] = blocked_count
         return PublicCapabilityResult(
             (
                 f"有 {count} 条 AI 主张等待人工核验，"
                 f"其中 {ready_count if isinstance(ready_count, int) else 0} 条已具备核验条件。"
             ),
-            payload,
+            review_queue_payload,
         )
     if capability_name == "search_bid_wiki":
         return PublicCapabilityResult(f"找到 {count} 条可用记忆。", {"count": count})
@@ -429,10 +434,10 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
                 "latest_compilation_status",
             ),
         )
-        payload: dict[str, Any] = {"count": count}
+        portfolio_payload: dict[str, Any] = {"count": count}
         if projects:
-            payload["projects"] = projects
-        return PublicCapabilityResult(f"已检查 {count} 个可访问项目的知识状态。", payload)
+            portfolio_payload["projects"] = projects
+        return PublicCapabilityResult(f"已检查 {count} 个可访问项目的知识状态。", portfolio_payload)
     if capability_name == "propose_memory" and isinstance(result.get("id"), str):
         return PublicCapabilityResult("已保存为个人工作偏好。", {"memory_id": result["id"]})
     if capability_name == "forget_memory" and result.get("deleted") is True:
@@ -450,18 +455,18 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
                 "id",
             ),
         )
-        payload: dict[str, Any] = {"count": count}
+        sections_payload: dict[str, Any] = {"count": count}
         if sections:
-            payload["sections"] = sections
+            sections_payload["sections"] = sections
         drafted = result.get("drafted_count")
         approved = result.get("approved_count")
         if isinstance(drafted, int):
-            payload["drafted_count"] = drafted
+            sections_payload["drafted_count"] = drafted
         if isinstance(approved, int):
-            payload["approved_count"] = approved
+            sections_payload["approved_count"] = approved
         return PublicCapabilityResult(
             f"已找到 {count} 个章节。",
-            payload,
+            sections_payload,
         )
     if capability_name == "get_project_outline":
         drafted = result.get("drafted_count")
@@ -479,34 +484,42 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
                 "id",
             ),
         )
-        payload = {"count": count}
+        outline_payload: dict[str, Any] = {"count": count}
         if isinstance(drafted, int):
-            payload["drafted_count"] = drafted
+            outline_payload["drafted_count"] = drafted
         if isinstance(approved, int):
-            payload["approved_count"] = approved
+            outline_payload["approved_count"] = approved
         if isinstance(result.get("project_id"), str):
-            payload["project_id"] = result["project_id"]
+            outline_payload["project_id"] = result["project_id"]
         if isinstance(result.get("project_name"), str):
-            payload["project_name"] = result["project_name"]
+            outline_payload["project_name"] = result["project_name"]
         if sections:
-            payload["sections"] = sections
+            outline_payload["sections"] = sections
         return PublicCapabilityResult(
             f"大纲共 {count} 章，已起草 {drafted if isinstance(drafted, int) else 0} 章，"
             f"已批准 {approved if isinstance(approved, int) else 0} 章。",
-            payload,
+            outline_payload,
         )
     if capability_name == "list_deliverables":
         deliverables = _public_items(
             result.get("items"),
             ("id", "title", "status", "type"),
         )
-        payload = {"count": count}
+        deliverables_payload: dict[str, Any] = {"count": count}
         if deliverables:
-            payload["deliverables"] = deliverables
-        return PublicCapabilityResult(f"已找到 {count} 条相关记录。", payload)
+            deliverables_payload["deliverables"] = deliverables
+        return PublicCapabilityResult(f"已找到 {count} 条相关记录。", deliverables_payload)
+    if capability_name == "list_pending_reviews":
+        pending_reviews = _public_items(
+            result.get("items"),
+            ("review_thread_id", "project_id", "section_id", "section_version_id", "section_key"),
+        )
+        pending_reviews_payload: dict[str, Any] = {"count": count}
+        if pending_reviews:
+            pending_reviews_payload["items"] = pending_reviews
+        return PublicCapabilityResult(f"有 {count} 个待处理评审。", pending_reviews_payload)
     if capability_name in {
         "list_project_bundles",
-        "list_pending_reviews",
         "list_evidence",
         "list_documents",
         "get_section_versions",
@@ -560,13 +573,14 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
                 "planned_sections",
                 "started_runtime_run_ids",
                 "written_section_keys",
-                "failed",
                 "has_more",
                 "waves_run",
                 "auto_continue",
             )
             if key in result
         }
+        if "failed" in result:
+            payload["failed"] = _public_campaign_failures(result.get("failed"))
         processed = result.get("processed_count") or 0
         remaining = result.get("remaining_count") or 0
         waves = result.get("waves_run") or 0
@@ -674,6 +688,34 @@ def _result_count(result: dict[str, Any]) -> int:
         if isinstance(value, list):
             return len(value)
     return 0
+
+
+def _public_campaign_failures(value: Any) -> list[dict[str, str]]:
+    """Keep partial campaign failures useful without exposing raw exceptions."""
+    if not isinstance(value, list):
+        return []
+
+    failures: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        section_key = item.get("section_key")
+        if not isinstance(section_key, str) or not section_key.strip():
+            continue
+        error_code = item.get("error_code")
+        if not isinstance(error_code, str) or not _is_public_failure_code(error_code):
+            error_code = "capability_execution_failed"
+        failures.append(
+            {
+                "section_key": section_key,
+                "error_code": error_code,
+            }
+        )
+    return failures
+
+
+def _is_public_failure_code(value: str) -> bool:
+    return 1 <= len(value) <= 80 and all(character.islower() or character.isdigit() or character == "_" for character in value)
 
 
 def _public_items(

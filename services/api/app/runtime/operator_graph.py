@@ -1,4 +1,9 @@
-"""Explicit, bounded LangGraph adapter for governed BidPilot operations.
+"""Compatibility-only legacy LangGraph planner for governed BidPilot operations.
+
+New public Assistant turns use ``StreamingHarness`` and never create a
+``langgraph_operator`` run. This graph remains only so a durable historical
+run can finish or receive its approval resume during the migration window.
+Remove it after 2026-09-30 once no such persisted runs require recovery.
 
 The graph plans no more than a configured number of registered capabilities.
 It never calls a domain service directly: every effect crosses
@@ -23,7 +28,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
-from app.assistant.audit import redact_text
 from app.auth.schemas import CurrentUser
 from app.memory.schemas import MemoryContextRead
 from contracts.model_usage import ProviderUsageMeasurement, normalize_langchain_usage
@@ -31,6 +35,7 @@ from contracts.runtime import RuntimeApprovalDecisionType, RuntimeApprovalStatus
 from contracts.untrusted_context import build_untrusted_context_packet, with_untrusted_context_guard
 
 from .events import RuntimeEventDraft, publish_event
+from .failures import classify_capability_failure
 from .model_limits import (
     OPERATOR_MAX_CAPABILITY_CALLS,
     OPERATOR_PLANNER_MAX_ATTACHMENT_CONTEXT_CHARACTERS,
@@ -515,9 +520,9 @@ def build_operator_graph(
             # ``interrupt()`` is LangGraph control flow, not an execution error.
             raise
         except Exception as exc:
-            safe_error = redact_text(str(exc))
-            message = f"执行失败：{safe_error}"
-            fail_runtime_run(db, run_id, message, error_code="operator_capability_failed")
+            failure = classify_capability_failure(exc)
+            message = f"执行失败：{failure.message}"
+            fail_runtime_run(db, run_id, message, error_code=failure.error_code)
             return {
                 "calls_made": int(state.get("calls_made", 0)) + 1,
                 "final_message": message,

@@ -162,6 +162,8 @@ def resource_client():
             ]
         )
         db.flush()
+        section.approved_version_id = version.id
+        thread.section_version_id = version.id
         db.add_all(
             [
                 OrganizationMembership(
@@ -264,7 +266,11 @@ def test_review_routes_require_read_or_review_capabilities(resource_client, monk
     set_user(users["contributor"])
     denied_decision = client.post(
         "/review/decisions",
-        json={"section_id": section.id, "decision": "approved"},
+        json={
+            "section_id": section.id,
+            "section_version_id": "version-alpha",
+            "decision": "approved",
+        },
     )
     assert denied_decision.status_code == 403
 

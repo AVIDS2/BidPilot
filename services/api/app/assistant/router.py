@@ -1,29 +1,27 @@
-"""Assistant API router — powered by LangGraph ReAct agent."""
+"""Assistant API router for the governed server-side Harness."""
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
 from sqlalchemy.orm import Session
 
+from app.agent.llm import AgentModelConfigurationError, resolve_agent_model
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
-from app.chat.service import (
-    create_conversation,
-    get_conversation,
-    resolve_conversation_project_context,
-    save_message,
-)
+from app.chat.service import resolve_conversation_project_context
 from app.db import get_db
-from app.memory.service import memory_context_for_agent
 from app.models import RuntimeAction, RuntimeRun
 from app.providers.service import get_provider_config
-from app.runtime.service import find_pending_approval_for_conversation
+from app.runtime.service import (
+    assistant_turn_idempotency_key,
+    find_idempotent_runtime_run,
+    find_pending_approval_for_conversation,
+)
 from app.security.secrets import decrypt_secret
 from app.usage.schemas import ProviderSource
 from app.usage.service import (
@@ -35,7 +33,6 @@ from app.usage.service import (
 
 from .attachments import (
     MAX_ATTACHMENT_BYTES,
-    build_attachment_context,
     extract_attachment_text,
     hydrate_assistant_attachments,
     stage_assistant_attachment,
@@ -48,17 +45,28 @@ from app.runtime.assistant_adapter import (
     runtime_v1_enabled,
     stream_runtime_assistant_response,
 )
-from app.runtime.operator_adapter import stream_operator_assistant_response
-from ..agent.graph import build_agent
-from ..agent.streaming import stream_agent_events
+from app.runtime.operator_adapter import stream_existing_assistant_run, stream_operator_assistant_response
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 logger = logging.getLogger(__name__)
 
+# These names are accepted only so an already deployed environment can move to
+# the canonical value without splitting the public assistant behavior.
+LEGACY_ASSISTANT_ENGINE_ALIASES = {
+    "operator": "harness",
+    "streaming_harness": "harness",
+}
+LEGACY_ASSISTANT_ENGINE_ALIAS_RETIREMENT_DATE = "2026-09-30"
+
 
 def _assistant_engine() -> str:
-    """Use the governed operator runtime unless local development opts out."""
-    return os.getenv("DOCPILOT_ASSISTANT_ENGINE", "operator").lower()
+    """Return the one supported production assistant runtime.
+
+    ``operator`` and ``streaming_harness`` remain accepted environment aliases
+    during migration, but both resolve to the same governed Harness path.
+    """
+    configured = os.getenv("DOCPILOT_ASSISTANT_ENGINE", "harness").lower()
+    return LEGACY_ASSISTANT_ENGINE_ALIASES.get(configured, configured)
 
 
 def _deterministic_demo_intent(payload: AssistantRequest) -> AssistantIntent | None:
@@ -131,11 +139,11 @@ async def assistant_stream(
     user: CurrentUser = Depends(require_auth),
     db: Session = Depends(get_db),
 ):
-    """Stream an AI assistant response via Server-Sent Events.
+    """Stream one governed Harness turn via Server-Sent Events.
 
-    Uses a LangGraph ReAct agent with platform tools. The agent
-    autonomously decides which tools to call based on the user's
-    natural language input.
+    The Harness owns conversational tool selection and durable execution
+    records. Long-running bid pipelines remain separate LangGraph workflows
+    linked from the resulting runtime run.
 
     SSE event types:
     - ``assistant.start``: agent begins processing
@@ -143,8 +151,33 @@ async def assistant_stream(
     - ``assistant.tool_started``: a tool is being executed
     - ``assistant.tool_succeeded``: tool completed with result
     - ``assistant.tool_failed``: tool execution failed
+    - ``assistant.missing_input``: a required business field is needed before execution
+    - ``assistant.confirmation_requested``: a governed action needs approval
     - ``assistant.end``: agent finished
     """
+    # A transport retry must replay before any mutable preflight work:
+    # attachment hydration, provider lookup, quota accounting, or conversation
+    # allocation. The same client request ID therefore has exactly one cost.
+    if payload.confirmation is None:
+        existing = find_idempotent_runtime_run(
+            db,
+            user,
+            idempotency_key=assistant_turn_idempotency_key(
+                user_id=user.id,
+                client_request_id=payload.client_request_id,
+            ),
+        )
+        if existing is not None:
+            return StreamingResponse(
+                stream_existing_assistant_run(db, existing),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
     project_id = resolve_conversation_project_context(
         db,
         user,
@@ -195,7 +228,7 @@ async def assistant_stream(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
     assistant_engine = _assistant_engine()
-    if assistant_engine == "operator":
+    if assistant_engine == "harness":
         return StreamingResponse(
             stream_operator_assistant_response(
                 db,
@@ -229,76 +262,9 @@ async def assistant_stream(
                 "X-Accel-Buffering": "no",
             },
         )
-    if payload.confirmation is not None:
-        return StreamingResponse(
-            stream_assistant_response(db, user, payload),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
-
-    # Resolve or create conversation
-    conversation_id = _ensure_conversation(db, user, payload)
-    save_message(db, conversation_id, "user", payload.message)
-
-    memory_context = _load_agent_memory_context(db, user, payload)
-
-    # Build agent with fresh db session and user context
-    agent = build_agent(
-        db,
-        user,
-        provider_type=provider_type,
-        provider_id=provider_id,
-        api_key=api_key,
-        base_url=base_url,
-        model=model,
-        provider_config_id=payload.provider_config_id,
-        reasoning_effort=payload.reasoning_effort,
-        approval_mode=payload.approval_mode,
-        memory_context=memory_context,
-    )
-
-    config = {"configurable": {"thread_id": conversation_id}}
-    agent_message = build_attachment_context(payload.message, payload.attachments)
-    messages = [HumanMessage(content=agent_message)]
-
-    async def generate():
-        full_response = ""
-        async for sse_chunk in stream_agent_events(
-            agent,
-            messages,
-            config,
-            conversation_id,
-            db=db,
-            user=user,
-            approval_mode=payload.approval_mode,
-        ):
-            # Capture the final message content for persistence
-            if "assistant.message" in sse_chunk:
-                import json
-                try:
-                    data_start = sse_chunk.index("data: ") + 6
-                    data = json.loads(sse_chunk[data_start:].strip())
-                    full_response += data.get("content", "")
-                except (ValueError, json.JSONDecodeError):
-                    pass
-            yield sse_chunk
-
-        # Save assistant response for conversation history
-        if full_response:
-            save_message(db, conversation_id, "assistant", full_response)
-
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"Unsupported assistant runtime: {assistant_engine}",
     )
 
 
@@ -308,7 +274,22 @@ def _resolve_request_provider(
     payload: AssistantRequest,
 ) -> tuple[ProviderSource, str, str | None, str | None, str | None, str | None, str | None]:
     if not payload.provider_config_id:
-        return ProviderSource.OFFICIAL, "openai", None, None, None, None, None
+        try:
+            resolved = resolve_agent_model()
+        except AgentModelConfigurationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
+        return (
+            ProviderSource.OFFICIAL,
+            resolved.provider_type,
+            resolved.provider_id,
+            resolved.api_key,
+            resolved.base_url,
+            resolved.model,
+            None,
+        )
 
     config = get_provider_config(db, payload.provider_config_id, user.id)
     if config is None or not config.is_active:
@@ -317,13 +298,24 @@ def _resolve_request_provider(
         # with a platform-funded model.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider config not found")
 
+    try:
+        resolved = resolve_agent_model(
+            provider_type=config.provider_type,
+            provider_id=config.provider_id,
+            api_key=decrypt_secret(config.api_key),
+            base_url=config.api_url,
+            model=config.model,
+        )
+    except AgentModelConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
     return (
         ProviderSource.BYOK,
-        config.provider_type,
-        config.provider_id,
-        decrypt_secret(config.api_key),
-        config.api_url,
-        config.model,
+        resolved.provider_type,
+        resolved.provider_id,
+        resolved.api_key,
+        resolved.base_url,
+        resolved.model,
         config.id,
     )
 
@@ -352,25 +344,3 @@ def _record_assistant_usage(
         },
     )
     db.commit()
-
-
-def _ensure_conversation(db: Session, user: CurrentUser, payload: AssistantRequest) -> str:
-    if payload.conversation_id:
-        conversation = get_conversation(db, payload.conversation_id, user.id)
-        if conversation is not None:
-            return conversation.id
-    return create_conversation(db, user.id, payload.project_id).id
-
-
-def _load_agent_memory_context(db: Session, user: CurrentUser, payload: AssistantRequest):
-    """Memory retrieval is additive: a degraded memory path cannot stop an Agent run."""
-    try:
-        return memory_context_for_agent(
-            db,
-            current_user=user,
-            project_id=payload.project_id,
-            query=payload.message,
-        )
-    except Exception as exc:
-        logger.warning("Assistant memory context unavailable: %s", type(exc).__name__)
-        return None

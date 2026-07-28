@@ -1,30 +1,29 @@
-"""SSE adapter for the explicit LangGraph operator runtime.
+"""SSE adapter for the governed server-side Harness runtime.
 
 The adapter deliberately renders the same legacy ``assistant.*`` events as the
 existing web client expects, but those events are derived from durable runtime
-records. It is the production default through DOCPILOT_ASSISTANT_ENGINE=operator;
-the deterministic adapter remains available only for local and test operation.
+records. The LangGraph operator implementation remains an isolated migration
+path; public assistant turns run through ``StreamingHarness``.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 import logging
-import os
 from typing import Any
 from uuid import uuid4
 
 from langgraph.types import Command
 from sqlalchemy.orm import Session
 
-from app.assistant.audit import redact_arguments, redact_text
+from app.assistant.audit import redact_arguments
 from app.assistant.attachments import attachment_planner_context, build_attachment_context
 from app.assistant.schemas import AssistantConfirmation, AssistantRequest
 from app.assistant.task_state import clear_task_state, pending_input_context, set_task_state
 from app.auth.schemas import CurrentUser
 from app.chat.service import (
     bind_conversation_project_context,
-    get_conversation_messages,
+    get_recent_conversation_messages,
     resolve_conversation_project_context,
     save_message,
 )
@@ -52,7 +51,11 @@ from .assistant_adapter import (
     _sse,
 )
 from .events import latest_event_sequence
-from .harness_loop import StreamingHarness, stream_harness_assistant_response
+from .harness_loop import (
+    StreamingHarness,
+    classify_model_failure,
+    stream_harness_assistant_response,
+)
 from .operator_graph import (
     OperatorPlanningContext,
     OperatorPlan,
@@ -61,26 +64,22 @@ from .operator_graph import (
     get_operator_checkpointer,
 )
 from .model_limits import (
-    OPERATOR_PLANNER_MAX_CONVERSATION_CONTEXT_CHARACTERS,
-    OPERATOR_PLANNER_MAX_CONVERSATION_MESSAGE_CHARACTERS,
     OPERATOR_PLANNER_MAX_MEMORY_CONTEXT_CHARACTERS,
 )
+from .prompt_assembly import ConversationContextWindow, compact_conversation_context
 from .service import (
-    create_runtime_run,
+    assistant_turn_idempotency_key,
+    create_or_get_runtime_run,
     fail_runtime_run,
+    find_idempotent_runtime_run,
     find_pending_approval_for_conversation,
+    reconcile_runtime_run_for_replay,
 )
 
-
-def _use_streaming_harness() -> bool:
-    """Prefer the thin streaming tool loop unless explicitly disabled."""
-    return os.getenv("DOCPILOT_ASSISTANT_STREAMING_HARNESS", "true").lower() == "true"
 
 logger = logging.getLogger(__name__)
 
-_MAX_CONVERSATION_CONTEXT_MESSAGES = 8
-_MAX_CONVERSATION_CONTEXT_CHARACTERS = OPERATOR_PLANNER_MAX_CONVERSATION_CONTEXT_CHARACTERS
-_MAX_CONVERSATION_MESSAGE_CHARACTERS = OPERATOR_PLANNER_MAX_CONVERSATION_MESSAGE_CHARACTERS
+_MAX_CONVERSATION_SOURCE_MESSAGES = 24
 
 
 async def stream_operator_assistant_response(
@@ -95,7 +94,29 @@ async def stream_operator_assistant_response(
     base_url: str | None,
     model: str | None,
 ) -> AsyncGenerator[str, None]:
-    """Run one explicit operator graph turn or resume its pending interrupt."""
+    """Run one governed Harness turn or resume its pending approval."""
+    # Check retries before allocating a conversation. The first SSE response may
+    # be interrupted before the browser receives its conversation ID; creating
+    # one here would leave an orphan conversation for every retry.
+    idempotency_key = assistant_turn_idempotency_key(
+        user_id=user.id,
+        client_request_id=payload.client_request_id,
+    )
+    if payload.confirmation is None:
+        existing = find_idempotent_runtime_run(
+            db,
+            user,
+            idempotency_key=idempotency_key,
+        )
+        if existing is not None:
+            async for event in _replay_existing_run(
+                db,
+                existing,
+                conversation_id=existing.conversation_id or payload.conversation_id or "",
+            ):
+                yield event
+            return
+
     conversation_id = _ensure_conversation(db, user, payload)
     active_project_id = resolve_conversation_project_context(
         db,
@@ -105,6 +126,7 @@ async def stream_operator_assistant_response(
     )
     if active_project_id is None and payload.project_id is None:
         active_project_id = _recover_conversation_project_context(db, user, conversation_id)
+
     if payload.confirmation is not None and payload.confirmation.approval_id:
         save_message(db, conversation_id, "user", payload.message)
         async for event in _resume_operator_approval(
@@ -149,6 +171,9 @@ async def stream_operator_assistant_response(
     # Typed delete confirmation: user retyped the exact project name.
     if pending is not None and _matches_typed_confirmation(pending, payload.message):
         save_message(db, conversation_id, "user", payload.message)
+        pending_payload = pending.payload_json if isinstance(pending.payload_json, dict) else {}
+        pending_arguments = pending_payload.get("arguments")
+        confirmed_arguments = pending_arguments if isinstance(pending_arguments, dict) else {}
         async for event in _resume_operator_approval(
             db,
             user,
@@ -158,11 +183,7 @@ async def stream_operator_assistant_response(
                 tool_name=_approval_capability(db, pending),
                 approval_id=pending.id,
                 arguments={
-                    **(
-                        (pending.payload_json or {}).get("arguments")
-                        if isinstance(pending.payload_json, dict)
-                        else {}
-                    ),
+                    **confirmed_arguments,
                     "confirmation_text": payload.message.strip(),
                 },
             ),
@@ -209,12 +230,13 @@ async def stream_operator_assistant_response(
         )
         return
 
-    conversation_context = _bounded_conversation_context(db, conversation_id)
+    conversation_window = _bounded_conversation_context(db, conversation_id)
     pending_input = pending_input_context(db, conversation_id)
     memory_context = _load_authorized_memory_context(db, user, payload, project_id=active_project_id)
-    save_message(db, conversation_id, "user", payload.message)
-    engine = "streaming_harness" if _use_streaming_harness() else "langgraph_operator"
-    run = create_runtime_run(
+    # One public turn has one runtime. Do not let a deployment-only flag switch
+    # between two incompatible loops after the client has started streaming.
+    engine = "streaming_harness"
+    creation = create_or_get_runtime_run(
         db,
         user,
         kind="assistant_turn",
@@ -225,25 +247,64 @@ async def stream_operator_assistant_response(
         model=model,
         reasoning_effort=payload.reasoning_effort,
         approval_mode=payload.approval_mode,
+        idempotency_key=idempotency_key,
         input_json={
             "message": payload.message,
+            "client_request_id": payload.client_request_id,
             "attachment_names": [attachment.name for attachment in payload.attachments],
             "attachment_ids": [attachment.id for attachment in payload.attachments if attachment.id],
         },
     )
+    if not creation.created:
+        async for event in _replay_existing_run(
+            db,
+            creation.run,
+            conversation_id=creation.run.conversation_id or conversation_id,
+        ):
+            yield event
+        return
+
+    run = creation.run
+    save_message(db, conversation_id, "user", payload.message)
     yield _sse(
         "assistant.start",
         {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "thinking"},
     )
     if engine == "streaming_harness":
-        llm = get_agent_llm(
-            provider_type=provider_type,
-            provider_id=provider_id,
-            api_key=api_key,
-            base_url=base_url,
-            model=model,
-            reasoning_effort=payload.reasoning_effort,  # type: ignore[arg-type]
-        )
+        try:
+            llm = get_agent_llm(
+                provider_type=provider_type,
+                provider_id=provider_id,
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                reasoning_effort=payload.reasoning_effort,  # type: ignore[arg-type]
+            )
+        except Exception as exc:
+            # StreamingResponse has already sent its headers after the first
+            # event. Convert adapter/configuration errors into the same durable
+            # terminal contract as an in-loop provider failure instead of
+            # letting Starlette abort a half-open SSE response.
+            logger.warning(
+                "Harness model client construction failed: runtime_run=%s provider_type=%s error_type=%s",
+                run.id,
+                provider_type,
+                type(exc).__name__,
+            )
+            failure = classify_model_failure(exc)
+            try:
+                fail_runtime_run(db, run.id, failure.message, error_code=failure.error_code)
+            except ValueError:
+                pass
+            save_message(db, conversation_id, "assistant", failure.message)
+            for event in _render_runtime_events(
+                db,
+                run.id,
+                after_sequence=1,
+                conversation_id=conversation_id,
+            ):
+                yield event
+            return
         memory_records = []
         if memory_context is not None:
             from .operator_graph import _memory_context_records
@@ -258,12 +319,16 @@ async def stream_operator_assistant_response(
             provider_type=provider_type,
             provider_source=provider_source,
             model=model,
-            user_message=build_attachment_context(payload.message, payload.attachments),
-            conversation_context=conversation_context,
+            user_message=payload.message,
+            conversation_context=list(conversation_window.recent_turns),
+            conversation_window=conversation_window,
             memory_context_records=memory_records,
+            memory_context_version=memory_context.memory_version if memory_context is not None else None,
             available_attachments=attachment_planner_context(payload.attachments),
+            attachment_context=build_attachment_context("", payload.attachments),
             active_project_id=active_project_id,
             pending_input=pending_input,
+            approval_mode=payload.approval_mode,
             provider_config_id=payload.provider_config_id,
             reasoning_effort=payload.reasoning_effort,
             after_sequence=1,
@@ -284,12 +349,76 @@ async def stream_operator_assistant_response(
         base_url=base_url,
         model=model,
         reasoning_effort=payload.reasoning_effort,
-        conversation_context=conversation_context,
+        conversation_context=list(conversation_window.recent_turns),
         memory_context=memory_context,
         available_attachments=attachment_planner_context(payload.attachments),
         active_project_id=active_project_id,
         pending_input=pending_input,
     ):
+        yield event
+
+
+async def _replay_existing_run(
+    db: Session,
+    run: RuntimeRun,
+    *,
+    conversation_id: str,
+) -> AsyncGenerator[str, None]:
+    """Replay a durable run after a client retry without re-entering the loop."""
+    run = reconcile_runtime_run_for_replay(db, run.id)
+    state_by_status = {
+        "awaiting_approval": "needs_confirmation",
+        "failed": "failed",
+        "expired": "failed",
+        "cancelled": "completed",
+        "succeeded": "completed",
+    }
+    state = state_by_status.get(run.status, "thinking")
+    yield _sse(
+        "assistant.start",
+        {
+            "conversation_id": conversation_id,
+            "runtime_run_id": run.id,
+            "state": state,
+            "replayed": True,
+        },
+    )
+    emitted_end = False
+    for event in _render_runtime_events(
+        db,
+        run.id,
+        after_sequence=0,
+        conversation_id=conversation_id,
+    ):
+        if event.startswith("event: assistant.end"):
+            emitted_end = True
+        yield event
+    if not emitted_end:
+        yield _sse(
+            "assistant.end",
+            {
+                "conversation_id": conversation_id,
+                "runtime_run_id": run.id,
+                "state": state,
+                "replayed": True,
+            },
+        )
+
+
+async def stream_existing_assistant_run(
+    db: Session,
+    run: RuntimeRun,
+) -> AsyncGenerator[str, None]:
+    """Replay a previously authorized assistant run without resolving a model."""
+    conversation_id = run.conversation_id
+    if not conversation_id:
+        logger.error("Idempotent assistant run has no conversation: runtime_run=%s", run.id)
+        yield _sse(
+            "assistant.end",
+            {"runtime_run_id": run.id, "state": "failed", "replayed": True},
+        )
+        return
+    async for event in _replay_existing_run(db, run, conversation_id=conversation_id):
         yield event
 
 
@@ -545,12 +674,13 @@ async def _invoke_operator_graph(
         return
     except Exception as exc:
         mark_active_reservations_uncertain()
-        safe_error = redact_text(str(exc))
+        failure = classify_model_failure(exc)
+        message = f"执行失败：{failure.message}"
         try:
-            fail_runtime_run(db, run.id, f"执行失败：{safe_error}", error_code="operator_graph_failed")
+            fail_runtime_run(db, run.id, message, error_code=failure.error_code)
         except ValueError:
             pass
-        save_message(db, conversation_id, "assistant", f"执行失败：{safe_error}")
+        save_message(db, conversation_id, "assistant", message)
         for event in _render_runtime_events(
             db,
             run.id,
@@ -589,26 +719,23 @@ async def _invoke_operator_graph(
         yield event
 
 
-def _bounded_conversation_context(db: Session, conversation_id: str) -> list[dict[str, str]]:
-    """Load recent public chat turns without treating checkpoint state as business truth."""
-    remaining = _MAX_CONVERSATION_CONTEXT_CHARACTERS
-    items: list[dict[str, str]] = []
-    messages = get_conversation_messages(db, conversation_id)[-_MAX_CONVERSATION_CONTEXT_MESSAGES:]
-    for message in reversed(messages):
-        if remaining <= 0:
-            break
-        content = message.content.strip()
-        if not content:
-            continue
-        limit = min(_MAX_CONVERSATION_MESSAGE_CHARACTERS, remaining)
-        items.append(
+def _bounded_conversation_context(db: Session, conversation_id: str) -> ConversationContextWindow:
+    """Load a bounded recent window and make dropped history explicit to the model."""
+    messages, history_window_truncated = get_recent_conversation_messages(
+        db,
+        conversation_id,
+        limit=_MAX_CONVERSATION_SOURCE_MESSAGES,
+    )
+    return compact_conversation_context(
+        [
             {
-                "role": message.role if message.role in {"user", "assistant"} else "user",
-                "content": content[:limit],
+                "role": message.role,
+                "content": message.content,
             }
-        )
-        remaining -= len(items[-1]["content"])
-    return list(reversed(items))
+            for message in messages
+        ],
+        history_window_truncated=history_window_truncated,
+    )
 
 
 def _load_authorized_memory_context(

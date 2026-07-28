@@ -41,4 +41,5 @@ class DeliverableSectionRead(BaseModel):
     section_key: str
     title: str
     status: str
+    approved_version_id: str | None = None
     sort_order: int = 0

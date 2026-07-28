@@ -9,8 +9,11 @@ import pytest
 
 from app.runtime.harness_loop import (
     HARNESS_CAMPAIGN_MAX_STEPS,
+    HARNESS_MAX_CONSECUTIVE_TOOL_FAILURES,
     HARNESS_MAX_STEPS,
     StreamingHarness,
+    classify_model_failure,
+    public_model_failure_message,
     build_capability_tool_specs,
     build_turn_summary,
     resolve_harness_budgets,
@@ -47,6 +50,16 @@ class _FakeRun:
         self.model = "test-model"
 
 
+class _FakeDb:
+    """Small read-only session double for Harness lifecycle-boundary checks."""
+
+    def scalar(self, _statement: object) -> str:
+        return "running"
+
+    def scalars(self, _statement: object) -> list[object]:
+        return []
+
+
 class _FakeUser:
     id = "user-1"
     org_id = "org-1"
@@ -80,6 +93,34 @@ def test_resolve_harness_budgets_raises_for_campaign_language() -> None:
     assert campaign_tools >= default_tools
 
 
+def test_harness_model_failures_do_not_expose_gateway_model_details() -> None:
+    message = public_model_failure_message(
+        RuntimeError(
+            "Error code: 400 - supported API model names are deepseek-v4-pro, "
+            "but you passed deepseek-chat"
+        )
+    )
+
+    assert "端点不兼容" in message
+    assert "deepseek" not in message.lower()
+
+
+def test_harness_maps_response_format_failures_to_a_recoverable_message() -> None:
+    message = public_model_failure_message(
+        RuntimeError("This response_format type is unavailable now")
+    )
+
+    assert "结构化输出" in message
+    assert "response_format" not in message
+
+
+def test_harness_classifies_provider_failures_with_stable_codes() -> None:
+    failure = classify_model_failure(RuntimeError("This response_format type is unavailable now"))
+
+    assert failure.error_code == "provider_structured_output_unsupported"
+    assert "response_format" not in failure.message
+
+
 def test_streaming_harness_answers_without_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
@@ -95,7 +136,7 @@ def test_streaming_harness_answers_without_tools(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
 
     harness = StreamingHarness(
-        db=object(),  # type: ignore[arg-type]
+        db=_FakeDb(),  # type: ignore[arg-type]
         user=_FakeUser(),  # type: ignore[arg-type]
         run=_FakeRun(),  # type: ignore[arg-type]
         conversation_id="conv-1",
@@ -173,7 +214,7 @@ def test_streaming_harness_executes_one_correlated_tool_then_answers(monkeypatch
     )
 
     harness = StreamingHarness(
-        db=object(),  # type: ignore[arg-type]
+        db=_FakeDb(),  # type: ignore[arg-type]
         user=_FakeUser(),  # type: ignore[arg-type]
         run=_FakeRun(),  # type: ignore[arg-type]
         conversation_id="conv-1",
@@ -212,6 +253,204 @@ def test_streaming_harness_executes_one_correlated_tool_then_answers(monkeypatch
     assert len(llm.calls) == 2
 
 
+def test_streaming_harness_chains_bid_discovery_to_draft_workflow(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A single request can make bounded, result-driven progress through the bid flow."""
+    import asyncio
+
+    from app.runtime import harness_loop as module
+    from app.runtime.registry import PublicCapabilityResult
+    from app.usage.schemas import ProviderSource
+
+    class _Action:
+        status = "succeeded"
+
+    class _Execution:
+        approval = None
+        action = _Action()
+
+        def __init__(self, result: PublicCapabilityResult) -> None:
+            self.result = result
+
+    llm = _FakeBoundLLM(
+        [
+            _FakeAIMessage(tool_calls=[{"id": "call-projects", "name": "search_projects", "args": {}}]),
+            _FakeAIMessage(
+                tool_calls=[{"id": "call-documents", "name": "list_documents", "args": {"project_id": "p1"}}]
+            ),
+            _FakeAIMessage(
+                tool_calls=[{"id": "call-requirements", "name": "list_requirements", "args": {"project_id": "p1"}}]
+            ),
+            _FakeAIMessage(
+                tool_calls=[{"id": "call-outline", "name": "get_project_outline", "args": {"project_id": "p1"}}]
+            ),
+            _FakeAIMessage(
+                tool_calls=[
+                    {
+                        "id": "call-draft",
+                        "name": "start_draft_section",
+                        "args": {"project_id": "p1", "section_key": "technical-approach"},
+                    }
+                ]
+            ),
+            _FakeAIMessage(content="已核对项目资料与需求，并启动技术方案章节起草。"),
+        ]
+    )
+    results = {
+        "search_projects": PublicCapabilityResult("找到 1 个项目。", {"count": 1, "projects": [{"id": "p1"}]}),
+        "list_documents": PublicCapabilityResult("已找到 2 条相关记录。", {"count": 2}),
+        "list_requirements": PublicCapabilityResult("找到 3 条需求。", {"count": 3}),
+        "get_project_outline": PublicCapabilityResult(
+            "大纲共 1 章，已起草 0 章，已批准 0 章。",
+            {"project_id": "p1", "sections": [{"section_key": "technical-approach"}]},
+        ),
+        "start_draft_section": PublicCapabilityResult(
+            "起草工作流已启动。",
+            {"run_id": "execution-1", "runtime_run_id": "workflow-runtime-1"},
+        ),
+    }
+    executed: list[str] = []
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_execute_capability(_db, _user, *, capability_name, **_kwargs):
+        executed.append(capability_name)
+        return _Execution(results[capability_name])
+
+    monkeypatch.setattr(module, "execute_capability", fake_execute_capability)
+    monkeypatch.setattr(module, "save_message", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "complete_runtime_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "reserve_assistant_model_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
+    monkeypatch.setattr("app.runtime.assistant_adapter._render_runtime_event", lambda *args, **kwargs: [])
+
+    harness = StreamingHarness(
+        db=_FakeDb(),  # type: ignore[arg-type]
+        user=_FakeUser(),  # type: ignore[arg-type]
+        run=_FakeRun(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        llm=llm,
+        provider_type="openai",
+        provider_source=ProviderSource.OFFICIAL,
+        model="test",
+        user_message="检查项目资料和需求后，启动技术方案章节起草。",
+    )
+
+    async def _collect() -> None:
+        async for raw in harness.run():
+            event_type = ""
+            payload = ""
+            for line in raw.strip().splitlines():
+                if line.startswith("event: "):
+                    event_type = line[7:]
+                elif line.startswith("data: "):
+                    payload = line[6:]
+            if event_type and payload:
+                events.append((event_type, json.loads(payload)))
+
+    asyncio.run(_collect())
+
+    assert executed == [
+        "search_projects",
+        "list_documents",
+        "list_requirements",
+        "get_project_outline",
+        "start_draft_section",
+    ]
+    assert [payload["tool_name"] for event, payload in events if event == "assistant.tool_started"] == executed
+    assert any(event == "assistant.workflow_started" and payload["tool_name"] == "start_draft_section" for event, payload in events)
+    final_message_index = next(index for index, (event, _payload) in enumerate(events) if event == "assistant.message")
+    last_tool_index = max(index for index, (event, _payload) in enumerate(events) if event == "assistant.tool_succeeded")
+    assert last_tool_index < final_message_index
+    assert len(llm.calls) == 6
+
+
+def test_streaming_harness_pauses_for_missing_required_tool_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing required field is recoverable, never a failed mutation."""
+    import asyncio
+
+    from app.runtime import harness_loop as module
+    from app.usage.schemas import ProviderSource
+
+    llm = _FakeBoundLLM(
+        [
+            _FakeAIMessage(
+                tool_calls=[
+                    {"id": "call-create", "name": "create_project", "args": {}},
+                ],
+            )
+        ]
+    )
+    persisted_state: dict[str, Any] = {}
+    saved_messages: list[str] = []
+
+    def fake_set_task_state(_db: Any, _conversation_id: str, **kwargs: Any) -> None:
+        persisted_state.update(kwargs)
+
+    def fail_if_executed(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("a tool with missing required input must not execute")
+
+    monkeypatch.setattr(module, "set_task_state", fake_set_task_state)
+    monkeypatch.setattr(module, "execute_capability", fail_if_executed)
+    monkeypatch.setattr(
+        module,
+        "save_message",
+        lambda _db, _conversation_id, _role, content: saved_messages.append(content),
+    )
+    monkeypatch.setattr(module, "complete_runtime_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "reserve_assistant_model_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
+
+    harness = StreamingHarness(
+        db=_FakeDb(),  # type: ignore[arg-type]
+        user=_FakeUser(),  # type: ignore[arg-type]
+        run=_FakeRun(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        llm=llm,
+        provider_type="openai",
+        provider_source=ProviderSource.OFFICIAL,
+        model="test",
+        user_message="帮我创建一个项目",
+    )
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    async def _collect() -> None:
+        async for raw in harness.run():
+            event_type = ""
+            payload = ""
+            for line in raw.strip().splitlines():
+                if line.startswith("event: "):
+                    event_type = line[7:]
+                elif line.startswith("data: "):
+                    payload = line[6:]
+            if event_type and payload:
+                events.append((event_type, json.loads(payload)))
+
+    asyncio.run(_collect())
+
+    assert persisted_state == {
+        "status": "needs_input",
+        "tool_name": "create_project",
+        "arguments": {},
+        "missing_fields": ("name",),
+    }
+    assert saved_messages == ["请告诉我项目名称。"]
+    assert "assistant.tool_started" not in [event for event, _ in events]
+    assert "assistant.tool_failed" not in [event for event, _ in events]
+    missing = next(payload for event, payload in events if event == "assistant.missing_input")
+    assert missing["missing_fields"] == ["name"]
+    assert missing["state"] == "needs_input"
+    assert events[-1] == (
+        "assistant.end",
+        {
+            "conversation_id": "conv-1",
+            "runtime_run_id": "run-1",
+            "state": "needs_input",
+        },
+    )
+    assert len(llm.calls) == 1
+
+
 def test_streaming_harness_limits_test_requests_to_read_only_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
@@ -239,7 +478,7 @@ def test_streaming_harness_limits_test_requests_to_read_only_tools(monkeypatch: 
     monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
 
     harness = StreamingHarness(
-        db=object(),  # type: ignore[arg-type]
+        db=_FakeDb(),  # type: ignore[arg-type]
         user=_FakeUser(),  # type: ignore[arg-type]
         run=_FakeRun(),  # type: ignore[arg-type]
         conversation_id="conv-1",
@@ -274,6 +513,80 @@ def test_streaming_harness_limits_test_requests_to_read_only_tools(monkeypatch: 
     assert "安全诊断" in failure["error_message"]
 
 
+def test_streaming_harness_stops_after_repeated_tool_failures_without_leaking_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from app.runtime import harness_loop as module
+    from app.usage.schemas import ProviderSource
+
+    llm = _FakeBoundLLM(
+        [
+            _FakeAIMessage(tool_calls=[{"id": f"call-{index}", "name": "search_projects", "args": {}}])
+            for index in range(HARNESS_MAX_CONSECUTIVE_TOOL_FAILURES + 1)
+        ]
+    )
+    executed: list[str] = []
+    terminal_failures: list[dict[str, Any]] = []
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    def _failing_execute(*_args: Any, **kwargs: Any) -> None:
+        executed.append(str(kwargs["capability_name"]))
+        raise RuntimeError("postgresql://internal-user:super-secret@db.internal/runtime")
+
+    def _fail_runtime(_db: Any, _run_id: str, _message: str, **kwargs: Any) -> None:
+        terminal_failures.append(kwargs)
+
+    monkeypatch.setattr(module, "execute_capability", _failing_execute)
+    monkeypatch.setattr(module, "fail_runtime_run", _fail_runtime)
+    monkeypatch.setattr(module, "save_message", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "reserve_assistant_model_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
+    monkeypatch.setattr("app.runtime.assistant_adapter._render_runtime_event", lambda *args, **kwargs: [])
+
+    harness = StreamingHarness(
+        db=_FakeDb(),  # type: ignore[arg-type]
+        user=_FakeUser(),  # type: ignore[arg-type]
+        run=_FakeRun(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        llm=llm,
+        provider_type="openai",
+        provider_source=ProviderSource.OFFICIAL,
+        model="test",
+        user_message="连续检查项目",
+    )
+
+    async def _collect() -> None:
+        async for raw in harness.run():
+            event_type = ""
+            payload = ""
+            for line in raw.strip().splitlines():
+                if line.startswith("event: "):
+                    event_type = line[7:]
+                elif line.startswith("data: "):
+                    payload = line[6:]
+            if event_type and payload:
+                events.append((event_type, json.loads(payload)))
+
+    asyncio.run(_collect())
+
+    assert executed == ["search_projects"] * HARNESS_MAX_CONSECUTIVE_TOOL_FAILURES
+    assert terminal_failures == [{"error_code": "harness_tool_failures"}]
+    tool_failures = [payload for event, payload in events if event == "assistant.tool_failed"]
+    assert len(tool_failures) == HARNESS_MAX_CONSECUTIVE_TOOL_FAILURES
+    assert all("super-secret" not in payload["error_message"] for payload in tool_failures)
+    assert all(payload["error_code"] == "capability_execution_failed" for payload in tool_failures)
+    assert events[-1] == (
+        "assistant.end",
+        {
+            "conversation_id": "conv-1",
+            "runtime_run_id": "run-1",
+            "state": "failed",
+        },
+    )
+
+
 def test_resume_approval_emits_started_before_succeeded(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
@@ -298,6 +611,7 @@ def test_resume_approval_emits_started_before_succeeded(monkeypatch: pytest.Monk
         return _Execution()
 
     monkeypatch.setattr(module, "resolve_approval", fake_resolve_approval)
+    monkeypatch.setattr(module, "clear_task_state", lambda *args, **kwargs: None)
     monkeypatch.setattr(module, "save_message", lambda *args, **kwargs: None)
     monkeypatch.setattr(module, "complete_runtime_run", lambda *args, **kwargs: None)
     monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
@@ -307,7 +621,7 @@ def test_resume_approval_emits_started_before_succeeded(monkeypatch: pytest.Monk
     )
 
     harness = StreamingHarness(
-        db=object(),  # type: ignore[arg-type]
+        db=_FakeDb(),  # type: ignore[arg-type]
         user=_FakeUser(),  # type: ignore[arg-type]
         run=_FakeRun(),  # type: ignore[arg-type]
         conversation_id="conv-1",
@@ -356,3 +670,10 @@ def test_product_tool_schemas_include_redraft_feedback_and_export_project() -> N
     assert set(tools["resume_draft_run"]["required"]) == {"run_id", "decision"}
     assert "mode" in tools["run_section_campaign"]["properties"]
     assert "project_id" in tools["run_section_campaign"]["required"]
+    assert "section_version_id" in tools["submit_review_decision"]["properties"]
+    assert set(tools["submit_review_decision"]["required"]) == {
+        "project_id",
+        "section_id",
+        "section_version_id",
+        "decision",
+    }

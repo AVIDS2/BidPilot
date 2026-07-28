@@ -19,6 +19,7 @@ from app.chat.service import (
     save_message,
 )
 from app.models import ChatTaskState
+from app.runtime.failures import classify_capability_failure
 
 from .guardrails import requires_confirmation
 from .audit import (
@@ -72,6 +73,7 @@ async def stream_assistant_response(
         _clear_task_state(db, conversation_id)
         task_state = None
     if _is_pending_confirmation(task_state):
+        assert task_state is not None
         if _is_cancel_followup(payload.message):
             async for event in _handle_confirmation(
                 db,
@@ -184,10 +186,10 @@ async def stream_assistant_response(
     try:
         result = execute_tool(db, user, intent.tool_name, arguments)
     except Exception as exc:
-        safe_error = redact_text(str(exc))
-        record_action_failed(db, audit, safe_error)
-        yield _tool_failed(intent.tool_name, safe_error)
-        yield _message_and_end(db, conversation_id, f"执行失败：{safe_error}")
+        failure = classify_capability_failure(exc)
+        record_action_failed(db, audit, failure.message)
+        yield _tool_failed(intent.tool_name, failure.message)
+        yield _message_and_end(db, conversation_id, f"执行失败：{failure.message}")
         return
 
     record_action_succeeded(db, audit, result.summary)
@@ -228,9 +230,9 @@ async def _handle_confirmation(
             approval_id=confirmation.approval_id,
         )
     except Exception as exc:
-        safe_error = redact_text(str(exc))
-        yield _tool_failed(confirmation.tool_name, safe_error)
-        yield _message_and_end(db, conversation_id, f"执行失败：{safe_error}")
+        failure = classify_capability_failure(exc)
+        yield _tool_failed(confirmation.tool_name, failure.message)
+        yield _message_and_end(db, conversation_id, f"执行失败：{failure.message}")
         return
     yield _sse(
         "assistant.tool_started",
@@ -243,9 +245,9 @@ async def _handle_confirmation(
     try:
         result = execute_tool(db, user, confirmation.tool_name, confirmation.arguments)
     except Exception as exc:
-        safe_error = redact_text(str(exc))
-        record_action_failed(db, audit, safe_error)
-        yield _tool_failed(confirmation.tool_name, safe_error)
+        failure = classify_capability_failure(exc)
+        record_action_failed(db, audit, failure.message)
+        yield _tool_failed(confirmation.tool_name, failure.message)
         return
 
     record_action_succeeded(db, audit, result.summary)
@@ -394,6 +396,39 @@ def _resume_pending_intent(
                 tool_name="propose_memory_graph",
                 arguments={**(task_state.arguments_json or {}), "memory_record_id": memory_record_id},
             )
+        if task_state.status == "needs_input" and task_state.tool_name == "submit_review_decision":
+            arguments = dict(task_state.arguments_json or {})
+            missing_fields = task_state.missing_fields_json or {}
+            required = list(missing_fields.get("fields") or [])
+            candidate_id = _extract_uuid(message)
+            if not candidate_id:
+                return AssistantIntent(
+                    mode="needs_input",
+                    tool_name="submit_review_decision",
+                    arguments=arguments,
+                    missing_fields=required,
+                    response="请提供待审核章节或候选版本的完整 ID。",
+                )
+            if "section_id" in required:
+                arguments["section_id"] = candidate_id
+                required.remove("section_id")
+                required.append("section_version_id")
+            elif "section_version_id" in required:
+                arguments["section_version_id"] = candidate_id
+                required.remove("section_version_id")
+            if required:
+                return AssistantIntent(
+                    mode="needs_input",
+                    tool_name="submit_review_decision",
+                    arguments=arguments,
+                    missing_fields=required,
+                    response="请继续提供待审核候选版本的完整 ID。",
+                )
+            return AssistantIntent(
+                mode="tool_action",
+                tool_name="submit_review_decision",
+                arguments=arguments,
+            )
         if task_state.status != "needs_input" or task_state.tool_name != "create_project":
             return None
         missing_fields = task_state.missing_fields_json or {}
@@ -403,6 +438,7 @@ def _resume_pending_intent(
         return None
 
     text = message.strip()
+    name: str | None
     if _is_delegate_followup(text):
         name = _default_project_name()
     else:

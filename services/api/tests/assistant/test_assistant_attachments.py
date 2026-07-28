@@ -6,6 +6,7 @@ from io import BytesIO
 
 from docx import Document
 
+from app.assistant import attachments
 from app.assistant.attachments import build_attachment_context, extract_attachment_text, remember_attachment_text
 from app.assistant.schemas import AssistantAttachmentPayload
 
@@ -73,3 +74,21 @@ def test_image_attachment_context_is_honest_about_unread_pixels() -> None:
     assert "screenshot.png" in context
     assert "当前不能读取图片像素或 OCR" in context
     assert "我看到了图片内容" not in context
+
+
+def test_attachment_extraction_never_exposes_raw_parser_error(monkeypatch) -> None:
+    monkeypatch.setattr(
+        attachments,
+        "_extract_docx",
+        lambda _data: (_ for _ in ()).throw(RuntimeError("database password=super-secret")),
+    )
+
+    result = extract_attachment_text(
+        filename="requirements.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        data=b"not-a-real-docx",
+    )
+
+    assert result.extraction_status == "failed"
+    assert result.error == "附件内容解析失败，请确认文件完整后重新上传。"
+    assert "super-secret" not in (result.error or "")
