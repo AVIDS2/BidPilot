@@ -17,6 +17,7 @@ OPENROUTER_EMBEDDING_MODEL = "qwen/qwen3-embedding-8b"
 OPENROUTER_EMBEDDING_DIMENSIONS = 1536
 
 _EMBEDDING_KEY_SOURCES: tuple[tuple[str, str], ...] = (
+    ("DOCPILOT_EMBEDDING_API_KEY", "platform"),
     ("EMBEDDING_API_KEY", "legacy"),
     ("OPENROUTER_API_KEY", "openrouter"),
     ("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "domestic"),
@@ -58,6 +59,11 @@ def embedding_api_url(default_url: str) -> str:
         return explicit_url
 
     _key, family = _first_present(_EMBEDDING_KEY_SOURCES)
+    if family == "platform":
+        base_url = os.environ.get("DOCPILOT_EMBEDDING_BASE_URL")
+        if base_url:
+            return _endpoint(base_url, "embeddings")
+        return default_url
     if family == "domestic":
         base_url = os.environ.get("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", DASHSCOPE_BASE_URL)
         return _endpoint(base_url, "embeddings")
@@ -78,6 +84,8 @@ def embedding_model(default_model: str) -> str:
         return explicit_model
 
     _key, family = _first_present(_EMBEDDING_KEY_SOURCES)
+    if family == "platform":
+        return os.environ.get("DOCPILOT_EMBEDDING_MODEL", default_model)
     if family == "domestic":
         return os.environ.get("DOCPILOT_EMBEDDING_MODEL_TEXT", DASHSCOPE_EMBEDDING_MODEL)
     if family == "openrouter":

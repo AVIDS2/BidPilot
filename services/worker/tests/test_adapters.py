@@ -19,6 +19,10 @@ from app.adapters.export import render_markdown_to_docx, _parse_markdown_to_bloc
 
 
 _EMBEDDING_ENV_NAMES = (
+    "DOCPILOT_EMBEDDING_API_KEY",
+    "DOCPILOT_EMBEDDING_BASE_URL",
+    "DOCPILOT_EMBEDDING_MODEL",
+    "DOCPILOT_EMBEDDING_DIMENSIONS",
     "EMBEDDING_API_KEY",
     "EMBEDDING_API_URL",
     "EMBEDDING_MODEL",
@@ -136,6 +140,33 @@ class TestEmbeddingAdapter:
         assert all(result.status is EmbeddingOutcomeStatus.NOT_CONFIGURED for result in results)
         assert all(result.embedding is None for result in results)
 
+    def test_large_batch_is_split_into_bounded_provider_requests(self, monkeypatch) -> None:
+        calls: list[list[str]] = []
+
+        def _fake_request(input_value: str | list[str], *, expected_count: int):
+            assert isinstance(input_value, list)
+            calls.append(input_value)
+            return [
+                embedding_adapter.EmbeddingResult(
+                    status=EmbeddingOutcomeStatus.SUCCESS,
+                    model=value,
+                    profile_id="test:embedding:1536:bidpilot-lexical-v1",
+                    vector=[0.1] * 1536,
+                )
+                for value in input_value
+            ]
+
+        monkeypatch.setattr(embedding_adapter, "_request_embeddings", _fake_request)
+
+        results = generate_embeddings_batch([f"chunk-{index}" for index in range(9)])
+
+        assert calls == [
+            ["chunk-0", "chunk-1", "chunk-2", "chunk-3"],
+            ["chunk-4", "chunk-5", "chunk-6", "chunk-7"],
+            ["chunk-8"],
+        ]
+        assert [result.model for result in results] == [f"chunk-{index}" for index in range(9)]
+
     def test_domestic_embedding_env_uses_dashscope_defaults(self, monkeypatch) -> None:
         monkeypatch.delenv("EMBEDDING_API_KEY", raising=False)
         monkeypatch.delenv("EMBEDDING_API_URL", raising=False)
@@ -176,6 +207,18 @@ class TestEmbeddingAdapter:
 
         assert embedding_adapter._api_key() == "test-openrouter-key"
         assert embedding_adapter._api_url() == "https://openrouter.ai/api/v1/embeddings"
+        assert embedding_adapter._api_model() == "qwen/qwen3-embedding-8b"
+        assert embedding_adapter._api_dimensions() == 1536
+
+    def test_explicit_platform_embedding_env_has_priority(self, monkeypatch) -> None:
+        _clear_embedding_env(monkeypatch)
+        monkeypatch.setenv("DOCPILOT_EMBEDDING_API_KEY", "test-platform-key")
+        monkeypatch.setenv("DOCPILOT_EMBEDDING_BASE_URL", "https://embeddings.example.test/v1")
+        monkeypatch.setenv("DOCPILOT_EMBEDDING_MODEL", "qwen/qwen3-embedding-8b")
+        monkeypatch.setenv("DOCPILOT_EMBEDDING_DIMENSIONS", "1536")
+
+        assert embedding_adapter._api_key() == "test-platform-key"
+        assert embedding_adapter._api_url() == "https://embeddings.example.test/v1/embeddings"
         assert embedding_adapter._api_model() == "qwen/qwen3-embedding-8b"
         assert embedding_adapter._api_dimensions() == 1536
 

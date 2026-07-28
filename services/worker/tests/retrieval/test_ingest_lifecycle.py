@@ -114,6 +114,24 @@ def test_run_ingest_marks_document_indexed_after_successful_embedding(monkeypatc
     assert chunk.embedding is not None
 
 
+def test_extract_text_reads_persisted_bucket_storage_key(monkeypatch) -> None:
+    downloaded_keys: list[str] = []
+
+    def _download_storage_key(storage_key: str) -> bytes:
+        downloaded_keys.append(storage_key)
+        return b"# RFP\nThe supplier must provide an implementation plan."
+
+    monkeypatch.setattr("app.adapters.storage.download_storage_key", _download_storage_key)
+
+    extracted = parser._extract_text(
+        "docpilot-project-id/bundle-id/rfp.md",
+        "text/markdown",
+    )
+
+    assert extracted.startswith("# RFP")
+    assert downloaded_keys == ["docpilot-project-id/bundle-id/rfp.md"]
+
+
 def test_run_ingest_stops_after_durable_parse_retry_budget(monkeypatch) -> None:
     bundle_id, source_document_id = _create_pending_bundle()
     extraction_attempts: list[str] = []

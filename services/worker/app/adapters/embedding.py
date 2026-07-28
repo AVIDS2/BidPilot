@@ -21,6 +21,7 @@ from contracts import EmbeddingOutcome, EmbeddingOutcomeStatus, RetrievalProfile
 logger = logging.getLogger(__name__)
 
 EMBEDDING_DIM = 1536
+EMBEDDING_BATCH_SIZE = 4
 _DEFAULT_URL = "https://api.openai.com/v1/embeddings"
 _DEFAULT_MODEL = "text-embedding-3-small"
 
@@ -267,7 +268,17 @@ def generate_embedding(text: str) -> EmbeddingResult:
 
 
 def generate_embeddings_batch(texts: list[str]) -> list[EmbeddingResult]:
-    """Generate a batch of embeddings with one bounded provider request."""
+    """Generate embeddings in bounded provider requests while preserving input order.
+
+    A document bundle can contain dozens of long chunks.  Sending all of them
+    through a gateway in one request makes a transient timeout fail the entire
+    index.  Keep requests small so a later re-ingest can retry only the failed
+    chunk records without fabricating vectors for the rest.
+    """
     if not texts:
         return []
-    return _request_embeddings(texts, expected_count=len(texts))
+    results: list[EmbeddingResult] = []
+    for start in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+        batch = texts[start : start + EMBEDDING_BATCH_SIZE]
+        results.extend(_request_embeddings(batch, expected_count=len(batch)))
+    return results

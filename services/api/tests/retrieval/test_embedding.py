@@ -5,6 +5,9 @@ from contracts import EmbeddingOutcomeStatus
 
 
 _EMBEDDING_ENV_NAMES = (
+    "DOCPILOT_EMBEDDING_API_KEY",
+    "DOCPILOT_EMBEDDING_BASE_URL",
+    "DOCPILOT_EMBEDDING_MODEL",
     "EMBEDDING_API_KEY",
     "EMBEDDING_API_URL",
     "EMBEDDING_MODEL",
@@ -83,6 +86,43 @@ def test_query_embedding_uses_openrouter_profile_and_dimension_request(
     assert captured["url"] == "https://openrouter.ai/api/v1/embeddings"
     assert captured["json"] == {
         "input": "cloud deployment",
+        "model": "qwen/qwen3-embedding-8b",
+        "dimensions": 1536,
+    }
+
+
+def test_query_embedding_uses_explicit_platform_embedding_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_embedding_env(monkeypatch)
+    monkeypatch.setenv("DOCPILOT_EMBEDDING_API_KEY", "test-platform-key")
+    monkeypatch.setenv("DOCPILOT_EMBEDDING_BASE_URL", "https://embeddings.example.test/v1")
+    monkeypatch.setenv("DOCPILOT_EMBEDDING_MODEL", "qwen/qwen3-embedding-8b")
+    monkeypatch.setenv("DOCPILOT_EMBEDDING_DIMENSIONS", "1536")
+    captured: dict[str, object] = {}
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"data": [{"embedding": [0.1] * 1536}]}
+
+    def fake_post(url: str, *, headers: dict[str, str], json: dict[str, object], timeout: float) -> Response:
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        return Response()
+
+    monkeypatch.setattr(query_embedding.httpx, "post", fake_post)
+
+    result = query_embedding.generate_query_embedding("controlled project evidence")
+
+    assert result.status is EmbeddingOutcomeStatus.SUCCESS
+    assert result.profile_id == "platform:qwen/qwen3-embedding-8b:1536:bidpilot-lexical-v1"
+    assert captured["url"] == "https://embeddings.example.test/v1/embeddings"
+    assert captured["json"] == {
+        "input": "controlled project evidence",
         "model": "qwen/qwen3-embedding-8b",
         "dimensions": 1536,
     }

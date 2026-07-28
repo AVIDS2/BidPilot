@@ -74,6 +74,22 @@ def download_document(project_id: str, object_name: str) -> bytes:
         response.release_conn()
 
 
+def download_storage_key(storage_key: str) -> bytes:
+    """Download a document using the persisted ``bucket/object_name`` key.
+
+    The API owns bucket naming when it uploads a source document.  Workers must
+    therefore read the durable key directly instead of trying to derive a bucket
+    from an unrelated identifier.
+    """
+    bucket, object_name = storage_key.split("/", 1)
+    response = _get_client().get_object(bucket, object_name)
+    try:
+        return response.read()
+    finally:
+        response.close()
+        response.release_conn()
+
+
 def list_documents(project_id: str, prefix: str = "") -> list[str]:
     """List document object names in a project bucket."""
     client = _get_client()

@@ -90,18 +90,11 @@ class _ContentBlock:
 
 
 def _download_from_minio(storage_key: str) -> bytes | None:
-    """Download document bytes from MinIO using the storage_key.
-
-    storage_key format: ``{project_id}/{object_name}`` or just ``{object_name}``.
-    """
+    """Download document bytes from MinIO using its durable storage key."""
     try:
-        from app.adapters.storage import download_document
+        from app.adapters.storage import download_storage_key
 
-        parts = storage_key.split("/", 1)
-        if len(parts) == 2:
-            project_id, object_name = parts
-            return download_document(project_id, object_name)
-        return None
+        return download_storage_key(storage_key)
     except Exception as exc:
         logger.warning("MinIO download failed for %s: %s", storage_key, exc)
         return None
