@@ -45,6 +45,7 @@ Based on 99.5% availability SLO over 30 days:
 | `GET /health` | Liveness probe (always returns ok if process alive) |
 | `GET /ops/health-detailed` | Readiness probe (checks Postgres, Redis, MinIO) |
 | `GET /ops/runtime-summary` | Queue depth, failed runs, success rate |
+| `GET /ops/runtime-runs/{run_id}/diagnostics` | Administrator-only redacted run correlation: state, retries, approval wait, token counters, retrieval metrics, audit and deliverable links |
 
 ## Local load smoke
 

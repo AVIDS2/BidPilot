@@ -82,6 +82,11 @@ authorized, policy-checked, auditable, and persisted before any model output is
 presented as complete. The complete lifecycle, public-result, and human-only
 boundaries are defined in [agent-capability-matrix.md](agent-capability-matrix.md).
 
+The conversational Harness and long-running LangGraph workflows have separate
+responsibilities. Their public boundary, event contract, retry semantics, and
+approval behavior are defined in
+[assistant-harness-runtime.md](assistant-harness-runtime.md).
+
 ## Deployment evolution
 
 ### Initial mode

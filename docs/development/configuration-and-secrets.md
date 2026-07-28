@@ -168,7 +168,7 @@ catalogue, and invoice matching are still separate launch requirements.
 
 `DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres` is the production default for durable workflow checkpoints. `DOCPILOT_AGENT_CHECKPOINTER=postgres` is the corresponding durable setting for the interactive Assistant. `memory` is allowed only for explicit local smoke tests where checkpoint behavior is being isolated.
 
-`DOCPILOT_ASSISTANT_ENGINE=operator` is the production default. It uses the product runtime policy, idempotency, approval, and event contracts; `deterministic` remains a local/test fallback and the legacy ReAct path is not an approved production engine.
+`DOCPILOT_ASSISTANT_ENGINE=harness` is the production default. It uses the product runtime policy, idempotency, approval, and event contracts; `deterministic` remains a local/test fallback. `operator` and `streaming_harness` are temporary configuration aliases only and must not appear in new deployment files.
 
 SMTP is considered configured only when `DOCPILOT_SMTP_HOST`,
 `DOCPILOT_SMTP_USER`, `DOCPILOT_SMTP_PASS`, and `DOCPILOT_SMTP_FROM` are all
@@ -246,7 +246,7 @@ replay protection; application changes must preserve it.
 - `DOCPILOT_ENV` must be `production`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER` must be `postgres`
 - `DOCPILOT_AGENT_CHECKPOINTER` must be `postgres`
-- `DOCPILOT_ASSISTANT_ENGINE` must be `operator`
+- `DOCPILOT_ASSISTANT_ENGINE` must be `harness`
 - `DOCPILOT_RATE_LIMIT` must be a reviewed positive fixed-window budget such as `1000/minute`
 - `DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING` must be a reviewed non-negative
   per-workspace platform maximum; `0` intentionally disables platform-funded

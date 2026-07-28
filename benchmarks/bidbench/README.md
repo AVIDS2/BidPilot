@@ -31,3 +31,18 @@ Every committed dataset must declare origin and license. Private customer files 
 
 The `demo-smart-community` dataset is entirely synthetic. Company names, customers, qualifications, staffing, delivery history, and performance figures are fictional and do not represent real credentials or contracts.
 
+## Development Baseline
+
+Run the four offline evaluators together with:
+
+```powershell
+uv run --directory services/api python ../../scripts/run_development_baseline.py
+```
+
+The command writes BidBench, RetrievalBench, MemoryBench, AssistantBench, and
+one aggregate receipt. The receipt records the current Git commit, every
+dataset fingerprint, report SHA-256, capture mode, and the total fixed-case
+count. It uses only control fixtures and performs no provider call, so it is a
+development diagnostic artifact, never a release-quality claim. Production
+promotion still requires reviewed `regression` or `hidden` captures through
+the quality-gate policy.

@@ -37,6 +37,28 @@ Project-like bundles used to validate the canonical end-to-end scenarios.
 - keep fixtures versioned and documented
 - large benchmark datasets should not live in the main repo by default
 
+## P0-B Fixed Synthetic Demo Pack
+
+`sample-data/bidpilot-demo/manifest.json` is the canonical, de-identified
+three-document material pack used by the P0 ingestion and presentation path.
+It contains one RFP, one supplier capability document, and one case study.
+
+- all material is repository-maintained synthetic demo content; it is not a
+  customer bid or a claim about a real supplier
+- the manifest declares a dataset id, version, role, expected structural
+  anchors, and SHA-256 for every source file
+- tests must verify the hashes before relying on the pack as a regression or
+  demo input
+- every parsed chunk derived from this pack must retain the stable locator
+  contract: `source_document_id + chunk_index + source_checksum + document_version`
+- a demo result can use sparse retrieval when no embedding provider is
+  configured, but it must surface that degraded state rather than claiming a
+  fully indexed live corpus
+
+Update the manifest and its hash test in the same review whenever a fixture is
+intentionally changed. Do not overwrite the files to make an evaluation score
+look better; create a new dataset version instead.
+
 ## Recommended baseline packs
 
 ### Fixture Pack A: Tiny smoke bundle

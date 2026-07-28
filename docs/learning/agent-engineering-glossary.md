@@ -45,6 +45,30 @@ This is a living glossary. Each entry should eventually link to a BidPilot imple
 | Structured pending-input state | Small durable state for one incomplete task, distinct from chat history | Stores only capability, redacted arguments, and missing fields for 30 minutes so the next Operator turn knows what remains |
 | Evaluation capture manifest | Private mapping from a benchmark case to an approved runtime trace | Offline AssistantBench capture reads durable plan/action/approval facts but emits no messages, ids, argument values, or model payloads |
 | SLO | Reliability target for a service | P95 assistant latency, workflow completion, approval safety |
+| Context Engineering | Designing what goes into the LLM context window, when, and how | Prompt assembly + memory injection + compression + skill loading — the whole pipeline from user intent to final messages[] |
+| Attention Dilution | When long conversations cause the model to "forget" early instructions or goals because attention is spread too thin across too many tokens | Long-running harness turns lose track of the original goal; mitigated by todo reminder injection, subagent isolation, and context compaction |
+| Lost-in-the-Middle | Models pay less attention to information in the middle of long contexts; best recall is at the beginning and end | Evidence retrieval ordering matters; place most relevant chunks at start and end of injected context |
+| TTFT | Time To First Token — latency from request sent to first streaming chunk received | Depends on provider, prompt cache hit, KV-cache state, and prompt length |
+| Context Compaction | Automatically shrinking the messages[] list when approaching the context window limit | BidPilot deterministically retains recent turns and emits an explicit compact recap marker; it deliberately does not yet call an LLM to summarize transcript history |
+| Model Cascade | Using a small/fast/cheap model for classification or summarization, then routing complex work to a large/expensive model | Not yet implemented in BidPilot; reduces token cost 40-60% |
+| Inference Optimization | Techniques to make model inference faster or cheaper: KV-cache reuse, quantization (INT8/INT4/FP8), speculative decoding, dynamic batching | Mostly applies to self-hosted models; for API users, the lever is prompt caching and streaming |
+| KV-Cache | Key-Value cache stores computed attention states from previous tokens so the model doesn't recompute them on each new token | Enables streaming: each new token only computes attention against cached KVs, not the full context |
+| Quantization | Reducing model weight precision (FP32 → FP16 → INT8 → INT4) to save memory and speed up inference at some quality cost | Self-hosted consideration; API users don't control this |
+| Speculative Decoding | A small "draft" model generates candidate tokens, the large "verifier" model checks them in parallel — correct tokens are accepted, wrong ones re-generated | Speeds up inference 2-3x for self-hosted; some API providers use it internally |
+| Sandbox Isolation | Restricting what an agent can do at the OS level: file system access, network, process limits | BidPilot has tool-level filtering (read-only tools) but no OS-level sandbox (Docker/nsjail) |
+| Multimodal Vision | Processing images, PDFs, screenshots as input alongside text | BidPilot doesn't process image content yet; cookbooks `multimodal/` covers this |
+| Prompt Cache | Provider-side caching of common prompt prefixes (especially system prompt + tools) so repeated calls skip re-processing | Anthropic supports prompt caching; BidPilot doesn't optimize for it yet |
+| Circuit Breaker | Pattern to stop calling a failing service after N consecutive errors, preventing cascading failures | BidPilot has retry but no circuit breaker pattern yet |
+| Exponential Backoff | Retry with increasing delays (1s, 2s, 4s, 8s...) to avoid hammering a temporarily failing service | BidPilot has basic retry; could benefit from exponential backoff |
+| Prompt Assembly | Building the final system prompt from modular pieces: identity + tools + skills + memory + project context | `runtime/prompt_assembly.py` composes bounded conversation, selected skills, authorized memory, staged-attachment context, and trace metadata |
+| Working Memory | The information visible to the model in the current context window — its "short-term memory" | BidPilot passes conversation_context + memory_context_records + available_attachments as working memory |
+| Episodic Memory | Records of what happened in past tasks: what was tried, what worked, what failed | Glossary-defined but not auto-extracted in BidPilot |
+| Semantic Memory | Stable facts: company capabilities, customer data, requirement standards | Partially via memory_context_records, but no auto-extraction |
+| Procedural Memory | Reusable workflows and playbooks: how to draft a section, how to format evidence | Partially via skills docs, but not in a structured memory system |
+| Fine-tuning (SFT/RLHF/DPO) | SFT = Supervised Fine-Tuning on curated examples; RLHF = training with human preference feedback via reward model; DPO = Direct Preference Optimization (simpler RLHF alternative) | BidPilot doesn't fine-tune models; understanding these is for interview and future optimization |
+| Transformer Architecture | The neural network architecture behind all modern LLMs: self-attention mechanism, feed-forward layers, positional encoding, layer normalization | Not needed for harness engineering, but critical for AI engineering interviews |
+| Self-Attention | Mechanism where each token computes relevance scores against all other tokens in the sequence; O(n²) in sequence length | Understanding this explains why long contexts are expensive and why attention dilution happens |
+| Tokenization | Converting text into integer token IDs; different models use different tokenizers (BPE, SentencePiece, etc.) | Explains why some languages/models are more token-efficient than others |
 
 ## Project Access: Concepts Applied in BidPilot
 

@@ -65,6 +65,18 @@ Actions like parse, draft, rerun, validation, and export should:
 2. return that identifier immediately
 3. update run state through the control plane
 
+### Response-plan read model
+
+The API exposes response-plan history as a project-scoped read model:
+
+- `GET /response-plans?project_id=...` lists immutable plan revisions;
+- `GET /response-plans/{response_plan_id}?project_id=...` returns sections,
+  assigned requirement/owner snapshots, and the evidence/content-plan bindings
+  used by each draft attempt.
+
+Both endpoints require `project.read`. They are audit views only: clients do
+not construct or mutate response-plan mappings directly.
+
 ### Run state shape
 
 Each durable run should expose:
@@ -142,6 +154,18 @@ The event subject should identify what changed:
 - additive fields are preferred over breaking renames
 - shared contracts should live in `packages/contracts`
 - API and worker code should import shared identifiers and enums where practical
+
+## Assistant runtime event contract
+
+Assistant and workflow execution traces use `RuntimeEventRecord` schema version
+`1.1`. Every event is durable before it is rendered to SSE and includes a
+run-local monotonic sequence plus optional parent-event lineage. The public
+assistant endpoint may still emit `assistant.*` events for compatibility, but
+those events are projections of `run.*`, `capability.*`, `approval.*`,
+`workflow.linked`, and `message.*` runtime facts.
+
+See [assistant-harness-runtime.md](assistant-harness-runtime.md) for the
+Harness lifecycle, idempotency, approval, and failure-handling rules.
 
 ## Documentation rule
 

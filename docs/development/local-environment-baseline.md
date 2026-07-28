@@ -74,6 +74,7 @@ initialize it before testing:
 ```powershell
 $env:DOCPILOT_DATABASE_URL = $env:DOCPILOT_TEST_DATABASE_URL
 uv run --directory services/api alembic upgrade head
+uv run --directory services/api python ../../scripts/verify_migration_health.py
 ```
 
 The test bootstrap rejects a database name that does not end in `_test` before
@@ -83,6 +84,12 @@ release-rehearsal evidence reproducible.
 `alembic` is invoked outside the test bootstrap, so it reads
 `DOCPILOT_DATABASE_URL` directly. Set it explicitly as shown above; do not run
 migrations against `docpilot` while intending to migrate `docpilot_test`.
+
+`verify_migration_health.py` also creates one randomly named local scratch
+database ending in `_test`, upgrades it from empty state, checks all ORM model
+tables, and removes only that scratch database when the check finishes. It
+refuses remote hosts and names outside its generated scratch namespace. Use
+`--keep-scratch` only when manually investigating a migration failure.
 
 Start command:
 

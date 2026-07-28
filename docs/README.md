@@ -27,6 +27,10 @@ It is organized to support three goals:
   - supported source categories, document intake priorities, and data-quality rules
 - `docs/product/domain-glossary.md`
   - durable domain terms and their intended meaning across product and implementation
+- `docs/product/non-developer-demo-guide.md`
+  - non-technical walkthrough of the synthetic bid-response golden path
+- `docs/product/interview-demo-script.md`
+  - timed architecture, runtime, workflow, failure, and evaluation walkthrough
 - `docs/adr/0001-core-technology-stack.md`
   - the primary stack and architecture decision record
 - `docs/adr/0002-workflow-and-execution-architecture.md`
@@ -48,6 +52,8 @@ It is organized to support three goals:
   - how model providers, parsers, MCP servers, and tools plug into the system
 - `docs/architecture/api-and-event-contracts.md`
   - REST, async run, and event contract conventions for stable implementation
+- `docs/architecture/assistant-harness-runtime.md`
+  - public Assistant lifecycle, idempotency, approval, replay, and failure boundary
 - `docs/architecture/frontend-application-architecture.md`
   - route, state, UI layer, and component architecture for the frontend application
 - `docs/architecture/document-ingestion-and-format-strategy.md`

@@ -105,7 +105,7 @@ Required secret-backed values:
 - `DOCPILOT_ENV=production`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres`
 - `DOCPILOT_AGENT_CHECKPOINTER=postgres`
-- `DOCPILOT_ASSISTANT_ENGINE=operator`
+- `DOCPILOT_ASSISTANT_ENGINE=harness`
 
 `DOCPILOT_AUTH_REQUIRED` must be `true`.
 

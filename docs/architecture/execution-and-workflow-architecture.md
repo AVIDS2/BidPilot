@@ -87,6 +87,18 @@ Owns:
 - agentic step logic inside drafting or similar AI-heavy tasks
 - step sequencing where loops, tools, and validation matter
 
+### Assistant Harness
+
+Owns:
+
+- interactive, tool-calling turns over the product control plane
+- missing-input pauses, approval handoff, and durable turn traces
+- handoff into a linked long-running workflow when a task cannot complete in
+  the request/response lifetime
+
+It does not replace the worker workflow engine. The detailed runtime boundary
+is documented in [assistant-harness-runtime.md](assistant-harness-runtime.md).
+
 ## Initial workflow families
 
 ### Ingestion workflow
@@ -114,9 +126,33 @@ Stages:
 
 - drafting queued
 - evidence retrieved
+- durable response-plan revision resolved from the deliverable outline and requirement ledger
+- response-plan/evidence binding captured for the exact execution run and draft iteration
 - draft generated
 - validation completed
 - section version persisted
+
+### Durable response-plan boundary
+
+`ContentPlan` in LangGraph state is an execution convenience, not proposal
+business truth. Before a provider is allowed to draft, the worker must persist
+and later reload the following PostgreSQL records:
+
+- `ResponsePlan`: immutable revision of one deliverable structure and its
+  requirement-assignment source fingerprint;
+- `ResponsePlanSection` and `ResponsePlanRequirement`: the exact
+  section/requirement/owner/verification snapshots used for a draft;
+- `ResponsePlanEvidenceBinding`: one idempotent binding per
+  `(ExecutionRun, generation_iteration)`, carrying the response-plan section,
+  authorized `EvidenceSet`, and JSON-safe content plan;
+- `SectionVersion`: immutable draft candidate pointing to both the plan
+  section and the plan/evidence binding.
+
+A changed requirement creates a new active response-plan revision and marks
+the prior plan `superseded`; it never rewrites a candidate's historical
+planning basis. Drafting, review, and final persistence rehydrate the same
+binding by project, run, and section scope. Missing or mismatched bindings are
+terminal workflow errors, not compatibility fallbacks.
 
 ### Review workflow
 
