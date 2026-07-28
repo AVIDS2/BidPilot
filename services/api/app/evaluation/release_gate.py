@@ -11,7 +11,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
@@ -25,6 +25,9 @@ from .retrieval_metrics import RetrievalEvaluationReport
 
 class _QualityGateModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+
+ReportModel = TypeVar("ReportModel", bound=BaseModel)
 
 
 class QualityGateMode(StrEnum):
@@ -599,7 +602,7 @@ def _assistant_input(report: AssistantEvaluationReport) -> QualityGateInput:
     )
 
 
-def _load_report(path: Path, model: type[BaseModel], name: str) -> BaseModel:
+def _load_report(path: Path, model: type[ReportModel], name: str) -> ReportModel:
     try:
         return model.model_validate_json(path.read_bytes())
     except (OSError, ValidationError) as exc:

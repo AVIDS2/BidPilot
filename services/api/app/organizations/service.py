@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -368,18 +370,17 @@ def list_user_orgs_query(db: Session, user_id: str) -> list[Organization]:
 
 
 def list_org_members_query(db: Session, org_id: str) -> list[tuple[OrganizationMembership, User]]:
-    return list(
-        db.execute(
-            select(OrganizationMembership, User)
-            .join(User, User.id == OrganizationMembership.user_id)
-            .where(
-                OrganizationMembership.org_id == org_id,
-                OrganizationMembership.status == ACTIVE_MEMBERSHIP_STATUS,
-                User.disabled.is_(False),
-            )
-            .order_by(User.display_name, User.email, User.id)
-        ).all()
+    rows = db.execute(
+        select(OrganizationMembership, User)
+        .join(User, User.id == OrganizationMembership.user_id)
+        .where(
+            OrganizationMembership.org_id == org_id,
+            OrganizationMembership.status == ACTIVE_MEMBERSHIP_STATUS,
+            User.disabled.is_(False),
+        )
+        .order_by(User.display_name, User.email, User.id)
     )
+    return cast(list[tuple[OrganizationMembership, User]], rows.tuples().all())
 
 
 def get_org_by_id(db: Session, org_id: str) -> Organization | None:
@@ -680,18 +681,26 @@ def remove_organization_member_command(
             commit=False,
         )
 
-    project_memberships_removed = db.execute(
-        delete(ProjectMember).where(
-            ProjectMember.user_id == target_user_id,
-            ProjectMember.project_id.in_(select(Project.id).where(Project.org_id == org_id)),
-        )
-    ).rowcount or 0
-    team_memberships_removed = db.execute(
-        delete(TeamMember).where(
-            TeamMember.user_id == target_user_id,
-            TeamMember.team_id.in_(select(Team.id).where(Team.org_id == org_id)),
-        )
-    ).rowcount or 0
+    project_memberships_result = cast(
+        CursorResult[Any],
+        db.execute(
+            delete(ProjectMember).where(
+                ProjectMember.user_id == target_user_id,
+                ProjectMember.project_id.in_(select(Project.id).where(Project.org_id == org_id)),
+            ),
+        ),
+    )
+    project_memberships_removed = project_memberships_result.rowcount or 0
+    team_memberships_result = cast(
+        CursorResult[Any],
+        db.execute(
+            delete(TeamMember).where(
+                TeamMember.user_id == target_user_id,
+                TeamMember.team_id.in_(select(Team.id).where(Team.org_id == org_id)),
+            ),
+        ),
+    )
+    team_memberships_removed = team_memberships_result.rowcount or 0
 
     target_membership.status = REMOVED_MEMBERSHIP_STATUS
     target_membership.removed_at = _utcnow()

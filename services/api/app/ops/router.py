@@ -3,13 +3,26 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.service import require_admin
+from app.auth.schemas import CurrentUser
 from app.db import get_db
 from app.billing.service import get_billing_summary, list_stripe_webhook_receipts
 from app.models import ExecutionRun, User
 from app.ops.health import collect_dependency_checks, dependencies_are_ready
+from app.runtime.diagnostics import get_runtime_diagnostics
+from app.runtime.schemas import RuntimeDiagnosticsRead
 from app.usage.service import list_usage_events_for_user
 
 router = APIRouter(prefix="/ops", tags=["ops"])
+
+
+@router.get("/runtime-runs/{run_id}/diagnostics", response_model=RuntimeDiagnosticsRead)
+def runtime_run_diagnostics(
+    run_id: str,
+    admin: CurrentUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> RuntimeDiagnosticsRead:
+    """Return a redacted, administrator-only correlation view for one run."""
+    return get_runtime_diagnostics(db, current_user=admin, run_id=run_id)
 
 
 @router.get("/runtime-summary")

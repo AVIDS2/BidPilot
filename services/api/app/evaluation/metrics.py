@@ -132,7 +132,7 @@ def score_candidate(dataset: BidBenchDataset, candidate: BidBenchCandidate) -> B
         for evidence_id in requirement.expected_evidence_ids
     }
     matched_by_candidate_id = {candidate_requirement.id: truth.id for candidate_requirement, truth in matches}
-    candidate_evidence = set()
+    candidate_evidence: set[tuple[str, str]] = set()
     for candidate_requirement in candidate.requirements:
         truth_id = matched_by_candidate_id.get(
             candidate_requirement.id,

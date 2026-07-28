@@ -11,7 +11,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
@@ -54,6 +54,9 @@ _DRAFT_RUN_TYPES = {"draft_section", "redraft_section"}
 
 class _ClaimIntegrityCaptureModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+
+MappingItem = TypeVar("MappingItem")
 
 
 class ClaimIntegrityRuntimeRequirementMap(_ClaimIntegrityCaptureModel):
@@ -422,8 +425,19 @@ def _validate_runtime_bridge(
     return bridge
 
 
-def _exact_map(items: tuple, *, key: str, expected_ids: set[str], label: str) -> dict[str, object]:
-    mapped = {getattr(item, key): item for item in items}
+def _exact_map(
+    items: tuple[MappingItem, ...],
+    *,
+    key: str,
+    expected_ids: set[str],
+    label: str,
+) -> dict[str, MappingItem]:
+    mapped: dict[str, MappingItem] = {}
+    for item in items:
+        item_id = getattr(item, key, None)
+        if not isinstance(item_id, str):
+            raise ValueError(f"claim capture {label} map has an invalid runtime id")
+        mapped[item_id] = item
     if len(mapped) != len(items) or set(mapped) != expected_ids:
         raise ValueError(f"claim capture {label} map does not exactly cover the runtime scope")
     return mapped
@@ -495,18 +509,21 @@ def _validate_benchmark_mappings(
     source_ids: set[str],
     evidence_ids: set[str],
 ) -> None:
-    for item in manifest.requirements:
-        if item.benchmark_requirement_id and item.benchmark_requirement_id not in requirement_ids:
+    for requirement_mapping in manifest.requirements:
+        if (
+            requirement_mapping.benchmark_requirement_id
+            and requirement_mapping.benchmark_requirement_id not in requirement_ids
+        ):
             raise ValueError("claim capture requirement map references an unknown benchmark requirement")
-    for item in manifest.source_documents:
-        if item.benchmark_source_id and item.benchmark_source_id not in source_ids:
+    for source_mapping in manifest.source_documents:
+        if source_mapping.benchmark_source_id and source_mapping.benchmark_source_id not in source_ids:
             raise ValueError("claim capture source map references an unknown benchmark source")
-        if not item.benchmark_source_id and item.candidate_source_id in source_ids:
+        if not source_mapping.benchmark_source_id and source_mapping.candidate_source_id in source_ids:
             raise ValueError("claim capture unmapped source id collides with a benchmark source")
-    for item in manifest.evidence:
-        if item.benchmark_evidence_id and item.benchmark_evidence_id not in evidence_ids:
+    for evidence_mapping in manifest.evidence:
+        if evidence_mapping.benchmark_evidence_id and evidence_mapping.benchmark_evidence_id not in evidence_ids:
             raise ValueError("claim capture evidence map references an unknown benchmark evidence")
-        if not item.benchmark_evidence_id and item.candidate_evidence_id in evidence_ids:
+        if not evidence_mapping.benchmark_evidence_id and evidence_mapping.candidate_evidence_id in evidence_ids:
             raise ValueError("claim capture unmapped evidence id collides with benchmark evidence")
 
 

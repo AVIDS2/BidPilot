@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Any
 
 _STRIPE_KEY = os.environ.get("DOCPILOT_STRIPE_SECRET_KEY", "")
 _STRIPE_WEBHOOK_SECRET = os.environ.get("DOCPILOT_STRIPE_WEBHOOK_SECRET", "")
@@ -59,7 +60,7 @@ def create_checkout_session(
     _stripe.api_key = _STRIPE_KEY
 
     metadata = {"user_id": user_id, "plan": plan}
-    session_args = {
+    session_args: dict[str, Any] = {
         "mode": "subscription",
         "success_url": success_url,
         "cancel_url": cancel_url,
@@ -75,6 +76,8 @@ def create_checkout_session(
         session_args["customer_email"] = user_email
 
     session = _stripe.checkout.Session.create(**session_args)
+    if not session.url:
+        raise RuntimeError("Stripe Checkout did not return a redirect URL")
     return CheckoutResult(session_id=session.id, url=session.url)
 
 
@@ -111,7 +114,7 @@ def create_organization_checkout_session(
         "billing_owner_user_id": billing_owner_user_id,
         "plan": plan,
     }
-    session_args = {
+    session_args: dict[str, Any] = {
         "mode": "subscription",
         "success_url": success_url,
         "cancel_url": cancel_url,
@@ -126,6 +129,8 @@ def create_organization_checkout_session(
         session_args["customer_email"] = billing_owner_email
 
     session = _stripe.checkout.Session.create(**session_args)
+    if not session.url:
+        raise RuntimeError("Stripe Checkout did not return a redirect URL")
     return CheckoutResult(session_id=session.id, url=session.url)
 
 

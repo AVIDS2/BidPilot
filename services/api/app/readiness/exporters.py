@@ -2,6 +2,7 @@ from io import BytesIO
 import json
 
 from docx import Document
+from docx.document import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 from openpyxl import Workbook
@@ -138,7 +139,7 @@ def render_readiness_docx(summary: BidReadinessSummary) -> bytes:
     return buffer.getvalue()
 
 
-def _add_requirement_section(document: Document, title: str, requirements: list) -> None:
+def _add_requirement_section(document: DocxDocument, title: str, requirements: list) -> None:
     document.add_heading(title, level=2)
     if not requirements:
         document.add_paragraph("None")

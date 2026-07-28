@@ -4,6 +4,8 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from app.adapters import stripe_adapter
 
 
@@ -77,6 +79,32 @@ def test_checkout_uses_existing_customer_instead_of_customer_email(monkeypatch):
 
     assert calls[0]["customer"] == "cus_existing"
     assert "customer_email" not in calls[0]
+
+
+def test_checkout_rejects_missing_redirect_url(monkeypatch):
+    class FakeCheckoutSession:
+        @staticmethod
+        def create(**_kwargs):
+            return SimpleNamespace(id="cs_test_missing_url", url=None)
+
+    fake_stripe = SimpleNamespace(
+        api_key=None,
+        checkout=SimpleNamespace(Session=FakeCheckoutSession),
+    )
+    monkeypatch.setattr(stripe_adapter, "_STRIPE_KEY", "sk_test_adapter")
+    monkeypatch.setitem(stripe_adapter.PLAN_PRICE_IDS, "professional", "price_professional")
+
+    with patch.dict(sys.modules, {"stripe": fake_stripe}), pytest.raises(
+        RuntimeError,
+        match="redirect URL",
+    ):
+        stripe_adapter.create_checkout_session(
+            user_id="user_missing_url",
+            user_email="user@example.com",
+            plan="professional",
+            success_url="https://app.example/success",
+            cancel_url="https://app.example/cancel",
+        )
 
 
 def test_organization_checkout_copies_workspace_metadata_and_seat_quantity(monkeypatch):

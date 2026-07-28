@@ -441,7 +441,16 @@ def export_user_data(
         ],
         "section_versions": [
             {"id": v.id, "deliverable_section_id": v.deliverable_section_id, "version_number": v.version_number, "created_by_actor": v.created_by_actor}
-            for v in db.query(SectionVersion).join(DeliverableSection).join(Deliverable).filter(Deliverable.project_id.in_(audit_project_ids)).all()
+            for v in (
+                db.query(SectionVersion)
+                .join(
+                    DeliverableSection,
+                    SectionVersion.deliverable_section_id == DeliverableSection.id,
+                )
+                .join(Deliverable, DeliverableSection.deliverable_id == Deliverable.id)
+                .filter(Deliverable.project_id.in_(audit_project_ids))
+                .all()
+            )
         ] if audit_project_ids else [],
         "audit_events": [
             {"id": e.id, "event_type": e.event_type, "actor_id": e.actor_id, "project_id": e.project_id, "timestamp": str(e.created_at)}

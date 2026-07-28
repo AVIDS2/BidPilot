@@ -414,8 +414,8 @@ def _apply_stripe_event(
             if isinstance(target.subscription, OrganizationSubscription)
             else _resolve_plan(obj, target.subscription)
         )
-        subscription_status = _string(_get(obj, "status"))
-        if plan is None or subscription_status not in VALID_SUBSCRIPTION_STATUSES:
+        current_subscription_status = _string(_get(obj, "status"))
+        if plan is None or current_subscription_status not in VALID_SUBSCRIPTION_STATUSES:
             return "ignored_invalid_subscription"
         if target.scope == "organization":
             _sync_organization_subscription(
@@ -426,7 +426,7 @@ def _apply_stripe_event(
                     stripe_subscription_id=current_subscription_id,
                 ),
                 plan=plan,
-                status=subscription_status,
+                status=current_subscription_status,
                 event_created_at=event_created_at,
                 seat_state=seat_state,
             )
@@ -437,7 +437,7 @@ def _apply_stripe_event(
             db,
             user_id=target.user_id,
             plan=plan,
-            status=subscription_status,
+            status=current_subscription_status,
             customer_id=current_customer_id,
             stripe_subscription_id=current_subscription_id,
             event_created_at=event_created_at,

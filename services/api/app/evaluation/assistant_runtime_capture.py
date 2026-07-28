@@ -148,7 +148,9 @@ def _capture_observation(
             raise ValueError(f"runtime capture case {case.id} tool plan has no durable action")
         if action.capability_name != capability_name:
             raise ValueError(f"runtime capture case {case.id} plan/action capability mismatch")
-        mode = "workflow_trigger" if is_workflow_capability(capability_name) else "tool_action"
+        mode: Literal["workflow_trigger", "tool_action"] = (
+            "workflow_trigger" if is_workflow_capability(capability_name) else "tool_action"
+        )
         policy_outcome = _runtime_policy_outcome(action, case_id=case.id)
         approval = db.scalar(select(RuntimeApproval).where(RuntimeApproval.action_id == action.id))
         requires_typed_confirmation = bool(
@@ -203,9 +205,14 @@ def _load_single_plan(db: Session, run: RuntimeRun, *, case_id: str) -> RuntimeE
 
 def _plan_mode(event: RuntimeEvent, *, case_id: str) -> Literal["answer", "tool", "needs_input"]:
     mode = _payload_text(event.payload_json, "mode")
-    if mode not in {"answer", "tool", "needs_input"}:
+    if mode == "answer":
+        return "answer"
+    if mode == "tool":
+        return "tool"
+    if mode == "needs_input":
+        return "needs_input"
+    else:
         raise ValueError(f"runtime capture case {case_id} has an unsupported plan mode")
-    return mode
 
 
 def _runtime_policy_outcome(action: RuntimeAction, *, case_id: str) -> RuntimePolicyOutcome:

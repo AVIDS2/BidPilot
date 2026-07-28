@@ -97,17 +97,17 @@ def create_checkout(
         # An existing Stripe customer must manage an upgrade/cancellation in the
         # Billing Portal. Creating another Checkout subscription would bill twice.
         if subscription.stripe_customer_id:
-            result = create_billing_portal_session(
+            portal_result = create_billing_portal_session(
                 stripe_customer_id=subscription.stripe_customer_id,
                 return_url=f"{app_url}/account",
             )
-            return {"url": result.url, "session_id": result.session_id, "mode": "portal"}
+            return {"url": portal_result.url, "session_id": portal_result.session_id, "mode": "portal"}
         entitlement = resolve_org_entitlements(
             db,
             org_id=current_user.org_id,
             actor_user_id=current_user.id,
         )
-        result = create_organization_checkout_session(
+        checkout_result = create_organization_checkout_session(
             org_id=current_user.org_id,
             billing_owner_user_id=current_user.id,
             billing_owner_email=current_user.email,
@@ -119,7 +119,7 @@ def create_checkout(
     except RuntimeError as e:
         raise HTTPException(status_code=501, detail=str(e))
 
-    return {"url": result.url, "session_id": result.session_id, "mode": "checkout"}
+    return {"url": checkout_result.url, "session_id": checkout_result.session_id, "mode": "checkout"}
 
 
 @router.post("/portal")

@@ -1,7 +1,7 @@
-"""End-to-end smoke test covering full MVP acceptance criteria.
+"""API control-plane smoke test covering the MVP resource lifecycle.
 
-Covers: project → bundle → document upload → deliverable → section →
-requirement → draft → evidence → review → redraft → export → audit trail.
+Worker execution and LangGraph checkpoint behavior have dedicated cross-service
+tests. This smoke only verifies the API's durable resource and export contract.
 """
 
 from fastapi.testclient import TestClient
@@ -72,12 +72,40 @@ def test_full_e2e_flow() -> None:
     assert runs.status_code == 200
     assert any(r["id"] == run_id for r in runs.json())
 
+    # The draft request is asynchronous. Seed its immutable candidate snapshot
+    # here so this control-plane test can exercise version-targeted review and
+    # approved-only export without pretending to execute a Worker.
+    from app.db import SessionLocal
+    from app.models import SectionVersion
+
+    db = SessionLocal()
+    try:
+        candidate = SectionVersion(
+            deliverable_section_id=section_id,
+            version_number=1,
+            content_markdown="Verified executive summary draft.",
+            generation_run_id=run_id,
+            generation_iteration=1,
+        )
+        db.add(candidate)
+        db.commit()
+        candidate_version_id = candidate.id
+    finally:
+        db.close()
+
     # 11. Check evidence exists
     evidence = client.get(f"/evidence?project_id={project_id}")
     assert evidence.status_code == 200
 
     # 12. Submit review decision
-    decision = client.post("/review/decisions", json={"section_id": section_id, "decision": "approved"})
+    decision = client.post(
+        "/review/decisions",
+        json={
+            "section_id": section_id,
+            "section_version_id": candidate_version_id,
+            "decision": "approved",
+        },
+    )
     assert decision.status_code == 201
 
     # 13. Add review comment
