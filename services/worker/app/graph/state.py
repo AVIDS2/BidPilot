@@ -33,6 +33,8 @@ class EvidenceChunk(TypedDict):
     retrieval_methods: list[str]
     locator_json: dict
     chunk_index: int
+    evidence_set_item_id: NotRequired[str]
+    source_document_version: NotRequired[int]
 
 
 class MemoryContextEntry(TypedDict):
@@ -116,12 +118,24 @@ class BidPilotState(TypedDict):
     requirements_parsed: bool
 
     # ── Knowledge retriever output ─────────────────────────────────────
+    evidence_set_id: str | None
+    evidence_set_status: str | None
+    evidence_set_unmet_requirement_ids: list[str]
+    evidence_set_degraded_reasons: list[str]
     evidence_chunks: list[EvidenceChunk]
     evidence_retrieved: bool
+    retrieval_candidate_count: int | None
+    retrieval_fused_candidate_count: int | None
+    retrieval_reranked_candidate_count: int | None
+    retrieval_latency_ms: int | None
 
     # ── Content plan (pre-draft structure) ────────────────────────────
     content_plan: ContentPlan | None
     content_plan_ready: bool
+    response_plan_id: str | None
+    response_plan_section_id: str | None
+    response_plan_evidence_binding_id: str | None
+    response_plan_version: int | None
 
     # ── Governed memory context ───────────────────────────────────────
     memory_context_loaded: bool

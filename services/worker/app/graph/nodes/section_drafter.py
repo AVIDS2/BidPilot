@@ -20,7 +20,12 @@ from app.adapters.provider_errors import ProviderInvocationError
 from app.adapters.structured_llm import resolve_structured_provider
 from app.db import SessionLocal
 from app.models import Project
+from app.retrieval.evidence_sets import EvidenceSetScopeError, load_authorized_evidence_set
 from app.runtime.events import publish_provider_retry
+from contracts.response_plans import (
+    ResponsePlanScopeError,
+    load_authorized_response_plan_binding,
+)
 from app.execution.model_usage import (
     begin_workflow_model_call,
     finalize_workflow_model_reservation_failure,
@@ -174,9 +179,14 @@ def _append_memory_context(system_prompt: str | None, state: BidPilotState) -> s
     return "\n".join(lines)
 
 
-def _append_content_plan(system_prompt: str | None, state: BidPilotState) -> str | None:
+def _append_content_plan(
+    system_prompt: str | None,
+    state: BidPilotState,
+    *,
+    content_plan: dict | None = None,
+) -> str | None:
     """Inject the pre-draft content plan as trusted writing structure."""
-    plan = state.get("content_plan")
+    plan = content_plan if content_plan is not None else state.get("content_plan")
     if not isinstance(plan, dict) or not plan:
         return system_prompt
     base = system_prompt or "你是投标方案起草助手。"
@@ -212,6 +222,111 @@ def _append_content_plan(system_prompt: str | None, state: BidPilotState) -> str
     return "\n".join(lines)
 
 
+def _load_authorized_evidence(state: BidPilotState) -> tuple[list[dict], dict]:
+    """Reload the durable evidence snapshot instead of trusting graph state."""
+    evidence_set_id = state.get("evidence_set_id")
+    if not isinstance(evidence_set_id, str) or not evidence_set_id:
+        # Compatibility for direct unit-node invocation. Product graph runs
+        # always receive an EvidenceSet from knowledge_retriever.
+        return list(state.get("evidence_chunks") or []), {}
+
+    db = SessionLocal()
+    try:
+        snapshot = load_authorized_evidence_set(
+            db,
+            evidence_set_id=evidence_set_id,
+            project_id=state["project_id"],
+            execution_run_id=state["run_id"],
+        )
+        if snapshot.status == "invalidated":
+            db.commit()
+            raise EvidenceSetScopeError("evidence_set_invalidated")
+        db.commit()
+        return (
+            snapshot.evidence_chunks,
+            {
+                "evidence_set_id": snapshot.id,
+                "evidence_set_status": snapshot.status,
+                "evidence_set_unmet_requirement_ids": list(snapshot.unmet_requirement_ids),
+                "evidence_set_degraded_reasons": list(
+                    dict.fromkeys([*snapshot.degraded_reasons, *snapshot.rejected_reasons])
+                ),
+            },
+        )
+    finally:
+        db.close()
+
+
+def _load_authorized_response_plan(state: BidPilotState) -> tuple[dict | None, list[dict], dict]:
+    """Reload the immutable plan snapshot instead of trusting graph state."""
+    binding_id = state.get("response_plan_evidence_binding_id")
+    if not isinstance(binding_id, str) or not binding_id:
+        # Compatibility for direct unit-node invocation. Product graph runs
+        # always create a response-plan binding after retrieval.
+        plan = state.get("content_plan")
+        return (plan if isinstance(plan, dict) else None, list(state.get("requirements") or []), {})
+
+    db = SessionLocal()
+    try:
+        snapshot = load_authorized_response_plan_binding(
+            db,
+            response_plan_evidence_binding_id=binding_id,
+            project_id=state["project_id"],
+            execution_run_id=state["run_id"],
+            section_key=state["section_key"],
+        )
+        return (
+            snapshot.content_plan,
+            list(snapshot.requirements),
+            {
+                "response_plan_id": snapshot.response_plan_id,
+                "response_plan_section_id": snapshot.response_plan_section_id,
+                "response_plan_evidence_binding_id": (
+                    snapshot.response_plan_evidence_binding_id
+                ),
+                "response_plan_version": snapshot.response_plan_version,
+            },
+        )
+    finally:
+        db.close()
+
+
+def _append_evidence_set_guard(
+    system_prompt: str | None,
+    *,
+    evidence_chunks: list[dict],
+    evidence_set_id: str | None,
+    evidence_set_status: str | None,
+) -> str | None:
+    """Tell the model exactly which durable evidence boundary it may use."""
+    if not evidence_set_id:
+        return system_prompt
+    lines = [
+        system_prompt or "你是投标方案起草助手。",
+        "\n本次草拟只能使用系统已授权的证据集。不得臆造来源、页码、文件名或引用。",
+    ]
+    if not evidence_chunks:
+        lines.append(
+            "当前没有仍然有效的授权证据。只能给出待补充资料的结构性草稿，"
+            "不得把计划、记忆或常识写成已被来源证实的事实。"
+        )
+        return "\n".join(lines)
+
+    lines.append("可用证据定位：")
+    for index, chunk in enumerate(evidence_chunks, start=1):
+        locator = chunk.get("locator_json") if isinstance(chunk.get("locator_json"), dict) else {}
+        location: list[str] = []
+        if isinstance(locator.get("page"), int):
+            location.append(f"第 {locator['page']} 页")
+        if isinstance(locator.get("heading"), str) and locator["heading"].strip():
+            location.append(locator["heading"].strip()[:120])
+        location.append(f"片段 {locator.get('chunk_index', chunk.get('chunk_index', 0))}")
+        lines.append(f"- E{index}: {' / '.join(location)}")
+    if evidence_set_status in {"degraded", "invalidated", "missing_evidence"}:
+        lines.append("证据集存在降级或缺口；任何未被上列证据直接支持的内容必须明确标为待确认。")
+    return "\n".join(lines)
+
+
 def section_drafter_node(state: BidPilotState) -> dict:
     """LangGraph node: draft a section using evidence and LLM.
 
@@ -234,22 +349,44 @@ def section_drafter_node(state: BidPilotState) -> dict:
     reasoning_effort: str | None = state.get("reasoning_effort")
     # Use human_feedback (from HITL) if available, otherwise input_review_feedback
     review_feedback: str | None = state.get("human_feedback") or state.get("input_review_feedback")
-    evidence_chunks = state.get("evidence_chunks", [])
     iteration: int = state.get("iteration", 0)
     run_id = state.get("run_id")
     if not isinstance(run_id, str):
         run_id = None
     attempt_tracker: dict[str, object] = {}
 
-    evidence_texts = [chunk["content"] for chunk in evidence_chunks]
-
     provider_type = "openai"
+    evidence_state_update: dict = {}
+    response_plan_state_update: dict = {}
 
     try:
+        evidence_chunks, evidence_state_update = _load_authorized_evidence(state)
+        durable_content_plan, _durable_requirements, response_plan_state_update = (
+            _load_authorized_response_plan(state)
+        )
+        evidence_texts = [
+            chunk["content"]
+            for chunk in evidence_chunks
+            if isinstance(chunk.get("content"), str)
+        ]
         provider_config_dict, provider_type = _resolve_provider(provider_config_id)
-        system_prompt = _append_content_plan(
-            _append_memory_context(_load_system_prompt(project_id), state),
-            state,
+        system_prompt = _append_evidence_set_guard(
+            _append_content_plan(
+                _append_memory_context(_load_system_prompt(project_id), state),
+                state,
+                content_plan=durable_content_plan,
+            ),
+            evidence_chunks=evidence_chunks,
+            evidence_set_id=(
+                evidence_state_update.get("evidence_set_id")
+                if isinstance(evidence_state_update.get("evidence_set_id"), str)
+                else state.get("evidence_set_id")
+            ),
+            evidence_set_status=(
+                evidence_state_update.get("evidence_set_status")
+                if isinstance(evidence_state_update.get("evidence_set_status"), str)
+                else state.get("evidence_set_status")
+            ),
         )
         result = _draft_with_retry(
             section_key=section_key,
@@ -305,6 +442,9 @@ def section_drafter_node(state: BidPilotState) -> dict:
         )
 
         return {
+            **evidence_state_update,
+            **response_plan_state_update,
+            "evidence_chunks": evidence_chunks,
             "draft_markdown": result.content_markdown,
             "draft_model_used": result.model_used,
             "draft_created": True,
@@ -315,6 +455,36 @@ def section_drafter_node(state: BidPilotState) -> dict:
             "review_result": None,
             "review_passed": False,
             "human_decision": None,
+            "agent_history": history,
+        }
+    except (EvidenceSetScopeError, ResponsePlanScopeError) as exc:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        failure_code = (
+            "evidence_set_unavailable"
+            if isinstance(exc, EvidenceSetScopeError)
+            else "response_plan_unavailable"
+        )
+        if run_id:
+            finalize_workflow_model_reservation_failure(
+                run_id=run_id,
+                error_code=failure_code,
+            )
+        history = record_agent_call(
+            agent="section_drafter",
+            action="draft_section",
+            input_summary=f"section={section_key}, durable_plan_or_evidence=unavailable",
+            output_summary=f"ERROR: {failure_code}",
+            duration_ms=duration_ms,
+            success=False,
+            error=failure_code,
+        )
+        return {
+            "draft_markdown": "",
+            "draft_model_used": "",
+            "draft_created": False,
+            "iteration": iteration + 1,
+            "provider_error_code": failure_code,
+            "error": "section_drafter: 本次草拟的计划或证据集已不可用，请重新发起工作流。",
             "agent_history": history,
         }
     except ProviderInvocationError as exc:

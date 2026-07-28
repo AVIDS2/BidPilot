@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from tenacity import wait_none
@@ -8,6 +9,7 @@ from app.adapters.provider_errors import ProviderInvocationError
 from app.graph.nodes import section_drafter as section_drafter_module
 from app.graph.nodes.section_drafter import section_drafter_node
 from app.graph.nodes.supervisor import route_after_draft
+from app.retrieval.evidence_sets import EvidenceSetItemSnapshot, EvidenceSetSnapshot
 
 
 def test_section_drafter_increments_draft_iteration(monkeypatch):
@@ -37,6 +39,112 @@ def test_section_drafter_increments_draft_iteration(monkeypatch):
 
     assert result["draft_created"] is True
     assert result["iteration"] == 2
+
+
+def test_section_drafter_reloads_authorized_evidence_instead_of_state_payload(monkeypatch):
+    session = MagicMock()
+    snapshot = EvidenceSetSnapshot(
+        id="evidence-set-1",
+        status="ready",
+        degraded_reasons=(),
+        rejected_reasons=(),
+        unmet_requirement_ids=(),
+        items=(
+            EvidenceSetItemSnapshot(
+                id="evidence-item-1",
+                chunk_id="chunk-1",
+                source_document_id="source-1",
+                source_document_version=1,
+                source_document_checksum="a" * 64,
+                quote_text="授权证据内容",
+                locator_json={"source_document_id": "source-1", "chunk_index": 0},
+                retrieval_rank=1,
+                retrieval_score=0.9,
+                retrieval_methods=("fts",),
+                selected_reason="test",
+            ),
+        ),
+    )
+    seen_evidence: list[str] = []
+
+    monkeypatch.setattr(section_drafter_module, "SessionLocal", lambda: session)
+    monkeypatch.setattr(
+        section_drafter_module,
+        "load_authorized_evidence_set",
+        lambda *_args, **_kwargs: snapshot,
+    )
+    monkeypatch.setattr(section_drafter_module, "_resolve_provider", lambda _provider_config_id: (None, "openai"))
+    monkeypatch.setattr(section_drafter_module, "_load_system_prompt", lambda _project_id: None)
+
+    def draft_stub(_section_key, evidence_texts, *_args, **_kwargs):
+        seen_evidence.extend(evidence_texts)
+        return DraftResult(content_markdown="## Draft", evidence_ids=[], model_used="stub")
+
+    monkeypatch.setattr(section_drafter_module, "draft_section_openai", draft_stub)
+
+    result = section_drafter_node(
+        {
+            "project_id": "project-1",
+            "section_key": "exec-summary",
+            "run_id": "run-1",
+            "provider_config_id": None,
+            "input_review_feedback": None,
+            "human_feedback": None,
+            "evidence_set_id": "evidence-set-1",
+            "evidence_chunks": [{"content": "伪造 state 内容"}],
+            "iteration": 0,
+        }
+    )
+
+    assert result["draft_created"] is True
+    assert seen_evidence == ["授权证据内容"]
+    assert result["evidence_chunks"][0]["evidence_set_item_id"] == "evidence-item-1"
+    session.commit.assert_called_once()
+    session.close.assert_called_once()
+
+
+def test_section_drafter_stops_when_authorized_evidence_is_invalidated(monkeypatch):
+    session = MagicMock()
+    model_called: list[bool] = []
+    snapshot = EvidenceSetSnapshot(
+        id="evidence-set-1",
+        status="invalidated",
+        degraded_reasons=(),
+        rejected_reasons=("source_document_superseded",),
+        unmet_requirement_ids=(),
+        items=(),
+    )
+    monkeypatch.setattr(section_drafter_module, "SessionLocal", lambda: session)
+    monkeypatch.setattr(
+        section_drafter_module,
+        "load_authorized_evidence_set",
+        lambda *_args, **_kwargs: snapshot,
+    )
+    monkeypatch.setattr(
+        section_drafter_module,
+        "draft_section_openai",
+        lambda *_args, **_kwargs: model_called.append(True),
+    )
+
+    result = section_drafter_node(
+        {
+            "project_id": "project-1",
+            "section_key": "exec-summary",
+            "run_id": "run-1",
+            "provider_config_id": None,
+            "input_review_feedback": None,
+            "human_feedback": None,
+            "evidence_set_id": "evidence-set-1",
+            "evidence_chunks": [],
+            "iteration": 0,
+        }
+    )
+
+    assert model_called == []
+    assert result["draft_created"] is False
+    assert result["provider_error_code"] == "evidence_set_unavailable"
+    session.commit.assert_called_once()
+    session.close.assert_called_once()
 
 
 def test_section_drafter_retries_only_typed_transient_provider_failures(monkeypatch):

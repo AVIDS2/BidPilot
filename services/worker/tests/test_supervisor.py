@@ -4,6 +4,7 @@ from app.graph.nodes.supervisor import (
     supervisor_node,
     route_initial,
     route_after_review,
+    route_after_persist,
 )
 from app.graph.state import BidPilotState
 
@@ -23,6 +24,10 @@ def _make_state(**overrides) -> BidPilotState:
         "memory_context_version": None,
         "memory_context_degraded_reasons": [],
         "memory_proposal_ids": [],
+        "evidence_set_id": None,
+        "evidence_set_status": None,
+        "evidence_set_unmet_requirement_ids": [],
+        "evidence_set_degraded_reasons": [],
         "evidence_chunks": [],
         "evidence_retrieved": False,
         "content_plan": None,
@@ -100,9 +105,12 @@ class TestRouteInitial:
 
 
 class TestRouteAfterReview:
-    def test_review_passed_goes_to_human_approval(self):
+    def test_evidence_boundary_error_ends_workflow_without_persisting(self):
+        assert route_after_review(_make_state(error="evidence_set_unavailable")) == "failed"
+
+    def test_review_passed_persists_candidate_before_human_approval(self):
         state = _make_state(review_passed=True)
-        assert route_after_review(state) == "human_approval"
+        assert route_after_review(state) == "persist_result"
 
     def test_review_failed_iteration_below_max_goes_to_content_plan(self):
         state = _make_state(review_passed=False, iteration=1, max_iterations=3)
@@ -111,6 +119,14 @@ class TestRouteAfterReview:
     def test_review_failed_iteration_at_max_goes_to_persist(self):
         state = _make_state(review_passed=False, iteration=3, max_iterations=3)
         assert route_after_review(state) == "persist_result"
+
+
+class TestRouteAfterPersist:
+    def test_review_candidate_goes_to_human_approval_after_persistence(self):
+        assert route_after_persist(_make_state(review_passed=True, human_decision=None)) == "human_approval"
+
+    def test_approved_candidate_finishes_after_persistence(self):
+        assert route_after_persist(_make_state(review_passed=True, human_decision="approved")) == "memory_proposals"
 
 
 class TestSupervisorNode:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from contracts.models import Organization, RuntimeEvent, RuntimeRun, User
+from contracts.models import Notification, Organization, RuntimeEvent, RuntimeRun, User
 from contracts.runtime import RuntimeEventType
 
 from app.db import SessionLocal
@@ -83,6 +83,27 @@ def test_worker_runtime_events_are_ordered_redacted_and_terminal() -> None:
             (3, "run.completed"),
         ]
         assert events[0].payload_json["api_key"] == "***redacted***"
+    finally:
+        db.close()
+
+
+def test_worker_terminal_transition_commits_one_durable_wake_notification() -> None:
+    run = _runtime_run()
+
+    complete_runtime_run(run.id, result={"section_key": "technical-approach"})
+    complete_runtime_run(run.id, result={"section_key": "technical-approach"})
+
+    db = SessionLocal()
+    try:
+        notifications = list(
+            db.query(Notification)
+            .filter(Notification.user_id == run.user_id, Notification.type == "agent_task")
+            .all()
+        )
+        assert len(notifications) == 1
+        assert notifications[0].link == f"/agent?wake={run.id}"
+        assert notifications[0].body == "工作流已完成。\n章节：technical-approach"
+        assert db.query(RuntimeEvent).filter(RuntimeEvent.run_id == run.id).count() == 1
     finally:
         db.close()
 

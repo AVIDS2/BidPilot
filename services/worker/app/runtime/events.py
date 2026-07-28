@@ -150,6 +150,7 @@ def publish_human_approval_requested(
     *,
     section_key: str,
     review_score: float | None,
+    section_version_id: str | None = None,
 ) -> RuntimeEvent | None:
     return publish_runtime_event(
         runtime_run_id,
@@ -159,6 +160,7 @@ def publish_human_approval_requested(
             "capability": "human_approval",
             "section_key": section_key,
             "review_score": review_score,
+            "section_version_id": section_version_id,
         },
         once_key="human_approval_requested",
     )
@@ -177,53 +179,36 @@ def publish_human_approval_resolved(
     )
 
 
-def _publish_agent_wake_notification(
-    runtime_run_id: str | None,
+def _add_agent_wake_notification(
+    db,
+    run: RuntimeRun,
     *,
     status: str,
     summary: str,
     result: dict[str, Any] | None = None,
 ) -> None:
-    """Durable wake signal so the assistant can resume after long workflows.
-
-    Pattern (learn-claude-code s13): background work finishes outside the live
-    chat turn; a notification is enqueued so the next turn / wake path can
-    continue without the model having to busy-wait.
-    """
-    if not runtime_run_id:
-        return
-    db = SessionLocal()
-    try:
-        run = db.get(RuntimeRun, runtime_run_id)
-        if run is None or not run.user_id:
-            return
-        title = "后台任务已完成" if status == "succeeded" else "后台任务失败"
-        body_parts = [summary]
-        if isinstance(result, dict):
-            section_key = result.get("section_key")
-            if isinstance(section_key, str) and section_key:
-                body_parts.append(f"章节：{section_key}")
-            execution_run_id = result.get("execution_run_id")
-            if isinstance(execution_run_id, str) and execution_run_id:
-                body_parts.append(f"运行：{execution_run_id[:8]}")
-        link = f"/agent?wake={runtime_run_id}"
-        if run.conversation_id:
-            link = f"/agent?conversation={run.conversation_id}&wake={runtime_run_id}"
-        db.add(
-            Notification(
-                user_id=run.user_id,
-                type="agent_task",
-                title=title[:255],
-                body="\n".join(body_parts)[:2000],
-                link=link[:500],
-            )
+    """Stage an assistant wake in the same transaction as a terminal event."""
+    title = "后台任务已完成" if status == "succeeded" else "后台任务失败"
+    body_parts = [summary]
+    if isinstance(result, dict):
+        section_key = result.get("section_key")
+        if isinstance(section_key, str) and section_key:
+            body_parts.append(f"章节：{section_key}")
+        execution_run_id = result.get("execution_run_id")
+        if isinstance(execution_run_id, str) and execution_run_id:
+            body_parts.append(f"运行：{execution_run_id[:8]}")
+    link = f"/agent?wake={run.id}"
+    if run.conversation_id:
+        link = f"/agent?conversation={run.conversation_id}&wake={run.id}"
+    db.add(
+        Notification(
+            user_id=run.user_id,
+            type="agent_task",
+            title=title[:255],
+            body="\n".join(body_parts)[:2000],
+            link=link[:500],
         )
-        db.commit()
-    except Exception:
-        logger.exception("failed to publish agent wake notification for %s", runtime_run_id)
-        db.rollback()
-    finally:
-        db.close()
+    )
 
 
 def complete_runtime_run(
@@ -237,12 +222,8 @@ def complete_runtime_run(
         event_type=RuntimeEventType.RUN_COMPLETED,
         summary="工作流已完成。",
         result=result,
-    )
-    _publish_agent_wake_notification(
-        runtime_run_id,
-        status="succeeded",
-        summary="工作流已完成。",
-        result=result,
+        wake_status="succeeded",
+        wake_result=result,
     )
 
 
@@ -268,12 +249,8 @@ def fail_runtime_run(
         summary="工作流未能完成。",
         error_code=error_code,
         error_message=message,
-    )
-    _publish_agent_wake_notification(
-        runtime_run_id,
-        status="failed",
-        summary="工作流未能完成。",
-        result={"error": message, "error_code": error_code},
+        wake_status="failed",
+        wake_result={"error": message, "error_code": error_code},
     )
 
 
@@ -340,6 +317,8 @@ def _finish_runtime_run(
     result: dict[str, Any] | None = None,
     error_code: str | None = None,
     error_message: str | None = None,
+    wake_status: str | None = None,
+    wake_result: dict[str, Any] | None = None,
 ) -> None:
     if not runtime_run_id:
         return
@@ -368,6 +347,14 @@ def _finish_runtime_run(
                 schema_version="1.0",
             )
         )
+        if wake_status:
+            _add_agent_wake_notification(
+                db,
+                run,
+                status=wake_status,
+                summary=summary,
+                result=wake_result,
+            )
         db.commit()
     except Exception:
         db.rollback()

@@ -34,6 +34,7 @@ from .nodes.supervisor import (
     route_after_content_plan,
     route_after_draft,
     route_after_review,
+    route_after_persist,
     route_after_human_approval,
 )
 from .nodes.rfp_parser import rfp_parser_node
@@ -149,10 +150,22 @@ def _node_payload(node_name: str, result: dict) -> dict:
     if node_name == "rfp_parser":
         return {"requirement_count": len(result.get("requirements", []))}
     if node_name == "knowledge_retriever":
-        return {"evidence_count": len(result.get("evidence_chunks", []))}
+        payload = {"evidence_count": len(result.get("evidence_chunks", []))}
+        for key in (
+            "retrieval_candidate_count",
+            "retrieval_fused_candidate_count",
+            "retrieval_reranked_candidate_count",
+            "retrieval_latency_ms",
+        ):
+            value = result.get(key)
+            if type(value) is int and value >= 0:
+                payload[key] = value
+        return payload
     if node_name == "content_plan":
         plan = result.get("content_plan") or {}
         return {
+            "response_plan_id": result.get("response_plan_id"),
+            "response_plan_version": result.get("response_plan_version"),
             "key_point_count": len(plan.get("key_points") or []),
             "table_count": len(plan.get("tables") or []),
             "figure_count": len(plan.get("figures") or []),
@@ -193,22 +206,22 @@ def _build_graph() -> StateGraph:
         supervisor -> content_plan       (if evidence ready, plan missing)
         supervisor -> section_drafter    (if plan ready, draft missing)
         supervisor -> quality_reviewer   (if draft exists, no review)
-        supervisor -> human_approval     (if review passed, HITL pause)
-        supervisor -> persist_result     (if human approved or max iterations)
+        supervisor -> persist_result     (if review passed, approval resolved, or max iterations)
 
         rfp_parser -> knowledge_retriever
         knowledge_retriever -> content_plan
         content_plan -> section_drafter
         section_drafter -> quality_reviewer
 
-        quality_reviewer -> human_approval   (review passed)
+        quality_reviewer -> persist_result   (review passed; writes immutable review candidate)
         quality_reviewer -> content_plan     (review failed, iteration < max)
         quality_reviewer -> persist_result   (review failed, iteration >= max)
 
         human_approval -> persist_result     (human approved)
         human_approval -> content_plan       (human rejected with feedback)
 
-        persist_result -> __end__
+        persist_result -> human_approval     (new reviewed candidate)
+        persist_result -> memory_proposals   (terminal persistence)
     """
     sg = StateGraph(BidPilotState)
 
@@ -249,12 +262,12 @@ def _build_graph() -> StateGraph:
     sg.add_conditional_edges(
         "knowledge_retriever",
         route_after_retrieval,
-        {"content_plan": "content_plan"},
+        {"content_plan": "content_plan", "failed": END},
     )
     sg.add_conditional_edges(
         "content_plan",
         route_after_content_plan,
-        {"section_drafter": "section_drafter"},
+        {"section_drafter": "section_drafter", "failed": END},
     )
     sg.add_conditional_edges(
         "section_drafter",
@@ -267,9 +280,9 @@ def _build_graph() -> StateGraph:
         "quality_reviewer",
         route_after_review,
         {
-            "human_approval": "human_approval",
             "persist_result": "persist_result",
             "content_plan": "content_plan",
+            "failed": END,
         },
     )
 
@@ -283,8 +296,16 @@ def _build_graph() -> StateGraph:
         },
     )
 
-    # ── Terminal edge ─────────────────────────────────────────────────
-    sg.add_edge("persist_result", "memory_proposals")
+    # ── Persistence either opens a durable human-review checkpoint or
+    # reaches terminal memory proposal generation.
+    sg.add_conditional_edges(
+        "persist_result",
+        route_after_persist,
+        {
+            "human_approval": "human_approval",
+            "memory_proposals": "memory_proposals",
+        },
+    )
     sg.add_edge("memory_proposals", END)
 
     return sg
@@ -458,10 +479,18 @@ def invoke_graph(
         "memory_context_version": None,
         "memory_context_degraded_reasons": [],
         "memory_proposal_ids": [],
+        "evidence_set_id": None,
+        "evidence_set_status": None,
+        "evidence_set_unmet_requirement_ids": [],
+        "evidence_set_degraded_reasons": [],
         "evidence_chunks": [],
         "evidence_retrieved": False,
         "content_plan": None,
         "content_plan_ready": False,
+        "response_plan_id": None,
+        "response_plan_section_id": None,
+        "response_plan_evidence_binding_id": None,
+        "response_plan_version": None,
         "draft_markdown": "",
         "draft_model_used": "",
         "draft_created": False,
@@ -525,6 +554,11 @@ def resume_graph(
     Returns:
         The final BidPilotState dict after graph execution completes.
     """
+    if decision not in {"approved", "rejected_with_feedback"}:
+        raise ValueError("Unsupported LangGraph human approval decision")
+    if feedback is not None and not isinstance(feedback, str):
+        raise ValueError("LangGraph human approval feedback must be a string")
+
     from langgraph.types import Command
 
     config = {"configurable": {"thread_id": thread_id or run_id}}

@@ -26,6 +26,26 @@ os.environ["DOCPILOT_DATABASE_URL"] = _test_database_url
 os.environ["DOCPILOT_TEST_DATABASE_URL"] = _test_database_url
 
 
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Prepare the real PostgresSaver schema before graph task tests run.
+
+    Production creates these tables in an ordered one-shot deployment service;
+    tests use the same setup code against the dedicated ``*_test`` database.
+    """
+    del session
+    if os.environ.get("DOCPILOT_LANGGRAPH_CHECKPOINTER", "postgres").lower() != "postgres":
+        return
+    if not _test_database_url.startswith(("postgresql://", "postgresql+psycopg://")):
+        return
+
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    from scripts.setup_langgraph_checkpoints import checkpoint_connection_url
+
+    with PostgresSaver.from_conn_string(checkpoint_connection_url(_test_database_url)) as checkpointer:
+        checkpointer.setup()
+
+
 @pytest.fixture(autouse=True)
 def isolate_provider_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent Worker tests from inheriting billable chat credentials."""

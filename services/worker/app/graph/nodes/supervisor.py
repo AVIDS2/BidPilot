@@ -64,13 +64,15 @@ def supervisor_node(state: BidPilotState) -> dict:
 
 
 def route_after_review(state: BidPilotState) -> str:
-    """Route to approval, redraft, or persistence after quality review."""
+    """Persist a reviewed candidate before pausing for human approval."""
+    if state.get("error"):
+        return "failed"
     review_passed: bool = state.get("review_passed", False)
     iteration: int = state.get("iteration", 0)
     max_iterations: int = state.get("max_iterations", 3)
     if review_passed:
-        logger.info("Review passed on iteration %d — routing to human approval", iteration)
-        return "human_approval"
+        logger.info("Review passed on iteration %d — persisting review candidate", iteration)
+        return "persist_result"
     if iteration < max_iterations:
         logger.info(
             "Review failed on iteration %d/%d — re-planning then redrafting",
@@ -80,6 +82,13 @@ def route_after_review(state: BidPilotState) -> str:
         return "content_plan"
     logger.warning("Review failed after %d iterations - persisting draft as-is", iteration)
     return "persist_result"
+
+
+def route_after_persist(state: BidPilotState) -> str:
+    """Pause only after the immutable review candidate has been committed."""
+    if state.get("review_passed") and state.get("human_decision") is None:
+        return "human_approval"
+    return "memory_proposals"
 
 
 def route_after_human_approval(state: BidPilotState) -> str:
@@ -112,12 +121,20 @@ def route_after_rfp(state: BidPilotState) -> str:
 
 
 def route_after_retrieval(state: BidPilotState) -> str:
-    """Plan content structure after retrieval completes."""
+    """Plan only after retrieval captured an authorized evidence boundary."""
+    if state.get("error"):
+        return "failed"
     return "content_plan"
 
 
 def route_after_content_plan(state: BidPilotState) -> str:
     """Draft after the content plan is ready."""
+    if state.get("error"):
+        return "failed"
+    # Product graph runs always persist an EvidenceSet before planning; the
+    # associated response-plan binding is the durable write contract.
+    if state.get("evidence_set_id") and not state.get("response_plan_evidence_binding_id"):
+        return "failed"
     return "section_drafter"
 
 

@@ -165,16 +165,25 @@ def _load_project_source(project_id: str) -> tuple[list[str], str]:
 
 
 def _persist_requirements(project_id: str, requirements: list[Requirement]) -> list[Requirement]:
-    """Persist requirements and return their durable ids for this workflow only."""
+    """Resolve workflow findings to source-backed ledger facts when available.
+
+    Ingestion owns durable requirement creation because it has immutable source
+    document and chunk provenance. The LangGraph parser may use a model for
+    planning, but it must never turn a model-only finding into a source-less
+    business record.
+    """
     db = SessionLocal()
     try:
         existing = {
             (item.section_key, item.requirement_text): item
             for item in db.scalars(
-                select(RequirementItem).where(RequirementItem.project_id == project_id)
+                select(RequirementItem).where(
+                    RequirementItem.project_id == project_id,
+                    RequirementItem.source_document_id.is_not(None),
+                )
             ).all()
         }
-        persisted: list[tuple[Requirement, RequirementItem]] = []
+        resolved: list[Requirement] = []
         seen: set[tuple[str, str]] = set()
         for requirement in requirements:
             identity = (requirement["section_key"], requirement["requirement_text"])
@@ -183,31 +192,17 @@ def _persist_requirements(project_id: str, requirements: list[Requirement]) -> l
             seen.add(identity)
             item = existing.get(identity)
             if item is None:
-                item = RequirementItem(
-                    project_id=project_id,
+                resolved.append(requirement)
+                continue
+            resolved.append(
+                Requirement(
+                    id=item.id,
                     section_key=requirement["section_key"],
                     requirement_text=requirement["requirement_text"],
                     priority=requirement["priority"],
-                    status="open",
                 )
-                db.add(item)
-                existing[identity] = item
-            persisted.append((requirement, item))
-        db.flush()
-        db.commit()
-        return [
-            Requirement(
-                id=item.id,
-                section_key=requirement["section_key"],
-                requirement_text=requirement["requirement_text"],
-                priority=requirement["priority"],
             )
-            for requirement, item in persisted
-        ]
-    except Exception:
-        db.rollback()
-        logger.exception("Failed to persist extracted requirements for project %s", project_id)
-        raise
+        return resolved
     finally:
         db.close()
 

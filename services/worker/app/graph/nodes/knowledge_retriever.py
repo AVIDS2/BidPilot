@@ -8,34 +8,18 @@ import time
 from app.db import SessionLocal
 from app.execution.embedding_capacity import generate_metered_embedding
 from app.models import Project, RuntimeRun, User
+from app.retrieval.evidence_sets import capture_evidence_set
 from app.retrieval.reranker import rerank_candidates
 from app.retrieval.section_query import expand_section_retrieval_query, section_fallback_query
 from contracts import EmbeddingOutcome, EmbeddingOutcomeStatus
 from contracts.retrieval_service import retrieve_project_evidence
 
-from ..state import BidPilotState, EvidenceChunk
+from ..state import BidPilotState
 from ._history import record_agent_call
 
 logger = logging.getLogger(__name__)
 
 _TOP_K = 5
-
-
-def _map_candidates(candidates) -> list[EvidenceChunk]:
-    return [
-        EvidenceChunk(
-            chunk_id=candidate.chunk_id,
-            source_document_id=candidate.source_document_id,
-            content=candidate.content[:500],
-            retrieval_score=candidate.final_score,
-            retrieval_methods=list(candidate.methods),
-            locator_json=candidate.locator.model_dump(exclude_none=True),
-            chunk_index=candidate.locator.chunk_index,
-        )
-        for candidate in candidates
-    ]
-
-
 def knowledge_retriever_node(state: BidPilotState) -> dict:
     """Retrieve validated project evidence without raw SQL or broad fallback."""
     started = time.monotonic()
@@ -104,12 +88,26 @@ def knowledge_retriever_node(state: BidPilotState) -> dict:
                     top_k=_TOP_K,
                     reranker=rerank_candidates,
                 )
-        chunks = _map_candidates(result.candidates)
-        duration_ms = int((time.monotonic() - started) * 1000)
-        methods = sorted({method for chunk in chunks for method in chunk["retrieval_methods"]})
         degraded = list(result.degraded_reasons)
         if used_fallback:
             degraded.append("section_query_fallback")
+        evidence_set = capture_evidence_set(
+            db,
+            project_id=project_id,
+            execution_run_id=state["run_id"],
+            section_key=section_key,
+            query_text=query_used,
+            retrieval_profile_id=result.profile_id,
+            degraded_reasons=degraded,
+            candidates=result.candidates,
+        )
+        # The evidence set is the durable boundary before a provider sees any
+        # retrieved material. Commit it before returning state to LangGraph.
+        db.commit()
+        chunks = evidence_set.evidence_chunks
+        duration_ms = int((time.monotonic() - started) * 1000)
+        methods = sorted({method for chunk in chunks for method in chunk["retrieval_methods"]})
+        all_degraded = list(dict.fromkeys([*degraded, *evidence_set.degraded_reasons]))
         history = record_agent_call(
             agent="knowledge_retriever",
             action="retrieve_evidence",
@@ -119,16 +117,37 @@ def knowledge_retriever_node(state: BidPilotState) -> dict:
             ),
             output_summary=(
                 f"evidence_chunks[{len(chunks)}], methods={','.join(methods) or 'none'}, "
-                f"degraded={','.join(degraded) or 'none'}, "
+                f"evidence_set={evidence_set.status}, "
+                f"degraded={','.join(all_degraded) or 'none'}, "
                 f"embedding={query_embedding.error_code or 'available'}, "
                 f"fallback={used_fallback}"
             ),
             duration_ms=duration_ms,
             success=True,
         )
+        retrieval_trace = result.trace
         return {
+            "evidence_set_id": evidence_set.id,
+            "evidence_set_status": evidence_set.status,
+            "evidence_set_unmet_requirement_ids": list(evidence_set.unmet_requirement_ids),
+            "evidence_set_degraded_reasons": list(
+                dict.fromkeys([*all_degraded, *evidence_set.rejected_reasons])
+            ),
             "evidence_chunks": chunks,
             "evidence_retrieved": True,
+            # Numeric trace fields are safe to persist into the runtime event.
+            # The expanded query, candidate content, and provider request stay
+            # in the retrieval boundary and never become observability output.
+            "retrieval_candidate_count": (
+                retrieval_trace.returned_candidate_count if retrieval_trace is not None else None
+            ),
+            "retrieval_fused_candidate_count": (
+                retrieval_trace.fused_candidate_count if retrieval_trace is not None else None
+            ),
+            "retrieval_reranked_candidate_count": (
+                retrieval_trace.reranked_candidate_count if retrieval_trace is not None else None
+            ),
+            "retrieval_latency_ms": retrieval_trace.latency_ms if retrieval_trace is not None else None,
             "agent_history": history,
         }
     except Exception:

@@ -61,10 +61,13 @@ def test_incremental_ingest_skips_already_parsed_documents(monkeypatch) -> None:
 
     first_batch = parser.parse_bundle_documents(bundle_id)
     assert extracted_keys == [pending_storage_key]
-    assert parser.store_chunks(bundle_id, first_batch) == 1
+    assert first_batch.successful_document_ids
+    stored_first = parser.store_chunks(bundle_id, first_batch)
+    assert stored_first.chunks_created == 1
+    assert stored_first.parsed_assets_created == 1
 
     second_batch = parser.parse_bundle_documents(bundle_id)
-    assert second_batch == []
+    assert second_batch.documents == []
     assert extracted_keys == [pending_storage_key]
 
     db = SessionLocal()
@@ -76,5 +79,93 @@ def test_incremental_ingest_skips_already_parsed_documents(monkeypatch) -> None:
             .count()
         )
         assert chunk_count == 1
+        chunk = (
+            db.query(KnowledgeChunk)
+            .join(SourceDocument, SourceDocument.id == KnowledgeChunk.source_document_id)
+            .filter(SourceDocument.bundle_id == bundle_id)
+            .one()
+        )
+        assert chunk.chunk_key
+        assert chunk.metadata_json["locator"]["source_document_id"] == chunk.source_document_id
+        assert chunk.metadata_json["locator"]["chunk_index"] == 0
+    finally:
+        db.close()
+
+
+def test_replaying_a_parse_result_does_not_duplicate_chunks(monkeypatch) -> None:
+    bundle_id, pending_storage_key = _create_bundle_with_existing_document()
+    monkeypatch.setattr(
+        parser,
+        "_extract_text",
+        lambda storage_key, _mime_type: (
+            "第一章 投标要求\n投标方必须支持云平台部署。"
+            if storage_key == pending_storage_key
+            else ""
+        ),
+    )
+
+    parsed = parser.parse_bundle_documents(bundle_id)
+    first = parser.store_chunks(bundle_id, parsed)
+    replay = parser.store_chunks(bundle_id, parsed)
+
+    assert first.chunks_created == 1
+    assert replay.chunks_created == 0
+    assert replay.parsed_assets_created == 0
+
+    db = SessionLocal()
+    try:
+        chunks = list(
+            db.query(KnowledgeChunk)
+            .join(SourceDocument, SourceDocument.id == KnowledgeChunk.source_document_id)
+            .filter(SourceDocument.bundle_id == bundle_id)
+            .all()
+        )
+        assert len(chunks) == 1
+        document = db.get(SourceDocument, chunks[0].source_document_id)
+        assert document is not None
+        assert document.parse_status == "parsed"
+        assert document.parse_error_code is None
+    finally:
+        db.close()
+
+
+def test_failed_parse_is_durable_but_retryable(monkeypatch) -> None:
+    bundle_id, pending_storage_key = _create_bundle_with_existing_document()
+    monkeypatch.setattr(parser, "_extract_text", lambda _storage_key, _mime_type: "")
+
+    failed_result = parser.parse_bundle_documents(bundle_id)
+    stored_failure = parser.store_chunks(bundle_id, failed_result)
+    assert stored_failure.failed_document_ids
+
+    db = SessionLocal()
+    try:
+        document = db.query(SourceDocument).filter_by(
+            bundle_id=bundle_id,
+            storage_key=pending_storage_key,
+        ).one()
+        assert document.parse_status == "failed"
+        assert document.parse_error_code == "no_extractable_text"
+    finally:
+        db.close()
+
+    monkeypatch.setattr(
+        parser,
+        "_extract_text",
+        lambda storage_key, _mime_type: "第二章 交付要求\n系统必须提供验收材料。"
+        if storage_key == pending_storage_key
+        else "",
+    )
+    retry_result = parser.parse_bundle_documents(bundle_id)
+    retry_stored = parser.store_chunks(bundle_id, retry_result)
+
+    assert retry_stored.chunks_created == 1
+    db = SessionLocal()
+    try:
+        document = db.query(SourceDocument).filter_by(
+            bundle_id=bundle_id,
+            storage_key=pending_storage_key,
+        ).one()
+        assert document.parse_status == "parsed"
+        assert document.parse_error_code is None
     finally:
         db.close()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
@@ -9,7 +11,18 @@ from typing import Literal
 from sqlalchemy import case, false, func, literal_column, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from .models import MemoryRecord
+from .models import (
+    AuditEvent,
+    Bundle,
+    ChatConversation,
+    ChatMessage,
+    Evidence,
+    KnowledgeChunk,
+    MemoryEvidenceLink,
+    MemoryRecord,
+    RequirementItem,
+    SourceDocument,
+)
 
 
 _TEXT_CONFIG = literal_column("'simple'::regconfig")
@@ -245,6 +258,147 @@ def list_active_preference_memory(
     return list(db.scalars(stmt).all())
 
 
+def valid_memory_evidence_links(
+    db: Session,
+    *,
+    records: Iterable[MemoryRecord],
+) -> dict[str, tuple[MemoryEvidenceLink, ...]]:
+    """Return only citations whose backing source is still usable and in scope.
+
+    Memory records are immutable ledger entries, but their source rows can be
+    removed or become unavailable later. Retrieval must therefore revalidate
+    evidence instead of trusting the link that was checked at proposal time.
+    Source-document supersession is intentionally not invalidation: the cited
+    document version remains an auditable historical source until it is no
+    longer parseable or addressable.
+    """
+
+    records_by_id = {record.id: record for record in records}
+    links = [link for record in records_by_id.values() for link in record.evidence_links]
+    if not links:
+        return {}
+
+    source_ids: dict[str, set[str]] = defaultdict(set)
+    for link in links:
+        source_ids[link.source_type].add(link.source_id)
+
+    chunk_projects = _knowledge_chunk_projects(db, source_ids.get("knowledge_chunk", set()))
+    requirement_projects = _requirement_projects(db, source_ids.get("requirement_item", set()))
+    evidence_projects = _evidence_projects(db, source_ids.get("evidence_item", set()))
+    chat_sources = _chat_message_sources(db, source_ids.get("chat_message", set()))
+    audit_projects = _audit_event_projects(db, source_ids.get("audit_event", set()))
+
+    valid_by_record: dict[str, list[MemoryEvidenceLink]] = defaultdict(list)
+    for link in links:
+        record = records_by_id[link.memory_record_id]
+        if _is_valid_memory_evidence_link(
+            link=link,
+            record=record,
+            chunk_projects=chunk_projects,
+            requirement_projects=requirement_projects,
+            evidence_projects=evidence_projects,
+            chat_sources=chat_sources,
+            audit_projects=audit_projects,
+        ):
+            valid_by_record[record.id].append(link)
+
+    return {
+        record_id: tuple(
+            sorted(
+                valid_links,
+                key=lambda link: (link.source_type, link.source_id, link.evidence_role, link.id),
+            )
+        )
+        for record_id, valid_links in valid_by_record.items()
+    }
+
+
+def _knowledge_chunk_projects(db: Session, source_ids: set[str]) -> dict[str, str]:
+    if not source_ids:
+        return {}
+    rows = db.execute(
+        select(KnowledgeChunk.id, KnowledgeChunk.project_id)
+        .join(SourceDocument, SourceDocument.id == KnowledgeChunk.source_document_id)
+        .join(Bundle, Bundle.id == SourceDocument.bundle_id)
+        .where(
+            KnowledgeChunk.id.in_(source_ids),
+            SourceDocument.parse_status == "parsed",
+            Bundle.project_id == KnowledgeChunk.project_id,
+        )
+    ).all()
+    return {source_id: project_id for source_id, project_id in rows}
+
+
+def _requirement_projects(db: Session, source_ids: set[str]) -> dict[str, str]:
+    if not source_ids:
+        return {}
+    return dict(db.execute(select(RequirementItem.id, RequirementItem.project_id).where(RequirementItem.id.in_(source_ids))).all())
+
+
+def _evidence_projects(db: Session, source_ids: set[str]) -> dict[str, str]:
+    if not source_ids:
+        return {}
+    rows = db.execute(
+        select(
+            Evidence.id,
+            Evidence.project_id,
+            Evidence.source_document_id,
+            SourceDocument.id,
+            Bundle.project_id,
+        )
+        .outerjoin(SourceDocument, SourceDocument.id == Evidence.source_document_id)
+        .outerjoin(Bundle, Bundle.id == SourceDocument.bundle_id)
+        .where(Evidence.id.in_(source_ids))
+    ).all()
+    return {
+        evidence_id: project_id
+        for evidence_id, project_id, source_document_id, resolved_source_id, bundle_project_id in rows
+        if source_document_id is None or (resolved_source_id is not None and bundle_project_id == project_id)
+    }
+
+
+def _chat_message_sources(db: Session, source_ids: set[str]) -> dict[str, tuple[str | None, str]]:
+    if not source_ids:
+        return {}
+    rows = db.execute(
+        select(ChatMessage.id, ChatConversation.project_id, ChatConversation.user_id)
+        .join(ChatConversation, ChatConversation.id == ChatMessage.conversation_id)
+        .where(ChatMessage.id.in_(source_ids))
+    ).all()
+    return {message_id: (project_id, user_id) for message_id, project_id, user_id in rows}
+
+
+def _audit_event_projects(db: Session, source_ids: set[str]) -> dict[str, str]:
+    if not source_ids:
+        return {}
+    return dict(db.execute(select(AuditEvent.id, AuditEvent.project_id).where(AuditEvent.id.in_(source_ids))).all())
+
+
+def _is_valid_memory_evidence_link(
+    *,
+    link: MemoryEvidenceLink,
+    record: MemoryRecord,
+    chunk_projects: dict[str, str],
+    requirement_projects: dict[str, str],
+    evidence_projects: dict[str, str],
+    chat_sources: dict[str, tuple[str | None, str]],
+    audit_projects: dict[str, str],
+) -> bool:
+    if link.source_type == "human_decision":
+        return bool(record.created_by_actor_id) and link.source_id == record.created_by_actor_id
+    if link.source_type == "knowledge_chunk":
+        return chunk_projects.get(link.source_id) == record.project_id
+    if link.source_type == "requirement_item":
+        return requirement_projects.get(link.source_id) == record.project_id
+    if link.source_type == "evidence_item":
+        return evidence_projects.get(link.source_id) == record.project_id
+    if link.source_type == "chat_message":
+        return chat_sources.get(link.source_id) == (record.project_id, record.created_by_actor_id)
+    if link.source_type == "audit_event":
+        return audit_projects.get(link.source_id) == record.project_id
+    return False
+
+
 __all__ = [
     "RankedMemoryRecord",
     "has_visible_memory",
@@ -252,4 +406,5 @@ __all__ = [
     "search_fts_memory_candidates",
     "search_trigram_memory_candidates",
     "list_active_preference_memory",
+    "valid_memory_evidence_links",
 ]

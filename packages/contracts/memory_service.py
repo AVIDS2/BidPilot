@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
@@ -15,8 +16,9 @@ from .memory_repository import (
     search_dense_memory_candidates,
     search_fts_memory_candidates,
     search_trigram_memory_candidates,
+    valid_memory_evidence_links,
 )
-from .models import MemoryRecord
+from .models import MemoryEvidenceLink, MemoryRecord
 from .retrieval import normalize_retrieval_text, reciprocal_rank_fusion
 
 
@@ -39,10 +41,10 @@ def _add_ranked_records(
         records.setdefault(candidate.record_id, candidate)
 
 
-def _citations(record: MemoryRecord) -> tuple[MemoryCitation, ...]:
+def _citations(links: Iterable[MemoryEvidenceLink]) -> tuple[MemoryCitation, ...]:
     citations: list[MemoryCitation] = []
     for link in sorted(
-        record.evidence_links,
+        links,
         key=lambda value: (value.source_type, value.source_id, value.evidence_role, value.id),
     ):
         try:
@@ -74,12 +76,15 @@ def _memory_version(
     user_id: str,
     project_id: str | None,
     records: Iterable[MemoryRecord],
+    citations_by_record: dict[str, tuple[MemoryCitation, ...]],
 ) -> str:
     parts = ["bidpilot-memory-context-v1", org_id, user_id, project_id or "-"]
-    parts.extend(
-        f"{record.id}:{record.updated_at.isoformat() if record.updated_at else '-'}"
-        for record in records
-    )
+    for record in records:
+        parts.append(f"{record.id}:{record.updated_at.isoformat() if record.updated_at else '-'}")
+        parts.extend(
+            json.dumps(citation.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+            for citation in citations_by_record.get(record.id, ())
+        )
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
 
@@ -158,15 +163,22 @@ def build_memory_context_pack(
     ordered_records = [records[fused_record.chunk_id].record for fused_record in fused]
     seen_record_ids = {record.id for record in ordered_records}
     ordered_records.extend(record for record in always_on_preferences if record.id not in seen_record_ids)
+    valid_links_by_record = valid_memory_evidence_links(db, records=ordered_records)
     remaining_characters = max_characters
     selected_records: list[MemoryRecord] = []
+    selected_citations: dict[str, tuple[MemoryCitation, ...]] = {}
     items: list[MemoryContextItem] = []
     invalid_provenance_count = 0
+    invalid_evidence_count = 0
 
     for record in ordered_records:
         if len(items) >= top_k or remaining_characters <= 1:
             break
-        citations = _citations(record)
+        raw_link_count = len(record.evidence_links)
+        valid_links = valid_links_by_record.get(record.id, ())
+        if len(valid_links) < raw_link_count:
+            invalid_evidence_count += 1
+        citations = _citations(valid_links)
         if not citations:
             invalid_provenance_count += 1
             continue
@@ -197,10 +209,13 @@ def build_memory_context_pack(
             )
         )
         selected_records.append(record)
+        selected_citations[record.id] = citations
         remaining_characters -= len(title) + len(body)
 
     if invalid_provenance_count:
         degraded_reasons.append("invalid_memory_provenance")
+    if invalid_evidence_count:
+        degraded_reasons.append("invalid_memory_evidence")
     if not items:
         degraded_reasons.append("no_memory_found")
 
@@ -213,6 +228,7 @@ def build_memory_context_pack(
             user_id=user_id,
             project_id=project_id,
             records=selected_records,
+            citations_by_record=selected_citations,
         ),
         items=tuple(items),
         degraded_reasons=tuple(degraded_reasons),

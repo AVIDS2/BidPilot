@@ -54,6 +54,7 @@ def human_approval_node(state: BidPilotState) -> dict:
         "review_score": review_result.get("overall_score") if review_result else None,
         "review_issues": review_result.get("issues", []) if review_result else [],
         "iteration": iteration,
+        "section_version_id": state.get("section_version_id"),
         "instructions": (
             "Review the draft and respond with a dict containing:\n"
             "  decision: 'approved' | 'rejected_with_feedback'\n"
@@ -65,6 +66,7 @@ def human_approval_node(state: BidPilotState) -> dict:
         state.get("runtime_run_id"),
         section_key=section_key,
         review_score=review_result.get("overall_score") if review_result else None,
+        section_version_id=state.get("section_version_id"),
     )
 
     # This pauses the graph.  On resume it returns the caller-supplied value.
@@ -72,12 +74,17 @@ def human_approval_node(state: BidPilotState) -> dict:
 
     # Parse the human response (may come as a dict or a pydantic model).
     if isinstance(human_response, dict):
-        decision = human_response.get("decision", "approved")
+        decision = human_response.get("decision")
         feedback = human_response.get("feedback")
     else:
         # Handle pydantic model or other object with attributes
-        decision = getattr(human_response, "decision", "approved")
+        decision = getattr(human_response, "decision", None)
         feedback = getattr(human_response, "feedback", None)
+
+    if decision not in {"approved", "rejected_with_feedback"}:
+        raise ValueError("Unsupported human approval decision")
+    if feedback is not None and not isinstance(feedback, str):
+        raise ValueError("Human approval feedback must be a string")
 
     duration_ms = int((time.monotonic() - start) * 1000)
 

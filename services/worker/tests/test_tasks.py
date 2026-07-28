@@ -142,9 +142,27 @@ def test_reindex_bundle_task_never_reparses_or_reextracts(monkeypatch) -> None:
     def _forbidden(*_args, **_kwargs):
         raise AssertionError("reindex must not parse documents or extract requirements")
 
+    def _complete_embedding(target_bundle_id: str) -> int:
+        db = SessionLocal()
+        try:
+            chunks = list(
+                db.query(KnowledgeChunk)
+                .join(SourceDocument, SourceDocument.id == KnowledgeChunk.source_document_id)
+                .filter(SourceDocument.bundle_id == target_bundle_id)
+                .all()
+            )
+            for chunk in chunks:
+                chunk.embedding = [0.1] * 1536
+                chunk.embedding_status = "success"
+                chunk.embedding_error_code = None
+            db.commit()
+            return len(chunks)
+        finally:
+            db.close()
+
     monkeypatch.setattr("app.execution.ingest.parse_bundle_documents", _forbidden)
     monkeypatch.setattr("app.execution.ingest._extract_and_store_requirements", _forbidden)
-    monkeypatch.setattr("app.execution.ingest._embed_and_update_chunks", lambda _bundle_id: 1)
+    monkeypatch.setattr("app.execution.ingest._embed_and_update_chunks", _complete_embedding)
 
     result = reindex_bundle(bundle_id)
 
@@ -264,7 +282,7 @@ def test_draft_section_stops_before_legacy_work_when_runtime_cancellation_is_req
         called = True
         raise AssertionError("cancelled work must not call the drafting executor")
 
-    monkeypatch.setattr("app.execution.drafting.run_draft", should_not_draft)
+    monkeypatch.setattr("app.graph.builder.invoke_graph", should_not_draft)
 
     result = draft_section(run_id, project_id, "technical-approach", runtime_run_id=runtime_run_id)
 
@@ -280,7 +298,7 @@ def test_draft_section_stops_before_legacy_work_when_runtime_cancellation_is_req
         db.close()
 
 
-def test_draft_section_cancels_after_legacy_work_when_request_arrives_in_flight(monkeypatch) -> None:
+def test_draft_section_cancels_after_graph_work_when_request_arrives_in_flight(monkeypatch) -> None:
     db = SessionLocal()
     try:
         suffix = _unique_suffix()
@@ -324,7 +342,7 @@ def test_draft_section_cancels_after_legacy_work_when_request_arrives_in_flight(
     finally:
         db.close()
 
-    def draft_then_request_cancellation(*_args, **_kwargs):
+    def graph_then_request_cancellation(*_args, **_kwargs):
         worker_db = SessionLocal()
         try:
             persisted = worker_db.get(RuntimeRun, runtime_run_id)
@@ -333,9 +351,13 @@ def test_draft_section_cancels_after_legacy_work_when_request_arrives_in_flight(
             worker_db.commit()
         finally:
             worker_db.close()
-        return {"status": "succeeded", "section_key": "technical-approach"}
+        return {
+            "persisted": True,
+            "section_key": "technical-approach",
+            "section_version_id": "candidate-version",
+        }
 
-    monkeypatch.setattr("app.execution.drafting.run_draft", draft_then_request_cancellation)
+    monkeypatch.setattr("app.graph.builder.invoke_graph", graph_then_request_cancellation)
 
     result = draft_section(run_id, project_id, "technical-approach", runtime_run_id=runtime_run_id)
 

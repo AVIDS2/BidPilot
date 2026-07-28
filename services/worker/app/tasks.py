@@ -10,6 +10,7 @@ from app.execution.assistant_attachments import purge_expired_assistant_attachme
 from app.execution.memory import index_memory_records, run_compile_bid_wiki
 from app.execution.memory_graph import run_extract_memory_graph
 from app.execution.model_usage import finalize_workflow_model_reservation_failure
+from app.execution.review_resume import resolve_durable_review_resume
 from app.execution.task_outbox import (
     claim_workflow_task_delivery,
     complete_workflow_task_delivery,
@@ -279,7 +280,7 @@ def _execute_draft_section(
             },
         )
         return {
-            "status": "ok",
+            "status": "succeeded",
             "run_id": run_id,
             "section_key": section_key,
             "section_version_id": result.get("section_version_id", ""),
@@ -417,6 +418,11 @@ def _execute_resume_draft(
         if is_runtime_cancellation_requested(runtime_run_id):
             return _cancel_workflow(run_id, "", runtime_run_id)
         try:
+            decision, feedback = resolve_durable_review_resume(
+                run_id=run_id,
+                requested_decision=decision,
+                requested_feedback=feedback,
+            )
             result = resume_graph(
                 run_id=run_id,
                 decision=decision,
@@ -480,7 +486,7 @@ def _execute_resume_draft(
             },
         )
         return {
-            "status": "ok",
+            "status": "succeeded",
             "run_id": run_id,
             "section_key": result.get("section_key", ""),
             "section_version_id": result.get("section_version_id", ""),

@@ -27,6 +27,27 @@ class TestGraphCompilation:
 
 
 class TestGraphInvocation:
+    def test_knowledge_retrieval_payload_contains_only_safe_numeric_metrics(self):
+        payload = builder._node_payload(
+            "knowledge_retriever",
+            {
+                "evidence_chunks": [{"content": "must not leave the node"}],
+                "retrieval_candidate_count": 3,
+                "retrieval_fused_candidate_count": 7,
+                "retrieval_reranked_candidate_count": 4,
+                "retrieval_latency_ms": 21,
+                "query": "must not become an event field",
+            },
+        )
+
+        assert payload == {
+            "evidence_count": 1,
+            "retrieval_candidate_count": 3,
+            "retrieval_fused_candidate_count": 7,
+            "retrieval_reranked_candidate_count": 4,
+            "retrieval_latency_ms": 21,
+        }
+
     def test_instrumented_node_stops_at_the_first_safe_boundary_after_cancellation(self, monkeypatch):
         """A cancellation arriving during a node prevents the next graph transition."""
         cancellation_checks = iter([False, True])

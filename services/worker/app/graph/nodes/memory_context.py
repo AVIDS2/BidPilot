@@ -5,9 +5,12 @@ from __future__ import annotations
 import logging
 import time
 
+from sqlalchemy import select
+
 from app.db import SessionLocal
 from app.execution.embedding_capacity import generate_metered_embedding
-from app.models import Project, RuntimeRun, User
+from app.models import Project, ProjectMember, RuntimeRun, User
+from contracts.access import project_role_has_capability
 from contracts.memory_service import build_memory_context_pack
 
 from ..state import BidPilotState, MemoryContextEntry
@@ -74,6 +77,15 @@ def load_memory_context_node(state: BidPilotState) -> dict:
         user = db.get(User, runtime_run.user_id)
         if user is None or user.org_id != project.org_id or user.disabled:
             return _degraded_result("invalid_runtime_principal", started=started)
+        if user.role != "admin":
+            membership = db.scalar(
+                select(ProjectMember).where(
+                    ProjectMember.project_id == project.id,
+                    ProjectMember.user_id == user.id,
+                )
+            )
+            if membership is None or not project_role_has_capability(membership.role, "memory.read"):
+                return _degraded_result("runtime_principal_memory_access_revoked", started=started)
 
         query = _memory_query(state)
         embedding = generate_metered_embedding(

@@ -13,6 +13,13 @@ import re
 import time
 from typing import Any
 
+from app.db import SessionLocal
+from contracts.response_plans import (
+    ResponsePlanScopeError,
+    capture_response_plan_binding,
+    ensure_response_plan_section,
+)
+
 from ..state import BidPilotState, ContentPlan, ContentPlanItem
 from ._history import record_agent_call
 
@@ -156,18 +163,115 @@ def build_content_plan(
     }
 
 
+def _response_plan_failure(
+    *,
+    started_at: float,
+    section_key: str,
+    error_code: str,
+) -> dict:
+    history = record_agent_call(
+        agent="content_plan",
+        action="plan_section_content",
+        input_summary=f"section={section_key}, durable_response_plan=unavailable",
+        output_summary=f"ERROR: {error_code}",
+        duration_ms=int((time.monotonic() - started_at) * 1000),
+        success=False,
+        error=error_code,
+    )
+    return {
+        "content_plan": None,
+        "content_plan_ready": False,
+        "error": "content_plan: 响应计划快照不可用，请重新发起工作流。",
+        "agent_history": history,
+    }
+
+
 def content_plan_node(state: BidPilotState) -> dict:
     """LangGraph node: produce a deterministic content plan after retrieval."""
     start = time.monotonic()
     section_key: str = state["section_key"]
     evidence_chunks = list(state.get("evidence_chunks") or [])
     requirements = list(state.get("requirements") or [])
+    response_plan_update: dict[str, object] = {}
 
-    plan = build_content_plan(
-        section_key=section_key,
-        evidence_chunks=evidence_chunks,
-        requirements=requirements,
-    )
+    evidence_set_id = state.get("evidence_set_id")
+    run_id = state.get("run_id")
+    if isinstance(evidence_set_id, str) and evidence_set_id:
+        if not isinstance(run_id, str) or not run_id:
+            return _response_plan_failure(
+                started_at=start,
+                section_key=section_key,
+                error_code="response_plan_execution_run_required",
+            )
+        db = SessionLocal()
+        try:
+            plan_section = ensure_response_plan_section(
+                db,
+                project_id=state["project_id"],
+                section_key=section_key,
+            )
+            # Only durable requirement assignments are allowed to shape the
+            # model-facing plan. Graph state is not the business source of truth.
+            requirements = list(plan_section.requirements)
+            plan = build_content_plan(
+                section_key=section_key,
+                evidence_chunks=evidence_chunks,
+                requirements=requirements,
+            )
+            if plan_section.unmapped_requirement_ids:
+                plan["gaps"] = [
+                    *plan["gaps"],
+                    (
+                        f"有 {len(plan_section.unmapped_requirement_ids)} 条需求尚未分配章节，"
+                        "需人工完成章节映射。"
+                    ),
+                ]
+            raw_iteration = state.get("iteration", 0)
+            generation_iteration = raw_iteration + 1 if isinstance(raw_iteration, int) else 1
+            binding = capture_response_plan_binding(
+                db,
+                project_id=state["project_id"],
+                execution_run_id=run_id,
+                evidence_set_id=evidence_set_id,
+                response_plan_section_id=plan_section.response_plan_section_id,
+                generation_iteration=max(generation_iteration, 1),
+                content_plan=plan,
+            )
+            db.commit()
+            plan = binding.content_plan
+            response_plan_update = {
+                "response_plan_id": binding.response_plan_id,
+                "response_plan_section_id": binding.response_plan_section_id,
+                "response_plan_evidence_binding_id": (
+                    binding.response_plan_evidence_binding_id
+                ),
+                "response_plan_version": binding.response_plan_version,
+            }
+        except ResponsePlanScopeError as exc:
+            db.rollback()
+            return _response_plan_failure(
+                started_at=start,
+                section_key=section_key,
+                error_code=str(exc),
+            )
+        except Exception:
+            db.rollback()
+            logger.exception("Unable to persist response plan for section %s", section_key)
+            return _response_plan_failure(
+                started_at=start,
+                section_key=section_key,
+                error_code="response_plan_persistence_failed",
+            )
+        finally:
+            db.close()
+    else:
+        # This compatibility path keeps deterministic unit-node tests pure.
+        # Product graph executions always arrive with an EvidenceSet.
+        plan = build_content_plan(
+            section_key=section_key,
+            evidence_chunks=evidence_chunks,
+            requirements=requirements,
+        )
     duration_ms = int((time.monotonic() - start) * 1000)
     history = record_agent_call(
         agent="content_plan",
@@ -197,6 +301,7 @@ def content_plan_node(state: BidPilotState) -> dict:
         "content_plan": plan,
         "content_plan_ready": True,
         "agent_history": history,
+        **response_plan_update,
     }
     if replan:
         update.update(

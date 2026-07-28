@@ -1,10 +1,12 @@
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from app.adapters.provider_errors import ProviderInvocationError
 from app.adapters.structured_llm import StructuredModelResult
 from app.graph.nodes import quality_reviewer as reviewer_module
 from app.graph.nodes import rfp_parser as parser_module
 from app.graph.nodes import supervisor as supervisor_module
+from app.retrieval.evidence_sets import EvidenceSetItemSnapshot, EvidenceSetSnapshot
 
 
 def test_rfp_parser_records_governed_model_usage(monkeypatch):
@@ -140,6 +142,74 @@ def test_quality_reviewer_records_governed_model_usage(monkeypatch):
     assert result["review_passed"] is True
     assert captured["begin"]["workload"] == "workflow_quality_review"
     assert captured["usage"]["reservation_key"] == "review-call"
+
+
+def test_quality_reviewer_reloads_authorized_evidence_instead_of_state_payload(monkeypatch):
+    session = MagicMock()
+    snapshot = EvidenceSetSnapshot(
+        id="evidence-set-1",
+        status="ready",
+        degraded_reasons=(),
+        rejected_reasons=(),
+        unmet_requirement_ids=(),
+        items=(
+            EvidenceSetItemSnapshot(
+                id="evidence-item-1",
+                chunk_id="chunk-1",
+                source_document_id="source-1",
+                source_document_version=1,
+                source_document_checksum="a" * 64,
+                quote_text="授权审核证据",
+                locator_json={"source_document_id": "source-1", "chunk_index": 0},
+                retrieval_rank=1,
+                retrieval_score=0.9,
+                retrieval_methods=("fts",),
+                selected_reason="test",
+            ),
+        ),
+    )
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(reviewer_module, "SessionLocal", lambda: session)
+    monkeypatch.setattr(
+        reviewer_module,
+        "load_authorized_evidence_set",
+        lambda *_args, **_kwargs: snapshot,
+    )
+    monkeypatch.setattr(reviewer_module, "resolve_structured_provider", lambda _config_id: (None, "openai"))
+    monkeypatch.setattr(
+        reviewer_module,
+        "invoke_structured_text",
+        lambda **kwargs: captured.update({"prompt": kwargs["user_prompt"]})
+        or StructuredModelResult(
+            content='{"passed": true, "issues": [], "suggestions": [], "overall_score": 0.9}',
+            model_used="test-model",
+            provider_type="openai",
+            usage=None,
+        ),
+    )
+
+    result = reviewer_module.quality_reviewer_node(
+        {
+            "project_id": "project-1",
+            "section_key": "summary",
+            "run_id": "run-1",
+            "provider_config_id": None,
+            "reasoning_effort": None,
+            "iteration": 1,
+            "draft_markdown": "A" * 300,
+            "requirements": [],
+            "evidence_set_id": "evidence-set-1",
+            "evidence_chunks": [{"content": "伪造 state 证据"}],
+        }
+    )
+
+    assert result["review_passed"] is True
+    assert "授权审核证据" in captured["prompt"]
+    assert "伪造 state 证据" not in captured["prompt"]
+    assert result["evidence_chunks"][0]["evidence_set_item_id"] == "evidence-item-1"
+    session.commit.assert_called_once()
+    session.close.assert_called_once()
 
 
 def test_supervisor_has_no_llm_routing_side_path():

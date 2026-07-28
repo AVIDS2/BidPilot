@@ -13,12 +13,18 @@ from app.adapters.structured_llm import (
     invoke_structured_text,
     resolve_structured_provider,
 )
+from app.db import SessionLocal
 from app.execution.model_usage import (
     begin_workflow_model_call,
     record_workflow_model_usage,
     resolve_workflow_model_call_failure,
 )
+from app.retrieval.evidence_sets import EvidenceSetScopeError, load_authorized_evidence_set
 from contracts.untrusted_context import build_untrusted_context_packet
+from contracts.response_plans import (
+    ResponsePlanScopeError,
+    load_authorized_response_plan_binding,
+)
 
 from ..state import BidPilotState, ClaimCandidate, ReviewResult
 from ._history import record_agent_call
@@ -276,13 +282,79 @@ def _deterministic_review(state: BidPilotState) -> ReviewResult:
     )
 
 
+def _load_authorized_evidence_for_review(state: BidPilotState) -> tuple[list[dict], dict]:
+    """Reload the persisted evidence boundary before evaluating factual claims."""
+    evidence_set_id = state.get("evidence_set_id")
+    if not isinstance(evidence_set_id, str) or not evidence_set_id:
+        # Compatibility for direct unit-node invocation. Production graph runs
+        # always receive an EvidenceSet from knowledge_retriever.
+        return list(state.get("evidence_chunks") or []), {}
+
+    db = SessionLocal()
+    try:
+        snapshot = load_authorized_evidence_set(
+            db,
+            evidence_set_id=evidence_set_id,
+            project_id=state["project_id"],
+            execution_run_id=state["run_id"],
+        )
+        if snapshot.status == "invalidated":
+            db.commit()
+            raise EvidenceSetScopeError("evidence_set_invalidated")
+        db.commit()
+        return (
+            snapshot.evidence_chunks,
+            {
+                "evidence_set_id": snapshot.id,
+                "evidence_set_status": snapshot.status,
+                "evidence_set_unmet_requirement_ids": list(snapshot.unmet_requirement_ids),
+                "evidence_set_degraded_reasons": list(
+                    dict.fromkeys([*snapshot.degraded_reasons, *snapshot.rejected_reasons])
+                ),
+            },
+        )
+    finally:
+        db.close()
+
+
+def _load_authorized_plan_requirements(state: BidPilotState) -> tuple[list[dict], dict]:
+    """Review only the persisted requirements assigned to this plan section."""
+    binding_id = state.get("response_plan_evidence_binding_id")
+    if not isinstance(binding_id, str) or not binding_id:
+        # Compatibility for direct unit-node invocation. Product graph runs
+        # always create a response-plan binding before the draft node.
+        return list(state.get("requirements") or []), {}
+
+    db = SessionLocal()
+    try:
+        snapshot = load_authorized_response_plan_binding(
+            db,
+            response_plan_evidence_binding_id=binding_id,
+            project_id=state["project_id"],
+            execution_run_id=state["run_id"],
+            section_key=state["section_key"],
+        )
+        return (
+            list(snapshot.requirements),
+            {
+                "response_plan_id": snapshot.response_plan_id,
+                "response_plan_section_id": snapshot.response_plan_section_id,
+                "response_plan_evidence_binding_id": (
+                    snapshot.response_plan_evidence_binding_id
+                ),
+                "response_plan_version": snapshot.response_plan_version,
+            },
+        )
+    finally:
+        db.close()
+
+
 def quality_reviewer_node(state: BidPilotState) -> dict:
     """Review a draft with a governed model call and deterministic fallback."""
     start = time.monotonic()
     section_key: str = state["section_key"]
     draft_markdown: str = state.get("draft_markdown", "")
     requirements = state.get("requirements", [])
-    evidence_chunks = state.get("evidence_chunks", [])
     provider_config_id: str | None = state.get("provider_config_id")
     reasoning_effort: str | None = state.get("reasoning_effort")
     iteration: int = state.get("iteration", 0)
@@ -292,8 +364,13 @@ def quality_reviewer_node(state: BidPilotState) -> dict:
     degradation_code: str | None = None
     claim_candidates: list[ClaimCandidate] = []
     claim_integrity_status = "not_applicable"
+    evidence_chunks: list[dict] = []
+    evidence_state_update: dict = {}
+    response_plan_state_update: dict = {}
 
     try:
+        evidence_chunks, evidence_state_update = _load_authorized_evidence_for_review(state)
+        requirements, response_plan_state_update = _load_authorized_plan_requirements(state)
         provider_config, provider_type = resolve_structured_provider(provider_config_id)
         if isinstance(run_id, str) and run_id:
             call = begin_workflow_model_call(
@@ -340,6 +417,19 @@ def quality_reviewer_node(state: BidPilotState) -> dict:
             if requirement_refs and evidence_refs
             else "not_applicable"
         )
+    except (EvidenceSetScopeError, ResponsePlanScopeError) as exc:
+        review = ReviewResult(
+            passed=False,
+            issues=["Authorized evidence set or response plan is unavailable"],
+            suggestions=["Restart the workflow after retrieving current project evidence."],
+            overall_score=0.0,
+        )
+        degradation_code = (
+            "evidence_set_unavailable"
+            if isinstance(exc, EvidenceSetScopeError)
+            else "response_plan_unavailable"
+        )
+        claim_integrity_status = "invalid_evidence_set" if isinstance(exc, EvidenceSetScopeError) else "invalid_response_plan"
     except ProviderInvocationError as exc:
         if isinstance(run_id, str) and run_id:
             resolve_workflow_model_call_failure(
@@ -348,7 +438,9 @@ def quality_reviewer_node(state: BidPilotState) -> dict:
                 error_code=exc.error_code,
             )
         logger.warning("Quality review degraded: code=%s", exc.error_code)
-        review = _deterministic_review(state)
+        review = _deterministic_review(
+            {**state, "evidence_chunks": evidence_chunks, "requirements": requirements}
+        )
         degradation_code = exc.error_code
         claim_integrity_status = "degraded"
 
@@ -373,9 +465,17 @@ def quality_reviewer_node(state: BidPilotState) -> dict:
         success=True,
     )
     return {
+        **evidence_state_update,
+        **response_plan_state_update,
+        "evidence_chunks": evidence_chunks,
         "review_result": review,
         "review_passed": review["passed"],
         "claim_candidates": claim_candidates,
         "claim_integrity_status": claim_integrity_status,
+        "error": (
+            "quality_reviewer: 本次草拟的计划或证据集已不可用，请重新发起工作流。"
+            if degradation_code in {"evidence_set_unavailable", "response_plan_unavailable"}
+            else state.get("error")
+        ),
         "agent_history": history,
     }

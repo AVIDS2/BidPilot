@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 
 from app.db import SessionLocal
 from app.models import (
+    AuditEvent,
     Deliverable,
     DeliverableSection,
     Evidence,
@@ -25,7 +26,14 @@ from app.models import (
     RequirementClaimLink,
     RequirementEvidenceLink,
     RequirementItem,
+    ReviewThread,
     SectionVersion,
+)
+from app.retrieval.evidence_sets import EvidenceSetScopeError, load_authorized_evidence_set
+from contracts.response_plans import (
+    ResponsePlanBindingSnapshot,
+    ResponsePlanScopeError,
+    load_authorized_response_plan_binding,
 )
 from sqlalchemy import func, select
 
@@ -106,8 +114,9 @@ def _find_existing_version_for_run(
     project_id: str,
     section_key: str,
     run_id: str,
+    iteration: int,
 ) -> SectionVersion | None:
-    """Return a previously committed version when a Worker delivery replays."""
+    """Return a prior candidate for the same durable graph iteration."""
     return db.scalar(
         select(SectionVersion)
         .join(DeliverableSection, DeliverableSection.id == SectionVersion.deliverable_section_id)
@@ -116,6 +125,7 @@ def _find_existing_version_for_run(
             Deliverable.project_id == project_id,
             DeliverableSection.section_key == section_key,
             SectionVersion.generation_run_id == run_id,
+            SectionVersion.generation_iteration == iteration,
         )
         .limit(1)
     )
@@ -149,12 +159,145 @@ def _recompute_deliverable_approval(db, deliverable: Deliverable) -> None:
         if has_version is not None:
             non_empty.append(section)
 
-    if non_empty and all(section.status == "approved" for section in non_empty):
+    if non_empty and all(
+        section.status == "approved" and section.approved_version_id is not None
+        for section in non_empty
+    ):
         deliverable.status = "approved"
-    elif any(section.status == "approved" for section in non_empty):
+    elif any(
+        section.approved_version_id is not None or section.status == "in_review"
+        for section in non_empty
+    ):
         # Partial progress: keep draft/in_review, export still allowed via approved sections.
-        if deliverable.status not in {"approved"}:
-            deliverable.status = "in_review"
+        deliverable.status = "in_review"
+    else:
+        deliverable.status = "draft"
+
+
+def _review_thread_for_version(db, section_version_id: str) -> ReviewThread | None:
+    return db.scalar(
+        select(ReviewThread)
+        .where(ReviewThread.section_version_id == section_version_id)
+        .order_by(ReviewThread.id.desc())
+        .limit(1)
+    )
+
+
+def _load_authorized_evidence_for_persistence(
+    db,
+    *,
+    state: BidPilotState,
+    project_id: str,
+) -> tuple[list[dict], str, dict]:
+    """Use only the durable, scope-checked evidence snapshot at write time."""
+    evidence_set_id = state.get("evidence_set_id")
+    if not isinstance(evidence_set_id, str) or not evidence_set_id:
+        raise EvidenceSetScopeError("evidence_set_required_for_persistence")
+
+    snapshot = load_authorized_evidence_set(
+        db,
+        evidence_set_id=evidence_set_id,
+        project_id=project_id,
+        execution_run_id=state["run_id"],
+    )
+    if snapshot.status == "invalidated":
+        raise EvidenceSetScopeError("evidence_set_invalidated_before_persistence")
+
+    return (
+        snapshot.evidence_chunks,
+        snapshot.id,
+        {
+            "evidence_set_id": snapshot.id,
+            "evidence_set_status": snapshot.status,
+            "evidence_set_unmet_requirement_ids": list(snapshot.unmet_requirement_ids),
+            "evidence_set_degraded_reasons": list(
+                dict.fromkeys([*snapshot.degraded_reasons, *snapshot.rejected_reasons])
+            ),
+            "_evidence_set_items": snapshot.items,
+        },
+    )
+
+
+def _load_authorized_response_plan_for_persistence(
+    db,
+    *,
+    state: BidPilotState,
+    project_id: str,
+    evidence_set_id: str,
+) -> ResponsePlanBindingSnapshot:
+    """Require the same plan/evidence binding that shaped the model draft."""
+    binding_id = state.get("response_plan_evidence_binding_id")
+    if not isinstance(binding_id, str) or not binding_id:
+        raise ResponsePlanScopeError("response_plan_binding_required_for_persistence")
+    snapshot = load_authorized_response_plan_binding(
+        db,
+        response_plan_evidence_binding_id=binding_id,
+        project_id=project_id,
+        execution_run_id=state["run_id"],
+        section_key=state["section_key"],
+    )
+    if snapshot.evidence_set_id != evidence_set_id:
+        raise ResponsePlanScopeError("response_plan_binding_evidence_mismatch")
+    iteration = state.get("iteration")
+    if isinstance(iteration, int) and iteration > 0 and snapshot.generation_iteration != iteration:
+        raise ResponsePlanScopeError("response_plan_binding_iteration_mismatch")
+    return snapshot
+
+
+def _public_persist_failure(exc: BaseException) -> tuple[str, str]:
+    """Translate persistence failures before they reach durable run state."""
+    if isinstance(exc, EvidenceSetScopeError):
+        return (
+            "evidence_set_unavailable",
+            "本次证据集已不可用，请重新发起工作流。",
+        )
+    if isinstance(exc, ResponsePlanScopeError):
+        return (
+            "response_plan_unavailable",
+            "本次响应计划已不可用，请重新发起工作流。",
+        )
+    return (
+        "persistence_failed",
+        "草稿结果未能保存，请检查项目状态后重试。",
+    )
+
+
+def _ensure_open_review_thread(
+    db,
+    *,
+    project_id: str,
+    section: DeliverableSection,
+    version: SectionVersion,
+    run_id: str,
+) -> ReviewThread:
+    """Bind one durable human-review thread to an immutable candidate."""
+    thread = _review_thread_for_version(db, version.id)
+    if thread is not None:
+        return thread
+
+    thread = ReviewThread(
+        deliverable_section_id=section.id,
+        section_version_id=version.id,
+        status="open",
+        opened_by=run_id,
+    )
+    db.add(thread)
+    db.flush()
+    db.add(
+        AuditEvent(
+            project_id=project_id,
+            actor_type="workflow",
+            actor_id=run_id,
+            event_type="review.requested",
+            payload_json={
+                "section_id": section.id,
+                "section_key": section.section_key,
+                "section_version_id": version.id,
+                "version_number": version.version_number,
+            },
+        )
+    )
+    return thread
 
 
 def _unique_strings(value: object) -> list[str]:
@@ -177,15 +320,20 @@ def _persist_claim_candidates(
     draft_markdown: str,
     candidates: list[dict],
     evidence_id_by_chunk_id: dict[str, str],
+    authorized_requirement_ids: set[str] | None = None,
 ) -> int:
     """Persist only server-validated proposal claims for this section version."""
-    valid_requirement_ids = set(
-        db.scalars(
-            select(RequirementItem.id).where(
-                RequirementItem.project_id == project_id,
-                RequirementItem.section_key.in_((section_key, "extracted")),
-            )
-        ).all()
+    valid_requirement_ids = (
+        authorized_requirement_ids
+        if authorized_requirement_ids is not None
+        else set(
+            db.scalars(
+                select(RequirementItem.id).where(
+                    RequirementItem.project_id == project_id,
+                    RequirementItem.section_key.in_((section_key, "extracted")),
+                )
+            ).all()
+        )
     )
     existing_claims = {
         (_normalize_claim_text(claim.claim_text), claim.claim_type): claim
@@ -303,18 +451,47 @@ def persist_result_node(state: BidPilotState) -> dict:
     run_id: str = state["run_id"]
     draft_markdown: str = state.get("draft_markdown", "")
     draft_model_used: str = state.get("draft_model_used", "")
-    evidence_chunks = state.get("evidence_chunks", [])
+    evidence_chunks: list[dict] = []
+    evidence_set_id: str | None = None
+    evidence_set_items: tuple = ()
+    evidence_state_update: dict = {}
+    response_plan_state_update: dict = {}
     claim_candidates = state.get("claim_candidates", [])
     claim_integrity_status = str(state.get("claim_integrity_status") or "not_assessed")
     iteration: int = state.get("iteration", 0)
 
     db = SessionLocal()
     try:
+        evidence_chunks, evidence_set_id, evidence_state_update = (
+            _load_authorized_evidence_for_persistence(
+                db,
+                state=state,
+                project_id=project_id,
+            )
+        )
+        evidence_set_items = tuple(evidence_state_update.pop("_evidence_set_items", ()))
+        response_plan_binding = _load_authorized_response_plan_for_persistence(
+            db,
+            state=state,
+            project_id=project_id,
+            evidence_set_id=evidence_set_id,
+        )
+        response_plan_state_update = {
+            "response_plan_id": response_plan_binding.response_plan_id,
+            "response_plan_section_id": response_plan_binding.response_plan_section_id,
+            "response_plan_evidence_binding_id": (
+                response_plan_binding.response_plan_evidence_binding_id
+            ),
+            "response_plan_version": response_plan_binding.response_plan_version,
+        }
+        human_decision = state.get("human_decision")
+        requires_human_review = bool(state.get("review_passed")) and human_decision is None
         existing_version = _find_existing_version_for_run(
             db,
             project_id=project_id,
             section_key=section_key,
             run_id=run_id,
+            iteration=iteration,
         )
         if existing_version is not None:
             claim_count = len(
@@ -324,16 +501,79 @@ def persist_result_node(state: BidPilotState) -> dict:
                     ).all()
                 )
             )
-            # Replay path still needs HITL promotion — a previous partial write may
-            # have left the section in draft after the version row was committed.
             section = _find_or_create_section(db, project_id, section_key)
-            human_decision = state.get("human_decision")
-            if human_decision == "approved":
-                section.status = "approved"
-                deliverable = db.get(Deliverable, section.deliverable_id)
+            if section.id != response_plan_binding.deliverable_section_id:
+                raise ResponsePlanScopeError("response_plan_binding_deliverable_section_mismatch")
+            if (
+                existing_version.response_plan_section_id
+                != response_plan_binding.response_plan_section_id
+                or existing_version.response_plan_evidence_binding_id
+                != response_plan_binding.response_plan_evidence_binding_id
+            ):
+                raise ResponsePlanScopeError("section_version_response_plan_binding_mismatch")
+            deliverable = db.get(Deliverable, section.deliverable_id)
+            run = db.get(ExecutionRun, run_id)
+            if requires_human_review:
+                # Celery may replay before the API observes the graph pause. Keep
+                # the candidate and its review thread stable instead of making a
+                # second SectionVersion.
+                section.status = "in_review"
+                _ensure_open_review_thread(
+                    db,
+                    project_id=project_id,
+                    section=section,
+                    version=existing_version,
+                    run_id=run_id,
+                )
                 if deliverable is not None:
                     _recompute_deliverable_approval(db, deliverable)
+                if run is not None:
+                    run.status = "awaiting_human"
+                    run.finished_at = None
+                    run.output_json = {
+                        **(run.output_json or {}),
+                        "section_key": section_key,
+                        "response_plan_id": response_plan_binding.response_plan_id,
+                        "response_plan_version": response_plan_binding.response_plan_version,
+                        "response_plan_section_id": response_plan_binding.response_plan_section_id,
+                        "response_plan_evidence_binding_id": (
+                            response_plan_binding.response_plan_evidence_binding_id
+                        ),
+                        "section_version_id": existing_version.id,
+                        "iterations": iteration,
+                        "section_status": section.status,
+                        "awaiting_human": True,
+                    }
                 db.commit()
+            elif human_decision == "approved":
+                section.status = "approved"
+                section.approved_version_id = existing_version.id
+                if deliverable is not None:
+                    _recompute_deliverable_approval(db, deliverable)
+                thread = _review_thread_for_version(db, existing_version.id)
+                if thread is not None:
+                    thread.status = "approved"
+                if run is not None:
+                    run.status = "succeeded"
+                    run.finished_at = datetime.now(UTC)
+                    run.output_json = {
+                        **(run.output_json or {}),
+                        "section_key": section_key,
+                        "response_plan_id": response_plan_binding.response_plan_id,
+                        "response_plan_version": response_plan_binding.response_plan_version,
+                        "response_plan_section_id": response_plan_binding.response_plan_section_id,
+                        "response_plan_evidence_binding_id": (
+                            response_plan_binding.response_plan_evidence_binding_id
+                        ),
+                        "section_version_id": existing_version.id,
+                        "iterations": iteration,
+                        "section_status": section.status,
+                        "human_decision": human_decision,
+                    }
+                db.commit()
+            # Reload can mark a persisted evidence set degraded/invalidated;
+            # retain that status even when this delivery is an idempotent replay.
+            db.commit()
             history = record_agent_call(
                 agent="persist_result",
                 action="persist_to_db",
@@ -346,6 +586,9 @@ def persist_result_node(state: BidPilotState) -> dict:
                 success=True,
             )
             return {
+                **evidence_state_update,
+                **response_plan_state_update,
+                "evidence_chunks": evidence_chunks,
                 "section_version_id": existing_version.id,
                 "persisted": True,
                 "claim_count": claim_count,
@@ -355,8 +598,12 @@ def persist_result_node(state: BidPilotState) -> dict:
 
         # 1. Find or create the deliverable section
         section = _find_or_create_section(db, project_id, section_key)
+        if section.id != response_plan_binding.deliverable_section_id:
+            raise ResponsePlanScopeError("response_plan_binding_deliverable_section_mismatch")
 
-        # 2. Create section version
+        # 2. Create section version. A new candidate cannot inherit a prior
+        # approval; the old approved pointer remains a stable export snapshot.
+        section.status = "draft"
         next_ver = _next_version_number(db, section.id)
         sv = SectionVersion(
             deliverable_section_id=section.id,
@@ -364,6 +611,12 @@ def persist_result_node(state: BidPilotState) -> dict:
             content_markdown=draft_markdown,
             created_by_actor="ai",
             generation_run_id=run_id,
+            generation_iteration=iteration,
+            evidence_set_id=evidence_set_id,
+            response_plan_section_id=response_plan_binding.response_plan_section_id,
+            response_plan_evidence_binding_id=(
+                response_plan_binding.response_plan_evidence_binding_id
+            ),
         )
         db.add(sv)
         db.flush()
@@ -372,29 +625,26 @@ def persist_result_node(state: BidPilotState) -> dict:
         # 3. Persist validated locators. Retrieval ranking is not a calibrated
         # evidence-confidence score, so confidence remains unset here.
         evidence_id_by_chunk_id: dict[str, str] = {}
-        if evidence_chunks:
+        if evidence_set_items:
             evidence_rows: list[tuple[str, Evidence]] = []
             seen_chunk_ids: set[str] = set()
-            for chunk in evidence_chunks:
-                chunk_id = chunk.get("chunk_id")
-                if isinstance(chunk_id, str) and chunk_id in seen_chunk_ids:
+            for item in evidence_set_items:
+                chunk_id = item.chunk_id
+                if chunk_id in seen_chunk_ids:
                     continue
-                if isinstance(chunk_id, str):
-                    seen_chunk_ids.add(chunk_id)
+                seen_chunk_ids.add(chunk_id)
                 ev = Evidence(
                     project_id=project_id,
                     section_version_id=section_version_id,
-                    source_document_id=chunk.get("source_document_id"),
-                    chunk_id=chunk.get("chunk_id"),
-                    quote_text=chunk.get("content", "")[:500],
-                    locator_json=chunk.get("locator_json") or {
-                        "chunk_index": chunk.get("chunk_index")
-                    },
+                    evidence_set_item_id=item.id,
+                    source_document_id=item.source_document_id,
+                    chunk_id=chunk_id,
+                    quote_text=item.quote_text[:500],
+                    locator_json=dict(item.locator_json),
                     confidence=None,
                 )
                 db.add(ev)
-                if isinstance(chunk_id, str) and chunk_id:
-                    evidence_rows.append((chunk_id, ev))
+                evidence_rows.append((chunk_id, ev))
             db.flush()
             evidence_id_by_chunk_id = {
                 chunk_id: evidence.id
@@ -423,33 +673,58 @@ def persist_result_node(state: BidPilotState) -> dict:
             draft_markdown=draft_markdown,
             candidates=claim_candidates if isinstance(claim_candidates, list) else [],
             evidence_id_by_chunk_id=evidence_id_by_chunk_id,
+            authorized_requirement_ids={
+                str(requirement["id"])
+                for requirement in response_plan_binding.requirements
+                if isinstance(requirement.get("id"), str)
+            },
         )
         if claim_integrity_status == "proposed" and not persisted_claim_count:
             claim_integrity_status = "invalid_candidates"
 
-        # 4. Promote section/deliverable status after human approval.
-        # Quality-only persist (max iterations without HITL) stays draft so export
-        # cannot silently ship unreviewed body text.
-        human_decision = state.get("human_decision")
-        if human_decision == "approved":
+        # 4. A quality-passed candidate is durable before LangGraph interrupts.
+        # Export remains pinned to approved_version_id until a human approves it.
+        deliverable = db.get(Deliverable, section.deliverable_id)
+        if requires_human_review:
+            section.status = "in_review"
+            _ensure_open_review_thread(
+                db,
+                project_id=project_id,
+                section=section,
+                version=sv,
+                run_id=run_id,
+            )
+        elif human_decision == "approved":
             section.status = "approved"
-            deliverable = db.get(Deliverable, section.deliverable_id)
-            if deliverable is not None:
-                _recompute_deliverable_approval(db, deliverable)
+            section.approved_version_id = section_version_id
         elif human_decision == "rejected_with_feedback":
-            section.status = "rejected"
+            # A rejected candidate must not erase an earlier approved snapshot.
+            section.status = "approved" if section.approved_version_id else "rejected"
         elif section.status in {None, "", "draft"}:
             section.status = "draft"
+        if deliverable is not None:
+            _recompute_deliverable_approval(db, deliverable)
 
         # 5. Update execution run status
         run = db.get(ExecutionRun, run_id)
         if run is not None:
-            run.status = "succeeded"
-            run.finished_at = datetime.now(UTC)
+            run.status = "awaiting_human" if requires_human_review else "succeeded"
+            run.finished_at = None if requires_human_review else datetime.now(UTC)
             run.output_json = {
                 "section_key": section_key,
                 "model_used": draft_model_used,
                 "evidence_count": len(evidence_chunks),
+                "evidence_set_id": evidence_set_id,
+                "evidence_set_status": evidence_state_update.get("evidence_set_status"),
+                "evidence_set_unmet_requirement_count": len(
+                    evidence_state_update.get("evidence_set_unmet_requirement_ids", [])
+                ),
+                "response_plan_id": response_plan_binding.response_plan_id,
+                "response_plan_version": response_plan_binding.response_plan_version,
+                "response_plan_section_id": response_plan_binding.response_plan_section_id,
+                "response_plan_evidence_binding_id": (
+                    response_plan_binding.response_plan_evidence_binding_id
+                ),
                 "section_version_id": section_version_id,
                 "iterations": iteration,
                 "claim_integrity_status": claim_integrity_status,
@@ -457,6 +732,7 @@ def persist_result_node(state: BidPilotState) -> dict:
                 "claim_count": persisted_claim_count,
                 "section_status": section.status,
                 "human_decision": human_decision,
+                "awaiting_human": requires_human_review,
             }
 
         db.commit()
@@ -489,6 +765,9 @@ def persist_result_node(state: BidPilotState) -> dict:
         )
 
         return {
+            **evidence_state_update,
+            **response_plan_state_update,
+            "evidence_chunks": evidence_chunks,
             "section_version_id": section_version_id,
             "persisted": True,
             "claim_count": persisted_claim_count,
@@ -497,6 +776,7 @@ def persist_result_node(state: BidPilotState) -> dict:
         }
     except Exception as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
+        error_code, public_message = _public_persist_failure(exc)
         logger.exception("persist_result_node failed for run %s", run_id)
         db.rollback()
 
@@ -507,7 +787,7 @@ def persist_result_node(state: BidPilotState) -> dict:
             if run is not None:
                 run.status = "failed"
                 run.finished_at = datetime.now(UTC)
-                run.output_json = {"error": str(exc)}
+                run.output_json = {"error_code": error_code}
                 db2.commit()
             db2.close()
         except Exception:
@@ -520,16 +800,16 @@ def persist_result_node(state: BidPilotState) -> dict:
                 f"section={section_key}, run_id={run_id}, "
                 f"draft_len={len(draft_markdown)}, evidence={len(evidence_chunks)}"
             ),
-            output_summary=f"ERROR: {exc}",
+            output_summary=f"ERROR: {error_code}",
             duration_ms=duration_ms,
             success=False,
-            error=str(exc),
+            error=error_code,
         )
 
         return {
             "section_version_id": None,
             "persisted": False,
-            "error": f"persist_result: {exc}",
+            "error": f"persist_result: {public_message}",
             "agent_history": history,
         }
     finally:

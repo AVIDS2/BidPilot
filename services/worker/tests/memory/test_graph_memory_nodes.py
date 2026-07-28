@@ -6,7 +6,7 @@ from app.adapters.embedding import EmbeddingResult
 from app.db import SessionLocal
 from app.graph.nodes.memory_context import load_memory_context_node
 from app.graph.nodes.memory_proposals import propose_memory_updates_node
-from app.models import KnowledgeChunk, MemoryEvidenceLink, MemoryRecord, Organization, Project, RuntimeRun, SourceDocument, Bundle, User
+from app.models import Bundle, KnowledgeChunk, MemoryEvidenceLink, MemoryRecord, Organization, Project, ProjectMember, RuntimeRun, SourceDocument, User
 from contracts import EmbeddingOutcomeStatus, normalize_retrieval_text
 
 
@@ -40,6 +40,7 @@ def test_graph_loads_only_the_runtime_initiators_authorized_memory(monkeypatch) 
         )
         db.add_all([org, project, owner, other_user])
         db.flush()
+        db.add(ProjectMember(project_id=project.id, user_id=owner.id, role="owner"))
         runtime_run = RuntimeRun(
             kind="workflow_bridge",
             status="running",
@@ -132,6 +133,23 @@ def test_graph_loads_only_the_runtime_initiators_authorized_memory(monkeypatch) 
         }
     ]
     assert "dense_unavailable" in result["memory_context_degraded_reasons"]
+
+    with SessionLocal() as db:
+        membership = db.query(ProjectMember).filter_by(project_id=project_id, user_id=owner.id).one()
+        db.delete(membership)
+        db.commit()
+
+    revoked = load_memory_context_node(
+        {
+            "project_id": project_id,
+            "section_key": "technical-approach",
+            "runtime_run_id": runtime_run_id,
+            "requirements": [],
+        }
+    )
+
+    assert revoked["memory_context_items"] == []
+    assert revoked["memory_context_degraded_reasons"] == ["runtime_principal_memory_access_revoked"]
 
 
 def test_graph_memory_context_degrades_when_runtime_principal_is_missing() -> None:
