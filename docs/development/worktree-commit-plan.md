@@ -78,7 +78,7 @@ commit boundaries were executed on 2026-07-28 without using `git add .`:
 | 6 | `775368d` | CI, local/production readiness, release checks, and deployment safeguards |
 | 7 | `5539a29` | Traceable synthetic demo material pack |
 
-The remaining documentation-only group is under review and will be committed
-separately so that frontend reconstruction work remains outside this backend
-closure. No public deployment, VPS mutation, or remote push is implied by any
-of the commits above.
+The documentation-only group was committed separately as `c5b0c1e` so that
+frontend reconstruction work remains outside this backend closure. No public
+deployment, VPS mutation, or remote push is implied by any of the commits
+above.
