@@ -130,6 +130,31 @@ Expected outcomes:
 - core project and deliverable records survive
 - recovery procedure is documented and repeatable
 
+## Scenario AC-07: Public historical procurement rehearsal
+
+Purpose:
+
+- validate the core governed workflow against a medium public procurement
+  corpus without introducing customer material into the repository
+
+Steps:
+
+1. download the source-manifest-pinned public materials to ignored local storage
+2. verify file hash and PDF signature before upload
+3. create an isolated project and upload all materials through the normal API
+4. wait for Worker parsing and indexing, then issue source-specific retrieval queries
+5. draft, reject, redraft, approve, export, and retry through the durable run paths
+
+Expected outcomes:
+
+- all public documents are parsed and indexed
+- retrieval returns a non-invalid locator for each expected public source
+- the LangGraph and human-review workflow completes without a synthetic bypass
+- evidence contains only IDs, counts, hashes, methods, and statuses
+
+See [P0-D7 Public Procurement Rehearsal](public-procurement-rehearsal.md) for
+the explicit legal and evaluation boundary.
+
 ## Release requirement
 
 A release is not production-ready unless the scenarios relevant to its phase pass with current code and current docs.

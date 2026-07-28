@@ -92,6 +92,10 @@ If confidence is weak, the system should mark ambiguity rather than silently mer
 - keep one small public-safe seed bundle for repeatable developer validation
 - keep one medium realistic bundle for staging acceptance
 - ensure no customer-confidential material is required for baseline system validation
+- when using public historical procurement material, track publisher URL,
+  retrieval date, checksum, and source boundary separately from raw source
+  bytes; do not commit third-party documents solely because they are publicly
+  reachable
 
 ## Metadata expectations
 

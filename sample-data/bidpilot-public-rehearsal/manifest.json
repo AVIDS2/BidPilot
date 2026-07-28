@@ -1,0 +1,84 @@
+{
+  "dataset_id": "bidpilot-public-rehearsal-v1",
+  "dataset_version": 1,
+  "origin": "public_historical_procurement",
+  "source_policy": {
+    "raw_materials_tracked": false,
+    "download_directory": "tmp/p0-d7-public-rehearsal",
+    "usage": "Local or staging engineering rehearsal only. Do not use these historical documents to represent a live solicitation or a real supplier capability.",
+    "redistribution": "The repository stores source metadata and hashes only. Review each publisher's current terms before any use beyond this controlled rehearsal."
+  },
+  "documents": [
+    {
+      "id": "ca-state-bar-office-supplies-rfp-2010",
+      "filename": "01-ca-state-bar-office-supplies-rfp-2010.pdf",
+      "role": "buyer_rfp",
+      "title": "State Bar of California - General Office Supplies Request for Proposal",
+      "source_publisher": "State Bar of California",
+      "source_url": "https://www.calbar.ca.gov/portals/0/documents/rfp/2010_Office-Supplies_RFP_04-10-10.pdf",
+      "source_published_at": "2010-04-10",
+      "content_type": "application/pdf",
+      "expected_bytes": 360208,
+      "sha256": "f0a81a9df512f3b015876300199529d8601df154eadf060520475be4993f362b",
+      "expected_anchors": [
+        "General Office Supplies",
+        "STATEMENT OF WORK",
+        "Submission Requirements",
+        "Evaluation Process and Highest Scored Bidder"
+      ]
+    },
+    {
+      "id": "wa-commerce-cjta-rfp-2017",
+      "filename": "02-wa-commerce-cjta-rfp-2017.pdf",
+      "role": "buyer_rfp",
+      "title": "Washington Department of Commerce - Office of Homeless Youth Criminal Justice Training RFP",
+      "source_publisher": "Washington State Department of Commerce",
+      "source_url": "https://www.commerce.wa.gov/wp-content/uploads/2015/11/hau-ohy-cjta-rfp-4-27-17.pdf",
+      "source_published_at": "2017-04-27",
+      "content_type": "application/pdf",
+      "expected_bytes": 1459730,
+      "sha256": "1b9a0b1e51d2626d4b9ccdb8fa23bab9d263e5932cbde4728eef47861b2651de",
+      "expected_anchors": [
+        "RFP NO. 17-46117-502",
+        "SUBMISSION OF PROPOSALS",
+        "EVALUATION AND CONTRACT AWARD",
+        "PROJECT SCHEDULE"
+      ]
+    },
+    {
+      "id": "cisa-rfp-rfi-sample-language-2019",
+      "filename": "03-cisa-rfp-rfi-sample-language-2019.pdf",
+      "role": "public_procurement_reference",
+      "title": "CISA - RFP and RFI Sample Language and Resources for Land Mobile Radio Subscriber Units Procurement",
+      "source_publisher": "Cybersecurity and Infrastructure Security Agency",
+      "source_url": "https://www.cisa.gov/sites/default/files/publications/Final_RFP%20and%20RFI%20Sample%20Language%20and%20Resources_021219_508C.pdf",
+      "source_published_at": "2019-02-01",
+      "content_type": "application/pdf",
+      "expected_bytes": 596442,
+      "sha256": "3e91dd2aa0cc650e510920a5e9a2e3d23f608fe5a7426826500d20c0e67477d5",
+      "expected_anchors": [
+        "Statement of Requirements",
+        "Scoring Criteria and Evaluation",
+        "Qualifications and Experience",
+        "TRAINING"
+      ]
+    }
+  ],
+  "retrieval_checks": [
+    {
+      "query": "General Office Supplies statement of work and submission requirements",
+      "document_id": "ca-state-bar-office-supplies-rfp-2010",
+      "required_anchor": "General Office Supplies"
+    },
+    {
+      "query": "Office of Homeless Youth Criminal Justice Training evaluation and contract award",
+      "document_id": "wa-commerce-cjta-rfp-2017",
+      "required_anchor": "EVALUATION AND CONTRACT AWARD"
+    },
+    {
+      "query": "P25 land mobile radio subscriber units scoring criteria and evaluation",
+      "document_id": "cisa-rfp-rfi-sample-language-2019",
+      "required_anchor": "Scoring Criteria and Evaluation"
+    }
+  ]
+}

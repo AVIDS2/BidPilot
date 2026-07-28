@@ -88,6 +88,25 @@ Contents:
 - one template-like response structure
 - one capability or company profile source
 
+### Fixture Pack C: Public historical procurement rehearsal
+
+Purpose:
+
+- medium-corpus local or staging acceptance beyond a synthetic fixture
+- PDF parsing, indexed retrieval, locator validation, and governed workflow
+  rehearsal against publicly accessible historical procurement language
+
+Contents:
+
+- two historical public buyer RFPs
+- one official public procurement reference document
+- a checked-in source manifest with publisher URLs, byte lengths, SHA-256
+  hashes, expected anchors, and retrieval checks
+
+The repository tracks metadata only. The fetcher downloads source bytes into
+ignored `tmp/` storage and fails closed when a publisher changes a document.
+See [P0-D7 Public Procurement Rehearsal](public-procurement-rehearsal.md).
+
 ## Storage guidance
 
 - lightweight fixtures may live in the repo

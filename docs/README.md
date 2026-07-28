@@ -105,6 +105,8 @@ It is organized to support three goals:
   - canonical end-to-end scenarios and release-grade acceptance flows
 - `docs/quality/test-data-and-fixtures.md`
   - fixture packs, synthetic data rules, and repeatable validation datasets
+- `docs/quality/public-procurement-rehearsal.md`
+  - P0-D7 source policy and repeatable public historical procurement acceptance
 - `docs/security/security-and-governance.md`
   - auth, RBAC, audit, secrets, and data handling rules
 
