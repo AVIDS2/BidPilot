@@ -41,6 +41,7 @@ from app.teams.router import router as teams_router
 from app.organizations.router import router as organizations_router
 from app.chat.router import router as chat_router
 from app.providers.router import router as providers_router
+from app.response_plans.router import router as response_plans_router
 from app.invitations.router import router as invitations_router
 from app.usage.router import router as usage_router
 from app.notifications.router import router as notifications_router
@@ -70,10 +71,8 @@ async def lifespan(_app: FastAPI):
 
 def close_runtime_resources() -> None:
     """Release all long-lived LangGraph checkpointer connections on shutdown."""
-    from app.agent.graph import close_checkpointer
     from app.runtime.operator_graph import close_operator_checkpointer
 
-    close_checkpointer()
     close_operator_checkpointer()
 
 
@@ -146,6 +145,7 @@ app.include_router(drafting_router, dependencies=_protected)
 app.include_router(evidence_router, dependencies=_protected)
 app.include_router(execution_router, dependencies=_protected)
 app.include_router(requirements_router, dependencies=_protected)
+app.include_router(response_plans_router, dependencies=_protected)
 app.include_router(readiness_router, dependencies=_protected)
 app.include_router(memory_router, dependencies=_protected)
 app.include_router(retrieval_router, dependencies=_protected)

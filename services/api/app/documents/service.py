@@ -1,15 +1,45 @@
 import hashlib
 import uuid
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.access.service import require_bundle_capability, require_source_document_capability
 from app.audit.service import record_audit_event
 from app.auth.schemas import CurrentUser
 from app.models import SourceDocument
+from contracts.document_ingestion import (
+    BundleIngestStatus,
+    DocumentIndexStatus,
+    DocumentParseStatus,
+    canonical_source_document_mime_type,
+    source_document_validation_error,
+)
 
-from .repository import create_source_document, list_documents_by_bundle, list_documents_paginated
+from .repository import (
+    create_source_document,
+    get_document_by_id_for_update,
+    list_documents_by_bundle,
+    list_documents_paginated,
+)
 from .schemas import DocumentsPaginatedResponse, SourceDocumentRead
+
+
+def _document_to_read(document: SourceDocument) -> SourceDocumentRead:
+    return SourceDocumentRead(
+        id=document.id,
+        bundle_id=document.bundle_id,
+        storage_key=document.storage_key,
+        mime_type=document.mime_type,
+        original_filename=document.original_filename,
+        parse_status=document.parse_status,
+        parse_attempt_count=document.parse_attempt_count,
+        parse_error_code=document.parse_error_code,
+        index_status=document.index_status,
+        index_error_code=document.index_error_code,
+        version_number=document.version_number,
+        supersedes_document_id=document.supersedes_document_id,
+    )
 
 
 def list_documents_query(
@@ -25,14 +55,7 @@ def list_documents_query(
     )
     docs = list_documents_by_bundle(db, bundle_id)
     return [
-        SourceDocumentRead(
-            id=d.id,
-            bundle_id=d.bundle_id,
-            storage_key=d.storage_key,
-            mime_type=d.mime_type,
-            original_filename=d.original_filename,
-            parse_status=d.parse_status,
-        )
+        _document_to_read(d)
         for d in docs
     ]
 
@@ -54,14 +77,7 @@ def list_documents_paginated_query(
     )
     docs, total = list_documents_paginated(db, bundle_id, page, page_size)
     items = [
-        SourceDocumentRead(
-            id=d.id,
-            bundle_id=d.bundle_id,
-            storage_key=d.storage_key,
-            mime_type=d.mime_type,
-            original_filename=d.original_filename,
-            parse_status=d.parse_status,
-        )
+        _document_to_read(d)
         for d in docs
     ]
     return DocumentsPaginatedResponse(
@@ -81,8 +97,9 @@ def upload_document_command(
     data: bytes,
     current_user: CurrentUser,
     assistant_attachment_id: str | None = None,
+    supersedes_document_id: str | None = None,
 ) -> SourceDocumentRead:
-    """Upload a file to MinIO and create a SourceDocument record."""
+    """Upload one immutable source-document version and queue it for ingestion."""
     bundle = require_bundle_capability(
         db,
         current_user=current_user,
@@ -90,14 +107,33 @@ def upload_document_command(
         capability="bundles.write",
     )
     project_id = bundle.project_id
-    if bundle.ingest_status in {"queued", "running", "indexing"}:
+    if bundle.ingest_status in {
+        BundleIngestStatus.QUEUED.value,
+        BundleIngestStatus.RUNNING.value,
+        BundleIngestStatus.INDEXING.value,
+    }:
         raise HTTPException(status_code=409, detail="Wait for the current bundle processing run before uploading more files")
+
+    safe_filename = _safe_filename(filename)
+    mime_type = canonical_source_document_mime_type(filename=safe_filename, content_type=content_type)
+    if mime_type is None:
+        raise HTTPException(status_code=415, detail="Unsupported document type. Upload PDF, DOCX, TXT, or Markdown.")
+    validation_error = source_document_validation_error(data=data, mime_type=mime_type)
+    if validation_error is not None:
+        status_code = 413 if validation_error == "document_too_large" else 422
+        raise HTTPException(status_code=status_code, detail=validation_error)
+
+    superseded_document: SourceDocument | None = None
+    if supersedes_document_id:
+        superseded_document = get_document_by_id_for_update(db, supersedes_document_id)
+        if superseded_document is None or superseded_document.bundle_id != bundle_id:
+            raise HTTPException(status_code=422, detail="Replacement document must belong to the same bundle")
 
     # Store in MinIO
     from app.adapters.storage import upload_bytes
 
-    object_name = f"{bundle_id}/{uuid.uuid4().hex}-{_safe_filename(filename)}"
-    storage_key = upload_bytes(project_id, object_name, data, content_type)
+    object_name = f"{bundle_id}/{uuid.uuid4().hex}-{safe_filename}"
+    storage_key = upload_bytes(project_id, object_name, data, mime_type)
     staged_storage_key: str | None = None
     try:
         # Create DB record
@@ -105,13 +141,16 @@ def upload_document_command(
         doc = SourceDocument(
             bundle_id=bundle_id,
             storage_key=storage_key,
-            mime_type=content_type,
+            mime_type=mime_type,
             checksum=checksum,
-            original_filename=filename,
-            parse_status="pending",
+            original_filename=safe_filename,
+            parse_status=DocumentParseStatus.PENDING.value,
+            index_status=DocumentIndexStatus.PENDING.value,
+            version_number=(superseded_document.version_number + 1) if superseded_document else 1,
+            supersedes_document_id=superseded_document.id if superseded_document else None,
         )
         doc = create_source_document(db, doc)
-        bundle.ingest_status = "ready_to_ingest"
+        bundle.ingest_status = BundleIngestStatus.READY_TO_INGEST.value
 
         if assistant_attachment_id:
             from app.assistant.attachments import link_staged_attachment_to_document
@@ -131,9 +170,23 @@ def upload_document_command(
             event_type="document.uploaded",
             actor_type="user",
             actor_id=current_user.id,
-            payload={"document_id": doc.id, "filename": filename},
+            payload={
+                "document_id": doc.id,
+                "filename": safe_filename,
+                "version_number": doc.version_number,
+                "supersedes_document_id": doc.supersedes_document_id,
+            },
         )
         db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        _delete_storage_key_quietly(storage_key)
+        if supersedes_document_id:
+            raise HTTPException(
+                status_code=409,
+                detail="This document version already has a replacement",
+            ) from exc
+        raise
     except Exception:
         db.rollback()
         _delete_storage_key_quietly(storage_key)
@@ -144,14 +197,7 @@ def upload_document_command(
 
         delete_staged_attachment_storage(db, assistant_attachment_id)
 
-    return SourceDocumentRead(
-        id=doc.id,
-        bundle_id=doc.bundle_id,
-        storage_key=doc.storage_key,
-        mime_type=doc.mime_type,
-        original_filename=doc.original_filename,
-        parse_status=doc.parse_status,
-    )
+    return _document_to_read(doc)
 
 
 def _safe_filename(filename: str) -> str:

@@ -31,8 +31,13 @@ os.environ["DOCPILOT_RATE_LIMIT"] = "10000/minute"
 os.environ["DOCPILOT_SECRETS_KEY"] = "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
 
 # Keep assistant endpoint deterministic in tests. Production defaults to the
-# LangGraph engine, but tests must never call external model providers.
+# governed Harness, but tests must never call external model providers.
 os.environ["DOCPILOT_ASSISTANT_ENGINE"] = "deterministic"
+os.environ["DOCPILOT_ASSISTANT_API_KEY"] = "test-assistant-key"
+os.environ["DOCPILOT_ASSISTANT_PROTOCOL"] = "openai"
+os.environ["DOCPILOT_ASSISTANT_PROVIDER_ID"] = "test"
+os.environ["DOCPILOT_ASSISTANT_BASE_URL"] = "https://models.example.test/v1"
+os.environ["DOCPILOT_ASSISTANT_MODEL"] = "test-assistant-model"
 
 # Disable auth requirement in tests (uses dev fallback)
 # Must happen before app modules are imported
@@ -112,6 +117,25 @@ def reset_usage_events():
         db.execute(delete(OrganizationUsageBudgetEvent))
         db.execute(delete(OrganizationUsageBudget))
         db.execute(delete(UsageEvent))
+        db.commit()
+        db.close()
+
+
+@pytest.fixture(autouse=True)
+def reset_notifications():
+    """Keep the notification inbox isolated across API tests."""
+    from sqlalchemy import delete
+
+    from app.db import SessionLocal
+    from app.models import Notification
+
+    db = SessionLocal()
+    try:
+        db.execute(delete(Notification))
+        db.commit()
+        yield
+    finally:
+        db.execute(delete(Notification))
         db.commit()
         db.close()
 

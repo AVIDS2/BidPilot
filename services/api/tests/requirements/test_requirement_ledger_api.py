@@ -426,6 +426,7 @@ def test_bulk_assignment_validates_versions_and_organization(
     )
     assert assigned.status_code == 200, assigned.text
     assert {item["owner_user_id"] for item in assigned.json()} == {assignee_id}
+    assert {item["status"] for item in assigned.json()} == {"assigned"}
 
     stale = client.post(
         "/requirements/bulk-assign",
@@ -453,6 +454,7 @@ def test_bulk_assignment_validates_versions_and_organization(
     )
     assert unassigned.status_code == 200, unassigned.text
     assert {item["owner_user_id"] for item in unassigned.json()} == {None}
+    assert {item["status"] for item in unassigned.json()} == {"untriaged"}
 
 
 def test_verified_evidence_backed_claim_closes_requirement(

@@ -5,7 +5,11 @@ from app.models import Bundle, SourceDocument
 
 
 def list_documents_by_bundle(db: Session, bundle_id: str) -> list[SourceDocument]:
-    stmt = select(SourceDocument).where(SourceDocument.bundle_id == bundle_id).order_by(SourceDocument.original_filename)
+    stmt = (
+        select(SourceDocument)
+        .where(SourceDocument.bundle_id == bundle_id)
+        .order_by(SourceDocument.original_filename, SourceDocument.version_number.desc())
+    )
     return list(db.scalars(stmt).all())
 
 
@@ -15,7 +19,7 @@ def list_documents_paginated(db: Session, bundle_id: str, page: int = 1, page_si
     docs = db.scalars(
         select(SourceDocument)
         .where(SourceDocument.bundle_id == bundle_id)
-        .order_by(SourceDocument.original_filename)
+        .order_by(SourceDocument.original_filename, SourceDocument.version_number.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
@@ -35,3 +39,12 @@ def get_bundle_project_id(db: Session, bundle_id: str) -> str | None:
 
 def get_document_by_id(db: Session, document_id: str) -> SourceDocument | None:
     return db.get(SourceDocument, document_id)
+
+
+def get_document_by_id_for_update(db: Session, document_id: str) -> SourceDocument | None:
+    """Lock a predecessor while a replacement version is being created."""
+    return db.scalar(
+        select(SourceDocument)
+        .where(SourceDocument.id == document_id)
+        .with_for_update()
+    )

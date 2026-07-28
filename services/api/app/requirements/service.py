@@ -128,13 +128,18 @@ def create_requirement_command(
         source_document_id=payload.source_document_id,
         source_locator_json=payload.source_locator_json,
         priority=payload.priority,
+        status="untriaged",
         owner_user_id=payload.owner_user_id,
         reviewer_user_id=payload.reviewer_user_id,
         due_at=payload.due_at,
         extraction_confidence=payload.extraction_confidence,
     )
-    if payload.bid_profile is not None:
-        item.bid_profile = BidRequirementProfile(**payload.bid_profile.model_dump())
+    # A requirement without a profile cannot participate in readiness, evidence
+    # coverage, or risk queries. Every ledger row starts with an explicit
+    # uncovered/missing baseline and can then be enriched by the caller.
+    item.bid_profile = BidRequirementProfile(
+        **(payload.bid_profile.model_dump() if payload.bid_profile is not None else {})
+    )
     create_requirement(db, item)
     record_audit_event(
         db,
@@ -383,6 +388,10 @@ def bulk_assign_requirements_command(
     for item in items:
         if "owner_user_id" in payload.model_fields_set:
             item.owner_user_id = payload.owner_user_id
+            if payload.owner_user_id is not None and item.status == "untriaged":
+                item.status = "assigned"
+            elif payload.owner_user_id is None and item.status == "assigned":
+                item.status = "untriaged"
         if "reviewer_user_id" in payload.model_fields_set:
             item.reviewer_user_id = payload.reviewer_user_id
 

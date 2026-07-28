@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -313,7 +314,7 @@ def list_memory_query(
                 org_id=org_id,
                 project_id=project_id,
                 owner_user_id=current_user.id,
-                scope=MemoryScope.USER_PRIVATE.value,
+                scope=str(MemoryScope.USER_PRIVATE),
                 include_proposed=False,
             )
             return [_to_read(record) for record in records]
@@ -1386,8 +1387,8 @@ def _graph_proposal_for_read(record: MemoryRecord) -> MemoryGraphProposalRead | 
     if proposal is None:
         return None
     proposal_fingerprint = _graph_proposal_fingerprint(proposal)
-    decisions = {
-        decision.item_id: decision
+    decision_states: dict[str, tuple[Literal["pending", "accepted", "rejected"], str | None]] = {
+        decision.item_id: (_graph_review_status(decision.decision), decision.decision_note)
         for decision in record.graph_review_decisions
         if decision.proposal_fingerprint == proposal_fingerprint
     }
@@ -1396,102 +1397,62 @@ def _graph_proposal_for_read(record: MemoryRecord) -> MemoryGraphProposalRead | 
         for link in record.evidence_links
     }
     entities_by_local_id = {entity.local_id: entity.canonical_name for entity in proposal.entities}
-    return MemoryGraphProposalRead(
-        schema_version=proposal.schema_version,
-        entities=tuple(
+    entities: list[MemoryGraphEntityRead] = []
+    for entity in proposal.entities:
+        item_id = _graph_item_id(proposal_fingerprint, "entity", entity.semantic_key)
+        review_status, review_note = decision_states.get(item_id, ("pending", None))
+        entities.append(
             MemoryGraphEntityRead(
-                item_id=_graph_item_id(proposal_fingerprint, "entity", entity.semantic_key),
+                item_id=item_id,
                 canonical_name=entity.canonical_name,
                 entity_type=entity.entity_type,
                 evidence_labels=tuple(
                     evidence_labels.get(evidence_ref.key, "已验证来源")
                     for evidence_ref in entity.evidence_refs
                 ),
-                review_status=decisions.get(
-                    _graph_item_id(proposal_fingerprint, "entity", entity.semantic_key)
-                ).decision
-                if decisions.get(_graph_item_id(proposal_fingerprint, "entity", entity.semantic_key))
-                else "pending",
-                review_note=decisions.get(
-                    _graph_item_id(proposal_fingerprint, "entity", entity.semantic_key)
-                ).decision_note
-                if decisions.get(_graph_item_id(proposal_fingerprint, "entity", entity.semantic_key))
-                else None,
+                review_status=review_status,
+                review_note=review_note,
             )
-            for entity in proposal.entities
-        ),
-        relations=tuple(
+        )
+
+    relations: list[MemoryGraphRelationRead] = []
+    for relation in proposal.relations:
+        subject = entities_by_local_id[relation.subject_local_id]
+        object_name = entities_by_local_id[relation.object_local_id]
+        item_id = _graph_item_id(
+            proposal_fingerprint,
+            "relation",
+            (subject, relation.predicate.value, object_name),
+        )
+        review_status, review_note = decision_states.get(item_id, ("pending", None))
+        relations.append(
             MemoryGraphRelationRead(
-                item_id=_graph_item_id(
-                    proposal_fingerprint,
-                    "relation",
-                    (
-                        entities_by_local_id[relation.subject_local_id],
-                        relation.predicate.value,
-                        entities_by_local_id[relation.object_local_id],
-                    ),
-                ),
-                subject=entities_by_local_id[relation.subject_local_id],
+                item_id=item_id,
+                subject=subject,
                 predicate=relation.predicate,
-                object=entities_by_local_id[relation.object_local_id],
+                object=object_name,
                 evidence_labels=tuple(
                     evidence_labels.get(evidence_ref.key, "已验证来源")
                     for evidence_ref in relation.evidence_refs
                 ),
-                review_status=(
-                    decisions.get(
-                        _graph_item_id(
-                            proposal_fingerprint,
-                            "relation",
-                            (
-                                entities_by_local_id[relation.subject_local_id],
-                                relation.predicate.value,
-                                entities_by_local_id[relation.object_local_id],
-                            ),
-                        )
-                    ).decision
-                    if decisions.get(
-                        _graph_item_id(
-                            proposal_fingerprint,
-                            "relation",
-                            (
-                                entities_by_local_id[relation.subject_local_id],
-                                relation.predicate.value,
-                                entities_by_local_id[relation.object_local_id],
-                            ),
-                        )
-                    )
-                    else "pending"
-                ),
-                review_note=(
-                    decisions.get(
-                        _graph_item_id(
-                            proposal_fingerprint,
-                            "relation",
-                            (
-                                entities_by_local_id[relation.subject_local_id],
-                                relation.predicate.value,
-                                entities_by_local_id[relation.object_local_id],
-                            ),
-                        )
-                    ).decision_note
-                    if decisions.get(
-                        _graph_item_id(
-                            proposal_fingerprint,
-                            "relation",
-                            (
-                                entities_by_local_id[relation.subject_local_id],
-                                relation.predicate.value,
-                                entities_by_local_id[relation.object_local_id],
-                            ),
-                        )
-                    )
-                    else None
-                ),
+                review_status=review_status,
+                review_note=review_note,
             )
-            for relation in proposal.relations
-        ),
+        )
+
+    return MemoryGraphProposalRead(
+        schema_version=proposal.schema_version,
+        entities=tuple(entities),
+        relations=tuple(relations),
     )
+
+
+def _graph_review_status(value: object) -> Literal["pending", "accepted", "rejected"]:
+    if value == "accepted":
+        return "accepted"
+    if value == "rejected":
+        return "rejected"
+    return "pending"
 
 
 def _memory_graph_proposal_for_record(record: MemoryRecord) -> MemoryGraphProposal | None:

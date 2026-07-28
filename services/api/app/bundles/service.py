@@ -110,6 +110,10 @@ def reindex_bundle_command(
         bundle_id=bundle_id,
         capability="bundles.write",
     )
+    if bundle.ingest_status in {"queued", "running", "indexing"}:
+        raise HTTPException(status_code=409, detail="Bundle processing is already in progress")
+    if not bundle.source_documents:
+        raise HTTPException(status_code=409, detail="Upload at least one document before reindexing this bundle")
     check_indexing_quota(db, current_user.id, current_user.org_id, ProviderSource.OFFICIAL)
     bundle.ingest_status = "queued"
     record_usage_event(

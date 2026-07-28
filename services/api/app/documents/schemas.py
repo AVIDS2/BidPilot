@@ -8,6 +8,12 @@ class SourceDocumentRead(BaseModel):
     mime_type: str
     original_filename: str
     parse_status: str
+    parse_attempt_count: int
+    parse_error_code: str | None
+    index_status: str
+    index_error_code: str | None
+    version_number: int
+    supersedes_document_id: str | None
 
 
 class DocumentsPaginatedResponse(BaseModel):

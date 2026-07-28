@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from app.db import SessionLocal
-from app.models import MemoryEvidenceLink, MemoryRecord, Organization, Project, User
+from app.models import Bundle, KnowledgeChunk, MemoryEvidenceLink, MemoryRecord, Organization, Project, SourceDocument, User
 from contracts import normalize_retrieval_text
 from contracts.memory_service import build_memory_context_pack
 
@@ -29,6 +29,7 @@ def _add_record(
     embedding=None,
     embedding_profile=None,
     deleted_at=None,
+    citation_source_id: str | None = None,
 ) -> None:
     record = MemoryRecord(
         id=record_id,
@@ -56,7 +57,7 @@ def _add_record(
         MemoryEvidenceLink(
             memory_record_id=record.id,
             source_type="human_decision" if scope == "user_private" else "knowledge_chunk",
-            source_id=owner_user_id or "chunk-deployment",
+            source_id=owner_user_id or citation_source_id or "chunk-deployment",
             label="用户明确设置" if scope == "user_private" else "技术规范，第 3 节",
         )
     )
@@ -100,6 +101,37 @@ def _seed_memory() -> tuple[str, str, str, str, dict[str, str]]:
         )
         db.add_all([org, project, foreign_project, user, other_user])
         db.commit()
+        bundle = Bundle(
+            id=f"bundle-memory-{suffix}",
+            project_id=project.id,
+            label="技术规范",
+            source_type="upload",
+            ingest_status="ingested",
+        )
+        source = SourceDocument(
+            id=f"source-memory-{suffix}",
+            bundle_id=bundle.id,
+            storage_key=f"uploads/{suffix}/technical-spec.docx",
+            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            checksum="a" * 64,
+            original_filename="技术规范.docx",
+            parse_status="parsed",
+            index_status="indexed",
+        )
+        db.add_all([bundle, source])
+        # KnowledgeChunk intentionally has no ORM relationship to SourceDocument,
+        # so flush the document first instead of relying on unit-of-work ordering.
+        db.flush()
+        chunk = KnowledgeChunk(
+            id=f"chunk-deployment-{suffix}",
+            project_id=project.id,
+            source_document_id=source.id,
+            chunk_index=0,
+            content="投标方案必须支持私有化部署和离线交付。",
+            retrieval_text="投标方案必须支持私有化部署和离线交付。",
+        )
+        db.add(chunk)
+        db.commit()
         _add_record(
             db,
             record_id=f"memory-project-{suffix}",
@@ -111,6 +143,7 @@ def _seed_memory() -> tuple[str, str, str, str, dict[str, str]]:
             body="投标方案必须支持私有化部署和离线交付。",
             embedding=_vector(1.0, 0.0),
             embedding_profile=PROFILE_ID,
+            citation_source_id=chunk.id,
         )
         _add_record(
             db,
@@ -181,6 +214,7 @@ def _seed_memory() -> tuple[str, str, str, str, dict[str, str]]:
         return org.id, user.id, project.id, foreign_project.id, {
             "project": f"memory-project-{suffix}",
             "private": f"memory-private-{suffix}",
+            "project_source_document": source.id,
         }
     finally:
         db.close()
@@ -267,4 +301,43 @@ def test_context_pack_tombstones_change_the_memory_version() -> None:
 
     assert record_ids["project"] in {item.record_id for item in before.items}
     assert record_ids["project"] not in {item.record_id for item in after.items}
+    assert before.memory_version != after.memory_version
+
+
+def test_context_pack_excludes_memory_when_its_document_source_is_invalidated() -> None:
+    org_id, user_id, project_id, _foreign_project_id, record_ids = _seed_memory()
+    db = SessionLocal()
+    try:
+        before = build_memory_context_pack(
+            db,
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            raw_query="私有化部署",
+            profile_id=None,
+            query_embedding=None,
+            top_k=8,
+            max_characters=2000,
+        )
+        source = db.get(SourceDocument, record_ids["project_source_document"])
+        assert source is not None
+        source.parse_status = "failed"
+        db.commit()
+        after = build_memory_context_pack(
+            db,
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            raw_query="私有化部署",
+            profile_id=None,
+            query_embedding=None,
+            top_k=8,
+            max_characters=2000,
+        )
+    finally:
+        db.close()
+
+    assert record_ids["project"] in {item.record_id for item in before.items}
+    assert record_ids["project"] not in {item.record_id for item in after.items}
+    assert "invalid_memory_evidence" in after.degraded_reasons
     assert before.memory_version != after.memory_version

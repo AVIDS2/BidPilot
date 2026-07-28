@@ -27,21 +27,27 @@ def list_documents(
 
 @router.post("/upload", response_model=SourceDocumentRead, status_code=201)
 async def upload_document(
-    bundle_id: str,
     file: UploadFile = File(...),
+    bundle_id: str | None = Query(None),
+    form_bundle_id: str | None = Form(None, alias="bundle_id"),
     assistant_attachment_id: str | None = Form(None),
+    supersedes_document_id: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_auth),
 ) -> SourceDocumentRead:
+    resolved_bundle_id = form_bundle_id or bundle_id
+    if not resolved_bundle_id:
+        raise HTTPException(status_code=422, detail="bundle_id is required")
     data = await file.read()
     return upload_document_command(
         db,
-        bundle_id=bundle_id,
+        bundle_id=resolved_bundle_id,
         filename=file.filename or "untitled",
         content_type=file.content_type or "application/octet-stream",
         data=data,
         current_user=current_user,
         assistant_attachment_id=assistant_attachment_id,
+        supersedes_document_id=supersedes_document_id,
     )
 
 
