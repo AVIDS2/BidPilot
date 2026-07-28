@@ -13,6 +13,7 @@ from typing import NamedTuple
 
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
+_REPOSITORY_ROOT = _SCRIPT_DIR.parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
@@ -56,11 +57,11 @@ def build_steps(
     quality_gate_command: str | None = None,
 ) -> list[RehearsalStep]:
     steps = [
-        RehearsalStep("API migrations", "uv run --directory services/api alembic upgrade head"),
-        RehearsalStep("API static checks", "uv run --directory services/api ruff check app tests"),
-        RehearsalStep("API tests", "uv run --directory services/api pytest -q"),
-        RehearsalStep("Worker static checks", "uv run --directory services/worker ruff check app tests"),
-        RehearsalStep("Worker tests", "uv run --directory services/worker pytest -q"),
+        RehearsalStep("API migrations", "uv run --directory services/api --locked --no-sync alembic upgrade head"),
+        RehearsalStep("API static checks", "uv run --directory services/api --locked --no-sync ruff check app tests"),
+        RehearsalStep("API tests", "uv run --directory services/api --locked --no-sync pytest -q"),
+        RehearsalStep("Worker static checks", "uv run --directory services/worker --locked --no-sync ruff check app tests"),
+        RehearsalStep("Worker tests", "uv run --directory services/worker --locked --no-sync pytest -q"),
         RehearsalStep("Frontend typecheck", "pnpm --filter @docpilot/web exec tsc --noEmit"),
         RehearsalStep("Frontend unit tests", "pnpm --filter @docpilot/web exec vitest run"),
         RehearsalStep("Frontend build", "pnpm --filter @docpilot/web run build"),
@@ -105,6 +106,8 @@ def build_quality_gate_command(
     arguments = [
         "uv",
         "run",
+        "--locked",
+        "--no-sync",
         "python",
         "scripts/run_quality_gate.py",
         "--policy",
@@ -137,6 +140,7 @@ def run_steps(
     steps: list[RehearsalStep],
     *,
     environment: dict[str, str] | None = None,
+    working_directory: Path | None = None,
 ) -> RehearsalResult:
     started_at = datetime.now(UTC).isoformat()
     results: list[RehearsalStepResult] = []
@@ -144,7 +148,12 @@ def run_steps(
         print(f"\n==> {step.name}")
         print(step.command)
         started = time.perf_counter()
-        completed = subprocess.run(step.command, shell=True, env=environment)
+        completed = subprocess.run(
+            step.command,
+            shell=True,
+            env=environment,
+            cwd=working_directory,
+        )
         duration_ms = round((time.perf_counter() - started) * 1000, 2)
         results.append(
             RehearsalStepResult(
@@ -208,6 +217,12 @@ def write_evidence_artifact(artifact: dict[str, object], output_file: Path) -> P
         encoding="utf-8",
     )
     return output_file
+
+
+def resolve_evidence_output_file(output_file: Path) -> Path:
+    if output_file.is_absolute():
+        return output_file
+    return _REPOSITORY_ROOT / output_file
 
 
 def read_git_metadata() -> tuple[str | None, bool | None]:
@@ -282,7 +297,11 @@ def main() -> int:
     except UnsafeTestDatabaseError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    result = run_steps(steps, environment=test_environment)
+    result = run_steps(
+        steps,
+        environment=test_environment,
+        working_directory=_REPOSITORY_ROOT,
+    )
     if args.output_file is not None:
         git_commit, git_dirty = read_git_metadata()
         artifact_path = write_evidence_artifact(
@@ -291,7 +310,7 @@ def main() -> int:
                 git_commit=git_commit,
                 git_dirty=git_dirty,
             ),
-            args.output_file,
+            resolve_evidence_output_file(args.output_file),
         )
         print(f"evidence_artifact={artifact_path}")
     return result.returncode

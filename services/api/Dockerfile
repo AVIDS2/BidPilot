@@ -13,6 +13,7 @@ RUN uv sync --frozen --no-dev --no-install-workspace
 COPY services/api/app /app/services/api/app
 COPY services/api/alembic.ini /app/services/api/alembic.ini
 COPY services/api/alembic /app/services/api/alembic
+COPY sample-data/bidpilot-demo /app/sample-data/bidpilot-demo
 COPY scripts/setup_langgraph_checkpoints.py /app/scripts/setup_langgraph_checkpoints.py
 COPY scripts/production_readiness.py /app/scripts/production_readiness.py
 

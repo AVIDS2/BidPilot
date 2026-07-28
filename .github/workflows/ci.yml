@@ -41,16 +41,23 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install uv
-      - name: Install API deps
-        run: uv sync --directory services/api
+      - name: Install workspace deps
+        run: uv sync --all-packages --locked
       - name: Lint
-        run: uv run --directory services/api ruff check app/ tests/
+        working-directory: services/api
+        run: uv run --locked --no-sync ruff check app/ tests/
       - name: Type check
-        run: uv run --directory services/api mypy app/ --ignore-missing-imports || true
+        working-directory: services/api
+        run: uv run --locked --no-sync mypy app/ --ignore-missing-imports
       - name: Run migrations
-        run: uv run --directory services/api alembic upgrade head
+        working-directory: services/api
+        run: uv run --locked --no-sync alembic upgrade head
+      - name: Verify migration health
+        working-directory: services/api
+        run: uv run --locked --no-sync python ../../scripts/verify_migration_health.py
       - name: Test
-        run: uv run --directory services/api pytest tests/ -v --tb=short
+        working-directory: services/api
+        run: uv run --locked --no-sync pytest tests/ -v --tb=short
 
   worker-test:
     runs-on: ubuntu-latest
@@ -87,26 +94,31 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install uv
-      - name: Install API migration deps
-        run: uv sync --directory services/api
-      - name: Install Worker deps
-        run: uv sync --directory services/worker
+      - name: Install workspace deps
+        run: uv sync --all-packages --locked
       - name: Run migrations
-        run: uv run --directory services/api alembic upgrade head
+        working-directory: services/api
+        run: uv run --locked --no-sync alembic upgrade head
       - name: Lint
-        run: uv run --directory services/worker ruff check app/ tests/
+        working-directory: services/worker
+        run: uv run --locked --no-sync ruff check app/ tests/
       - name: Test
-        run: uv run --directory services/worker pytest tests/ -v --tb=short
+        working-directory: services/worker
+        run: uv run --locked --no-sync pytest tests/ -v --tb=short
 
   frontend-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: pnpm
       - name: Install deps
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
         working-directory: .
       - name: Typecheck
         run: pnpm --filter @docpilot/web exec tsc --noEmit
@@ -115,4 +127,4 @@ jobs:
       - name: Build
         run: pnpm --filter @docpilot/web run build
       - name: Lint
-        run: pnpm --filter @docpilot/web exec eslint src/ --ext .ts,.tsx || true
+        run: pnpm --filter @docpilot/web run lint

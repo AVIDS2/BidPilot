@@ -114,7 +114,7 @@ services:
       DOCPILOT_AUTH_REQUIRED: "true"
       DOCPILOT_LANGGRAPH_CHECKPOINTER: postgres
       DOCPILOT_AGENT_CHECKPOINTER: postgres
-      DOCPILOT_ASSISTANT_ENGINE: operator
+      DOCPILOT_ASSISTANT_ENGINE: harness
     depends_on:
       checkpoints:
         condition: service_completed_successfully

@@ -63,7 +63,7 @@ if redis.password and not vals.get("DOCPILOT_REDIS_PASSWORD"):
 soft_defaults = {
     "DOCPILOT_ENV": "production",
     "DOCPILOT_AGENT_CHECKPOINTER": vals.get("DOCPILOT_LANGGRAPH_CHECKPOINTER") or "postgres",
-    "DOCPILOT_ASSISTANT_ENGINE": "operator",
+    "DOCPILOT_ASSISTANT_ENGINE": "harness",
     "USE_LANGGRAPH": "true",
     "DOCPILOT_RATE_LIMIT": "120/minute",
     "DOCPILOT_AUTH_REQUIRED": "true",
@@ -160,8 +160,16 @@ else
   echo "deploy_mode=app_services_only"
   rm -f "$NEXT_COMPOSE_FILE"
   # Keep current topology. Rebuild application services only.
-  # Prefer no-deps so a failing one-shot readiness/migrate job cannot strand api/web.
+  # Prefer no-deps so an existing production topology remains untouched. The
+  # migration itself is still mandatory: starting a newer API against an older
+  # schema makes first tool execution fail after a seemingly healthy deploy.
   docker compose build api worker web
+  echo "running_database_migrations"
+  docker compose run --rm --no-deps api \
+    /app/.venv/bin/alembic -c /app/services/api/alembic.ini upgrade head
+  echo "initializing_langgraph_checkpoints"
+  docker compose run --rm --no-deps api \
+    /app/.venv/bin/python /app/scripts/setup_langgraph_checkpoints.py
   docker compose up -d --no-deps api worker web
 fi
 

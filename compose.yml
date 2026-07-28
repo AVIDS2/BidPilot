@@ -1,9 +1,9 @@
 x-docpilot-env: &docpilot-env
-  DOCPILOT_DATABASE_URL: ${DOCPILOT_DATABASE_URL}
-  DOCPILOT_REDIS_URL: ${DOCPILOT_REDIS_URL}
-  DOCPILOT_MINIO_ENDPOINT: ${DOCPILOT_MINIO_ENDPOINT}
-  DOCPILOT_MINIO_ACCESS_KEY: ${DOCPILOT_MINIO_ACCESS_KEY}
-  DOCPILOT_MINIO_SECRET_KEY: ${DOCPILOT_MINIO_SECRET_KEY}
+  DOCPILOT_DATABASE_URL: ${DOCPILOT_DATABASE_URL:-postgresql+psycopg://docpilot:docpilot@postgres:5432/docpilot}
+  DOCPILOT_REDIS_URL: ${DOCPILOT_REDIS_URL:-redis://redis:6379/0}
+  DOCPILOT_MINIO_ENDPOINT: ${DOCPILOT_MINIO_ENDPOINT:-minio:9000}
+  DOCPILOT_MINIO_ACCESS_KEY: ${DOCPILOT_MINIO_ACCESS_KEY:-docpilot}
+  DOCPILOT_MINIO_SECRET_KEY: ${DOCPILOT_MINIO_SECRET_KEY:-docpilot123}
   DOCPILOT_JWT_SECRET: ${DOCPILOT_JWT_SECRET}
   DOCPILOT_SECRETS_KEY: ${DOCPILOT_SECRETS_KEY}
   DOCPILOT_APP_URL: ${DOCPILOT_APP_URL}
@@ -14,8 +14,23 @@ x-docpilot-env: &docpilot-env
   DOCPILOT_SMTP_HOST: ${DOCPILOT_SMTP_HOST}
   DOCPILOT_SMTP_USER: ${DOCPILOT_SMTP_USER}
   DOCPILOT_SMTP_FROM: ${DOCPILOT_SMTP_FROM}
-  DOCPILOT_PROVIDER_DOMESTIC_API_KEY: ${DOCPILOT_PROVIDER_DOMESTIC_API_KEY}
-  DOCPILOT_TURNSTILE_SECRET_KEY: ${DOCPILOT_TURNSTILE_SECRET_KEY}
+  DOCPILOT_PROVIDER_DOMESTIC_API_KEY: ${DOCPILOT_PROVIDER_DOMESTIC_API_KEY:-}
+  DOCPILOT_PROVIDER_DOMESTIC_BASE_URL: ${DOCPILOT_PROVIDER_DOMESTIC_BASE_URL:-}
+  DOCPILOT_PROVIDER_DOMESTIC_MODEL: ${DOCPILOT_PROVIDER_DOMESTIC_MODEL:-}
+  DOCPILOT_LLM_MODEL_PRIMARY: ${DOCPILOT_LLM_MODEL_PRIMARY:-}
+  DOCPILOT_ASSISTANT_ENGINE: ${DOCPILOT_ASSISTANT_ENGINE:-harness}
+  DOCPILOT_ASSISTANT_API_KEY: ${DOCPILOT_ASSISTANT_API_KEY:-}
+  DOCPILOT_ASSISTANT_PROTOCOL: ${DOCPILOT_ASSISTANT_PROTOCOL:-}
+  DOCPILOT_ASSISTANT_PROVIDER_ID: ${DOCPILOT_ASSISTANT_PROVIDER_ID:-}
+  DOCPILOT_ASSISTANT_BASE_URL: ${DOCPILOT_ASSISTANT_BASE_URL:-}
+  DOCPILOT_ASSISTANT_MODEL: ${DOCPILOT_ASSISTANT_MODEL:-}
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+  DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+  DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+  DOCPILOT_EMBEDDING_API_KEY: ${DOCPILOT_EMBEDDING_API_KEY:-}
+  DOCPILOT_EMBEDDING_BASE_URL: ${DOCPILOT_EMBEDDING_BASE_URL:-}
+  DOCPILOT_EMBEDDING_MODEL: ${DOCPILOT_EMBEDDING_MODEL:-}
+  DOCPILOT_TURNSTILE_SECRET_KEY: ${DOCPILOT_TURNSTILE_SECRET_KEY:-}
 
 services:
   postgres:
@@ -59,6 +74,18 @@ services:
     volumes:
       - docpilot-minio-data:/data
 
+  checkpoints:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: docpilot-checkpoints
+    restart: "no"
+    environment: *docpilot-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/app/.venv/bin/python", "/app/scripts/setup_langgraph_checkpoints.py"]
+
   api:
     build:
       context: .
@@ -67,6 +94,8 @@ services:
     restart: unless-stopped
     environment: *docpilot-env
     depends_on:
+      checkpoints:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -89,6 +118,8 @@ services:
     restart: unless-stopped
     environment: *docpilot-env
     depends_on:
+      checkpoints:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:

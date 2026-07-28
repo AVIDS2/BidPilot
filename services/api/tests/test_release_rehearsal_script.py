@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -35,11 +36,11 @@ def test_build_steps_contains_core_release_gates() -> None:
         "Frontend unit tests",
         "Frontend build",
     ]
-    assert "uv run --directory services/api alembic upgrade head" in commands
-    assert "uv run --directory services/api ruff check app tests" in commands
-    assert "uv run --directory services/api pytest -q" in commands
-    assert "uv run --directory services/worker ruff check app tests" in commands
-    assert "uv run --directory services/worker pytest -q" in commands
+    assert "uv run --directory services/api --locked --no-sync alembic upgrade head" in commands
+    assert "uv run --directory services/api --locked --no-sync ruff check app tests" in commands
+    assert "uv run --directory services/api --locked --no-sync pytest -q" in commands
+    assert "uv run --directory services/worker --locked --no-sync ruff check app tests" in commands
+    assert "uv run --directory services/worker --locked --no-sync pytest -q" in commands
     assert "pnpm --filter @docpilot/web exec tsc --noEmit" in commands
     assert "pnpm --filter @docpilot/web exec vitest run" in commands
     assert "pnpm --filter @docpilot/web run build" in commands
@@ -57,7 +58,7 @@ def test_build_steps_can_include_optional_release_gates() -> None:
 
 def test_build_steps_can_include_the_quality_gate_with_captured_reports() -> None:
     command = (
-        "uv run python scripts/run_quality_gate.py --policy release-policy.json "
+        "uv run --locked --no-sync python scripts/run_quality_gate.py --policy release-policy.json "
         "--bidbench-report bidbench.json --retrieval-report retrieval.json "
         "--memory-report memory.json --assistant-report assistant.json "
         "--mode release --expected-git-commit abc123"
@@ -82,6 +83,37 @@ def test_render_plan_marks_dry_run_commands() -> None:
     assert "Release rehearsal plan" in rendered
     assert "[dry-run] API tests" in rendered
     assert "uv run --directory services/api pytest -q" in rendered
+
+
+def test_run_steps_anchors_commands_at_repository_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(command: str, **kwargs: object) -> SimpleNamespace:
+        captured["command"] = command
+        captured.update(kwargs)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(release_rehearsal.subprocess, "run", fake_run)
+    repository_root = Path("E:/fixture/BidPilot")
+
+    result = release_rehearsal.run_steps(
+        [release_rehearsal.RehearsalStep(name="API tests", command="uv run --directory services/api pytest -q")],
+        environment={"DOCPILOT_TEST_DATABASE_URL": "postgresql://test"},
+        working_directory=repository_root,
+    )
+
+    assert result.passed is True
+    assert captured["cwd"] == repository_root
+    assert captured["env"] == {"DOCPILOT_TEST_DATABASE_URL": "postgresql://test"}
+    assert captured["shell"] is True
+
+
+def test_resolve_evidence_output_file_anchors_relative_paths_at_repository_root() -> None:
+    assert release_rehearsal.resolve_evidence_output_file(Path("tmp/rehearsal.json")) == (
+        release_rehearsal._REPOSITORY_ROOT / "tmp" / "rehearsal.json"
+    )
+    absolute_path = Path("E:/fixture/rehearsal.json")
+    assert release_rehearsal.resolve_evidence_output_file(absolute_path) == absolute_path
 
 
 def test_release_rehearsal_test_environment_requires_dedicated_database() -> None:

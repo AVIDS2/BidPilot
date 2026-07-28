@@ -48,8 +48,10 @@ REQUIRED_PRODUCTION_VARIABLES = [
 ]
 
 PROVIDER_KEY_VARIABLES = [
+    "DOCPILOT_ASSISTANT_API_KEY",
     "DOCPILOT_PROVIDER_OPENAI_API_KEY",
     "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
+    "DEEPSEEK_API_KEY",
     "ALIYUN_API_KEY",
     "DASHSCOPE_API_KEY",
     "OPENAI_API_KEY",
@@ -76,6 +78,7 @@ _WEAK_POSTGRES_PASSWORDS = {"bidpilot", "bidpilot123", "docpilot", "docpilot123"
 _WEAK_REDIS_PASSWORDS = {"redis", "redis123", "bidpilot", "bidpilot123", "docpilot", "docpilot123"}
 _RATE_LIMIT_PATTERN = re.compile(r"^(?P<count>[1-9][0-9]*)/(?P<window>second|seconds|minute|minutes|hour|hours|day|days)$")
 _NON_NEGATIVE_INTEGER_PATTERN = re.compile(r"^(0|[1-9][0-9]*)$")
+_CANONICAL_ASSISTANT_ENGINE = "harness"
 
 
 class ReadinessResult(NamedTuple):
@@ -112,6 +115,48 @@ def _is_placeholder(value: str) -> bool:
 
 def _is_valid_rate_limit(value: str) -> bool:
     return bool(_RATE_LIMIT_PATTERN.fullmatch(value.strip().lower()))
+
+
+def _is_configured_model_value(env: Mapping[str, str], name: str) -> bool:
+    value = env.get(name)
+    return not _is_missing(value) and not _is_placeholder(value or "")
+
+
+def _has_complete_platform_assistant_model(env: Mapping[str, str]) -> bool:
+    """Match the server-side resolver without calling an external provider.
+
+    A deployment can prove that it has a key/model pair, but it cannot safely
+    infer which model a custom gateway supports. Endpoint compatibility stays
+    an explicit administrator choice and is surfaced by the runtime in a
+    redacted error if the provider rejects it.
+    """
+
+    assistant_key = _is_configured_model_value(env, "DOCPILOT_ASSISTANT_API_KEY")
+    assistant_model = any(
+        _is_configured_model_value(env, name)
+        for name in ("DOCPILOT_ASSISTANT_MODEL", "DEEPSEEK_MODEL")
+    )
+    if assistant_key and assistant_model:
+        return True
+
+    if _is_configured_model_value(env, "DEEPSEEK_API_KEY") and _is_configured_model_value(
+        env, "DEEPSEEK_MODEL"
+    ):
+        return True
+
+    domestic_key = any(
+        _is_configured_model_value(env, name)
+        for name in (
+            "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
+            "ALIYUN_API_KEY",
+            "DASHSCOPE_API_KEY",
+        )
+    )
+    domestic_model = any(
+        _is_configured_model_value(env, name)
+        for name in ("DOCPILOT_PROVIDER_DOMESTIC_MODEL", "DOCPILOT_LLM_MODEL_PRIMARY")
+    )
+    return domestic_key and domestic_model
 
 
 def _has_valid_proxy_cidrs(value: str) -> bool:
@@ -167,8 +212,9 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
     if (env.get("DOCPILOT_ENV") or "").lower() != "production":
         errors.append("DOCPILOT_ENV must be production for production deployment")
 
-    if env.get("DOCPILOT_ASSISTANT_ENGINE") != "operator":
-        errors.append("DOCPILOT_ASSISTANT_ENGINE must be operator for production")
+    assistant_engine = (env.get("DOCPILOT_ASSISTANT_ENGINE") or "").lower()
+    if assistant_engine != _CANONICAL_ASSISTANT_ENGINE:
+        errors.append("DOCPILOT_ASSISTANT_ENGINE must be harness for production")
 
     if env.get("USE_LANGGRAPH", "").lower() not in {"1", "true", "yes"}:
         errors.append("USE_LANGGRAPH must be true for production workflows")
@@ -217,6 +263,9 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
         for name in PROVIDER_KEY_VARIABLES
     ):
         errors.append("one provider API key is required")
+
+    if not _has_complete_platform_assistant_model(env):
+        errors.append("a complete platform assistant model configuration (API key and model name) is required")
 
     stripe_values = [env.get(name) for name in (*STRIPE_BILLING_REQUIRED_IF_ENABLED, *STRIPE_BILLING_OPTIONAL)]
     if any(not _is_missing(value) for value in stripe_values):
