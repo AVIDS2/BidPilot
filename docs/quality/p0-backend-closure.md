@@ -62,6 +62,7 @@ database after the role-separation change:
 | Final full API regression after the role-aware change | 767 passed |
 | Final full Worker regression after the role-aware change | 167 passed |
 | Final static checks | API Ruff, API mypy (211 source files), and Worker Ruff passed |
+| Local platform Assistant SSE smoke | HTTP 200, durable RuntimeRun, Harness turn, streamed response, `completed` terminal state |
 
 The development baseline is intentionally marked `release_eligible: false`.
 It proves deterministic regression coverage, not model quality on customer
@@ -99,3 +100,8 @@ against the actual server configuration, including an authenticated Assistant
 turn using the configured platform model. If a provider rejects a configured
 model or structured-output option, correct the server-side provider profile or
 environment configuration; do not expose the upstream failure to users.
+
+An explicitly selected user BYOK configuration is intentionally not replaced
+with the platform model. Its provider, protocol, base URL, model identifier,
+and credential must be validated as one configuration when the user saves or
+tests it.
