@@ -96,4 +96,3 @@ against the actual server configuration, including an authenticated Assistant
 turn using the configured platform model. If a provider rejects a configured
 model or structured-output option, correct the server-side provider profile or
 environment configuration; do not expose the upstream failure to users.
-
