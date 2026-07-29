@@ -59,6 +59,9 @@ database after the role-separation change:
 | Worker memory, graph, runtime-event, and review-resume regression | 22 passed |
 | Alembic health on existing and fresh scratch test databases | 65 / 65 model tables at head `fd2e3f4a5b6c` |
 | Development evaluation baseline | 63 fixed control-fixture cases |
+| Final full API regression after the role-aware change | 767 passed |
+| Final full Worker regression after the role-aware change | 167 passed |
+| Final static checks | API Ruff, API mypy (211 source files), and Worker Ruff passed |
 
 The development baseline is intentionally marked `release_eligible: false`.
 It proves deterministic regression coverage, not model quality on customer
