@@ -155,6 +155,35 @@ Expected outcomes:
 See [P0-D7 Public Procurement Rehearsal](public-procurement-rehearsal.md) for
 the explicit legal and evaluation boundary.
 
+## Scenario AC-08: Role-aware RFP and supplier-evidence rehearsal
+
+Purpose:
+
+- prove that buyer obligations and supplier supporting evidence remain separate
+  control-plane facts rather than becoming one mixed LLM context bucket
+
+Steps:
+
+1. create an isolated project with a `buyer_rfp` bundle and a
+   `supplier_evidence` bundle
+2. parse and index both bundles through the ordinary Worker path
+3. inspect the Requirement Ledger and confirm that only buyer source documents
+   created requirement rows
+4. draft a section that retrieves supplier evidence
+5. link, verify, and approve a controlled factual claim through the public
+   Requirement and Claim APIs
+6. query readiness, then complete reject, redraft, approval, export, and retry
+
+Expected outcomes:
+
+- supplier wording never pollutes buyer requirements
+- retrieved supplier material can become governed Evidence after review
+- coverage and readiness change only after the explicit evidence and claim
+  verification path
+- the workflow and review lifecycle remains durable and retryable
+
+See [P0-D8 Role-Aware Bid Rehearsal](role-aware-rehearsal.md).
+
 ## Release requirement
 
 A release is not production-ready unless the scenarios relevant to its phase pass with current code and current docs.

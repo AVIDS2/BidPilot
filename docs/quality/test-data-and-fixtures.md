@@ -59,6 +59,24 @@ Update the manifest and its hash test in the same review whenever a fixture is
 intentionally changed. Do not overwrite the files to make an evaluation score
 look better; create a new dataset version instead.
 
+### Fixture Pack B1: Role-aware bid acceptance
+
+The same fixed synthetic pack is also used as the role-aware acceptance
+fixture. The runner must create two distinct bundles:
+
+- `buyer_rfp` contains only the RFP and is eligible to create Requirement
+  Ledger rows.
+- `supplier_evidence` contains the fictional capability and case-study
+  documents. It is indexable/retrievable but must create zero Requirement
+  Ledger rows.
+
+`role_aware_acceptance` in the manifest declares a minimum buyer requirement
+count, an expected buyer requirement anchor, an evidence document, and a
+fictional claim for the public API verification path. The redacted run artifact
+may record only aggregate counts and statuses, never raw fixture text, claims,
+prompts, provider responses, or credentials. See
+[P0-D8 Role-Aware Bid Rehearsal](role-aware-rehearsal.md).
+
 ## Recommended baseline packs
 
 ### Fixture Pack A: Tiny smoke bundle

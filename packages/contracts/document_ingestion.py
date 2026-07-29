@@ -50,6 +50,33 @@ _MIME_BY_EXTENSION = {
 }
 SUPPORTED_SOURCE_DOCUMENT_MIME_TYPES = frozenset(_MIME_BY_EXTENSION.values())
 
+# A bundle is not just a storage bucket.  Requirement Ledger entries are buyer
+# obligations, so supplier capability and case-study material must remain
+# retrievable evidence instead of being misclassified as procurement demands.
+REQUIREMENT_SOURCE_BUNDLE_TYPES = frozenset(
+    {
+        "assistant_upload",
+        "buyer_rfp",
+        "public_rehearsal",
+        "rfp",
+        "synthetic_fixture",
+        "tender",
+        "upload",
+    }
+)
+
+
+def bundle_contributes_requirements(source_type: str) -> bool:
+    """Return whether a bundle may materialize buyer requirements.
+
+    ``upload`` and ``assistant_upload`` remain eligible for backwards
+    compatibility with the existing generic upload flow.  New governed flows
+    should use ``buyer_rfp`` for buyer material and ``supplier_evidence`` for
+    capability, case-study, or internal supporting material.
+    """
+
+    return source_type.strip().lower() in REQUIREMENT_SOURCE_BUNDLE_TYPES
+
 
 def canonical_source_document_mime_type(*, filename: str, content_type: str) -> str | None:
     """Return a supported canonical MIME type without trusting a browser hint.
@@ -87,7 +114,9 @@ __all__ = [
     "DocumentParseStatus",
     "MAX_DOCUMENT_PARSE_ATTEMPTS",
     "MAX_SOURCE_DOCUMENT_BYTES",
+    "REQUIREMENT_SOURCE_BUNDLE_TYPES",
     "SUPPORTED_SOURCE_DOCUMENT_MIME_TYPES",
+    "bundle_contributes_requirements",
     "canonical_source_document_mime_type",
     "source_document_validation_error",
 ]

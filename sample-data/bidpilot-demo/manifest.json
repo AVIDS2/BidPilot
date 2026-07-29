@@ -45,5 +45,12 @@
       {"source": "supplier-capability", "heading": "二、核心能力", "anchor": "RBAC 角色权限控制"},
       {"source": "case-study", "heading": "四、实施周期", "anchor": "项目建设周期为 75 天"}
     ]
+  },
+  "role_aware_acceptance": {
+    "minimum_buyer_requirements": 5,
+    "requirement_document_id": "rfp",
+    "requirement_anchor": "培训",
+    "evidence_document_id": "case-study",
+    "claim_text": "受控演练中，供应商案例材料记录了与培训和上线相关的既往交付活动。"
   }
 }

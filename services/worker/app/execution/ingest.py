@@ -28,6 +28,7 @@ from contracts.document_ingestion import (
     DocumentIndexStatus,
     DocumentParseStatus,
     MAX_DOCUMENT_PARSE_ATTEMPTS,
+    bundle_contributes_requirements,
 )
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -372,6 +373,13 @@ def _extract_and_store_requirements(
     try:
         bundle = db.get(Bundle, bundle_id)
         if bundle is None:
+            return 0
+        if not bundle_contributes_requirements(bundle.source_type):
+            logger.info(
+                "Skipping requirement extraction for non-buyer bundle %s (%s)",
+                bundle_id,
+                bundle.source_type,
+            )
             return 0
         project_id = bundle.project_id
 

@@ -127,6 +127,35 @@ def test_ingest_requirement_extraction_is_source_aware_and_idempotent() -> None:
         db.close()
 
 
+def test_supplier_evidence_bundle_never_materializes_requirement_rows() -> None:
+    bundle_id, project_id, source_document_id = _create_source_chunk()
+
+    db = SessionLocal()
+    try:
+        bundle = db.get(Bundle, bundle_id)
+        assert bundle is not None
+        bundle.source_type = "supplier_evidence"
+        db.commit()
+    finally:
+        db.close()
+
+    assert ingest._extract_and_store_requirements(
+        bundle_id,
+        source_document_ids={source_document_id},
+    ) == 0
+
+    db = SessionLocal()
+    try:
+        assert (
+            db.scalar(
+                select(RequirementItem).where(RequirementItem.project_id == project_id)
+            )
+            is None
+        )
+    finally:
+        db.close()
+
+
 def test_workflow_requirement_parser_never_materializes_source_less_ledger_rows() -> None:
     bundle_id, project_id, source_document_id = _create_source_chunk()
     del bundle_id

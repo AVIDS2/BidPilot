@@ -82,3 +82,31 @@ def test_default_golden_path_still_loads_synthetic_pack() -> None:
     assert pack.origin == "synthetic_checked_in_pack"
     assert len(pack.documents) == 3
     assert not pack.retrieval_checks
+
+
+def test_role_aware_synthetic_pack_separates_buyer_requirements_from_supplier_evidence() -> None:
+    pack = golden_path._load_material_pack(
+        argparse.Namespace(
+            material_dir=golden_path.SAMPLE_PACK,
+            material_manifest=golden_path.SAMPLE_PACK / "manifest.json",
+            material_origin="synthetic_checked_in_pack",
+            material_label="Role-aware fixture",
+            bundle_mode="role_aware",
+        )
+    )
+
+    assert {(bundle.key, bundle.source_type) for bundle in pack.bundles} == {
+        ("buyer-rfp", "buyer_rfp"),
+        ("supplier-evidence", "supplier_evidence"),
+    }
+    assert {
+        (document.id, document.bundle_key)
+        for document in pack.documents
+    } == {
+        ("rfp", "buyer-rfp"),
+        ("supplier-capability", "supplier-evidence"),
+        ("case-study", "supplier-evidence"),
+    }
+    assert pack.requirement_evidence_acceptance is not None
+    assert pack.requirement_evidence_acceptance.requirement_document_id == "rfp"
+    assert pack.requirement_evidence_acceptance.evidence_document_id == "case-study"

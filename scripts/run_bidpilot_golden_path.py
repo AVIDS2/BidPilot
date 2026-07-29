@@ -66,6 +66,9 @@ class RunnerDefaults:
     material_label: str
     project_name_prefix: str
     actor_label: str
+    bundle_mode: str = "single"
+    verify_requirement_evidence: bool = False
+    section_key: str = "technical-approach"
 
 
 DEFAULT_GOLDEN_PATH = RunnerDefaults(
@@ -79,6 +82,9 @@ DEFAULT_GOLDEN_PATH = RunnerDefaults(
     material_label="P0-D6 synthetic bid materials",
     project_name_prefix="P0-D6 Synthetic Bid",
     actor_label="P0-D6 Golden Path",
+    bundle_mode="role_aware",
+    verify_requirement_evidence=True,
+    section_key="past-performance",
 )
 
 
@@ -88,6 +94,24 @@ class MaterialDocument:
     path: Path
     mime_type: str
     sha256: str
+    role: str
+    bundle_key: str
+
+
+@dataclass(frozen=True)
+class MaterialBundle:
+    key: str
+    label: str
+    source_type: str
+
+
+@dataclass(frozen=True)
+class RequirementEvidenceAcceptance:
+    minimum_buyer_requirements: int
+    requirement_document_id: str
+    requirement_anchor: str
+    evidence_document_id: str
+    claim_text: str
 
 
 @dataclass(frozen=True)
@@ -97,7 +121,9 @@ class MaterialPack:
     manifest_sha256: str
     origin: str
     documents: tuple[MaterialDocument, ...]
+    bundles: tuple[MaterialBundle, ...]
     retrieval_checks: tuple[dict[str, str], ...]
+    requirement_evidence_acceptance: RequirementEvidenceAcceptance | None
 
 
 @dataclass
@@ -113,7 +139,9 @@ class GoldenPathEvidence:
     steps: list[str] = field(default_factory=list)
     project_id: str | None = None
     bundle_id: str | None = None
+    bundle_count: int = 0
     document_count: int = 0
+    requirement_evidence: dict[str, object] | None = None
     initial_execution_run_id: str | None = None
     retry_source_run_id: str | None = None
     retry_execution_run_id: str | None = None
@@ -139,7 +167,9 @@ class GoldenPathEvidence:
             "steps": self.steps,
             "project_id": self.project_id,
             "bundle_id": self.bundle_id,
+            "bundle_count": self.bundle_count,
             "document_count": self.document_count,
+            "requirement_evidence": self.requirement_evidence,
             "initial_execution_run_id": self.initial_execution_run_id,
             "retry_source_run_id": self.retry_source_run_id,
             "retry_execution_run_id": self.retry_execution_run_id,
@@ -218,6 +248,23 @@ def _parse_args(defaults: RunnerDefaults) -> argparse.Namespace:
     parser.add_argument("--run-prefix", default=defaults.run_prefix)
     parser.add_argument("--evidence-kind", default=defaults.evidence_kind)
     parser.add_argument(
+        "--bundle-mode",
+        choices=("single", "role_aware"),
+        default=defaults.bundle_mode,
+        help="single keeps a legacy bundle; role_aware separates buyer requirements from supplier evidence",
+    )
+    parser.add_argument(
+        "--verify-requirement-evidence",
+        action="store_true",
+        default=defaults.verify_requirement_evidence,
+        help="verify the Requirement Ledger to supplier-evidence review path declared by the fixture manifest",
+    )
+    parser.add_argument(
+        "--section-key",
+        default=defaults.section_key,
+        help="default deliverable section to draft during the governed workflow",
+    )
+    parser.add_argument(
         "--skip-retry",
         action="store_true",
         help="skip the isolated retry/recovery checkpoint while debugging an earlier step",
@@ -258,6 +305,72 @@ def _material_mime_type(path: Path) -> str:
     return mime_type
 
 
+def _single_bundle_source_type(material_origin: str) -> str:
+    return (
+        "synthetic_fixture"
+        if material_origin == "synthetic_checked_in_pack"
+        else "public_rehearsal"
+    )
+
+
+def _role_aware_bundle(role: str) -> MaterialBundle:
+    normalized_role = role.strip().lower()
+    if normalized_role in {"rfp", "buyer_rfp", "tender"}:
+        return MaterialBundle(
+            key="buyer-rfp",
+            label="Buyer RFP requirements",
+            source_type="buyer_rfp",
+        )
+    if normalized_role in {"supplier_capability", "supplier_evidence", "case_study"}:
+        return MaterialBundle(
+            key="supplier-evidence",
+            label="Supplier capability and case evidence",
+            source_type="supplier_evidence",
+        )
+    raise GoldenPathError(f"Role-aware material pack has an unsupported document role: {role}")
+
+
+def _load_requirement_evidence_acceptance(
+    manifest: dict[str, Any],
+    *,
+    document_ids: set[str],
+) -> RequirementEvidenceAcceptance | None:
+    raw = manifest.get("role_aware_acceptance")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise GoldenPathError("role_aware_acceptance must be an object")
+
+    minimum_buyer_requirements = raw.get("minimum_buyer_requirements")
+    requirement_document_id = raw.get("requirement_document_id")
+    requirement_anchor = raw.get("requirement_anchor")
+    evidence_document_id = raw.get("evidence_document_id")
+    claim_text = raw.get("claim_text")
+    if not isinstance(minimum_buyer_requirements, int) or minimum_buyer_requirements < 1:
+        raise GoldenPathError("role_aware_acceptance minimum_buyer_requirements must be positive")
+    if not all(
+        isinstance(value, str) and value.strip()
+        for value in (
+            requirement_document_id,
+            requirement_anchor,
+            evidence_document_id,
+            claim_text,
+        )
+    ):
+        raise GoldenPathError("role_aware_acceptance requires document ids, an anchor, and a claim")
+    if requirement_document_id not in document_ids or evidence_document_id not in document_ids:
+        raise GoldenPathError("role_aware_acceptance references an unknown document")
+    if requirement_document_id == evidence_document_id:
+        raise GoldenPathError("role_aware_acceptance must use separate requirement and evidence documents")
+    return RequirementEvidenceAcceptance(
+        minimum_buyer_requirements=minimum_buyer_requirements,
+        requirement_document_id=requirement_document_id,
+        requirement_anchor=requirement_anchor,
+        evidence_document_id=evidence_document_id,
+        claim_text=claim_text,
+    )
+
+
 def _load_material_pack(args: argparse.Namespace) -> MaterialPack:
     material_dir = _output_path(args.material_dir).resolve()
     manifest_path = _output_path(args.material_manifest).resolve()
@@ -283,7 +396,12 @@ def _load_material_pack(args: argparse.Namespace) -> MaterialPack:
     if not isinstance(entries, list) or len(entries) < 3:
         raise GoldenPathError("Material pack manifest must contain at least three documents")
 
+    bundle_mode = str(getattr(args, "bundle_mode", "single"))
+    if bundle_mode not in {"single", "role_aware"}:
+        raise GoldenPathError("Material pack bundle mode is unsupported")
+
     documents: list[MaterialDocument] = []
+    bundles_by_key: dict[str, MaterialBundle] = {}
     seen_document_ids: set[str] = set()
     for entry in entries:
         if not isinstance(entry, dict):
@@ -308,12 +426,26 @@ def _load_material_pack(args: argparse.Namespace) -> MaterialPack:
         actual_sha256 = hashlib.sha256(document_path.read_bytes()).hexdigest()
         if actual_sha256 != expected_sha256:
             raise GoldenPathError(f"Material pack document checksum differs: {filename.name}")
+        role = entry.get("role")
+        if not isinstance(role, str) or not role.strip():
+            raise GoldenPathError(f"Material pack document role is required: {filename.name}")
+        if bundle_mode == "role_aware":
+            bundle = _role_aware_bundle(role)
+        else:
+            bundle = MaterialBundle(
+                key="default",
+                label=str(getattr(args, "material_label", "Bid material pack")),
+                source_type=_single_bundle_source_type(str(args.material_origin)),
+            )
+        bundles_by_key.setdefault(bundle.key, bundle)
         documents.append(
             MaterialDocument(
                 id=document_id,
                 path=document_path,
                 mime_type=_material_mime_type(document_path),
                 sha256=actual_sha256,
+                role=role,
+                bundle_key=bundle.key,
             )
         )
 
@@ -336,7 +468,12 @@ def _load_material_pack(args: argparse.Namespace) -> MaterialPack:
         manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
         origin=str(args.material_origin),
         documents=tuple(documents),
+        bundles=tuple(bundles_by_key.values()),
         retrieval_checks=tuple(retrieval_checks),
+        requirement_evidence_acceptance=_load_requirement_evidence_acceptance(
+            manifest,
+            document_ids=seen_document_ids,
+        ),
     )
 
 
@@ -536,16 +673,126 @@ def _wait_for_run_status(
     )
 
 
-def _select_deliverable_and_section(client: ApiClient, project_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def _select_deliverable_and_section(
+    client: ApiClient,
+    project_id: str,
+    section_key: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     deliverables = list(client.json("GET", "/deliverables", params={"project_id": project_id}))
     if len(deliverables) != 1:
         raise GoldenPathError("Expected one default deliverable for the isolated project")
     deliverable = dict(deliverables[0])
     sections = list(client.json("GET", f"/deliverables/{deliverable['id']}/sections"))
-    section = next((item for item in sections if item.get("section_key") == "technical-approach"), None)
+    section = next((item for item in sections if item.get("section_key") == section_key), None)
     if not isinstance(section, dict):
-        raise GoldenPathError("BidPilot default technical-approach section was not created")
+        raise GoldenPathError(f"BidPilot default {section_key} section was not created")
     return deliverable, section
+
+
+def _verify_requirement_evidence_acceptance(
+    client: ApiClient,
+    *,
+    project_id: str,
+    uploaded_document_ids: dict[str, str],
+    supplier_document_ids: set[str],
+    acceptance: RequirementEvidenceAcceptance,
+) -> dict[str, object]:
+    """Exercise the governed buyer-requirement to supplier-evidence review path.
+
+    This deliberately uses the public Requirement, Evidence, Claim, and
+    Readiness APIs.  It never inserts a covered requirement directly into the
+    database, and the returned artifact contains counts/statuses only.
+    """
+
+    requirements = list(client.json("GET", "/requirements", params={"project_id": project_id}))
+    buyer_document_id = uploaded_document_ids[acceptance.requirement_document_id]
+    supplier_document_id = uploaded_document_ids[acceptance.evidence_document_id]
+    buyer_requirements = [
+        item for item in requirements if item.get("source_document_id") == buyer_document_id
+    ]
+    supplier_requirement_count = sum(
+        item.get("source_document_id") in supplier_document_ids for item in requirements
+    )
+    if len(buyer_requirements) < acceptance.minimum_buyer_requirements:
+        raise GoldenPathError("Buyer RFP did not produce the required minimum Requirement Ledger rows")
+    if supplier_requirement_count:
+        raise GoldenPathError("Supplier evidence was incorrectly materialized as buyer requirements")
+
+    anchor = acceptance.requirement_anchor.casefold()
+    requirement = next(
+        (
+            item
+            for item in buyer_requirements
+            if anchor in str(item.get("requirement_text") or "").casefold()
+        ),
+        None,
+    )
+    if not isinstance(requirement, dict):
+        raise GoldenPathError("Expected buyer requirement anchor was not extracted")
+
+    evidence_items = list(client.json("GET", "/evidence", params={"project_id": project_id}))
+    evidence = next(
+        (
+            item
+            for item in evidence_items
+            if item.get("source_document_id") == supplier_document_id
+        ),
+        None,
+    )
+    if not isinstance(evidence, dict):
+        raise GoldenPathError("Workflow did not materialize retrievable supplier evidence")
+
+    requirement_id = str(requirement["id"])
+    evidence_id = str(evidence["id"])
+    link = dict(
+        client.json(
+            "POST",
+            f"/requirements/{requirement_id}/evidence",
+            json={"evidence_id": evidence_id, "relation_type": "supports"},
+        )
+    )
+    client.json(
+        "PATCH",
+        f"/requirements/{requirement_id}/evidence/{link['id']}",
+        json={"verification_status": "verified"},
+    )
+    claim = dict(
+        client.json(
+            "POST",
+            f"/requirements/{requirement_id}/claims",
+            json={
+                "claim_text": acceptance.claim_text,
+                "claim_type": "factual",
+                "coverage_role": "direct",
+                "evidence_ids": [evidence_id],
+            },
+        )
+    )
+    verified_claim = dict(
+        client.json(
+            "POST",
+            f"/requirements/{requirement_id}/claims/{claim['id']}/verify",
+        )
+    )
+    detail = dict(client.json("GET", f"/requirements/{requirement_id}"))
+    profile = dict(detail.get("bid_profile") or {})
+    if profile.get("coverage_status") != "covered" or profile.get("evidence_status") != "sufficient":
+        raise GoldenPathError("Verified supplier evidence did not close the selected requirement")
+    if verified_claim.get("status") != "verified":
+        raise GoldenPathError("Verified requirement claim did not retain verified status")
+
+    readiness = dict(client.json("GET", f"/readiness/projects/{project_id}"))
+    counts = dict(readiness.get("counts") or {})
+    if int(counts.get("covered") or 0) < 1:
+        raise GoldenPathError("Readiness summary did not reflect the verified evidence mapping")
+    return {
+        "buyer_requirement_count": len(buyer_requirements),
+        "supplier_requirement_count": supplier_requirement_count,
+        "covered_requirement_count": int(counts.get("covered") or 0),
+        "mapped_requirement_coverage": str(profile.get("coverage_status") or ""),
+        "mapped_requirement_evidence": str(profile.get("evidence_status") or ""),
+        "mapped_claim_status": str(verified_claim.get("status") or ""),
+    }
 
 
 def _latest_candidate(client: ApiClient, section_id: str, run_id: str, previous_id: str | None = None) -> dict[str, Any]:
@@ -663,7 +910,9 @@ def _run(args: argparse.Namespace, evidence: GoldenPathEvidence) -> None:
     evidence.material_dataset_id = material_pack.dataset_id
     evidence.material_dataset_version = material_pack.dataset_version
     evidence.material_manifest_sha256 = material_pack.manifest_sha256
-    total_steps = 10 if material_pack.retrieval_checks else 9
+    if args.verify_requirement_evidence and material_pack.requirement_evidence_acceptance is None:
+        raise GoldenPathError("This runner requires role_aware_acceptance in the material manifest")
+    total_steps = (10 if material_pack.retrieval_checks else 9) + int(args.verify_requirement_evidence)
 
     evidence.mark(f"1/{total_steps} Created an isolated verified local Golden Path actor")
     email, password = _bootstrap_actor(args.database_url, evidence.run_label, str(args.actor_label))
@@ -682,42 +931,66 @@ def _run(args: argparse.Namespace, evidence: GoldenPathEvidence) -> None:
             )
         )
         evidence.project_id = str(project["id"])
-        deliverable, section = _select_deliverable_and_section(client, evidence.project_id)
+        deliverable, section = _select_deliverable_and_section(
+            client,
+            evidence.project_id,
+            str(args.section_key),
+        )
         evidence.deliverable_id = str(deliverable["id"])
 
-        evidence.mark(f"3/{total_steps} Uploaded the manifest-pinned bid material pack")
-        bundle = dict(
-            client.json(
-                "POST",
-                "/bundles",
-                json={
-                    "project_id": evidence.project_id,
-                    "label": str(args.material_label),
-                    "source_type": (
-                        "synthetic_fixture"
-                        if material_pack.origin == "synthetic_checked_in_pack"
-                        else "public_rehearsal"
-                    ),
-                },
-            )
-        )
-        evidence.bundle_id = str(bundle["id"])
+        evidence.mark(f"3/{total_steps} Uploaded the manifest-pinned bid material pack through role-aware bundles")
+        bundle_id_by_key: dict[str, str] = {}
         uploaded_document_ids: dict[str, str] = {}
-        for material in material_pack.documents:
-            uploaded = dict(
+        document_count_by_bundle: dict[str, int] = {}
+        for material_bundle in material_pack.bundles:
+            bundle = dict(
                 client.json(
                     "POST",
-                    "/documents/upload",
-                    params={"bundle_id": evidence.bundle_id},
-                    files={"file": (material.path.name, material.path.read_bytes(), material.mime_type)},
+                    "/bundles",
+                    json={
+                        "project_id": evidence.project_id,
+                        "label": material_bundle.label,
+                        "source_type": material_bundle.source_type,
+                    },
                 )
             )
-            uploaded_document_ids[material.id] = str(uploaded["id"])
+            bundle_id = str(bundle["id"])
+            bundle_id_by_key[material_bundle.key] = bundle_id
+            bundle_documents = [
+                material
+                for material in material_pack.documents
+                if material.bundle_key == material_bundle.key
+            ]
+            if not bundle_documents:
+                raise GoldenPathError("Material bundle has no uploaded documents")
+            for material in bundle_documents:
+                uploaded = dict(
+                    client.json(
+                        "POST",
+                        "/documents/upload",
+                        params={"bundle_id": bundle_id},
+                        files={"file": (material.path.name, material.path.read_bytes(), material.mime_type)},
+                    )
+                )
+                uploaded_document_ids[material.id] = str(uploaded["id"])
+            document_count_by_bundle[material_bundle.key] = len(bundle_documents)
+        buyer_bundle = next(
+            (bundle for bundle in material_pack.bundles if bundle.source_type == "buyer_rfp"),
+            material_pack.bundles[0],
+        )
+        evidence.bundle_id = bundle_id_by_key[buyer_bundle.key]
+        evidence.bundle_count = len(bundle_id_by_key)
         evidence.document_count = len(material_pack.documents)
 
-        evidence.mark(f"4/{total_steps} Queued and verified real Worker parsing plus 1536-dimension indexing")
-        client.json("POST", f"/bundles/{evidence.bundle_id}/reingest")
-        _wait_for_documents(client, evidence.bundle_id, evidence.document_count, args.timeout_seconds)
+        evidence.mark(f"4/{total_steps} Queued and verified real Worker parsing and indexing for every bundle")
+        for bundle_key, bundle_id in bundle_id_by_key.items():
+            client.json("POST", f"/bundles/{bundle_id}/reingest")
+            _wait_for_documents(
+                client,
+                bundle_id,
+                document_count_by_bundle[bundle_key],
+                args.timeout_seconds,
+            )
 
         workflow_step = 5
         if material_pack.retrieval_checks:
@@ -747,7 +1020,31 @@ def _run(args: argparse.Namespace, evidence: GoldenPathEvidence) -> None:
         _wait_for_run_status(client, initial_run_id, "awaiting_human", args.timeout_seconds)
         first_candidate = _latest_candidate(client, str(section["id"]), initial_run_id)
 
-        evidence.mark(f"{workflow_step + 1}/{total_steps} Rejected the immutable candidate and waited for a redraft checkpoint")
+        next_step = workflow_step + 1
+        if args.verify_requirement_evidence:
+            acceptance = material_pack.requirement_evidence_acceptance
+            assert acceptance is not None
+            bundle_source_type_by_key = {
+                bundle.key: bundle.source_type
+                for bundle in material_pack.bundles
+            }
+            evidence.mark(
+                f"{next_step}/{total_steps} Verified buyer-only requirements, supplier evidence, claim review, and readiness"
+            )
+            evidence.requirement_evidence = _verify_requirement_evidence_acceptance(
+                client,
+                project_id=evidence.project_id,
+                uploaded_document_ids=uploaded_document_ids,
+                supplier_document_ids={
+                    uploaded_document_ids[material.id]
+                    for material in material_pack.documents
+                    if bundle_source_type_by_key[material.bundle_key] == "supplier_evidence"
+                },
+                acceptance=acceptance,
+            )
+            next_step += 1
+
+        evidence.mark(f"{next_step}/{total_steps} Rejected the immutable candidate and waited for a redraft checkpoint")
         _submit_review(
             client,
             section_id=str(section["id"]),
@@ -764,7 +1061,7 @@ def _run(args: argparse.Namespace, evidence: GoldenPathEvidence) -> None:
             args.timeout_seconds,
         )
 
-        evidence.mark(f"{workflow_step + 2}/{total_steps} Approved the revised candidate and verified approved-only DOCX export")
+        evidence.mark(f"{next_step + 1}/{total_steps} Approved the revised candidate and verified approved-only DOCX export")
         _submit_review(
             client,
             section_id=str(section["id"]),
@@ -778,10 +1075,10 @@ def _run(args: argparse.Namespace, evidence: GoldenPathEvidence) -> None:
         evidence.exported_docx_bytes = len(export_bytes)
 
         if args.skip_retry:
-            evidence.mark(f"{workflow_step + 3}/{total_steps} Skipped retry checkpoint by explicit request")
+            evidence.mark(f"{next_step + 2}/{total_steps} Skipped retry checkpoint by explicit request")
         else:
             evidence.mark(
-                f"{workflow_step + 3}/{total_steps} Exercised controlled failed-run retry through the public API and Worker"
+                f"{next_step + 2}/{total_steps} Exercised controlled failed-run retry through the public API and Worker"
             )
             user_identity = dict(client.json("GET", "/auth/me"))
             retry_source_run_id = _create_retry_fixture(
