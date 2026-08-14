@@ -87,4 +87,7 @@ def isolate_provider_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
         "ANTHROPIC_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
+    # Ingestion tests monkeypatch the provider call itself, but still need a
+    # deterministic profile so the metering/indexing path is exercised.
+    monkeypatch.setenv("EMBEDDING_API_KEY", "test-embedding-key")
     monkeypatch.setenv("DOCPILOT_ALLOW_STUB_LLM", "true")
