@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import { ClaudeActivityTimeline } from "./claude-activity-timeline";
 
@@ -18,9 +19,17 @@ const runningWorkflow: AssistantExecutionItem = {
   ],
 };
 
+function renderTimeline(items: AssistantExecutionItem[]) {
+  return render(
+    <MemoryRouter>
+      <ClaudeActivityTimeline items={items} />
+    </MemoryRouter>,
+  );
+}
+
 describe("ClaudeActivityTimeline", () => {
   it("keeps nested detail grids mounted when collapsed and marks only running workflow nodes", () => {
-    const { container } = render(<ClaudeActivityTimeline items={[runningWorkflow]} />);
+    const { container } = renderTimeline([runningWorkflow]);
 
     expect(screen.getByTestId("assistant-runtime-workflow-running").querySelector(".cr-runtime-timeline")).toHaveClass("is-running");
     expect(container.querySelector(".cr-runtime-node.is-running")).toBeInTheDocument();
@@ -47,18 +56,18 @@ describe("ClaudeActivityTimeline", () => {
       summary: "Found 3 projects.",
       timestamp: 1,
     };
-    render(<ClaudeActivityTimeline items={[completedTool]} />);
+    const { container } = renderTimeline([completedTool]);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
     fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
     fireEvent.click(screen.getByRole("button", { name: "Show Search projects details" }));
-    expect(screen.getByText("Found 3 projects.")).toBeInTheDocument();
+    expect(container.querySelector(".cr-public-summary")).toHaveTextContent("Found 3 projects.");
 
     fireEvent.click(screen.getByRole("button", { name: "Hide Search projects details" }));
-    expect(screen.getByText("Found 3 projects.")).toBeInTheDocument();
+    expect(container.querySelector(".cr-public-summary")).toHaveTextContent("Found 3 projects.");
 
     act(() => vi.advanceTimersByTime(320));
-    expect(screen.queryByText("Found 3 projects.")).not.toBeInTheDocument();
+    expect(container.querySelector(".cr-public-summary")).not.toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -87,7 +96,7 @@ describe("ClaudeActivityTimeline", () => {
         ],
       },
     };
-    render(<ClaudeActivityTimeline items={[searchTool]} />);
+    renderTimeline([searchTool]);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
     fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
@@ -99,5 +108,73 @@ describe("ClaudeActivityTimeline", () => {
       "https://example.com/procurement-guide",
     );
     expect(screen.queryByText("Unsafe source")).not.toBeInTheDocument();
+  });
+
+  it("shows concrete export facts and real project actions instead of a generic completion line", () => {
+    const exportTool: AssistantExecutionItem = {
+      id: "export-completed",
+      kind: "tool",
+      toolName: "export_deliverable",
+      status: "succeeded",
+      title: "导出交付物",
+      summary: "交付物「技术响应文件」导出已就绪，可直接下载或打开交付页。",
+      timestamp: 1,
+      runtimeRunId: "runtime-export-1",
+      result: {
+        project_id: "project-1",
+        deliverable_id: "deliverable-1",
+        deliverable_title: "技术响应文件",
+        format: "docx",
+        status: "ready",
+        download_path: "/exports/export-1/docx",
+      },
+    };
+    renderTimeline([exportTool]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+    fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Show .*deliverable details/i }));
+
+    expect(screen.getAllByText("技术响应文件")).toHaveLength(2);
+    expect(screen.getByText("文件已生成")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Download DOCX/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看交付物" })).toBeInTheDocument();
+    expect(screen.getByText("运行记录")).toBeInTheDocument();
+  });
+
+  it("shows a concrete failure message and stable error code", () => {
+    const failedTool: AssistantExecutionItem = {
+      id: "failed-download",
+      kind: "tool",
+      toolName: "fetch_url_to_project",
+      status: "failed",
+      title: "导入远程资料",
+      timestamp: 1,
+      errorMessage: "远程服务器拒绝了附件下载请求。",
+      errorCode: "remote_download_forbidden",
+    };
+    renderTimeline([failedTool]);
+
+    expect(screen.getByText("远程服务器拒绝了附件下载请求。")).toBeInTheDocument();
+    expect(screen.getByText("错误代码：remote_download_forbidden")).toBeInTheDocument();
+  });
+
+  it("links a section workflow to the project orchestration canvas", () => {
+    const workflow: AssistantExecutionItem = {
+      ...runningWorkflow,
+      id: "workflow-with-project",
+      status: "succeeded",
+      result: {
+        project_id: "project-1",
+        section_key: "technical-approach",
+      },
+    };
+    renderTimeline([workflow]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+    fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Show .*section.* details/i }));
+
+    expect(screen.getByRole("button", { name: "查看任务编排" })).toBeInTheDocument();
   });
 });

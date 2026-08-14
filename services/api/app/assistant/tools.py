@@ -873,7 +873,11 @@ def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> Assi
     )
     return AssistantToolResult(
         tool_name="start_draft_section",
-        result=response.model_dump(),
+        result={
+            **response.model_dump(),
+            "project_id": arguments["project_id"],
+            "section_key": arguments["section_key"],
+        },
         summary=f"已启动章节起草工作流，运行 ID：{response.run_id}。",
         workflow=True,
     )
@@ -1050,7 +1054,11 @@ def start_redraft_section(db: Session, user: CurrentUser, arguments: dict) -> As
     )
     return AssistantToolResult(
         tool_name="start_redraft_section",
-        result=response.model_dump(),
+        result={
+            **response.model_dump(),
+            "project_id": arguments["project_id"],
+            "section_key": arguments["section_key"],
+        },
         summary=f"已启动章节重写工作流，运行 ID：{response.run_id}。",
         workflow=True,
     )
@@ -1420,7 +1428,9 @@ def export_deliverable_tool(db: Session, user: CurrentUser, arguments: dict) -> 
     return AssistantToolResult(
         tool_name="export_deliverable",
         result={
+            "project_id": deliverable.project_id,
             "deliverable_id": deliverable_id,
+            "deliverable_title": deliverable.title,
             "export_id": artifact.export_id,
             "format": str(fmt).lower(),
             "status": "ready",

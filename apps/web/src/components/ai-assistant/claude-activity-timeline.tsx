@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { downloadAssistantArtifact } from "@/lib/api";
 import type {
   AssistantExecutionItem,
@@ -258,7 +259,7 @@ function displayGroupSummary(items: AssistantExecutionItem[], t: Translate) {
       ? getAssistantToolLabel(item.toolName, t)
       : t("activity.workflow.default", { defaultValue: "Workflow" });
     if (active === "succeeded") {
-      return t("activity.summarySingleDone", {
+      return displaySummary(item, t) || t("activity.summarySingleDone", {
         label,
         defaultValue: `${label} completed`,
       });
@@ -266,12 +267,107 @@ function displayGroupSummary(items: AssistantExecutionItem[], t: Translate) {
     return `${label} ${statusText(active, t).toLowerCase()}`;
   }
   if (active === "succeeded") {
-    return t("activity.countTools", { count: items.length, tools: items.length });
+    const latestSummary = [...items]
+      .reverse()
+      .map((item) => displaySummary(item, t))
+      .find(Boolean);
+    return latestSummary || t("activity.countTools", { count: items.length, tools: items.length });
   }
   return t("activity.groupSummary", {
     count: items.length,
     defaultValue: `${items.length} operations ${statusText(active, t).toLowerCase()}`,
   });
+}
+
+type ResultFact = {
+  label: string;
+  value: string;
+};
+
+function valueText(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "是" : "否";
+  return "";
+}
+
+function publicStatusText(value: unknown) {
+  const status = valueText(value).toLowerCase();
+  const labels: Record<string, string> = {
+    ready: "已就绪",
+    queued: "等待处理",
+    pending: "等待处理",
+    running: "处理中",
+    processing: "处理中",
+    succeeded: "已完成",
+    completed: "已完成",
+    failed: "失败",
+    parsed: "已解析",
+    indexed: "已可检索",
+    stored: "已入库",
+  };
+  return labels[status] ?? valueText(value);
+}
+
+function resultFacts(item: AssistantExecutionItem): ResultFact[] {
+  const result = item.result ?? {};
+  const facts: ResultFact[] = [];
+  const add = (label: string, key: string, transform?: (value: unknown) => string) => {
+    const text = transform ? transform(result[key]) : valueText(result[key]);
+    if (text) facts.push({ label, value: text });
+  };
+  add("交付物", "deliverable_title");
+  add("文件", "filename");
+  add("资料包", "bundle_label");
+  add("导出格式", "format", (value) => {
+    const text = valueText(value);
+    return text ? text.toUpperCase() : "";
+  });
+  add("处理状态", "status", publicStatusText);
+  add("解析状态", "parse_status", publicStatusText);
+  add("入库状态", "storage_status", publicStatusText);
+  add("结果数量", "count");
+  add("附件数量", "attachment_count");
+  add("已处理章节", "processed_count");
+  add("待处理章节", "remaining_count");
+  return facts;
+}
+
+function ResultFacts({ item }: { item: AssistantExecutionItem }) {
+  const facts = resultFacts(item);
+  const error = publicText(item.errorMessage) || (item.status === "failed" ? displaySummary(item, () => "") : "");
+  if (!facts.length && !error && !item.errorCode) return null;
+  return (
+    <section className={`cr-result-facts${item.status === "failed" ? " is-failed" : ""}`} aria-label="本次操作结果">
+      <header>{item.status === "failed" ? "失败详情" : "本次操作结果"}</header>
+      {facts.length > 0 && (
+        <dl>
+          {facts.map((fact) => (
+            <div key={`${fact.label}-${fact.value}`}>
+              <dt>{fact.label}</dt>
+              <dd>{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {error && <p>{error}</p>}
+      {item.errorCode && <small>错误代码：{item.errorCode}</small>}
+    </section>
+  );
+}
+
+function RunTrace({ item }: { item: AssistantExecutionItem }) {
+  if (!item.runtimeRunId && !item.turnId && !item.toolCallId) return null;
+  return (
+    <details className="cr-run-trace">
+      <summary>运行记录</summary>
+      <dl>
+        {item.runtimeRunId && <div><dt>运行</dt><dd>{item.runtimeRunId}</dd></div>}
+        {item.turnId && <div><dt>回合</dt><dd>{item.turnId}</dd></div>}
+        {item.toolCallId && <div><dt>操作</dt><dd>{item.toolCallId}</dd></div>}
+      </dl>
+    </details>
+  );
 }
 
 interface ActivityTurn {
@@ -408,9 +504,21 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
     [typeof result.format === "string" ? result.format.toUpperCase() : "PDF", result.download_path],
   ].filter((entry): entry is [string, string] => typeof entry[1] === "string");
   const [downloading, setDownloading] = useState<string | null>(null);
-  if (actions.length === 0) return null;
+  const navigate = useNavigate();
+  const projectId = typeof result.project_id === "string" ? result.project_id : "";
+  const deliverableId = typeof result.deliverable_id === "string" ? result.deliverable_id : "";
+  const title = typeof result.deliverable_title === "string" && result.deliverable_title.trim()
+    ? result.deliverable_title.trim()
+    : "交付物";
+  if (actions.length === 0 && !deliverableId) return null;
   return (
-    <div className="cr-inline-actions">
+    <section className="cr-artifact-actions" aria-label="交付物操作">
+      <header>
+        <FileCheck2Icon size={14} />
+        <span>{title}</span>
+        <small>{actions.length > 0 ? "文件已生成" : "可在项目工作区查看"}</small>
+      </header>
+      <div className="cr-inline-actions">
       {actions.map(([format, path]) => (
         <button
           key={path}
@@ -428,7 +536,40 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
             : t(`activity.download.${format.toLowerCase()}`, { defaultValue: `Download ${format}` })}
         </button>
       ))}
-    </div>
+      {projectId && deliverableId && (
+        <button
+          type="button"
+          onClick={() => navigate(`/projects/${projectId}?surface=deliverables${deliverableId ? `&deliverable_id=${deliverableId}` : ""}`)}
+        >
+          <FolderOpenIcon size={13} />
+          查看交付物
+        </button>
+      )}
+      </div>
+    </section>
+  );
+}
+
+function WorkflowCanvasAction({ item }: { item: AssistantExecutionItem }) {
+  const navigate = useNavigate();
+  const result = item.result ?? {};
+  const projectId = typeof result.project_id === "string" ? result.project_id : "";
+  if (item.kind !== "workflow" || !projectId) return null;
+  const sectionKey = typeof result.section_key === "string" ? result.section_key : "";
+  return (
+    <section className="cr-artifact-actions" aria-label="响应工作流操作">
+      <header>
+        <TimerIcon size={14} />
+        <span>响应工作流</span>
+        <small>{sectionKey ? `章节：${sectionKey}` : "项目任务编排"}</small>
+      </header>
+      <div className="cr-inline-actions">
+        <button type="button" onClick={() => navigate(`/projects/${projectId}?surface=workflow`)}>
+          <TimerIcon size={13} />
+          查看任务编排
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -462,7 +603,10 @@ function StepDetail({
       <WebSearchSources item={item} t={t} />
       <RemoteDocumentDiscovery item={item} />
       <RemoteDocumentImport item={item} />
+      <ResultFacts item={item} />
       <ArtifactActions item={item} t={t} />
+      <WorkflowCanvasAction item={item} />
+      <RunTrace item={item} />
       {canCancel && onCancelWorkflow && (
         <button
           type="button"

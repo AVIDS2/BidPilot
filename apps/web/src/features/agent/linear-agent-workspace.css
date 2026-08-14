@@ -194,7 +194,12 @@
 
 .bidpilot-linear-agent .bp-agent-session-error { flex: 0 0 auto; border-bottom: 1px solid #ead2cc; background: #fff8f6; padding: 8px 14px; color: #a84937; font-size: 12px; }
 .bidpilot-linear-agent .agent-content { position: relative; min-height: 0; flex: 1; overflow: hidden; }
-.bidpilot-linear-agent .agent-content:not(.has-messages) { overflow-y: auto; padding: clamp(60px, 10dvh, 112px) 0 48px; }
+.bidpilot-linear-agent .agent-content:not(.has-messages) {
+  overflow-y: auto;
+  /* Empty conversations need a deliberate visual centre. The previous 10dvh
+     top padding started the task launcher too close to the header on tall screens. */
+  padding: clamp(128px, 17dvh, 196px) 0 clamp(72px, 10dvh, 128px);
+}
 .bidpilot-linear-agent .agent-content.has-messages { display: flex; flex-direction: column; }
 .bidpilot-linear-agent .agent-content.has-messages .cr-thread { min-height: 0; height: auto; }
 .bidpilot-linear-agent .agent-content.has-messages .cr-thread-inner { padding-bottom: 32px; }
@@ -320,7 +325,7 @@
 }
 
 @media (max-width: 560px) {
-  .bidpilot-linear-agent .agent-content:not(.has-messages) { padding: 36px 0 28px; }
+  .bidpilot-linear-agent .agent-content:not(.has-messages) { padding: clamp(76px, 13dvh, 112px) 0 40px; }
   .bidpilot-linear-agent .agent-welcome { width: calc(100% - 32px); }
   .bidpilot-linear-agent .bp-linear-agent-composer-slot {
     padding: 10px 12px max(12px, env(safe-area-inset-bottom));

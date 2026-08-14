@@ -1424,3 +1424,26 @@ unverified visual changes merely to iterate in production.
   rendered the landing page with zero console errors. The production build still
   reports the `AIAssistantPanel` chunk at about 561 KB, tracked as a non-blocking
   follow-up for code splitting.
+
+## Agent result and observability UX correction (2026-08-14)
+
+- Preserved safe, actionable public result facts for draft workflows and DOCX
+  exports: project/section identity, deliverable identity, title, format and
+  download path now reach the Agent activity UI without exposing private
+  prompts, reasoning, credentials or raw tool arguments.
+- Replaced generic completed text with concrete server summaries, structured
+  result facts, safe failure messages/error codes, direct delivery download /
+  project-deliverables actions, and a dedicated `响应工作流 -> 查看任务编排`
+  entry point. Project workspace deep links now select the requested surface.
+- Moved the empty Agent welcome/composer region down on desktop and mobile;
+  browser checks confirmed the composer remains within the conversation pane
+  on Chromium and mobile Chromium.
+- Added `docs/learning/2026-08-14-ai-agents-in-depth-bidpilot-study.md`, a
+  chapter-by-chapter mapping of *AI Agents in Depth* to current facts and
+  explicit gaps. The runtime has durable event correlation, but is not yet a
+  full OpenTelemetry Trace/Span implementation.
+- Verification: focused web tests `13 passed`, web lint 0 errors with the 5
+  pre-existing hook warnings, production build passed, browser Agent layout
+  E2E `2 passed`, and targeted Python public-result smoke passed. Full pytest
+  was not run because this shell lacks `DOCPILOT_TEST_DATABASE_URL` pointing
+  at a dedicated database ending `_test`; the safety gate was not bypassed.

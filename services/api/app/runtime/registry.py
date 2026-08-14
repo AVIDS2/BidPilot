@@ -577,10 +577,15 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
     if capability_name in {"start_draft_section", "start_redraft_section"}:
         payload = {
             key: result[key]
-            for key in ("run_id", "runtime_run_id")
+            for key in ("run_id", "runtime_run_id", "project_id", "section_key")
             if isinstance(result.get(key), str)
         }
-        summary = "起草工作流已启动。" if capability_name == "start_draft_section" else "重写工作流已启动。"
+        section_key = result.get("section_key") or "目标章节"
+        summary = (
+            f"章节「{section_key}」起草工作流已启动。"
+            if capability_name == "start_draft_section"
+            else f"章节「{section_key}」重写工作流已启动。"
+        )
         return PublicCapabilityResult(summary, payload)
     if capability_name == "write_section":
         payload = {
@@ -721,10 +726,19 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
     if capability_name == "export_deliverable" and result.get("status") == "ready":
         payload = {
             key: result[key]
-            for key in ("format", "download_path", "persisted")
+            for key in (
+                "project_id",
+                "deliverable_id",
+                "deliverable_title",
+                "export_id",
+                "format",
+                "download_path",
+                "persisted",
+            )
             if key in result
         }
-        return PublicCapabilityResult("交付物导出已就绪。", payload)
+        title = result.get("deliverable_title") or "交付物"
+        return PublicCapabilityResult(f"交付物「{title}」导出已就绪，可直接下载或打开交付页。", payload)
     if capability_name == "generate_readiness_pack" and isinstance(result.get("pack_id"), str):
         payload = {
             key: result[key]

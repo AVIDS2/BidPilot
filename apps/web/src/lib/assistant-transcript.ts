@@ -230,9 +230,9 @@ function buildTurnSummary(tools: TranscriptTool[]): string {
   if (tools.length === 1) {
     const tool = tools[0];
     if (tool.status === "running" || tool.status === "pending") return `正在${tool.title}`;
-    if (tool.status === "failed") return `${tool.title}失败`;
+    if (tool.status === "failed") return tool.errorMessage || `${tool.title}失败`;
     if (tool.status === "cancelled") return `${tool.title}已取消`;
-    return `已完成${tool.title}`;
+    return tool.summary || `已完成${tool.title}`;
   }
 
   const counts = new Map<string, number>();
@@ -245,5 +245,8 @@ function buildTurnSummary(tools: TranscriptTool[]): string {
   const status = aggregateStatus(tools.map((tool) => tool.status));
   if (status === "running" || status === "pending") return `正在处理：${parts.join(" · ")}`;
   if (status === "failed") return `部分失败：${parts.join(" · ")}`;
-  return parts.join(" · ");
+  const completedSummaries = tools
+    .filter((tool) => tool.status === "succeeded" && tool.summary)
+    .map((tool) => tool.summary!);
+  return completedSummaries[completedSummaries.length - 1] || parts.join(" · ");
 }

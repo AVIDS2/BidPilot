@@ -80,6 +80,18 @@ describe("interleaved transcript parts", () => {
     expect(parts).toHaveLength(1);
   });
 
+  it("uses the server-provided completion summary for a completed tool", () => {
+    const [turn] = buildTranscriptTurns([
+      item({
+        id: "export",
+        title: "导出交付物",
+        toolName: "export_deliverable",
+        summary: "交付物「技术响应文件」导出已就绪，可直接下载。",
+      }),
+    ]);
+    expect(turn.summary).toBe("交付物「技术响应文件」导出已就绪，可直接下载。");
+  });
+
   it("does not duplicate a replayed titled public narration", () => {
     const options = {
       source: "harness" as const,

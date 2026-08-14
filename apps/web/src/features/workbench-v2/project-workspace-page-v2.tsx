@@ -21,8 +21,8 @@ import {
   ShieldCheckIcon,
   UploadIcon,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -108,6 +108,12 @@ const PROJECT_SURFACES: Array<{ value: ProjectSurface; label: string }> = [
   { value: "review", label: "审阅" },
   { value: "deliverables", label: "交付" },
 ];
+
+function projectSurfaceFromQuery(value: string | null): ProjectSurface | null {
+  return PROJECT_SURFACES.some((item) => item.value === value)
+    ? value as ProjectSurface
+    : null;
+}
 
 function documentQueueErrorMessage(error: unknown) {
   const detail = getApiErrorDetail(error);
@@ -1323,8 +1329,9 @@ function ResponsePlanSurface({
 export function ProjectWorkspacePageV2() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const [surface, setSurface] = useState<ProjectSurface>("overview");
+  const [surface, setSurface] = useState<ProjectSurface>(() => projectSurfaceFromQuery(searchParams.get("surface")) ?? "overview");
   const [requirementFilter, setRequirementFilter] = useState<RequirementFilter>("all");
   const [selectedRequirementId, setSelectedRequirementId] = useState<string | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -1342,6 +1349,15 @@ export function ProjectWorkspacePageV2() {
     reasoningEffort: "medium",
     maxIterations: 3,
   });
+
+  const queryKey = searchParams.toString();
+  useEffect(() => {
+    const query = new URLSearchParams(queryKey);
+    const requestedSurface = projectSurfaceFromQuery(query.get("surface"));
+    if (requestedSurface) setSurface(requestedSurface);
+    const requestedDeliverableId = query.get("deliverable_id");
+    if (requestedDeliverableId) setSelectedDeliverableId(requestedDeliverableId);
+  }, [queryKey]);
 
   const projectQuery = useQuery({ queryKey: ["project", id], queryFn: () => getProject(id!), enabled: Boolean(id), staleTime: 60_000 });
   const bundlesQuery = useQuery({ queryKey: ["bundles", id], queryFn: () => listBundles(id!), enabled: Boolean(id), staleTime: 30_000, refetchInterval: 5_000 });
