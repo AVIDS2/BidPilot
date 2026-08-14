@@ -1,3 +1,5 @@
+from functools import partial
+
 from sqlalchemy.orm import Session
 
 from app.access.service import (
@@ -99,6 +101,17 @@ def submit_review_decision_command(
             )
 
     project = db.get(Project, deliverable.project_id) if decision_applied else None
+    if project is None:
+        db.commit()
+        if outbox_event is not None:
+            request_task_outbox_dispatch(outbox_event.id)
+        return ReviewDecisionRead(
+            id=thread.id,
+            section_id=payload.section_id,
+            section_version_id=version.id,
+            decision=decision,
+            comment=payload.comment,
+        )
     recipients = (
         _review_notification_recipients(
             db,
@@ -132,8 +145,9 @@ def submit_review_decision_command(
     for recipient in recipients:
         if notification_channel_enabled(db, user_id=recipient.id, category="review", channel="email"):
             send_email_best_effort(
-                lambda recipient_email=recipient.email: send_review_notification_email(
-                    email=recipient_email,
+                partial(
+                    send_review_notification_email,
+                    email=recipient.email,
                     project_name=project.name,
                     section_title=section.title,
                     action=decision,

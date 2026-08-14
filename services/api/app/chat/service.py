@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from datetime import UTC, datetime
 from dataclasses import dataclass
 
@@ -325,7 +325,7 @@ def save_message(
     role: str,
     content: str,
     *,
-    attachments: list[object] | None = None,
+    attachments: Sequence[object] | None = None,
     runtime_run_id: str | None = None,
 ) -> ChatMessageModel:
     """Persist a chat message."""

@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
-from typing import Iterable
+from typing import Iterable, Literal, cast
 from urllib.parse import urljoin
 
 from fastapi import HTTPException
@@ -399,11 +399,11 @@ def ingest_notice_items_command(
     updated_count = 0
     for payload in items:
         external_id = payload.external_id or _fallback_external_id(payload.title, payload.source_url, payload.published_at)
-        item = db.scalar(
+        existing_item = db.scalar(
             select(NoticeItem).where(NoticeItem.source_id == source.id, NoticeItem.external_id == external_id)
         )
         snapshot = dict(payload.source_snapshot or {})
-        was_created = item is None
+        was_created = existing_item is None
         if was_created:
             item = NoticeItem(
                 org_id=source.org_id,
@@ -425,6 +425,7 @@ def ingest_notice_items_command(
             db.flush()
             created_count += 1
         else:
+            item = cast(NoticeItem, existing_item)
             item.title = payload.title
             item.source_url = payload.source_url
             item.buyer_name = payload.buyer_name
@@ -824,8 +825,10 @@ def _xml_link(entry: ET.Element) -> str | None:
     return None
 
 
-def _normal_notice_type(value: object | None) -> str:
+def _normal_notice_type(value: object | None) -> Literal["intent", "tender", "prequalification", "rfi", "other"]:
     normalized = (str(value or "other").strip().casefold().replace("-", "_") or "other")
     aliases = {"prequalification": "prequalification", "pre_qualification": "prequalification", "intention": "intent", "procurement_intent": "intent"}
     normalized = aliases.get(normalized, normalized)
-    return normalized if normalized in _NOTICE_TYPES else "other"
+    if normalized in _NOTICE_TYPES:
+        return cast(Literal["intent", "tender", "prequalification", "rfi", "other"], normalized)
+    return "other"

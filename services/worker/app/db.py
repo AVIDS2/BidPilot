@@ -6,10 +6,17 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 
-DATABASE_URL = os.environ.get(
+def _normalize_database_url(url: str) -> str:
+    """Use Psycopg 3 for legacy PostgreSQL URLs without a driver name."""
+    if url.startswith("postgresql://"):
+        return f"postgresql+psycopg://{url.removeprefix('postgresql://')}"
+    return url
+
+
+DATABASE_URL = _normalize_database_url(os.environ.get(
     "DOCPILOT_DATABASE_URL",
     "postgresql+psycopg://docpilot:docpilot@localhost:5433/docpilot",
-)
+))
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)

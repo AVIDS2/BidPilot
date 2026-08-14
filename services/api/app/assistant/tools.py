@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, cast
 
 from sqlalchemy.orm import Session
 
@@ -1693,11 +1693,12 @@ def fetch_url_to_project_tool(db: Session, user: CurrentUser, arguments: dict) -
 
     project_id = str(arguments.get("project_id") or "").strip()
     url = str(arguments.get("url") or "").strip()
-    import_mode = str(arguments.get("import_mode") or "artifact").strip().lower()
+    import_mode_value = str(arguments.get("import_mode") or "artifact").strip().lower()
     if not project_id or not url:
         raise ValueError("project_id and url are required")
-    if import_mode not in {"artifact", "web_evidence"}:
+    if import_mode_value not in {"artifact", "web_evidence"}:
         raise ValueError("import_mode must be artifact or web_evidence")
+    import_mode = cast(Literal["artifact", "web_evidence"], import_mode_value)
     require_project_capability(
         db,
         current_user=user,

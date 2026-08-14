@@ -31,4 +31,6 @@ def notification_channel_enabled(
         "radar": "radar_updates",
         "material": "material_updates",
     }.get(category)
-    return bool(getattr(preferences, category_field, True))
+    if category_field is None:
+        return True
+    return bool(getattr(preferences, category_field))

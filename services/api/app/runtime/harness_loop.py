@@ -1832,7 +1832,7 @@ class StreamingHarness:
         *,
         turn_id: str,
         content: str,
-    ) -> None:
+    ) -> AsyncGenerator[str, None]:
         if self._publish_public_reasoning(
             turn_id=turn_id,
             content=content,
@@ -1874,7 +1874,7 @@ class StreamingHarness:
         *,
         turn_id: str,
         usage_holder: dict[str, ProviderUsageMeasurement | None] | None = None,
-    ) -> AsyncGenerator[str, None]:
+    ) -> None:
         # Prefer token streaming; fall back to one-shot invoke for test doubles.
         if hasattr(bound, "astream"):
             assembled_tools: dict[int, dict[str, Any]] = {}

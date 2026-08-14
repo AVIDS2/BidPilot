@@ -544,22 +544,22 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
             ),
         )
         status_counts = _document_status_counts(documents)
-        payload: dict[str, Any] = {"count": count, **status_counts}
+        documents_payload: dict[str, Any] = {"count": count, **status_counts}
         if documents:
-            payload["documents"] = documents
-        return PublicCapabilityResult(_document_status_summary(count, status_counts), payload)
+            documents_payload["documents"] = documents
+        return PublicCapabilityResult(_document_status_summary(count, status_counts), documents_payload)
     if capability_name == "list_readiness_gaps":
         gaps = _public_items(
             result.get("items"),
             ("id", "requirement_text", "risk_level", "coverage_status", "evidence_status"),
         )
         kind = result.get("kind")
-        payload: dict[str, Any] = {"count": count}
+        gaps_payload: dict[str, Any] = {"count": count}
         if isinstance(kind, str):
-            payload["kind"] = kind
+            gaps_payload["kind"] = kind
         if gaps:
-            payload["gaps"] = gaps
-        return PublicCapabilityResult(f"找到 {count} 个待处理缺口。", payload)
+            gaps_payload["gaps"] = gaps
+        return PublicCapabilityResult(f"找到 {count} 个待处理缺口。", gaps_payload)
     if capability_name in {
         "list_project_bundles",
         "list_evidence",

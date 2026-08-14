@@ -225,7 +225,7 @@ def retry_failed_run_command(
         },
     )
 
-    task_kwargs: dict[str, str] = {"runtime_run_id": retry_bridge.id}
+    task_kwargs: dict[str, object] = {"runtime_run_id": retry_bridge.id}
     if review_feedback:
         task_kwargs["review_feedback"] = review_feedback
     if provider_config_id:

@@ -59,7 +59,7 @@ def _request_fingerprint(
     reasoning_effort: str | None,
     max_iterations: int | None,
     review_feedback: str | None = None,
-) -> dict[str, object | None]:
+) -> dict[str, str | int | None]:
     """Store the user-visible intent needed to reject key reuse safely."""
     return {
         "section_key": section_key,
@@ -132,7 +132,7 @@ def _replay_existing_draft_request(
     project_id: str,
     run_type: str,
     client_request_id: str | None,
-    fingerprint: dict[str, str | None],
+    fingerprint: dict[str, str | int | None],
 ) -> DraftSectionResponse | None:
     """Return an existing accepted draft request instead of starting it again.
 

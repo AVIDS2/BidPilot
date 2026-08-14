@@ -28,7 +28,7 @@ import logging
 import os
 import re
 from contextlib import AsyncExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ class McpServerConfig:
     command: str | None  # stdio transport
     args: tuple[str, ...] = ()
     url: str | None = None  # Streamable HTTP transport
-    env: dict[str, str] = None  # extra env vars (e.g. API keys) for the server process
+    env: dict[str, str] = field(default_factory=dict)  # extra env vars (e.g. API keys) for the server process
     trusted_mutations: bool = False
 
 
@@ -109,7 +109,7 @@ def _env_servers(env: dict[str, str] | None = None) -> list[McpServerConfig]:
                 command=command,
                 args=args,
                 url=url,
-                env=env_extra or None,
+                env=env_extra,
                 trusted_mutations=name in trusted,
             )
         )
@@ -186,10 +186,11 @@ class _McpServerPool:
             elif cfg.url:
                 from mcp.client.streamable_http import streamablehttp_client
 
-                read, write = await asyncio.wait_for(
+                transport = await asyncio.wait_for(
                     stack.enter_async_context(streamablehttp_client(url=cfg.url)),
                     timeout=_MCP_OPERATION_TIMEOUT_SECONDS,
                 )
+                read, write = transport[0], transport[1]
             else:
                 return None
             from mcp import ClientSession

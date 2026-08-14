@@ -360,7 +360,6 @@ def get_required_tool_choice_llm(llm: BaseChatModel) -> BaseChatModel:
         temperature=0.1,
         max_completion_tokens=getattr(llm, "max_tokens", None) or OPERATOR_PLANNER_MAX_OUTPUT_TOKENS,
         max_retries=getattr(llm, "max_retries", None),
-        request_timeout=getattr(llm, "request_timeout", None),
         default_headers=getattr(llm, "default_headers", None),
         extra_body={"thinking": {"type": "disabled"}},
     )

@@ -74,11 +74,11 @@ async def _with_sse_heartbeats(
     """
     interval = heartbeat_seconds if heartbeat_seconds is not None else SSE_HEARTBEAT_SECONDS
     iterator = stream.__aiter__()
-    pending: asyncio.Task[str] | None = None
+    pending: asyncio.Future[str] | None = None
     try:
         while True:
             if pending is None:
-                pending = asyncio.create_task(anext(iterator))
+                pending = asyncio.ensure_future(iterator.__anext__())
             done, _ = await asyncio.wait({pending}, timeout=interval)
             if not done:
                 yield ": keep-alive\n\n"

@@ -154,7 +154,6 @@ class BidPilotHarnessPlanPolicy(HarnessPlanPolicy):
         context: HarnessExecutionContext,
     ) -> HarnessPlanUpdate | None:
         _ = messages
-        items: list[dict[str, Any]] = []
         labels: list[str] = []
         for call in calls:
             try:
@@ -162,19 +161,10 @@ class BidPilotHarnessPlanPolicy(HarnessPlanPolicy):
             except ValueError:
                 label = call.name
             labels.append(label)
-            items.append(
-                {
-                    "id": call.id,
-                    "capability": call.name,
-                    "title": label,
-                    "status": "planned",
-                    "turn_id": context.turn_id,
-                }
-            )
-        if not items:
+        if not labels:
             return None
         summary = f"执行计划：{'、'.join(labels)}。"
-        return HarnessPlanUpdate(summary=summary, items=tuple(items))
+        return HarnessPlanUpdate(summary=summary, items=tuple(labels))
 
 
 class LangChainHarnessModelPort:
@@ -727,7 +717,8 @@ def _to_langchain_messages(messages: Sequence[HarnessMessage]) -> list[BaseMessa
             for raw_call in message.get("tool_calls") or []:
                 if not isinstance(raw_call, Mapping):
                     continue
-                function = raw_call.get("function") if isinstance(raw_call.get("function"), Mapping) else {}
+                raw_function = raw_call.get("function")
+                function: Mapping[str, Any] = raw_function if isinstance(raw_function, Mapping) else {}
                 raw_arguments = function.get("arguments") if isinstance(function, Mapping) else {}
                 try:
                     arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else dict(raw_arguments or {})
@@ -749,7 +740,8 @@ def _to_langchain_messages(messages: Sequence[HarnessMessage]) -> list[BaseMessa
 
 
 def _to_core_tool_definition(spec: Mapping[str, Any]) -> HarnessToolDefinition:
-    function = spec.get("function") if isinstance(spec.get("function"), Mapping) else {}
+    raw_function = spec.get("function")
+    function: Mapping[str, Any] = raw_function if isinstance(raw_function, Mapping) else {}
     return HarnessToolDefinition(
         name=str(function.get("name") or ""),
         description=str(function.get("description") or ""),
