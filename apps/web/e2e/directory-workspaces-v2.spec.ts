@@ -152,6 +152,14 @@ async function prepareDirectoryWorkspaces(page: Page) {
   });
 }
 
+async function expectTableFitsViewport(page: Page, selector: string) {
+  const table = await page.locator(selector).boundingBox();
+  const wrapper = await page.locator(selector).locator("xpath=ancestor::div[contains(@class, 'wb-directory-table-group') or contains(@class, 'wb-projects-table-wrap')][1]").boundingBox();
+  expect(table).not.toBeNull();
+  expect(wrapper).not.toBeNull();
+  expect(table!.width).toBeLessThanOrEqual(wrapper!.width + 1);
+}
+
 test("目录页在同一操作画布中呈现项目、资料和团队待办", async ({ page }, testInfo) => {
   await prepareDirectoryWorkspaces(page);
 
@@ -160,6 +168,7 @@ test("目录页在同一操作画布中呈现项目、资料和团队待办", as
   await expect(page.getByRole("table", { name: "投标机会" })).toBeVisible();
   await expect(page.getByText("城市智慧交通平台投标", { exact: true })).toBeVisible();
   await expect(page.locator(".wb-projects-table-wrap")).toHaveCSS("border-radius", "10px");
+  await expectTableFitsViewport(page, ".wb-projects-table");
   await page.screenshot({ path: testInfo.outputPath(`projects-directory-${testInfo.project.name}.png`), fullPage: true });
 
   await page.goto("/knowledge");
@@ -167,6 +176,7 @@ test("目录页在同一操作画布中呈现项目、资料和团队待办", as
   await expect(page.getByText("城市智慧交通采购文件.pdf", { exact: true })).toBeVisible();
   await expect(page.getByText(/公开来源/)).toBeVisible();
   await expect(page.locator(".wb-directory-table-group")).toHaveCSS("border-radius", "10px");
+  await expectTableFitsViewport(page, ".wb-materials-table");
   await page.screenshot({ path: testInfo.outputPath(`knowledge-directory-${testInfo.project.name}.png`), fullPage: true });
 
   await page.goto("/my-work");

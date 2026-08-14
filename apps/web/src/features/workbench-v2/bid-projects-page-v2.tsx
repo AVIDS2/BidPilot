@@ -227,9 +227,9 @@ export function BidProjectsPageV2() {
               <TableHeader>
                 <TableRow className="wb-projects-table__header">
                   <TableHead>机会</TableHead>
-                  <TableHead>响应类型</TableHead>
+                  <TableHead className="wb-projects-col-scenario">响应类型</TableHead>
                   <TableHead>推进状态</TableHead>
-                  <TableHead>项目标识</TableHead>
+                  <TableHead className="wb-projects-col-id">项目标识</TableHead>
                   <TableHead><span className="sr-only">项目操作</span></TableHead>
                 </TableRow>
               </TableHeader>
@@ -271,14 +271,14 @@ export function BidProjectsPageV2() {
                           </span>
                         </button>
                       </TableCell>
-                      <TableCell className="wb-projects-table__cell">{scenarioLabel(project.scenario_package)}</TableCell>
+                      <TableCell className="wb-projects-table__cell wb-projects-col-scenario">{scenarioLabel(project.scenario_package)}</TableCell>
                       <TableCell className="wb-projects-table__cell">
                         <span className={cn("wb-status", `wb-status--${status.tone}`)}>
                           <i aria-hidden="true" />
                           {status.label}
                         </span>
                       </TableCell>
-                      <TableCell className="wb-projects-table__cell wb-project-id">{project.id.slice(0, 8)}</TableCell>
+                      <TableCell className="wb-projects-table__cell wb-project-id wb-projects-col-id">{project.id.slice(0, 8)}</TableCell>
                       <TableCell className="wb-projects-table__cell wb-project-actions">
                         <DropdownMenu>
                           <DropdownMenuTrigger

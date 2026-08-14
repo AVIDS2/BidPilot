@@ -1740,7 +1740,42 @@
   .wb-projects-workbench .wb-list-toolbar { align-items: stretch; flex-direction: column; }
   .wb-projects-workbench .wb-search-field { width: 100%; }
   .wb-projects-workbench .wb-list-summary { padding-left: 2px; }
-  .wb-projects-workbench .wb-projects-table-wrap { overflow-x: auto; }
+  /* Tables become a phone-sized information hierarchy instead of a clipped desktop canvas. */
+  .wb-projects-workbench .wb-projects-table-wrap,
+  .wb-directory-table-group { overflow: hidden; }
+  .wb-projects-workbench .wb-projects-table,
+  .wb-directory-table-group table { width: 100%; min-width: 0; table-layout: fixed; }
+  .wb-projects-workbench .wb-projects-table th:nth-child(1),
+  .wb-projects-workbench .wb-projects-table td:nth-child(1) { width: auto; }
+  .wb-projects-workbench .wb-projects-table th:nth-child(3),
+  .wb-projects-workbench .wb-projects-table td:nth-child(3) { width: 86px; }
+  .wb-projects-workbench .wb-projects-table th:last-child,
+  .wb-projects-workbench .wb-projects-table td:last-child { width: 42px; }
+  .wb-projects-workbench .wb-projects-col-scenario,
+  .wb-projects-workbench .wb-projects-col-id { display: none; }
+  .wb-projects-workbench .wb-projects-table__row td { padding-top: 12px; padding-bottom: 12px; }
+  .wb-projects-workbench .wb-project-row-main { gap: 8px; }
+  .wb-projects-workbench .wb-project-copy strong { font-size: 13px; }
+  .wb-projects-workbench .wb-row-action { opacity: 1; }
+  .wb-directory-table-group th,
+  .wb-directory-table-group td { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wb-materials-table th:first-child,
+  .wb-materials-table td:first-child { width: 46%; }
+  .wb-materials-table th:nth-child(2),
+  .wb-materials-table td:nth-child(2) { width: 22%; }
+  .wb-materials-table th:nth-child(4),
+  .wb-materials-table td:nth-child(4) { width: 22%; }
+  .wb-materials-table th:last-child,
+  .wb-materials-table td:last-child { width: 42px; }
+  .wb-materials-table .wb-materials-col-bundle { display: none; }
+  .wb-knowledge-table th:first-child,
+  .wb-knowledge-table td:first-child { width: auto; }
+  .wb-knowledge-table th:nth-child(3),
+  .wb-knowledge-table td:nth-child(3) { width: 72px; }
+  .wb-knowledge-table th:last-child,
+  .wb-knowledge-table td:last-child { width: 76px; }
+  .wb-knowledge-table .wb-knowledge-col-project,
+  .wb-knowledge-table .wb-knowledge-col-source { display: none; }
 }
 
 /* Keep the typography quiet and readable at enterprise density. */

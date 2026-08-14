@@ -865,15 +865,15 @@ export function KnowledgePageV2() {
               <EmptyHeader><EmptyMedia variant="icon"><UploadIcon aria-hidden="true" /></EmptyMedia><EmptyTitle>从第一份招标资料开始</EmptyTitle><EmptyDescription>上传 PDF、DOCX、XLSX、CSV、TXT 或 Markdown。平台会自动解析，随后可在项目中提取要求和证据。</EmptyDescription></EmptyHeader>
               <EmptyContent><Button onClick={openUploadDialog} size="sm"><UploadIcon aria-hidden="true" data-icon="inline-start" />上传资料</Button></EmptyContent>
             </Empty> : null}
-            {materialRecords.length ? <div className="wb-directory-table-group"><Table>
-              <TableHeader><TableRow><TableHead>资料</TableHead><TableHead>所属项目</TableHead><TableHead>资料包</TableHead><TableHead>解析状态</TableHead><TableHead className="w-16" /></TableRow></TableHeader>
+            {materialRecords.length ? <div className="wb-directory-table-group"><Table className="wb-materials-table">
+              <TableHeader><TableRow><TableHead>资料</TableHead><TableHead>所属项目</TableHead><TableHead className="wb-materials-col-bundle">资料包</TableHead><TableHead>解析状态</TableHead><TableHead className="w-16" /></TableRow></TableHeader>
               <TableBody>{filteredMaterials.map((record) => {
                 const Icon = documentIcon(record.document);
                 const status = documentStatusMeta(record.document);
                 return <TableRow className="cursor-pointer" data-state={record.document.id === selectedDocumentId ? "selected" : undefined} key={record.document.id} onClick={() => setSelectedDocumentId(record.document.id)} onKeyDown={(event) => event.key === "Enter" && setSelectedDocumentId(record.document.id)} tabIndex={0}>
                   <TableCell><div className="flex min-w-0 items-center gap-2"><Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0"><span className="block truncate font-medium text-foreground">{record.document.original_filename}</span><span className="block text-xs text-muted-foreground">{documentMimeLabel(record.document.mime_type)} · v{record.document.version_number}{sourceUrlHref(record.document.source_url) ? " · 公开来源" : ""}</span></span></div></TableCell>
                   <TableCell className="max-w-48 truncate text-muted-foreground">{projectDisplayName(record.project)}</TableCell>
-                  <TableCell className="max-w-44 truncate text-muted-foreground">{record.bundle.label}</TableCell>
+                  <TableCell className="wb-materials-col-bundle max-w-44 truncate text-muted-foreground">{record.bundle.label}</TableCell>
                   <TableCell><Badge variant={status.variant}>{record.document.parse_status === "parsing" ? <LoaderCircleIcon className="animate-spin" aria-hidden="true" /> : null}{status.label}</Badge></TableCell>
                   <TableCell><Button aria-label={`打开 ${record.document.original_filename}`} onClick={(event) => { event.stopPropagation(); setSelectedDocumentId(record.document.id); }} size="icon-xs" variant="ghost"><ChevronRightIcon aria-hidden="true" /></Button></TableCell>
                 </TableRow>;
@@ -883,13 +883,13 @@ export function KnowledgePageV2() {
           </section> : <section aria-label="共享知识">
             {portfolioQuery.isLoading || memoryQueries.some((item) => item.isLoading) ? <p className="wb-list-loading">正在读取可复用知识…</p> : null}
             {!portfolioQuery.isLoading && !filteredKnowledge.length ? <Empty className="border-dashed py-12"><EmptyHeader><EmptyMedia variant="icon"><LibraryBigIcon aria-hidden="true" /></EmptyMedia><EmptyTitle>尚无可复用知识</EmptyTitle><EmptyDescription>资料解析并经团队确认后，能用于响应和核验的结论会在这里出现。</EmptyDescription></EmptyHeader></Empty> : null}
-            {filteredKnowledge.length ? <div className="wb-directory-table-group"><Table>
-              <TableHeader><TableRow><TableHead>知识</TableHead><TableHead>所属项目</TableHead><TableHead>类型</TableHead><TableHead>来源</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
+            {filteredKnowledge.length ? <div className="wb-directory-table-group"><Table className="wb-knowledge-table">
+              <TableHeader><TableRow><TableHead>知识</TableHead><TableHead className="wb-knowledge-col-project">所属项目</TableHead><TableHead>类型</TableHead><TableHead className="wb-knowledge-col-source">来源</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
               <TableBody>{filteredKnowledge.map(({ memory, projectId, projectName }) => <TableRow key={memory.id}>
                 <TableCell className="max-w-md"><span className="block truncate font-medium text-foreground">{memory.title}</span><span className="block truncate text-xs text-muted-foreground">{memory.body_markdown.replace(/\s+/g, " ")}</span></TableCell>
-                <TableCell className="max-w-44 truncate text-muted-foreground">{projectName}</TableCell>
+                <TableCell className="wb-knowledge-col-project max-w-44 truncate text-muted-foreground">{projectName}</TableCell>
                 <TableCell><Badge variant="outline">{memoryKindLabel(memory.kind)}</Badge></TableCell>
-                <TableCell className="text-muted-foreground">{memory.citations.length} 个引用</TableCell>
+                <TableCell className="wb-knowledge-col-source text-muted-foreground">{memory.citations.length} 个引用</TableCell>
                 <TableCell><Button onClick={() => navigate(`/projects/${projectId}`)} size="sm" variant="ghost">打开项目</Button></TableCell>
               </TableRow>)}</TableBody>
             </Table></div> : null}
