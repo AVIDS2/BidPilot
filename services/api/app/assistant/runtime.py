@@ -134,7 +134,7 @@ def classify_locally(message: str, project_id: str | None = None) -> AssistantIn
         return AssistantIntent(
             mode="tool_action",
             tool_name="open_page",
-            arguments={"route": _route_for_message(lowered)},
+            arguments={"route": _route_for_message(lowered, project_id)},
         )
 
     if _looks_like_readiness_gap(text):
@@ -358,7 +358,21 @@ def _looks_like_draft(text: str) -> bool:
 
 def _looks_like_open_page(text: str) -> bool:
     return any(word in text for word in ("打开", "进入", "跳转", "去")) and any(
-        word in text for word in ("页面", "项目", "文档", "价格", "设置", "供应商", "仪表盘", "知识", "wiki")
+        word in text
+        for word in (
+            "页面",
+            "项目",
+            "文档",
+            "价格",
+            "设置",
+            "供应商",
+            "仪表盘",
+            "知识",
+            "wiki",
+            "画布",
+            "编排",
+            "工作流",
+        )
     )
 
 
@@ -386,7 +400,9 @@ def _extract_section_key(text: str) -> str:
     return "technical-approach"
 
 
-def _route_for_message(lowered: str) -> str:
+def _route_for_message(lowered: str, project_id: str | None = None) -> str:
+    if any(token in lowered for token in ("画布", "编排", "工作流", "workflow", "canvas")):
+        return f"/projects/{project_id}?surface=workflow" if project_id else "/projects?surface=workflow"
     if "价格" in lowered or "pricing" in lowered:
         return "/pricing"
     if "文档" in lowered or "docs" in lowered:

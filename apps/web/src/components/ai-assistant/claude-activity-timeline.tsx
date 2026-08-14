@@ -15,7 +15,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import { downloadAssistantArtifact } from "@/lib/api";
 import type {
   AssistantExecutionItem,
@@ -170,6 +169,14 @@ function publicUrl(value: unknown) {
   }
 }
 
+// Timeline entries are also rendered in embedded previews that do not mount a
+// React Router. Keep structured actions functional in both places.
+function navigateToInternalRoute(route: string) {
+  if (typeof window === "undefined") return;
+  window.history.pushState({}, "", route);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 function remoteDocumentCandidates(item: AssistantExecutionItem): RemoteDocumentCandidate[] {
   if (item.toolName !== "discover_remote_documents" || !Array.isArray(item.result?.items)) return [];
   return item.result.items.flatMap((candidate) => {
@@ -259,10 +266,10 @@ function displayGroupSummary(items: AssistantExecutionItem[], t: Translate) {
       ? getAssistantToolLabel(item.toolName, t)
       : t("activity.workflow.default", { defaultValue: "Workflow" });
     if (active === "succeeded") {
-      return displaySummary(item, t) || t("activity.summarySingleDone", {
-        label,
-        defaultValue: `${label} completed`,
-      });
+      // A turn heading should identify the action. Its returned explanation
+      // belongs in the expandable trace, otherwise a raw provider summary
+      // leaks into the collapsed chronology and turns it into a status card.
+      return label;
     }
     return `${label} ${statusText(active, t).toLowerCase()}`;
   }
@@ -366,6 +373,44 @@ function RunTrace({ item }: { item: AssistantExecutionItem }) {
         {item.turnId && <div><dt>回合</dt><dd>{item.turnId}</dd></div>}
         {item.toolCallId && <div><dt>操作</dt><dd>{item.toolCallId}</dd></div>}
       </dl>
+    </details>
+  );
+}
+
+function redactPayload(value: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(value)
+      .slice(0, 24)
+      .map(([key, entry]) => [
+        key,
+        /(password|secret|token|api[_-]?key|authorization)/i.test(key) ? "***redacted***" : entry,
+      ]),
+  );
+}
+
+function ToolPayloadDetails({ item }: { item: AssistantExecutionItem }) {
+  const argumentsPayload = item.arguments && Object.keys(item.arguments).length > 0
+    ? redactPayload(item.arguments)
+    : null;
+  const resultPayload = item.result && Object.keys(item.result).length > 0
+    ? redactPayload(item.result)
+    : null;
+  if (!argumentsPayload && !resultPayload) return null;
+  return (
+    <details className="cr-run-trace cr-tool-payload">
+      <summary>工具输入与返回</summary>
+      {argumentsPayload && (
+        <div>
+          <small>输入参数</small>
+          <pre>{JSON.stringify(argumentsPayload, null, 2)}</pre>
+        </div>
+      )}
+      {resultPayload && (
+        <div>
+          <small>公开返回</small>
+          <pre>{JSON.stringify(resultPayload, null, 2)}</pre>
+        </div>
+      )}
     </details>
   );
 }
@@ -504,7 +549,6 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
     [typeof result.format === "string" ? result.format.toUpperCase() : "PDF", result.download_path],
   ].filter((entry): entry is [string, string] => typeof entry[1] === "string");
   const [downloading, setDownloading] = useState<string | null>(null);
-  const navigate = useNavigate();
   const projectId = typeof result.project_id === "string" ? result.project_id : "";
   const deliverableId = typeof result.deliverable_id === "string" ? result.deliverable_id : "";
   const title = typeof result.deliverable_title === "string" && result.deliverable_title.trim()
@@ -539,7 +583,7 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
       {projectId && deliverableId && (
         <button
           type="button"
-          onClick={() => navigate(`/projects/${projectId}?surface=deliverables${deliverableId ? `&deliverable_id=${deliverableId}` : ""}`)}
+          onClick={() => navigateToInternalRoute(`/projects/${projectId}?surface=deliverables${deliverableId ? `&deliverable_id=${deliverableId}` : ""}`)}
         >
           <FolderOpenIcon size={13} />
           查看交付物
@@ -551,7 +595,6 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
 }
 
 function WorkflowCanvasAction({ item }: { item: AssistantExecutionItem }) {
-  const navigate = useNavigate();
   const result = item.result ?? {};
   const projectId = typeof result.project_id === "string" ? result.project_id : "";
   if (item.kind !== "workflow" || !projectId) return null;
@@ -564,13 +607,49 @@ function WorkflowCanvasAction({ item }: { item: AssistantExecutionItem }) {
         <small>{sectionKey ? `章节：${sectionKey}` : "项目任务编排"}</small>
       </header>
       <div className="cr-inline-actions">
-        <button type="button" onClick={() => navigate(`/projects/${projectId}?surface=workflow`)}>
+        <button type="button" onClick={() => navigateToInternalRoute(`/projects/${projectId}?surface=workflow`)}>
           <TimerIcon size={13} />
           查看任务编排
         </button>
       </div>
     </section>
   );
+}
+
+function StructuredUiAction({ item }: { item: AssistantExecutionItem }) {
+  const rawAction = item.result?.ui_action;
+  if (!rawAction || typeof rawAction !== "object" || Array.isArray(rawAction)) return null;
+  const action = rawAction as Record<string, unknown>;
+  const type = typeof action.type === "string" ? action.type : "";
+  const label = typeof action.label === "string" && action.label.trim()
+    ? action.label.trim()
+    : "继续";
+  const route = typeof action.route === "string" ? action.route : "";
+  const href = publicUrl(action.href);
+
+  // This is intentionally a small allow-list. Agent output can describe a
+  // UI action, never inject arbitrary markup or event handlers into the app.
+  if (type === "canvas" && route.startsWith("/projects")) {
+    return (
+      <div className="cr-inline-actions cr-structured-action">
+        <button type="button" onClick={() => navigateToInternalRoute(route)}>
+          <TimerIcon size={13} />
+          {label}
+        </button>
+      </div>
+    );
+  }
+  if (type === "link" && href) {
+    return (
+      <div className="cr-inline-actions cr-structured-action">
+        <a href={href.href} rel="noreferrer" target="_blank">
+          <ExternalLinkIcon size={13} />
+          {label}
+        </a>
+      </div>
+    );
+  }
+  return null;
 }
 
 function StepDetail({
@@ -604,8 +683,10 @@ function StepDetail({
       <RemoteDocumentDiscovery item={item} />
       <RemoteDocumentImport item={item} />
       <ResultFacts item={item} />
+      <StructuredUiAction item={item} />
       <ArtifactActions item={item} t={t} />
       <WorkflowCanvasAction item={item} />
+      <ToolPayloadDetails item={item} />
       <RunTrace item={item} />
       {canCancel && onCancelWorkflow && (
         <button

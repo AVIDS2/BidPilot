@@ -165,7 +165,7 @@ test("目录页在同一操作画布中呈现项目、资料和团队待办", as
 
   await page.goto("/projects");
   await expect(page.getByRole("heading", { name: "投标机会" })).toBeVisible();
-  await expect(page.getByRole("table", { name: "投标机会" })).toBeVisible();
+  await expect(page.locator(".wb-projects-table")).toBeVisible();
   await expect(page.getByText("城市智慧交通平台投标", { exact: true })).toBeVisible();
   await expect(page.locator(".wb-projects-table-wrap")).toHaveCSS("border-radius", "10px");
   await expectTableFitsViewport(page, ".wb-projects-table");
@@ -185,4 +185,31 @@ test("目录页在同一操作画布中呈现项目、资料和团队待办", as
   await expect(page.getByText("技术响应草稿等待团队确认", { exact: true })).toBeVisible();
   await expect(page.locator(".wb-workboard-summary")).toHaveCSS("border-radius", "10px");
   await page.screenshot({ path: testInfo.outputPath(`my-work-directory-${testInfo.project.name}.png`), fullPage: true });
+});
+
+test("空项目目录保持表格结构并将创建入口居中", async ({ page }) => {
+  await prepareDirectoryWorkspaces(page);
+  await page.unroute("**/projects");
+  await page.route("**/projects", async (route) => {
+    const resourceType = route.request().resourceType();
+    if (resourceType !== "fetch" && resourceType !== "xhr") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ contentType: "application/json", body: "[]" });
+  });
+
+  await page.goto("/projects");
+  await expect(page.locator(".wb-projects-table")).toBeVisible();
+  const emptyCell = page.locator(".wb-projects-table__empty");
+  const emptyContent = page.locator(".wb-projects-empty-content");
+  await expect(emptyCell).toBeVisible();
+  await expect(emptyContent).toBeVisible();
+  await expect(emptyCell).toHaveCSS("display", "table-cell");
+  const cellBox = await emptyCell.boundingBox();
+  const contentBox = await emptyContent.boundingBox();
+  expect(cellBox).not.toBeNull();
+  expect(contentBox).not.toBeNull();
+  expect(contentBox!.x).toBeGreaterThan(cellBox!.x);
+  expect(contentBox!.x + contentBox!.width).toBeLessThan(cellBox!.x + cellBox!.width);
 });

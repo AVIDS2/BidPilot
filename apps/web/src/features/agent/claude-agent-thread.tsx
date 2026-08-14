@@ -3,6 +3,7 @@ import { CheckIcon, ChevronDownIcon, CopyIcon, FileIcon, ImageIcon, PencilIcon, 
 import { useTranslation } from "react-i18next";
 import { MessageContent } from "@/components/ui/message";
 import { ClaudeActivityTimeline } from "@/components/ai-assistant/claude-activity-timeline";
+import { AssistantInputRequestForm } from "@/components/ai-assistant/assistant-input-request";
 import type {
   AIAssistantState,
   AssistantConfirmationRequest,
@@ -447,6 +448,7 @@ export function ClaudeAgentThread({
   onConfigureProvider,
   onConfirm,
   onCancelConfirmation,
+  onSubmitInput,
   onRetryFromCheckpoint,
 }: {
   state: AIAssistantState;
@@ -454,6 +456,7 @@ export function ClaudeAgentThread({
   onConfigureProvider: () => void;
   onConfirm: (confirmationText?: string) => void;
   onCancelConfirmation: () => void;
+  onSubmitInput?: (content: string) => void;
   onRetryFromCheckpoint?: (checkpointMessageId: string, content: string) => void;
 }) {
   const threadRef = useRef<HTMLDivElement>(null);
@@ -529,6 +532,12 @@ export function ClaudeAgentThread({
             confirmation={state.pendingConfirmation}
             onConfirm={onConfirm}
             onCancel={onCancelConfirmation}
+          />
+        )}
+        {state.pendingInput && (
+          <AssistantInputRequestForm
+            request={state.pendingInput}
+            onSubmit={(content) => onSubmitInput?.(content)}
           />
         )}
       </div>

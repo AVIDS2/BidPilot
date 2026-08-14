@@ -34,6 +34,46 @@ test("renders signup page with password strength hint", async ({ page }) => {
   await expect(page.getByText(/uppercase.*lowercase.*digit/i)).toBeVisible();
 });
 
+test("restores non-sensitive signup fields after returning from verification prompt", async ({ page }) => {
+  await page.route("**/auth/register", async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "signup-draft-user",
+        email: "draft@example.com",
+        display_name: "Draft User",
+        role: "owner",
+        plan: "free",
+        email_verified: false,
+        org_id: "draft-org",
+        org_slug: "draft-org",
+      }),
+    });
+  });
+
+  await page.goto("/signup");
+  await page.getByLabel("Display Name").fill("Draft User");
+  await page.getByLabel("Email").fill("draft@example.com");
+  await page.getByLabel("Organization Name").fill("Draft Organization");
+  await page.getByLabel("Organization Slug").fill("draft-org");
+  await page.getByLabel("Password", { exact: true }).fill("DraftPass123");
+  await page.getByLabel("Confirm Password").fill("DraftPass123");
+  await page.getByRole("button", { name: "Create Account" }).click();
+  await expect(page).toHaveURL(/\/verify-email-prompt/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/signup/);
+  await expect(page.getByLabel("Display Name")).toHaveValue("Draft User");
+  await expect(page.getByLabel("Email")).toHaveValue("draft@example.com");
+  await expect(page.getByLabel("Organization Name")).toHaveValue("Draft Organization");
+  await expect(page.getByLabel("Organization Slug")).toHaveValue("draft-org");
+  // The browser may preserve the password in its in-memory history entry, but
+  // the recoverable session draft must never contain either password field.
+  const draft = await page.evaluate(() => sessionStorage.getItem("bidpilot_registration_draft"));
+  expect(draft).not.toContain("DraftPass123");
+});
+
 test("forgot password page renders", async ({ page }) => {
   await page.goto("/forgot-password");
   await expect(page.getByLabel("Email")).toBeVisible();

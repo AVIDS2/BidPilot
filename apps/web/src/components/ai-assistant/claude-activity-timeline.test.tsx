@@ -177,4 +177,31 @@ describe("ClaudeActivityTimeline", () => {
 
     expect(screen.getByRole("button", { name: "查看任务编排" })).toBeInTheDocument();
   });
+
+  it("renders a model-proposed canvas action as an explicit click target", () => {
+    const openCanvas: AssistantExecutionItem = {
+      id: "open-workflow-canvas",
+      kind: "tool",
+      toolName: "open_page",
+      status: "succeeded",
+      title: "打开页面",
+      summary: "已准备好任务编排画布入口，请点击打开。",
+      timestamp: 1,
+      result: {
+        route: "/projects/project-1?surface=workflow",
+        ui_action: {
+          type: "canvas",
+          label: "打开任务编排画布",
+          route: "/projects/project-1?surface=workflow",
+        },
+      },
+    };
+    renderTimeline([openCanvas]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
+    fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Show .*page details/i }));
+
+    expect(screen.getByRole("button", { name: "打开任务编排画布" })).toBeInTheDocument();
+  });
 });

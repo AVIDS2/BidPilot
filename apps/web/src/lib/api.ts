@@ -1329,7 +1329,7 @@ export function setUserStatus(userId: string, disabled: boolean) {
 
 // Email verification
 export function verifyEmail(token: string) {
-  return request<{ message: string }>(`/auth/verify-email?token=${token}`, { method: "POST" });
+  return request<TokenResponse>(`/auth/verify-email?token=${token}`, { method: "POST" });
 }
 
 export function resendVerification(token?: string | null, email?: string, turnstileToken?: string | null) {

@@ -242,14 +242,16 @@ export function BidProjectsPageV2() {
                 {!projectsQuery.isLoading && projects.length === 0 ? (
                   <TableRow>
                     <TableCell className="wb-projects-table__empty" colSpan={5}>
-                      <FolderKanbanIcon aria-hidden="true" />
-                      <strong>{allProjects.length === 0 ? "创建第一个投标机会" : "没有匹配的机会"}</strong>
-                      <span>{allProjects.length === 0 ? "将一个招标机会转化为可协作、可追溯的响应工作集。" : "调整搜索词或状态筛选。"}</span>
-                      {allProjects.length === 0 ? (
-                        <button className="wb-text-action" onClick={() => setIsCreating(true)} type="button">
-                          新建机会 <ChevronRightIcon aria-hidden="true" />
-                        </button>
-                      ) : null}
+                      <div className="wb-projects-empty-content">
+                        <FolderKanbanIcon aria-hidden="true" />
+                        <strong>{allProjects.length === 0 ? "创建第一个投标机会" : "没有匹配的机会"}</strong>
+                        <span>{allProjects.length === 0 ? "将一个招标机会转化为可协作、可追溯的响应工作集。" : "调整搜索词或状态筛选。"}</span>
+                        {allProjects.length === 0 ? (
+                          <button className="wb-text-action" onClick={() => setIsCreating(true)} type="button">
+                            新建机会 <ChevronRightIcon aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : null}

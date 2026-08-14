@@ -87,6 +87,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { AgentMark } from "@/components/brand";
 import FadeContent from "@/components/FadeContent";
 import { AssistantConfirmationCard } from "./assistant-confirmation-card";
+import { AssistantInputRequestForm } from "./assistant-input-request";
 import { ClaudeActivityTimeline } from "./claude-activity-timeline";
 
 /* ─── Date grouping helpers ─── */
@@ -1862,15 +1863,6 @@ export function AIAssistantPanel({
         </div>
       </div>
 
-      {state.sessionError && (
-        <div
-          data-testid="assistant-panel-error"
-          className="shrink-0 px-4 py-2 text-xs border-b border-border bg-destructive/10 text-destructive"
-        >
-          {state.sessionError}
-        </div>
-      )}
-
       {/* The conversation pane owns both scrolling messages and the composer. */}
       <div
         data-testid="assistant-panel-body"
@@ -2042,6 +2034,12 @@ export function AIAssistantPanel({
                           onCancel={() => void confirmAssistantAction(false)}
                         />
                       )}
+                    {state.pendingInput && (
+                      <AssistantInputRequestForm
+                        request={state.pendingInput}
+                        onSubmit={(content) => void sendMessage(content, { displayContent: content })}
+                      />
+                    )}
                     <ChatContainerScrollAnchor />
                   </>
                 )}

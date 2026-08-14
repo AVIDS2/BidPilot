@@ -12,21 +12,23 @@ import { BrandLogo } from "@/components/brand";
 import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
 import { AuthTrustRail } from "./auth-trust-rail";
 import { getRegistrationErrorKey } from "./registration-errors";
+import { readRegistrationDraft, saveRegistrationDraft } from "./registration-draft";
 
 export function SignupPage() {
   const [searchParams] = useSearchParams();
   const invToken = searchParams.get("invitation") || "";
+  const savedDraft = readRegistrationDraft();
 
-  const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState(savedDraft?.email ?? "");
+  const [displayName, setDisplayName] = useState(savedDraft?.displayName ?? "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [invitationToken, setInvitationToken] = useState(invToken);
+  const [invitationToken, setInvitationToken] = useState(invToken || savedDraft?.invitationToken || "");
   const createOrg = !invitationToken;
-  const [orgName, setOrgName] = useState("");
-  const [orgSlug, setOrgSlug] = useState("");
+  const [orgName, setOrgName] = useState(savedDraft?.orgName ?? "");
+  const [orgSlug, setOrgSlug] = useState(savedDraft?.orgSlug ?? "");
   const [loading, setLoading] = useState(false);
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
@@ -70,6 +72,7 @@ export function SignupPage() {
         createOrg ? orgSlug || undefined : undefined,
         verificationToken,
       );
+      saveRegistrationDraft({ displayName, email, invitationToken, orgName, orgSlug });
       toast.success(t("toast.accountCreated"));
       navigate("/verify-email-prompt", { state: { email } });
     } catch (err: unknown) {

@@ -113,6 +113,16 @@ export interface AssistantConfirmationRequest {
   expectedText?: string;
 }
 
+/** A harness pause that can be answered through a structured UI instead of a
+ * second round of guesswork in free-form chat. */
+export interface AssistantInputRequest {
+  messageId?: string;
+  runtimeRunId?: string;
+  toolName: string;
+  missingFields: string[];
+  message: string;
+}
+
 export interface AssistantExecutionItem {
   id: string;
   messageId?: string;
@@ -192,6 +202,7 @@ export interface AIAssistantState {
   status: AssistantStatus;
   executionItems: AssistantExecutionItem[];
   pendingConfirmation: AssistantConfirmationRequest | null;
+  pendingInput: AssistantInputRequest | null;
   sessionError: string | null;
   selectedProviderConfigId: string | null;
   reasoningEffort: AssistantReasoningEffort;
@@ -252,6 +263,7 @@ type Action =
     }
   | { type: "SET_SESSION_ERROR"; message: string; errorCode?: string }
   | { type: "SET_PENDING_CONFIRMATION"; confirmation: AssistantConfirmationRequest | null }
+  | { type: "SET_PENDING_INPUT"; request: AssistantInputRequest | null }
   | { type: "SET_SELECTED_PROVIDER_CONFIG"; providerConfigId: string | null }
   | { type: "SET_REASONING_EFFORT"; effort: AssistantReasoningEffort }
   | { type: "SET_APPROVAL_MODE"; mode: AssistantApprovalMode }
@@ -275,6 +287,7 @@ const initialState: AIAssistantState = {
   status: "idle",
   executionItems: [],
   pendingConfirmation: null,
+  pendingInput: null,
   sessionError: null,
   selectedProviderConfigId: getStoredValue("assistantProviderConfigId"),
   reasoningEffort: parseReasoningEffort(getStoredValue("assistantReasoningEffort")),
@@ -513,6 +526,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         assistantContentBuffers: {},
         executionItems: [],
         pendingConfirmation: null,
+        pendingInput: null,
         sessionError: null,
       };
     case "SET_LAST_USER_DURABLE_ID": {
@@ -602,6 +616,16 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       });
     }
     case "SET_STATUS":
+      // A late generic SSE terminator must not convert a failure or a durable
+      // human-input pause into a completed turn. The next user turn resumes it.
+      if (
+        action.status === "completed" &&
+        (state.status === "failed" ||
+          state.status === "needs_input" ||
+          state.status === "needs_confirmation")
+      ) {
+        return state;
+      }
       return { ...state, status: action.status };
     case "ADD_EXECUTION_ITEM":
       {
@@ -710,6 +734,13 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           ? { ...action.confirmation, messageId: action.confirmation.messageId ?? state.activeAssistantMessageId ?? undefined }
           : null,
       };
+    case "SET_PENDING_INPUT":
+      return {
+        ...state,
+        pendingInput: action.request
+          ? { ...action.request, messageId: action.request.messageId ?? state.activeAssistantMessageId ?? undefined }
+          : null,
+      };
     case "SET_SELECTED_PROVIDER_CONFIG":
       return { ...state, selectedProviderConfigId: action.providerConfigId };
     case "SET_REASONING_EFFORT":
@@ -738,6 +769,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       return {
         ...state,
         pendingConfirmation: null,
+        pendingInput: null,
         sessionError: null,
       };
     case "CLEAR_MESSAGES":
@@ -748,6 +780,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         assistantContentBuffers: {},
         executionItems: [],
         pendingConfirmation: null,
+        pendingInput: null,
         sessionError: null,
       };
     case "SET_CONTEXT":
@@ -867,6 +900,28 @@ function handleAssistantSseEvent(
     return;
   }
 
+  if (eventType === "assistant.missing_input") {
+    const missingFields = Array.isArray(parsed.missing_fields)
+      ? parsed.missing_fields.filter((field): field is string => typeof field === "string" && field.trim().length > 0)
+      : [];
+    dispatch({
+      type: "SET_PENDING_INPUT",
+      request: {
+        runtimeRunId,
+        toolName: typeof parsed.tool_name === "string" ? parsed.tool_name : "assistant",
+        missingFields,
+        message: typeof parsed.message === "string" && parsed.message.trim()
+          ? parsed.message
+          : "还需要补充信息才能继续。",
+      },
+    });
+    dispatch({ type: "SET_STATUS", status: "needs_input" });
+    // A missing field is an intentional durable pause. The same conversation
+    // can resume after the user submits the structured values.
+    options?.onTerminal?.();
+    return;
+  }
+
   if (eventType === "assistant.turn_started") {
     // A turn becomes visible with its first reasoning or tool event. Creating
     // an empty block here would place the tool timeline before streamed
@@ -928,6 +983,7 @@ function handleAssistantSseEvent(
         isRunning: true,
       },
     });
+    dispatch({ type: "SET_STATUS", status: "executing_tool" });
     return;
   }
 
@@ -1022,10 +1078,16 @@ function handleAssistantSseEvent(
         title: typeof parsed.title === "string" && parsed.title ? parsed.title : toolName,
       },
     });
+    // A completed tool is not necessarily a completed turn: the harness may
+    // still be deciding on the next action or composing the final response.
+    dispatch({ type: "SET_STATUS", status: "thinking" });
     if (typeof result.run_id === "string" || typeof result.runtime_run_id === "string") {
       return;
     }
-    if (toolName === "open_page" && typeof result.route === "string") {
+    // Structured UI actions require an explicit user click. This prevents a
+    // vague request such as “can you show the canvas?” from silently
+    // navigating away before the user can inspect the target.
+    if (toolName === "open_page" && typeof result.route === "string" && !asRecord(result.ui_action).type) {
       options?.navigate?.(result.route);
     }
     // Creating a project is an Agent result, not a navigation command. Keep
@@ -1053,6 +1115,7 @@ function handleAssistantSseEvent(
         turnId,
       },
     });
+    dispatch({ type: "SET_STATUS", status: "failed" });
     return;
   }
 
@@ -1071,6 +1134,7 @@ function handleAssistantSseEvent(
         retryMaxAttempts: typeof parsed.retry_max_attempts === "number" ? parsed.retry_max_attempts : undefined,
       },
     });
+    dispatch({ type: "SET_STATUS", status: "executing_tool" });
     return;
   }
 

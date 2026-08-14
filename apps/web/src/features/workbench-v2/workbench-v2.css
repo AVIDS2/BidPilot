@@ -481,6 +481,12 @@
 .wb-project-create-fields { gap: 8px !important; }
 .wb-project-create-fields [data-slot="field-label"] { color: #55565d; font-size: 12px; font-weight: 620; }
 .wb-project-create-footer { margin: 2px -20px -20px !important; border-color: var(--wb-line) !important; background: #fafafa !important; padding: 12px 20px !important; }
+.wb-project-create-footer .wb-primary-button:disabled {
+  opacity: 1 !important;
+  background: #e2e3e6 !important;
+  color: #8e9096 !important;
+  box-shadow: none !important;
+}
 
 .wb-input,
 .wb-select {
@@ -813,16 +819,17 @@
 .wb-status--attention i { background: var(--wb-amber); }
 
 .wb-projects-table__state,
-.wb-projects-table__empty { height: 230px !important; place-content: center; justify-items: center; gap: 8px; color: var(--wb-muted); text-align: center; }
+.wb-projects-table__empty { height: 230px !important; color: var(--wb-muted); text-align: center; }
 .wb-projects-table__state { display: table-cell; vertical-align: middle; }
-.wb-projects-table__empty { display: grid; }
-.wb-projects-table__empty svg { width: 20px; height: 20px; color: var(--wb-subtle); stroke-width: 1.5; }
-.wb-projects-table__empty strong { color: #45464c; font-size: 13px; font-weight: 620; }
-.wb-projects-table__empty span { max-width: 310px; font-size: 12px; }
+.wb-projects-table__empty { display: table-cell; padding: 0 !important; vertical-align: middle; }
+.wb-projects-empty-content { display: grid; width: min(100%, 360px); margin: 0 auto; place-items: center; gap: 8px; padding: 24px; }
+.wb-projects-empty-content svg { width: 20px; height: 20px; color: var(--wb-subtle); stroke-width: 1.5; }
+.wb-projects-empty-content strong { color: #45464c; font-size: 13px; font-weight: 620; }
+.wb-projects-empty-content span { max-width: 310px; font-size: 12px; line-height: 1.55; }
 
 .wb-text-action,
 .wb-rail-link { gap: 5px; border: 0; background: transparent; color: #5758a2; font-size: 12px; font-weight: 600; }
-.wb-text-action { margin-top: 4px; }
+.wb-text-action { display: inline-flex; align-items: center; margin-top: 4px; padding: 2px 4px; }
 .wb-text-action svg,
 .wb-rail-link svg { width: 14px; height: 14px; transition: transform 120ms ease-out; }
 .wb-text-action:hover svg,

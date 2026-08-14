@@ -109,6 +109,43 @@ def test_generic_multi_tool_turn_preserves_model_order_and_result_context() -> N
     assert json.loads(tool_messages[1]["content"])["result"] == {"saved": True}
 
 
+def test_explicit_parallel_safe_tools_execute_together_and_keep_result_order() -> None:
+    class ParallelExecutor:
+        allow_parallel_tools = True
+
+        def __init__(self) -> None:
+            self.started: list[str] = []
+            self._both_started = asyncio.Event()
+
+        async def execute(self, tool_call, _context):
+            self.started.append(tool_call.name)
+            if len(self.started) == 2:
+                self._both_started.set()
+            await asyncio.wait_for(self._both_started.wait(), timeout=0.2)
+            return HarnessToolOutcome.succeeded(f"{tool_call.name} read", {"name": tool_call.name})
+
+    executor = ParallelExecutor()
+    loop = HarnessLoop(
+        run_id="parallel-run",
+        model=ScriptedModel(deque([
+            step("", call("read-a", "read_a"), call("read-b", "read_b")),
+            step("Both independent reads completed."),
+        ])),
+        executor=executor,
+        tools=(
+            HarnessToolDefinition("read_a", "Independent read A", {"type": "object"}, parallel_safe=True),
+            HarnessToolDefinition("read_b", "Independent read B", {"type": "object"}, parallel_safe=True),
+        ),
+    )
+
+    result = _run(loop.run([{"role": "user", "content": "read both"}]))
+
+    assert result.terminal_state is HarnessTerminalState.COMPLETED
+    assert executor.started == ["read_a", "read_b"]
+    tool_messages = [message for message in loop.model.seen_messages[1] if message["role"] == "tool"]  # type: ignore[attr-defined]
+    assert [message["name"] for message in tool_messages] == ["read_a", "read_b"]
+
+
 def test_failed_tool_becomes_model_visible_and_the_model_can_correct_it() -> None:
     result, loop, executor = _run(run_loop(
         [

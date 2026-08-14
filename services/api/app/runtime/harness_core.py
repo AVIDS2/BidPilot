@@ -53,8 +53,9 @@ class HarnessToolDefinition:
 
     ``provider_spec`` remains opaque to the loop so a host can expose the
     schema required by LangChain, OpenAI-compatible APIs, or another adapter.
-    ``parallel_safe`` is intentionally metadata only for now; sequential
-    execution keeps dependent actions and durable audit trails explainable.
+    ``parallel_safe`` only opts a tool into the core loop's parallel lane. A
+    host still has to explicitly allow it; approval, writes and shared-session
+    tools stay sequential by default.
     """
 
     name: str
@@ -198,6 +199,7 @@ class HarnessLoopConfig:
     max_steps: int = 24
     max_tools_per_turn: int = 4
     max_consecutive_failures: int = 3
+    parallel_tools: bool = True
 
     def __post_init__(self) -> None:
         if self.max_steps < 1:
@@ -298,6 +300,7 @@ class HarnessLoop:
         self.followup_input_provider = followup_input_provider
         self.plan_policy = plan_policy
         self._tool_names = frozenset(tool.name for tool in self.tools)
+        self._tool_definitions = {tool.name: tool for tool in self.tools}
         self._events: list[HarnessEvent] = []
         self._messages: list[HarnessMessage] = []
         self._completed: list[str] = []
@@ -407,6 +410,91 @@ class HarnessLoop:
                     )
                 ):
                     yield event
+
+            if self._can_execute_parallel(calls):
+                context = self._execution_context(turn_id=turn_id, step=step)
+                for call in calls:
+                    async for event in self._emit(
+                        HarnessEvent(
+                            type="tool.started",
+                            turn_id=turn_id,
+                            tool_call_id=call.id,
+                            tool_name=call.name,
+                            payload={"arguments": dict(call.arguments)},
+                        )
+                    ):
+                        yield event
+                outcomes = await asyncio.gather(
+                    *(self._execute_call(call, context) for call in calls),
+                )
+                paused_outcome: HarnessToolOutcome | None = None
+                terminal_failure: HarnessToolOutcome | None = None
+                for call, outcome in zip(calls, outcomes, strict=True):
+                    self._messages.append(_tool_result_message(call, outcome))
+                    event_type = {
+                        ToolOutcomeKind.SUCCEEDED: "tool.succeeded",
+                        ToolOutcomeKind.FAILED: "tool.failed",
+                        ToolOutcomeKind.PAUSED: "tool.paused",
+                        ToolOutcomeKind.BLOCKED: "tool.blocked",
+                    }[outcome.kind]
+                    async for event in self._emit(
+                        HarnessEvent(
+                            type=event_type,
+                            turn_id=turn_id,
+                            tool_call_id=call.id,
+                            tool_name=call.name,
+                            summary=outcome.public_summary,
+                            payload={
+                                "error_code": outcome.error_code,
+                                "pause_reason": outcome.pause_reason,
+                                "recoverable": outcome.recoverable,
+                                "result": outcome.model_payload,
+                            },
+                        )
+                    ):
+                        yield event
+                    if outcome.kind is ToolOutcomeKind.SUCCEEDED:
+                        self._completed.append(call.name)
+                        self._consecutive_failures = 0
+                    else:
+                        self._failed.append(call.name)
+                        self._consecutive_failures += 1
+                        if outcome.kind is ToolOutcomeKind.PAUSED and paused_outcome is None:
+                            paused_outcome = outcome
+                        if (
+                            terminal_failure is None
+                            and (not outcome.recoverable or self._consecutive_failures >= self.config.max_consecutive_failures)
+                        ):
+                            terminal_failure = outcome
+                if paused_outcome is not None:
+                    async for event in self._finish(
+                        HarnessTerminalState.PAUSED,
+                        summary=paused_outcome.public_summary,
+                        turns=step,
+                        pause_reason=paused_outcome.pause_reason,
+                    ):
+                        yield event
+                    return
+                if terminal_failure is not None:
+                    async for event in self._finish(
+                        HarnessTerminalState.FAILED,
+                        summary="tool failure budget exhausted",
+                        turns=step,
+                        public_message=terminal_failure.public_summary,
+                        error_code=terminal_failure.error_code,
+                    ):
+                        yield event
+                    return
+                steering = await self._consume_steering_input()
+                if steering:
+                    self._messages.append({"role": "user", "content": steering})
+                    async for event in self._emit(
+                        HarnessEvent(type="steering.accepted", turn_id=turn_id, summary=steering)
+                    ):
+                        yield event
+                async for event in self._emit(HarnessEvent(type="turn.completed", turn_id=turn_id)):
+                    yield event
+                continue
 
             for call in calls:
                 if await self._cancelled():
@@ -542,6 +630,24 @@ class HarnessLoop:
         if outcome is not None and not isinstance(outcome, HarnessToolOutcome):
             return HarnessToolOutcome.failed("tool preparation returned an invalid outcome", error_code="tool_protocol_invalid")
         return outcome
+
+    def _can_execute_parallel(self, calls: Sequence[HarnessToolCall]) -> bool:
+        """Allow concurrency only when both the host and tool declarations opt in.
+
+        Governed product executors expose ``prepare`` to persist actions and
+        approvals, so they intentionally use the sequential lane. A stateless
+        read-only executor can opt in with ``allow_parallel_tools = True``.
+        """
+        if len(calls) < 2 or not self.config.parallel_tools:
+            return False
+        if not bool(getattr(self.executor, "allow_parallel_tools", False)):
+            return False
+        if callable(getattr(self.executor, "prepare", None)):
+            return False
+        return all(
+            (definition := self._tool_definitions.get(call.name)) is not None and definition.parallel_safe
+            for call in calls
+        )
 
     async def _cancelled(self) -> bool:
         if self.cancellation_check is None:

@@ -26,7 +26,7 @@ import {
   type AttachmentPreviewSelection,
 } from "@/components/ai-assistant/AIAssistantPanel";
 import { ClaudeAgentThread } from "./claude-agent-thread";
-import { useAIAssistant } from "@/lib/ai-assistant-store";
+import { useAIAssistant, type AssistantStatus } from "@/lib/ai-assistant-store";
 import {
   deleteChatConversation,
   renameChatConversation,
@@ -303,6 +303,26 @@ function AgentFooter({ onHistory }: { onHistory: () => void }) {
   );
 }
 
+const AGENT_STATUS_LABELS: Record<AssistantStatus, string> = {
+  idle: "就绪",
+  thinking: "正在思考",
+  needs_input: "等待补充信息",
+  needs_confirmation: "等待确认",
+  executing_tool: "正在执行工具",
+  running_workflow: "任务运行中",
+  completed: "本轮已完成",
+  failed: "本轮执行失败",
+};
+
+function AgentLiveStatus({ status }: { status: AssistantStatus }) {
+  return (
+    <span className={`agent-live-status is-${status}`} aria-live="polite">
+      <i aria-hidden="true" />
+      {AGENT_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
 export function LinearAgentWorkspace() {
   const navigate = useNavigate();
   const {
@@ -413,6 +433,7 @@ export function LinearAgentWorkspace() {
               <button type="button" className="chat-switch" aria-expanded={historyOpen} onClick={() => setHistoryOpen((value) => !value)}>
                 <span>{conversationTitle}</span><ChevronDownIcon size={13} />
               </button>
+              <AgentLiveStatus status={state.status} />
               <button
                 type="button"
                 className={`agent-header-icon${currentConversation?.is_pinned ? " is-active" : ""}`}
@@ -440,7 +461,6 @@ export function LinearAgentWorkspace() {
               onTogglePinned={togglePinnedConversation}
             />
           </div>
-          {state.sessionError && <div className="bp-agent-session-error">{state.sessionError}</div>}
           <div
             className={`agent-content bidpilot-claude-thread${state.messages.length ? " has-messages" : ""}`}
             data-testid="agent-conversation-pane"
@@ -453,6 +473,7 @@ export function LinearAgentWorkspace() {
                   onConfigureProvider={() => navigate("/settings/providers")}
                   onConfirm={(confirmationText) => void confirmAssistantAction(true, confirmationText)}
                   onCancelConfirmation={() => void confirmAssistantAction(false)}
+                  onSubmitInput={(content) => void sendMessage(content, { displayContent: content })}
                   onRetryFromCheckpoint={(checkpointMessageId, content) => {
                     void retryFromCheckpoint(checkpointMessageId, content);
                   }}

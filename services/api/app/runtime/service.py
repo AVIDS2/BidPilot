@@ -83,6 +83,9 @@ def _action_event_payload(action: RuntimeAction, **payload: Any) -> dict[str, An
     }
     if action.turn_id:
         value["turn_id"] = action.turn_id
+    # RuntimeAction already stores this payload through redact_arguments.
+    # Replay clients need it to explain what the tool was actually asked to do.
+    value["arguments"] = action.arguments_json or {}
     value.update(payload)
     return value
 

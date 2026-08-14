@@ -296,28 +296,34 @@ def register_user_command(db: Session, payload: UserRegister) -> CurrentUser:
     return _user_to_current(db, user, plan="starter")
 
 
-def login_command(db: Session, email: str, password: str) -> TokenResponse:
-    user = get_user_by_email(db, email)
-    if user is None or not _verify_password(password, user.password_hash):
-        raise ValueError("Invalid credentials")
+def _issue_session_tokens(db: Session, user: User) -> TokenResponse:
+    """Create a persistent browser session for an authenticated user."""
     if user.disabled:
         raise ValueError("Account is disabled. Contact your administrator.")
     if not user.email_verified:
         raise ValueError("Email not verified. Please check your email and verify your account.")
+
     refresh_token = _create_refresh_token(user.id)
-    # Store hashed refresh token in DB for server-side validation
     token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
-    rt = RefreshToken(
-        user_id=user.id,
-        token_hash=token_hash,
-        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=REFRESH_EXPIRES_DAYS),
+    db.add(
+        RefreshToken(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=REFRESH_EXPIRES_DAYS),
+        )
     )
-    db.add(rt)
     db.commit()
     return TokenResponse(
         access_token=_create_token(user.id),
         refresh_token=refresh_token,
     )
+
+
+def login_command(db: Session, email: str, password: str) -> TokenResponse:
+    user = get_user_by_email(db, email)
+    if user is None or not _verify_password(password, user.password_hash):
+        raise ValueError("Invalid credentials")
+    return _issue_session_tokens(db, user)
 
 
 def update_user_command(db: Session, user_id: str, payload: UserUpdate) -> CurrentUser:
@@ -570,6 +576,19 @@ def verify_email_command(db: Session, token: str) -> CurrentUser:
     db.commit()
     db.refresh(user)
     return _user_to_current(db, user)
+
+
+def verify_email_and_create_session_command(db: Session, token: str) -> TokenResponse:
+    """Redeem a verified email link for the first browser session.
+
+    The verification link is proof of mailbox control, so requiring the user to
+    type the password again only adds a dead-end in the registration flow.
+    """
+    verified_user = verify_email_command(db, token)
+    user = get_user_by_id(db, verified_user.id)
+    if user is None:
+        raise ValueError("User not found")
+    return _issue_session_tokens(db, user)
 
 
 def refresh_token_command(db: Session, refresh_token: str) -> TokenResponse:

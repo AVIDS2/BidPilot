@@ -77,16 +77,19 @@ def test_login_succeeds_after_verification(client: TestClient = TestClient(app))
 
 
 def test_verify_email_endpoint(client: TestClient = TestClient(app)):
-    """POST /auth/verify-email with a valid token marks user as verified."""
+    """A verified link marks the account verified and starts a browser session."""
     email = _register(client)
-    # Get a verification token via resend
-    resp = client.post(f"/auth/resend-verification?email={email}")
-    assert resp.status_code == 200
+    from app.auth.service import create_email_verification_token
+    from app.db import get_db
 
+    db = next(get_db())
     user_id = _get_user_id(client, email)
-    resp = client.post(f"/auth/users/{user_id}/verify")
+    assert user_id is not None
+    token = create_email_verification_token(db, user_id)
+    resp = client.post(f"/auth/verify-email?token={token}")
     assert resp.status_code == 200
-    assert resp.json().get("email_verified") is True
+    assert resp.json().get("access_token")
+    assert resp.json().get("refresh_token")
 
 
 def test_resend_verification_rate_limited(client: TestClient = TestClient(app)):

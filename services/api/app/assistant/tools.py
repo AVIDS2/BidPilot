@@ -464,12 +464,19 @@ def open_page(arguments: dict) -> AssistantToolResult:
         "/docs",
         "/settings/providers",
     }
-    if route not in allowed_routes and not route.startswith("/projects/"):
+    if route not in allowed_routes and not route.startswith("/projects/") and not route.startswith("/projects?"):
         route = "/"
+    result: dict[str, object] = {"route": route}
+    if "surface=workflow" in route:
+        result["ui_action"] = {
+            "type": "canvas",
+            "label": "打开任务编排画布",
+            "route": route,
+        }
     return AssistantToolResult(
         tool_name="open_page",
-        result={"route": route},
-        summary="已准备好跳转页面。",
+        result=result,
+        summary="已准备好任务编排画布入口，请点击打开。" if "surface=workflow" in route else "已准备好跳转页面。",
     )
 
 

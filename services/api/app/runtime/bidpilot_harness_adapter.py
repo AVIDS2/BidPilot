@@ -140,6 +140,7 @@ class BidPilotToolExecutor:
                         "title": title,
                         "tool_call_id": call.id,
                         "turn_id": context.turn_id,
+                        "arguments": dict(call.arguments),
                         "provider": f"mcp:{server_name}",
                     },
                 ),

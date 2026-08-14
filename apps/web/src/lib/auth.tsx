@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { loginUser, registerUser, getCurrentUser, type CurrentUser } from "@/lib/api";
+import { loginUser, registerUser, getCurrentUser, verifyEmail, type CurrentUser } from "@/lib/api";
 import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser-storage";
 
 interface AuthState {
@@ -7,6 +7,7 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string, turnstileToken?: string | null) => Promise<void>;
+  completeEmailVerification: (token: string) => Promise<void>;
   register: (email: string, displayName: string, password: string, invitationToken?: string, orgName?: string, orgSlug?: string, turnstileToken?: string | null) => Promise<CurrentUser>;
   logout: () => void;
   setUser: (user: CurrentUser) => void;
@@ -57,6 +58,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
   }, []);
 
+  const completeEmailVerification = useCallback(async (verificationToken: string) => {
+    const res = await verifyEmail(verificationToken);
+    setStoredValue("token", res.access_token);
+    if (res.refresh_token) setStoredValue("refreshToken", res.refresh_token);
+    setToken(res.access_token);
+    setUser(await getCurrentUser(res.access_token));
+  }, []);
+
   const register = useCallback(async (
     email: string,
     displayName: string,
@@ -90,10 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     token,
     isAuthenticated: !!token,
     login,
+    completeEmailVerification,
     register,
     logout,
     setUser,
-  }), [user, token, login, register, logout]);
+  }), [user, token, login, completeEmailVerification, register, logout]);
 
   return (
     <AuthContext.Provider value={value}>

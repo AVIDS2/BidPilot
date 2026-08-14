@@ -18,7 +18,7 @@ from app.security.turnstile import verify_turnstile_or_raise
 
 import math
 from .schemas import CurrentUser, TokenResponse, UserLogin, UserRegister, UserUpdate, SubscriptionRead, SubscriptionUpdate, PasswordResetRequest, PasswordResetConfirm, UsersPaginatedResponse
-from .service import AUTH_REQUIRED, get_current_user_from_token, get_dev_user, login_command, register_user_command, update_user_command, update_subscription_command, _user_to_current, require_admin, create_password_reset_token, confirm_password_reset, create_email_verification_token, verify_email_command, refresh_token_command, login_rate_limiter, resend_rate_limiter, registration_rate_limiter, password_reset_rate_limiter, admin_verify_user_command, delete_user_account_command
+from .service import AUTH_REQUIRED, get_current_user_from_token, get_dev_user, login_command, register_user_command, update_user_command, update_subscription_command, _user_to_current, require_admin, create_password_reset_token, confirm_password_reset, create_email_verification_token, verify_email_and_create_session_command, refresh_token_command, login_rate_limiter, resend_rate_limiter, registration_rate_limiter, password_reset_rate_limiter, admin_verify_user_command, delete_user_account_command
 from app.billing.service import get_billing_summary
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -286,11 +286,10 @@ def confirm_reset(payload: PasswordResetConfirm, db: Session = Depends(get_db)) 
 
 # --- Email verification ---
 
-@router.post("/verify-email")
-def verify_email(token: str, db: Session = Depends(get_db)) -> dict:
+@router.post("/verify-email", response_model=TokenResponse)
+def verify_email(token: str, db: Session = Depends(get_db)) -> TokenResponse:
     try:
-        verify_email_command(db, token)
-        return {"message": "Email verified successfully."}
+        return verify_email_and_create_session_command(db, token)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

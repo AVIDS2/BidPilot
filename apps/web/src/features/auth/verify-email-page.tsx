@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { verifyEmail } from "@/lib/api"
+import { useAuth } from "@/lib/auth"
 import { CheckCircleIcon, XCircleIcon, ArrowLeftIcon } from "lucide-react"
 import { BrandLogo } from "@/components/brand"
+import { clearRegistrationDraft } from "./registration-draft"
 
 export function VerifyEmailPage() {
   const [searchParams] = useSearchParams()
@@ -15,6 +16,7 @@ export function VerifyEmailPage() {
   const [result, setResult] = useState<"success" | "error" | null>(null)
   const [errorMsg, setErrorMsg] = useState("")
   const { t } = useTranslation("auth")
+  const { completeEmailVerification } = useAuth()
 
   // Auto-verify if token is present - using useEffect instead of calling in render
   useEffect(() => {
@@ -23,8 +25,10 @@ export function VerifyEmailPage() {
     const handleVerify = async () => {
       setVerifying(true)
       try {
-        await verifyEmail(token)
+        await completeEmailVerification(token)
+        clearRegistrationDraft()
         setResult("success")
+        window.setTimeout(() => navigate("/dashboard", { replace: true }), 900)
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         setResult("error")
@@ -35,7 +39,7 @@ export function VerifyEmailPage() {
     }
 
     handleVerify()
-  }, [token, result, verifying, t])
+  }, [completeEmailVerification, navigate, token, result, verifying, t])
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-6">
@@ -89,7 +93,7 @@ export function VerifyEmailPage() {
             </p>
             {result === "success" && (
               <button
-                onClick={() => navigate("/login")}
+                onClick={() => navigate("/dashboard", { replace: true })}
                 className="w-full py-3.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98]"
               >
                 {t("verifyEmail.continueToLogin")}

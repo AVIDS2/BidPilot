@@ -548,6 +548,7 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                     "tool_call_id": tool_call_id,
                     "turn_id": turn_id,
                     "title": resolved_title,
+                    "arguments": payload.get("arguments") or {},
                     "state": "executing_tool",
                 },
             )

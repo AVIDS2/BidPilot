@@ -317,6 +317,19 @@
   background: color-mix(in oklch, var(--cr-paper) 92%, #f3f3ef);
 }
 
+/* Trace is an event stream, not a stack of floating panels. Keep framing for
+   real previews only; facts, ids and actions stay attached to their event. */
+.assistant-claude-timeline .cr-result-facts,
+.assistant-claude-timeline .cr-artifact-actions,
+.assistant-claude-timeline .cr-run-trace,
+.assistant-claude-timeline .cr-remote-materials,
+.assistant-claude-timeline .cr-remote-import {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .assistant-claude-timeline .cr-result-facts {
   padding: 9px 10px;
 }
@@ -398,6 +411,24 @@
 .assistant-claude-timeline .cr-run-trace > summary::before { content: "›"; display: inline-block; margin-right: 6px; transition: transform 120ms ease; }
 .assistant-claude-timeline .cr-run-trace[open] > summary::before { transform: rotate(90deg); }
 .assistant-claude-timeline .cr-run-trace > dl { padding: 0 10px 9px; }
+.assistant-claude-timeline .cr-tool-payload > div { padding: 0 0 8px; }
+.assistant-claude-timeline .cr-tool-payload > div > small {
+  display: block;
+  margin: 3px 0;
+  color: #8b8983;
+  font-size: 11px;
+}
+.assistant-claude-timeline .cr-tool-payload pre {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  color: #56544f;
+  font-family: var(--cr-mono);
+  font-size: 11px;
+  line-height: 17px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .assistant-claude-timeline .cr-run-step-row {
   display: flex;
@@ -497,7 +528,8 @@
 
 .assistant-claude-timeline .cr-run-step-button:hover,
 .assistant-claude-timeline .cr-run-step.is-expanded {
-  background: rgba(255, 255, 255, 0.45);
+  /* Trace rows are events in one stream, not independently elevated cards. */
+  background: transparent;
   color: #4b4944;
 }
 
@@ -570,10 +602,10 @@
   display: grid;
   max-height: 186px;
   overflow-y: auto;
-  border: 1px solid color-mix(in oklch, var(--cr-line) 88%, transparent);
-  border-radius: 7px;
-  background: color-mix(in oklch, var(--cr-paper) 78%, transparent);
-  padding: 3px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   scrollbar-gutter: stable;
 }
 
@@ -593,9 +625,10 @@
 
 .assistant-claude-timeline .cr-search-source:hover,
 .assistant-claude-timeline .cr-search-source:focus-visible {
-  background: #efefec;
+  background: transparent;
   color: #302f2b;
-  outline: 0;
+  outline: 1px solid color-mix(in oklch, var(--cr-line) 85%, transparent);
+  outline-offset: -1px;
 }
 
 .assistant-claude-timeline .cr-search-source > svg {

@@ -148,6 +148,34 @@ describe("AIAssistantPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps a missing-input pause actionable when a generic stream end follows it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-input","runtime_run_id":"run-input","state":"thinking"}',
+            'event: assistant.missing_input\ndata: {"runtime_run_id":"run-input","tool_name":"create_project","missing_fields":["name"],"message":"请提供项目名称。","state":"needs_input"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-input","full_response":"请提供项目名称。","state":"completed"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "创建一个项目" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("需要补充信息")).toBeInTheDocument();
+    expect(screen.getByText("请提供项目名称。")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("填写项目名称")).toBeInTheDocument();
+    expect(screen.queryByText("本轮已完成")).not.toBeInTheDocument();
+  });
+
   it("submits a prompt once when Enter is pressed", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -748,7 +776,7 @@ describe("AIAssistantPanel", () => {
     await waitFor(() => {
       expect(screen.getAllByText("已打开项目页。").length).toBeGreaterThan(0);
     });
-    expect(screen.getByText("Open page completed")).toBeInTheDocument();
+    expect(screen.getAllByText("Open page").length).toBeGreaterThan(0);
     expect(screen.getAllByText("done").length).toBeGreaterThan(0);
     expect(
       screen.queryByText("raw detail should be hidden until expanded"),
@@ -764,7 +792,7 @@ describe("AIAssistantPanel", () => {
     ).toBeInTheDocument();
     expect(
       screen
-        .getByText("Open page completed")
+        .getAllByText("Open page").find((element) => Boolean(element.closest(".cr-run-step")))!
         .compareDocumentPosition(screen.getAllByText("已打开项目页。")[0]) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -800,7 +828,7 @@ describe("AIAssistantPanel", () => {
 
     await expandActivityDetails();
 
-    expect(screen.getByText("Search projects")).toBeInTheDocument();
+    expect(screen.getAllByText("Search projects").length).toBeGreaterThan(0);
     expect(screen.queryByText("Returned 1 results")).not.toBeInTheDocument();
     expect(screen.queryByText("Input")).not.toBeInTheDocument();
     expect(screen.queryByText("Output")).not.toBeInTheDocument();
@@ -844,10 +872,10 @@ describe("AIAssistantPanel", () => {
 
     await expandActivityDetails();
 
-    expect(screen.getByText("Read project overview")).toBeInTheDocument();
-    expect(screen.getByText("Check material bundles")).toBeInTheDocument();
-    expect(screen.getByText("Check deliverables")).toBeInTheDocument();
-    expect(screen.getByText("Check sections")).toBeInTheDocument();
+    expect(screen.getAllByText("Read project overview").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Check material bundles").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Check deliverables").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Check sections").length).toBeGreaterThan(0);
     expect(screen.queryByText("get_project_summary")).not.toBeInTheDocument();
     expect(screen.queryByText("list_project_bundles")).not.toBeInTheDocument();
     expect(screen.queryByText("list_deliverables")).not.toBeInTheDocument();
@@ -1043,7 +1071,7 @@ describe("AIAssistantPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByText("第一轮完成。")).toBeInTheDocument();
-      expect(screen.getByText("Open page completed")).toBeInTheDocument();
+      expect(screen.getAllByText("Open page").length).toBeGreaterThan(0);
     });
 
     fireEvent.change(input, { target: { value: "Search Acme projects" } });
@@ -1051,10 +1079,10 @@ describe("AIAssistantPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByText("第二轮完成。")).toBeInTheDocument();
-      expect(screen.getByText("Search projects completed")).toBeInTheDocument();
+      expect(screen.getAllByText("Search projects").length).toBeGreaterThan(0);
     });
 
-    const firstTool = screen.getAllByText("Open page completed")[0];
+    const firstTool = screen.getAllByText("Open page")[0];
     const secondUserMessage = screen.getByText("Search Acme projects");
     expect(
       firstTool.compareDocumentPosition(secondUserMessage) &
@@ -1117,7 +1145,7 @@ describe("AIAssistantPanel", () => {
     controller!.close();
 
     await waitFor(() => {
-      expect(screen.getByText("Search projects completed")).toBeInTheDocument();
+      expect(screen.getAllByText("Search projects").length).toBeGreaterThan(0);
       expect(screen.getByText("找到 test 项目。")).toBeInTheDocument();
     });
   });

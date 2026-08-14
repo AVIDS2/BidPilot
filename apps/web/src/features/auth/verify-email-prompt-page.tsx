@@ -8,11 +8,12 @@ import { MailCheckIcon, ArrowLeftIcon } from "lucide-react"
 import { toast } from "sonner"
 import { TurnstileWidget, isTurnstileConfigured, resetTurnstile, type TurnstileWidgetHandle } from "@/components/security/turnstile-widget"
 import { BrandLogo } from "@/components/brand"
+import { readRegistrationDraft } from "./registration-draft"
 
 export function VerifyEmailPromptPage() {
   const location = useLocation()
   const navigate = useNavigate()
-  const email = (location.state as { email?: string } | null)?.email || ""
+  const email = (location.state as { email?: string } | null)?.email || readRegistrationDraft()?.email || ""
   const [resending, setResending] = useState(false)
   const [resent, setResent] = useState(false)
   const [turnstileWidgetId, setTurnstileWidgetId] = useState<string | null>(null)

@@ -449,6 +449,22 @@ def test_open_page_executes_without_confirmation(client, default_user_id: str) -
     assert succeeded[0]["result"]["route"] == "/projects"
 
 
+def test_open_workflow_canvas_keeps_an_explicit_project_scoped_ui_action() -> None:
+    from app.assistant.runtime import classify_locally
+    from app.assistant.tools import open_page
+
+    intent = classify_locally("打开当前项目的任务编排画布", "project-alpha")
+    result = open_page(intent.arguments)
+
+    assert intent.tool_name == "open_page"
+    assert result.result["route"] == "/projects/project-alpha?surface=workflow"
+    assert result.result["ui_action"] == {
+        "type": "canvas",
+        "label": "打开任务编排画布",
+        "route": "/projects/project-alpha?surface=workflow",
+    }
+
+
 def test_readiness_intent_requires_project_context_and_routes_safely() -> None:
     from app.assistant.runtime import classify_locally
 
