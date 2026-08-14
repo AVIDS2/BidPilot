@@ -8,10 +8,13 @@ import {
 } from "react";
 import {
   BotIcon,
+  CircleAlertIcon,
+  CirclePauseIcon,
   ChevronDownIcon,
   Clock3Icon,
   FileSearchIcon,
   FileTextIcon,
+  LoaderCircleIcon,
   MoreHorizontalIcon,
   PanelTopIcon,
   PencilIcon,
@@ -26,7 +29,7 @@ import {
   type AttachmentPreviewSelection,
 } from "@/components/ai-assistant/AIAssistantPanel";
 import { ClaudeAgentThread } from "./claude-agent-thread";
-import { useAIAssistant, type AssistantStatus } from "@/lib/ai-assistant-store";
+import { useAIAssistant, type AIAssistantState } from "@/lib/ai-assistant-store";
 import {
   deleteChatConversation,
   renameChatConversation,
@@ -303,23 +306,55 @@ function AgentFooter({ onHistory }: { onHistory: () => void }) {
   );
 }
 
-const AGENT_STATUS_LABELS: Record<AssistantStatus, string> = {
-  idle: "就绪",
-  thinking: "正在思考",
-  needs_input: "等待补充信息",
-  needs_confirmation: "等待确认",
-  executing_tool: "正在执行工具",
-  running_workflow: "任务运行中",
-  completed: "本轮已完成",
-  failed: "本轮执行失败",
-};
+function latestRelevantExecution(state: AIAssistantState, status: AIAssistantState["status"]) {
+  return [...state.executionItems]
+    .reverse()
+    .find((item) =>
+      status === "failed"
+        ? item.status === "failed"
+        : item.status === "running" || item.status === "pending",
+    );
+}
 
-function AgentLiveStatus({ status }: { status: AssistantStatus }) {
+function scrollToLatestAgentTrace() {
+  document.querySelector(".cr-task-trace:last-of-type, .assistant-claude-timeline:last-of-type")
+    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+/**
+ * Pi/OpenCode keep session state attached to the active turn instead of
+ * permanently decorating the page chrome. Hide idle/completed states and
+ * surface only the concrete blocking or executing step above the composer.
+ */
+function AgentRunIndicator({ state }: { state: AIAssistantState }) {
+  const status = state.status;
+  const active = latestRelevantExecution(state, status);
+  if (status === "idle" || status === "completed") return null;
+
+  const tone = status === "failed" ? "failed" : status === "needs_input" || status === "needs_confirmation" ? "waiting" : "running";
+  const Icon = tone === "failed" ? CircleAlertIcon : tone === "waiting" ? CirclePauseIcon : LoaderCircleIcon;
+  const headline =
+    status === "thinking" ? "正在理解你的请求" :
+    status === "needs_input" ? "还需要你补充信息" :
+    status === "needs_confirmation" ? "等待你确认下一步" :
+    status === "running_workflow" ? "正在运行任务编排" :
+    status === "failed" ? "这一步没有完成" : "正在执行";
+  const detail =
+    status === "needs_input" ? state.pendingInput?.message :
+    status === "needs_confirmation" ? state.pendingConfirmation?.message :
+    active?.summary || active?.title || (status === "thinking" ? "正在整理上下文与下一步" : "执行详情会实时出现在本轮轨迹中");
+
   return (
-    <span className={`agent-live-status is-${status}`} aria-live="polite">
-      <i aria-hidden="true" />
-      {AGENT_STATUS_LABELS[status]}
-    </span>
+    <div className={`agent-run-indicator is-${tone}`} role="status" aria-live="polite">
+      <Icon aria-hidden="true" size={15} />
+      <span className="agent-run-indicator-copy">
+        <strong>{headline}</strong>
+        {detail ? <small>{detail}</small> : null}
+      </span>
+      <button type="button" onClick={scrollToLatestAgentTrace}>
+        查看轨迹
+      </button>
+    </div>
   );
 }
 
@@ -433,7 +468,6 @@ export function LinearAgentWorkspace() {
               <button type="button" className="chat-switch" aria-expanded={historyOpen} onClick={() => setHistoryOpen((value) => !value)}>
                 <span>{conversationTitle}</span><ChevronDownIcon size={13} />
               </button>
-              <AgentLiveStatus status={state.status} />
               <button
                 type="button"
                 className={`agent-header-icon${currentConversation?.is_pinned ? " is-active" : ""}`}
@@ -479,6 +513,7 @@ export function LinearAgentWorkspace() {
                   }}
                 />
                 <div className="bp-linear-agent-composer-slot" aria-label="Agent composer">
+                  <AgentRunIndicator state={state} />
                   <AIAssistantPanel variant="linear-agent" onPreviewAttachment={setPreviewAttachment} />
                 </div>
               </>

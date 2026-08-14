@@ -164,19 +164,6 @@
 .bidpilot-linear-agent .chat-switch { display: inline-flex; min-width: 0; max-width: min(460px, calc(100vw - 340px)); height: 28px; align-items: center; gap: 5px; overflow: hidden; border: 1px solid transparent; border-radius: 5px; color: lch(19.8 1.25 282); margin-left: -3px; padding: 0 8px; font-size: 12px; font-weight: 520; text-overflow: ellipsis; white-space: nowrap; transition: border-color 140ms ease, background-color 140ms ease; }
 .bidpilot-linear-agent .chat-switch:hover { border-color: var(--linear-line); background: #fff; }
 .bidpilot-linear-agent .chat-switch > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bidpilot-linear-agent .agent-live-status { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; color: lch(51 3 282); font-size: 11px; white-space: nowrap; }
-.bidpilot-linear-agent .agent-live-status i { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
-.bidpilot-linear-agent .agent-live-status.is-thinking,
-.bidpilot-linear-agent .agent-live-status.is-executing_tool,
-.bidpilot-linear-agent .agent-live-status.is-running_workflow { color: #2563eb; }
-.bidpilot-linear-agent .agent-live-status.is-thinking i,
-.bidpilot-linear-agent .agent-live-status.is-executing_tool i,
-.bidpilot-linear-agent .agent-live-status.is-running_workflow i { animation: agent-live-pulse 1.1s ease-in-out infinite; }
-.bidpilot-linear-agent .agent-live-status.is-needs_input,
-.bidpilot-linear-agent .agent-live-status.is-needs_confirmation { color: #a16207; }
-.bidpilot-linear-agent .agent-live-status.is-failed { color: #c2413b; }
-.bidpilot-linear-agent .agent-live-status.is-completed { color: #15803d; }
-@keyframes agent-live-pulse { 50% { opacity: 0.25; transform: scale(0.72); } }
 .bidpilot-linear-agent .agent-header-icon { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 5px; color: lch(49 0 282); transition: background-color 120ms ease, color 120ms ease; }
 .bidpilot-linear-agent .agent-header-icon:hover { background: lch(96.5 0 282); color: lch(25 0 282); }
 .bidpilot-linear-agent .agent-header-icon.is-active { color: #e8ae19; }
@@ -228,6 +215,25 @@
   background: var(--linear-surface);
   padding: 14px 24px 18px;
 }
+.bidpilot-linear-agent .agent-run-indicator {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 9px;
+  width: min(712px, 100%);
+  margin: 0 auto 8px;
+  color: #4d4b46;
+}
+.bidpilot-linear-agent .agent-run-indicator > svg { color: #2563eb; animation: agent-run-spin 1.1s linear infinite; }
+.bidpilot-linear-agent .agent-run-indicator-copy { display: flex; min-width: 0; align-items: baseline; gap: 8px; overflow: hidden; }
+.bidpilot-linear-agent .agent-run-indicator strong { flex: 0 0 auto; color: #302f2b; font-size: 12px; font-weight: 560; line-height: 18px; }
+.bidpilot-linear-agent .agent-run-indicator small { min-width: 0; overflow: hidden; color: #77746d; font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
+.bidpilot-linear-agent .agent-run-indicator button { border: 0; background: transparent; color: #5f5c55; padding: 2px 0; font-size: 12px; line-height: 18px; }
+.bidpilot-linear-agent .agent-run-indicator button:hover,
+.bidpilot-linear-agent .agent-run-indicator button:focus-visible { color: #1d1c19; text-decoration: underline; outline: none; }
+.bidpilot-linear-agent .agent-run-indicator.is-waiting > svg { color: #a16207; animation: none; }
+.bidpilot-linear-agent .agent-run-indicator.is-failed > svg { color: #be3d35; animation: none; }
+@keyframes agent-run-spin { to { transform: rotate(360deg); } }
 
 .bidpilot-linear-agent .agent-welcome { position: relative; width: min(712px, calc(100% - 56px)); margin: 0 auto; }
 .bidpilot-linear-agent .agent-welcome h3 { position: relative; z-index: 2; margin: 0 0 26px; color: var(--linear-text); font-size: 20px; font-weight: 500; letter-spacing: 0; line-height: 24px; text-align: center; }
@@ -350,6 +356,11 @@
   .bidpilot-linear-agent .bp-linear-agent-composer-slot {
     padding: 10px 12px max(12px, env(safe-area-inset-bottom));
   }
+  .bidpilot-linear-agent .agent-run-indicator { gap: 7px; margin-bottom: 6px; }
+  .bidpilot-linear-agent .agent-run-indicator-copy { display: block; }
+  .bidpilot-linear-agent .agent-run-indicator strong,
+  .bidpilot-linear-agent .agent-run-indicator small { display: block; }
+  .bidpilot-linear-agent .agent-run-indicator small { overflow: hidden; text-overflow: ellipsis; }
   .bidpilot-linear-agent .bp-linear-agent-keyhint,
   .bidpilot-linear-agent .bp-linear-agent-approval-anchor { display: none; }
   .bidpilot-linear-agent .bp-linear-agent-text-control { max-width: 94px; }

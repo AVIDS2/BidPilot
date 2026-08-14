@@ -58,6 +58,8 @@ test("keeps the Agent composer inside the conversation pane at every viewport", 
   await expect(textarea).toBeVisible();
   await expect(sendButton).toBeVisible();
   await expect(page.getByText("收集招标附件", { exact: true })).toBeVisible();
+  // Idle is the absence of a run, not a decorative status tag in the header.
+  await expect(page.getByText("就绪", { exact: true })).toHaveCount(0);
 
   const [paneBox, composerBox, textareaBox, sendBox] = await Promise.all([
     conversationPane.boundingBox(),
