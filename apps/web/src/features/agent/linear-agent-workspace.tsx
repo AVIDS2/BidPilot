@@ -16,7 +16,6 @@ import {
   PanelTopIcon,
   PencilIcon,
   PinIcon,
-  SparklesIcon,
   StarIcon,
   Trash2Icon,
   XIcon,

@@ -181,7 +181,7 @@ export function AccountPageV2() {
 
 function UsageMeter({ label, limit, used }: { label: string; limit: number; used: number }) {
   const percentage = quotaPercentage(used, limit);
-  return <div className="wb-account-usage-meter"><Progress value={percentage}><ProgressLabel>{label}</ProgressLabel><ProgressValue>{limit > 0 ? `${used} / ${limit}` : quotaLabel(null)}</ProgressValue></Progress><p>{limit > 0 ? `已使用 ${percentage}%` : "当前套餐不设此项上限"}</p></div>;
+  return <div className="wb-account-usage-meter"><Progress value={percentage}><ProgressLabel>{label}</ProgressLabel><ProgressValue>{() => limit > 0 ? `${used} / ${limit}` : quotaLabel(null)}</ProgressValue></Progress><p>{limit > 0 ? `已使用 ${percentage}%` : "当前套餐不设此项上限"}</p></div>;
 }
 
 function PreferenceRow({ checked, description, disabled, label, onCheckedChange }: { checked: boolean; description: string; disabled: boolean; label: string; onCheckedChange: (checked: boolean) => void }) {

@@ -353,28 +353,37 @@ describe("AIAssistantPanel", () => {
     vi.mocked(listRuntimeEvents).mockResolvedValue({
       items: [
         {
+          event_id: "event-runtime-replay-3",
           run_id: "runtime-replay-1",
+          parent_event_id: null,
           sequence: 3,
           type: "capability.succeeded",
           public_summary: "找到 2 个项目。",
           payload: { capability: "search_projects", count: 2 },
           schema_version: "1.0",
+          timestamp: "2026-08-14T09:00:03Z",
         },
         {
+          event_id: "event-runtime-replay-4",
           run_id: "runtime-replay-1",
+          parent_event_id: null,
           sequence: 4,
           type: "message.completed",
           public_summary: "当前共有 2 个项目。",
           payload: {},
           schema_version: "1.0",
+          timestamp: "2026-08-14T09:00:04Z",
         },
         {
+          event_id: "event-runtime-replay-5",
           run_id: "runtime-replay-1",
+          parent_event_id: null,
           sequence: 5,
           type: "run.completed",
           public_summary: "任务已完成。",
           payload: {},
           schema_version: "1.0",
+          timestamp: "2026-08-14T09:00:05Z",
         },
       ],
     });
@@ -547,7 +556,9 @@ describe("AIAssistantPanel", () => {
     vi.mocked(listRuntimeEvents).mockResolvedValue({
       items: [
         {
+          event_id: "event-provider-error-1",
           run_id: "workflow-provider-error",
+          parent_event_id: null,
           sequence: 1,
           type: "capability.progressed",
           public_summary: "模型服务暂时不可用，正在重试。",
@@ -560,9 +571,12 @@ describe("AIAssistantPanel", () => {
             max_attempts: 3,
           },
           schema_version: "1.0",
+          timestamp: "2026-08-14T09:01:01Z",
         },
         {
+          event_id: "event-provider-error-2",
           run_id: "workflow-provider-error",
+          parent_event_id: null,
           sequence: 2,
           type: "run.failed",
           public_summary: "Workflow step could not finish.",
@@ -571,6 +585,7 @@ describe("AIAssistantPanel", () => {
             error_code: "provider_auth_failed",
           },
           schema_version: "1.0",
+          timestamp: "2026-08-14T09:01:02Z",
         },
       ],
     });

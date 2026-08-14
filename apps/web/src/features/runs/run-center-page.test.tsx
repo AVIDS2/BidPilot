@@ -48,12 +48,15 @@ describe("RunCenterPage", () => {
     vi.mocked(listRuntimeEvents).mockResolvedValue({
       items: [
         {
+          event_id: "event-run-1",
           run_id: "run-1",
+          parent_event_id: null,
           sequence: 1,
           type: "plan.proposed",
           public_summary: "Prepared a governed plan.",
           payload: { private_trace: "must-not-render" },
           schema_version: "1.0",
+          timestamp: "2026-08-14T09:02:01Z",
         },
       ],
     });

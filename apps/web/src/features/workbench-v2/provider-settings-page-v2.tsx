@@ -354,8 +354,8 @@ export function ProviderSettingsPageV2() {
 
           <FieldGroup className="wb-provider-fields">
             <div className="wb-provider-fields-row">
-              <Field><FieldLabel>提供商预设</FieldLabel><Select onValueChange={applyPreset} value={form.providerId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectLabel>可用预设</SelectLabel>{PROVIDER_PRESETS.map((preset) => <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
-              <Field><FieldLabel>接口协议</FieldLabel><Select onValueChange={(value) => setForm((current) => ({ ...current, providerType: value as ProviderProtocol }))} value={form.providerType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="openai">OpenAI-compatible</SelectItem><SelectItem value="anthropic">Claude Messages</SelectItem></SelectGroup></SelectContent></Select></Field>
+              <Field><FieldLabel>提供商预设</FieldLabel><Select onValueChange={(value) => { if (value) applyPreset(value); }} value={form.providerId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectLabel>可用预设</SelectLabel>{PROVIDER_PRESETS.map((preset) => <SelectItem key={preset.id} value={preset.id}>{preset.label}</SelectItem>)}</SelectGroup></SelectContent></Select></Field>
+              <Field><FieldLabel>接口协议</FieldLabel><Select onValueChange={(value) => { if (value) setForm((current) => ({ ...current, providerType: value as ProviderProtocol })); }} value={form.providerType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="openai">OpenAI-compatible</SelectItem><SelectItem value="anthropic">Claude Messages</SelectItem></SelectGroup></SelectContent></Select></Field>
             </div>
             <div className="wb-provider-fields-row">
               <Field><FieldLabel htmlFor="provider-label">配置名称</FieldLabel><Input id="provider-label" onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} placeholder="例如：团队 DeepSeek" value={form.label} /></Field>

@@ -74,7 +74,8 @@ test.describe.serial("本地真实产品链路", () => {
     await page.getByRole("button", { name: "创建机会" }).click();
     await expect(page).toHaveURL(/\/projects\/[^/]+$/, { timeout: 15_000 });
 
-    const projectId = new URL(page.url()).pathname.split("/").at(-1);
+    const pathSegments = new URL(page.url()).pathname.split("/");
+    const projectId = pathSegments[pathSegments.length - 1];
     expect(projectId).toBeTruthy();
     await expect(page.getByRole("heading", { name: projectName })).toBeVisible();
 

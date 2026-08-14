@@ -18,7 +18,6 @@ from .schemas import (
     ChatConversationUpdate,
     ChatMessageAttachmentRead,
     ChatHistoryRead,
-    ChatMessage,
     ChatMessageRead,
     ChatRequest,
 )

@@ -8,7 +8,6 @@ import {
   BotIcon,
   CheckCircle2Icon,
   ChevronRightIcon,
-  CircleDotIcon,
   DownloadIcon,
   FileIcon,
   FileWarningIcon,
@@ -261,12 +260,9 @@ export function DashboardPageV2() {
   const readinessAverage = assessedRows.length
     ? Math.round(assessedRows.reduce((total, row) => total + (row.summary?.readiness_score ?? 0), 0) / assessedRows.length)
     : null;
-  const coveredRequirements = assessedRows.reduce((total, row) => total + (row.summary?.counts.covered ?? 0), 0);
-  const totalRequirements = assessedRows.reduce((total, row) => total + (row.summary?.counts.total ?? 0), 0);
   const blockerCount = healthRows.reduce((total, row) => total + row.blockerCount, 0);
   const approvalRuns = runs.filter((run) => run.status === "awaiting_approval" && run.project_id);
   const completedProjectCount = projects.filter((project) => project.status.toLowerCase() === "completed").length;
-  const leadProject = healthRows.find((row) => DASHBOARD_ACTIVE_STATUSES.has(row.project.status.toLowerCase()))?.project ?? projects[0] ?? null;
   const attentionRows = healthRows.filter((row) => row.blockerCount > 0).slice(0, 3);
   const unassessedProjectCount = Math.max(0, projects.length - assessedRows.length);
   const readinessChartData = useMemo(() => assessedRows
@@ -390,7 +386,6 @@ export function DashboardPageV2() {
 }
 
 export function InboxPageV2() {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const projectsQuery = useQuery({ queryKey: ["projects"], queryFn: listProjects, staleTime: 30_000 });
   const runsQuery = useQuery({ queryKey: ["runtime-runs", 30], queryFn: () => listRuntimeRuns(30), staleTime: 10_000 });
@@ -469,7 +464,7 @@ export function MyWorkPageV2() {
   const totalItems = readinessItems.length + approvalRuns.length;
   const failedCount = approvalRuns.filter((run) => run.status === "failed").length;
 
-  const readinessTitle = (kind: "mandatory" | "evidence" | "conflict", requirement: BidReadinessSummary["requirements"][number]) => {
+  const readinessTitle = (kind: "mandatory" | "evidence" | "conflict") => {
     if (kind === "mandatory") return "补齐强制要求的响应依据";
     if (kind === "conflict") return "核对互相冲突的要求";
     return "补充要求的证据材料";
@@ -515,7 +510,7 @@ export function MyWorkPageV2() {
               action={<button className="wb-text-action" onClick={() => navigate("/projects")} type="button">查看投标机会 <ArrowRightIcon aria-hidden="true" /></button>}
             />
           ) : null}
-          {visibleReadinessItems.length > 0 ? <section className="wb-workboard-section wb-work-section" aria-label="要求与合规待办"><p className="wb-work-section-heading">要求与合规</p><div className="wb-work-table">{visibleReadinessItems.map((item) => <button className="wb-work-row" key={item.id} onClick={() => navigate(`/projects/${item.project.id}`)} type="button"><span className="wb-work-row__icon"><AlertCircleIcon aria-hidden="true" /></span><span className="wb-work-row__title"><strong>{readinessTitle(item.kind, item.requirement)}</strong><small>{item.requirement.requirement_text}</small></span><span className="wb-work-row__project">{item.project.name}</span><RunState status="待处理" /><ChevronRightIcon aria-hidden="true" /></button>)}</div></section> : null}
+          {visibleReadinessItems.length > 0 ? <section className="wb-workboard-section wb-work-section" aria-label="要求与合规待办"><p className="wb-work-section-heading">要求与合规</p><div className="wb-work-table">{visibleReadinessItems.map((item) => <button className="wb-work-row" key={item.id} onClick={() => navigate(`/projects/${item.project.id}`)} type="button"><span className="wb-work-row__icon"><AlertCircleIcon aria-hidden="true" /></span><span className="wb-work-row__title"><strong>{readinessTitle(item.kind)}</strong><small>{item.requirement.requirement_text}</small></span><span className="wb-work-row__project">{item.project.name}</span><RunState status="待处理" /><ChevronRightIcon aria-hidden="true" /></button>)}</div></section> : null}
           {visibleApprovalRuns.length > 0 ? <section className="wb-workboard-section wb-work-section" aria-label="人工确认待办"><p className="wb-work-section-heading">人工确认</p><div className="wb-work-table">{visibleApprovalRuns.map((run) => <button className="wb-work-row" key={run.id} onClick={() => run.project_id ? navigate(`/projects/${run.project_id}`) : navigate("/projects")} type="button"><span className="wb-work-row__icon">{run.status === "failed" ? <AlertCircleIcon aria-hidden="true" /> : <ShieldCheckIcon aria-hidden="true" />}</span><span className="wb-work-row__title"><strong>{run.status === "failed" ? "检查并恢复项目中的异常工作" : "确认项目中的待决操作"}</strong><small>{run.latest_event_summary || "该项目需要人工继续推进。"}</small></span><span className="wb-work-row__project">{run.project_name || "未关联项目"}</span><RunState status={run.status} /><ChevronRightIcon aria-hidden="true" /></button>)}</div></section> : null}
         </div>
       </ScrollArea>
