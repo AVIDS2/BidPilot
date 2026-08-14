@@ -404,6 +404,55 @@ def test_streaming_harness_answers_without_tools(monkeypatch: pytest.MonkeyPatch
     assert llm.calls, "model should be invoked once"
 
 
+def test_streaming_harness_forwards_first_provider_chunk_before_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A normal answer must reach SSE before the upstream stream closes."""
+    import asyncio
+
+    from app.runtime import harness_loop as module
+    from app.usage.schemas import ProviderSource
+
+    class _DelayedStreamingLLM(_FakeStreamingBoundLLM):
+        stream_finished = False
+
+        async def astream(self, messages: list[Any]):
+            self.calls.append(messages)
+            yield _FakeStreamChunk(content="首")
+            await asyncio.sleep(0.02)
+            yield _FakeStreamChunk(content="字")
+            self.stream_finished = True
+
+    llm = _DelayedStreamingLLM([[]])
+    monkeypatch.setattr(module, "save_message", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "complete_runtime_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(module, "reserve_assistant_model_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
+
+    harness = StreamingHarness(
+        db=_FakeDb(),  # type: ignore[arg-type]
+        user=_FakeUser(),  # type: ignore[arg-type]
+        run=_FakeRun(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        llm=llm,
+        provider_type="openai",
+        provider_source=ProviderSource.OFFICIAL,
+        model="test",
+        user_message="你好",
+    )
+    saw_first_chunk_while_open = False
+
+    async def _collect() -> None:
+        nonlocal saw_first_chunk_while_open
+        async for raw in harness.run():
+            if raw.startswith("event: assistant.message") and '"content": "首"' in raw:
+                saw_first_chunk_while_open = not llm.stream_finished
+
+    asyncio.run(_collect())
+
+    assert saw_first_chunk_while_open is True
+
+
 def test_streaming_harness_executes_one_correlated_tool_then_answers(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 

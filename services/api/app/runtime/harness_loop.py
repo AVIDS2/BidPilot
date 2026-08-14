@@ -13,7 +13,7 @@ from inspect import isawaitable
 import json
 import logging
 import re
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 from time import monotonic
 from typing import Any
@@ -993,20 +993,71 @@ class StreamingHarness:
                 text_parts: list[str] = []
                 tool_calls: list[_BufferedToolCall] = []
                 usage_holder: dict[str, ProviderUsageMeasurement | None] = {"measurement": None}
+                live_text_queue: asyncio.Queue[str] = asyncio.Queue()
+                live_text_streamed = False
                 self._reserve_model_capacity()
-                try:
-                    await self._collect_model_step(
+                model_step_task = asyncio.create_task(
+                    self._collect_model_step(
                         bound,
                         [*messages, HumanMessage(content=self._trusted_runtime_status(turn_id=turn_id, step=step + 1))],
                         text_parts,
                         tool_calls,
                         turn_id=turn_id,
                         usage_holder=usage_holder,
+                        on_text=live_text_queue.put,
                     )
+                )
+                try:
+                    # Forward provider chunks while the model is still running.
+                    # The durable message is written after completion below, so
+                    # a dropped browser connection can still replay one clean
+                    # final transcript without writing every token to Postgres.
+                    while not model_step_task.done():
+                        try:
+                            content = await asyncio.wait_for(live_text_queue.get(), timeout=0.05)
+                        except asyncio.TimeoutError:
+                            continue
+                        if not content:
+                            continue
+                        live_text_streamed = True
+                        yield _sse(
+                            "assistant.message",
+                            {
+                                "runtime_run_id": self.runtime_run.id,
+                                "turn_id": turn_id,
+                                "content": content,
+                                "state": "thinking",
+                            },
+                        )
+                    await model_step_task
+                    while not live_text_queue.empty():
+                        content = live_text_queue.get_nowait()
+                        if not content:
+                            continue
+                        live_text_streamed = True
+                        yield _sse(
+                            "assistant.message",
+                            {
+                                "runtime_run_id": self.runtime_run.id,
+                                "turn_id": turn_id,
+                                "content": content,
+                                "state": "thinking",
+                            },
+                        )
                     # Prefer provider-reported usage; if streaming omitted it,
                     # release the hold instead of parking 8k–24k as "uncertain".
                     self._observe_model_usage(usage_holder.get("measurement"))
+                except asyncio.CancelledError:
+                    if not model_step_task.done():
+                        model_step_task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await model_step_task
+                    raise
                 except Exception:
+                    if not model_step_task.done():
+                        model_step_task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await model_step_task
                     self._mark_active_reservations_uncertain()
                     raise
 
@@ -1035,7 +1086,7 @@ class StreamingHarness:
                         turn_id=turn_id,
                         content=final_text,
                     )
-                    if not deltas_persisted:
+                    if not deltas_persisted and not live_text_streamed:
                         yield _sse(
                             "assistant.message",
                             {
@@ -1055,6 +1106,7 @@ class StreamingHarness:
                     )
                     async for event in self._flush_new_events(
                         skip_message_completed=not deltas_persisted,
+                        skip_message_deltas=live_text_streamed,
                         pace_message_deltas=deltas_persisted,
                     ):
                         yield event
@@ -1874,6 +1926,7 @@ class StreamingHarness:
         *,
         turn_id: str,
         usage_holder: dict[str, ProviderUsageMeasurement | None] | None = None,
+        on_text: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         # Prefer token streaming; fall back to one-shot invoke for test doubles.
         if hasattr(bound, "astream"):
@@ -1895,10 +1948,17 @@ class StreamingHarness:
                         )
                     if measurement is not None and usage_holder is not None:
                         usage_holder["measurement"] = measurement
+                    chunk_tool_calls = getattr(chunk, "tool_call_chunks", None) or []
                     content = _extract_public_text_content(getattr(chunk, "content", None))
                     if content:
                         text_parts.append(content)
-                    chunk_tool_calls = getattr(chunk, "tool_call_chunks", None) or []
+                        # Tool-preface text is intentionally held until the
+                        # turn is classified. A provider can emit narration
+                        # and a tool call in the same delta; that narration is
+                        # not the assistant's answer and must not flash in the
+                        # transcript before the tool lifecycle begins.
+                        if on_text is not None and not chunk_tool_calls:
+                            await on_text(content)
                     for piece in chunk_tool_calls:
                         index = int(piece.get("index") or 0)
                         bucket = assembled_tools.setdefault(index, {"id": "", "name": "", "args": ""})
@@ -1944,10 +2004,13 @@ class StreamingHarness:
                     (response.response_metadata or {}).get("token_usage")
                 )
             usage_holder["measurement"] = measurement
+        response_tool_calls = getattr(response, "tool_calls", None) or []
         content = _extract_public_text_content(getattr(response, "content", ""))
         if content:
             text_parts.append(content)
-        for tc in getattr(response, "tool_calls", None) or []:
+            if on_text is not None and not response_tool_calls:
+                await on_text(content)
+        for tc in response_tool_calls:
             if isinstance(tc, dict):
                 name = str(tc.get("name") or "")
                 raw_args = tc.get("args")
@@ -2634,6 +2697,7 @@ class StreamingHarness:
         self,
         *,
         skip_message_completed: bool = False,
+        skip_message_deltas: bool = False,
         skip_capability_started: bool = False,
         skip_capability_succeeded: bool = False,
         skip_capability_failed: bool = False,
@@ -2652,6 +2716,10 @@ class StreamingHarness:
             ):
                 # Text was already streamed as assistant.message deltas; do not
                 # re-append the durable final message into the live transcript.
+                continue
+            if skip_message_deltas and event.event_type == RuntimeEventType.MESSAGE_DELTA.value:
+                # Provider chunks were already forwarded live over SSE. Advance
+                # the durable cursor without sending the same text a second time.
                 continue
             if (
                 skip_capability_started
