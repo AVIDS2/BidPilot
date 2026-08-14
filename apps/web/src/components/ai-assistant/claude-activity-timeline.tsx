@@ -35,6 +35,7 @@ interface ClaudeActivityTimelineProps {
   nested?: boolean;
   onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider?: () => void;
+  onOpenWorkflowCanvas?: (projectId: string) => void;
 }
 
 function statusIsActive(status: ActivityStatus) {
@@ -594,7 +595,13 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
   );
 }
 
-function WorkflowCanvasAction({ item }: { item: AssistantExecutionItem }) {
+function WorkflowCanvasAction({
+  item,
+  onOpenWorkflowCanvas,
+}: {
+  item: AssistantExecutionItem;
+  onOpenWorkflowCanvas?: (projectId: string) => void;
+}) {
   const result = item.result ?? {};
   const projectId = typeof result.project_id === "string" ? result.project_id : "";
   if (item.kind !== "workflow" || !projectId) return null;
@@ -607,16 +614,31 @@ function WorkflowCanvasAction({ item }: { item: AssistantExecutionItem }) {
         <small>{sectionKey ? `章节：${sectionKey}` : "项目任务编排"}</small>
       </header>
       <div className="cr-inline-actions">
-        <button type="button" onClick={() => navigateToInternalRoute(`/projects/${projectId}?surface=workflow`)}>
+        <button
+          type="button"
+          onClick={() => {
+            if (onOpenWorkflowCanvas) {
+              onOpenWorkflowCanvas(projectId);
+              return;
+            }
+            navigateToInternalRoute(`/projects/${projectId}?surface=workflow`);
+          }}
+        >
           <TimerIcon size={13} />
-          查看任务编排
+          打开任务编排画布
         </button>
       </div>
     </section>
   );
 }
 
-function StructuredUiAction({ item }: { item: AssistantExecutionItem }) {
+function StructuredUiAction({
+  item,
+  onOpenWorkflowCanvas,
+}: {
+  item: AssistantExecutionItem;
+  onOpenWorkflowCanvas?: (projectId: string) => void;
+}) {
   const rawAction = item.result?.ui_action;
   if (!rawAction || typeof rawAction !== "object" || Array.isArray(rawAction)) return null;
   const action = rawAction as Record<string, unknown>;
@@ -630,9 +652,19 @@ function StructuredUiAction({ item }: { item: AssistantExecutionItem }) {
   // This is intentionally a small allow-list. Agent output can describe a
   // UI action, never inject arbitrary markup or event handlers into the app.
   if (type === "canvas" && route.startsWith("/projects")) {
+    const projectId = /^\/projects\/([^?/#]+)/.exec(route)?.[1];
     return (
       <div className="cr-inline-actions cr-structured-action">
-        <button type="button" onClick={() => navigateToInternalRoute(route)}>
+        <button
+          type="button"
+          onClick={() => {
+            if (projectId && onOpenWorkflowCanvas) {
+              onOpenWorkflowCanvas(projectId);
+              return;
+            }
+            navigateToInternalRoute(route);
+          }}
+        >
           <TimerIcon size={13} />
           {label}
         </button>
@@ -657,12 +689,14 @@ function StepDetail({
   t,
   onCancelWorkflow,
   onConfigureProvider,
+  onOpenWorkflowCanvas,
   isCancelling,
 }: {
   item: AssistantExecutionItem;
   t: Translate;
   onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider?: () => void;
+  onOpenWorkflowCanvas?: (projectId: string) => void;
   isCancelling: boolean;
 }) {
   const summary = displaySummary(item, t);
@@ -683,9 +717,9 @@ function StepDetail({
       <RemoteDocumentDiscovery item={item} />
       <RemoteDocumentImport item={item} />
       <ResultFacts item={item} />
-      <StructuredUiAction item={item} />
+      <StructuredUiAction item={item} onOpenWorkflowCanvas={onOpenWorkflowCanvas} />
       <ArtifactActions item={item} t={t} />
-      <WorkflowCanvasAction item={item} />
+      <WorkflowCanvasAction item={item} onOpenWorkflowCanvas={onOpenWorkflowCanvas} />
       <ToolPayloadDetails item={item} />
       <RunTrace item={item} />
       {canCancel && onCancelWorkflow && (
@@ -716,12 +750,14 @@ function ToolStep({
   t,
   onCancelWorkflow,
   onConfigureProvider,
+  onOpenWorkflowCanvas,
   isCancelling,
 }: {
   item: AssistantExecutionItem;
   t: Translate;
   onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider?: () => void;
+  onOpenWorkflowCanvas?: (projectId: string) => void;
   isCancelling: boolean;
 }) {
   const [open, setOpen] = useState(() => statusIsActive(item.status) || item.status === "failed");
@@ -788,6 +824,7 @@ function ToolStep({
               t={t}
               onCancelWorkflow={onCancelWorkflow}
               onConfigureProvider={onConfigureProvider}
+              onOpenWorkflowCanvas={onOpenWorkflowCanvas}
               isCancelling={isCancelling}
             />
           )}
@@ -804,6 +841,7 @@ function TaskTurn({
   t,
   onCancelWorkflow,
   onConfigureProvider,
+  onOpenWorkflowCanvas,
   cancellingRunId,
 }: {
   turn: ActivityTurn;
@@ -812,6 +850,7 @@ function TaskTurn({
   t: Translate;
   onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider?: () => void;
+  onOpenWorkflowCanvas?: (projectId: string) => void;
   cancellingRunId: string | null;
 }) {
   const tone = aggregateStatus(turn.items);
@@ -855,6 +894,7 @@ function TaskTurn({
                 t={t}
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
+                onOpenWorkflowCanvas={onOpenWorkflowCanvas}
                 isCancelling={cancellingRunId === item.runtimeRunId}
               />
             ))}
@@ -871,6 +911,7 @@ export function ClaudeActivityTimeline({
   nested = false,
   onCancelWorkflow,
   onConfigureProvider,
+  onOpenWorkflowCanvas,
 }: ClaudeActivityTimelineProps) {
   const { t } = useTranslation("ai-assistant");
   const tone = aggregateStatus(items);
@@ -918,6 +959,7 @@ export function ClaudeActivityTimeline({
               t={t}
               onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
               onConfigureProvider={onConfigureProvider}
+              onOpenWorkflowCanvas={onOpenWorkflowCanvas}
               cancellingRunId={cancellingRunId}
             />
           ))}
@@ -956,9 +998,10 @@ export function ClaudeActivityTimeline({
                 index={index}
                 title={taskTitle}
                 t={t}
-                onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
-                onConfigureProvider={onConfigureProvider}
-                cancellingRunId={cancellingRunId}
+              onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
+              onConfigureProvider={onConfigureProvider}
+              onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+              cancellingRunId={cancellingRunId}
               />
             ))}
           </div>

@@ -303,12 +303,14 @@ function ClaudeAssistantMessage({
   isStreaming,
   onCancelWorkflow,
   onConfigureProvider,
+  onOpenWorkflowCanvas,
 }: {
   message: ChatMessage;
   activityItems: AssistantExecutionItem[];
   isStreaming: boolean;
   onCancelWorkflow: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider: () => void;
+  onOpenWorkflowCanvas?: (projectId: string) => void;
 }) {
   const { t } = useTranslation("ai-assistant");
   const [copied, setCopied] = useState(false);
@@ -400,9 +402,10 @@ function ClaudeAssistantMessage({
                   key={part.id}
                   items={items}
                   taskTitle={titlesByTurn.get(part.turnId)}
-                  nested
+                nested
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
+                onOpenWorkflowCanvas={onOpenWorkflowCanvas}
               />
             ) : null;
           })}
@@ -413,6 +416,7 @@ function ClaudeAssistantMessage({
               nested
               onCancelWorkflow={onCancelWorkflow}
               onConfigureProvider={onConfigureProvider}
+              onOpenWorkflowCanvas={onOpenWorkflowCanvas}
             />
           )}
           {message.content && !hasNarrativePart && renderNarrative(message.content, `${message.id}-durable`) }
@@ -425,6 +429,7 @@ function ClaudeAssistantMessage({
               items={activityItems}
               onCancelWorkflow={onCancelWorkflow}
               onConfigureProvider={onConfigureProvider}
+              onOpenWorkflowCanvas={onOpenWorkflowCanvas}
             />
           )}
           {message.content ? renderNarrative(message.content, message.id) : isStreaming ? <ThinkingIndicator /> : null}
@@ -450,6 +455,7 @@ export function ClaudeAgentThread({
   onCancelConfirmation,
   onSubmitInput,
   onRetryFromCheckpoint,
+  onOpenWorkflowCanvas,
 }: {
   state: AIAssistantState;
   onCancelWorkflow: (runtimeRunId: string) => Promise<void>;
@@ -458,6 +464,7 @@ export function ClaudeAgentThread({
   onCancelConfirmation: () => void;
   onSubmitInput?: (content: string) => void;
   onRetryFromCheckpoint?: (checkpointMessageId: string, content: string) => void;
+  onOpenWorkflowCanvas?: (projectId: string) => void;
 }) {
   const threadRef = useRef<HTMLDivElement>(null);
   const executionItemsByMessageId = useMemo(() => {
@@ -507,6 +514,7 @@ export function ClaudeAgentThread({
                 isStreaming={state.isStreaming && state.activeAssistantMessageId === message.id}
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
+                onOpenWorkflowCanvas={onOpenWorkflowCanvas}
               />
               {confirmation && (
                 <ClaudeApproval
@@ -524,6 +532,7 @@ export function ClaudeAgentThread({
               items={unassignedExecutionItems}
               onCancelWorkflow={onCancelWorkflow}
               onConfigureProvider={onConfigureProvider}
+              onOpenWorkflowCanvas={onOpenWorkflowCanvas}
             />
           </article>
         )}

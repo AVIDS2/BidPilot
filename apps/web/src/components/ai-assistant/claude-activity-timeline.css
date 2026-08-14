@@ -895,6 +895,20 @@
   color: #302f2b;
 }
 
+/* A model-issued UI action is an actual control, not an explanatory sentence. */
+.assistant-claude-timeline .cr-structured-action button {
+  min-height: 28px;
+  border: 1px solid #d9d7d1;
+  background: #fff;
+  color: #302f2b;
+  font-weight: 560;
+}
+
+.assistant-claude-timeline .cr-structured-action button:hover {
+  border-color: #bbb8b0;
+  background: #f6f5f1;
+}
+
 @media (max-width: 520px) {
   .assistant-claude-timeline .cr-tool-summary,
   .assistant-claude-timeline .cr-run-step,

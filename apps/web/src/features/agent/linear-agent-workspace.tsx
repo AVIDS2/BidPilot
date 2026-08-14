@@ -28,6 +28,7 @@ import {
   AIAssistantPanel,
   type AttachmentPreviewSelection,
 } from "@/components/ai-assistant/AIAssistantPanel";
+import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { ClaudeAgentThread } from "./claude-agent-thread";
 import { useAIAssistant, type AIAssistantState } from "@/lib/ai-assistant-store";
 import {
@@ -88,6 +89,51 @@ function AgentPreviewCanvas({
           </div>
         ) : null}
       </div>
+    </aside>
+  );
+}
+
+function AgentWorkflowCanvas({
+  projectId,
+  state,
+  onClose,
+  onOpenProject,
+}: {
+  projectId: string;
+  state: AIAssistantState;
+  onClose: () => void;
+  onOpenProject: () => void;
+}) {
+  const workflow = useMemo(() => {
+    const matchesProject = (item: AIAssistantState["executionItems"][number]) => {
+      if (item.kind !== "workflow") return false;
+      const resultProjectId = typeof item.result?.project_id === "string" ? item.result.project_id : "";
+      const argumentProjectId = typeof item.arguments?.project_id === "string" ? item.arguments.project_id : "";
+      return resultProjectId === projectId || argumentProjectId === projectId;
+    };
+    return [...state.executionItems].reverse().find(matchesProject) ?? null;
+  }, [projectId, state.executionItems]);
+
+  return (
+    <aside className="agent-preview-canvas agent-workflow-canvas" aria-label="任务编排画布">
+      <header className="agent-preview-header">
+        <div className="agent-preview-heading">
+          <strong>任务编排画布</strong>
+          <span>{workflow?.isWaitingApproval ? "当前在等待人工确认" : workflow?.summary || "查看本次任务的执行路径与节点状态"}</span>
+        </div>
+        <button type="button" className="agent-preview-close" aria-label="关闭任务编排画布" onClick={onClose}><XIcon size={16} /></button>
+      </header>
+      <div className="agent-preview-body agent-workflow-body">
+        <WorkflowCanvas
+          currentNode={workflow?.currentNode ?? null}
+          isWaitingApproval={workflow?.isWaitingApproval ?? false}
+          nodes={workflow?.nodes ?? []}
+        />
+      </div>
+      <footer className="agent-workflow-footer">
+        <span>{workflow ? "节点状态会随当前运行实时更新" : "当前项目尚无运行中的编排任务"}</span>
+        <button type="button" onClick={onOpenProject}><PanelTopIcon size={14} />在项目工作区打开</button>
+      </footer>
     </aside>
   );
 }
@@ -371,6 +417,7 @@ export function LinearAgentWorkspace() {
   } = useAIAssistant();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<AttachmentPreviewSelection | null>(null);
+  const [workflowCanvasProjectId, setWorkflowCanvasProjectId] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState(420);
   const [isPreviewResizing, setIsPreviewResizing] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -432,6 +479,15 @@ export function LinearAgentWorkspace() {
   const handleExample = (prompt: string) => {
     void sendMessage(prompt, { displayContent: prompt });
   };
+  const openWorkflowCanvas = (projectId: string) => {
+    setPreviewAttachment(null);
+    setWorkflowCanvasProjectId(projectId);
+  };
+  const hasSideCanvas = Boolean(previewAttachment || workflowCanvasProjectId);
+
+  useEffect(() => {
+    setWorkflowCanvasProjectId(null);
+  }, [state.currentConversationId]);
 
   const handlePreviewResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -459,7 +515,7 @@ export function LinearAgentWorkspace() {
   return (
     <div className={`linear-agent-embedded bidpilot-linear-agent${isPreviewResizing ? " is-preview-resizing" : ""}`} ref={workspaceRef}>
       <main
-        className={`linear-main${previewAttachment ? " has-preview-canvas" : ""}`}
+        className={`linear-main${hasSideCanvas ? " has-preview-canvas" : ""}`}
         style={{ "--preview-width": `${previewWidth}px` } as CSSProperties}
       >
         <section className="agent-canvas">
@@ -511,10 +567,17 @@ export function LinearAgentWorkspace() {
                   onRetryFromCheckpoint={(checkpointMessageId, content) => {
                     void retryFromCheckpoint(checkpointMessageId, content);
                   }}
+                  onOpenWorkflowCanvas={openWorkflowCanvas}
                 />
                 <div className="bp-linear-agent-composer-slot" aria-label="Agent composer">
                   <AgentRunIndicator state={state} />
-                  <AIAssistantPanel variant="linear-agent" onPreviewAttachment={setPreviewAttachment} />
+                  <AIAssistantPanel
+                    variant="linear-agent"
+                    onPreviewAttachment={(selection) => {
+                      setWorkflowCanvasProjectId(null);
+                      setPreviewAttachment(selection);
+                    }}
+                  />
                 </div>
               </>
             ) : (
@@ -522,7 +585,7 @@ export function LinearAgentWorkspace() {
             )}
           </div>
         </section>
-        {previewAttachment ? (
+        {hasSideCanvas ? (
           <div
             className="agent-preview-resize-handle"
             aria-label="调整预览画布宽度"
@@ -538,7 +601,16 @@ export function LinearAgentWorkspace() {
             }}
           />
         ) : null}
-        <AgentPreviewCanvas selection={previewAttachment} onClose={() => setPreviewAttachment(null)} />
+        {workflowCanvasProjectId ? (
+          <AgentWorkflowCanvas
+            projectId={workflowCanvasProjectId}
+            state={state}
+            onClose={() => setWorkflowCanvasProjectId(null)}
+            onOpenProject={() => navigate(`/projects/${workflowCanvasProjectId}?surface=workflow`)}
+          />
+        ) : (
+          <AgentPreviewCanvas selection={previewAttachment} onClose={() => setPreviewAttachment(null)} />
+        )}
         <AgentFooter onHistory={() => setHistoryOpen((value) => !value)} />
       </main>
     </div>

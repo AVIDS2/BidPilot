@@ -328,6 +328,13 @@
 .bidpilot-linear-agent .agent-preview-placeholder { display: grid; min-height: 240px; place-items: center; align-content: center; gap: 10px; color: var(--linear-text-soft); text-align: center; }
 .bidpilot-linear-agent .agent-preview-placeholder strong { color: var(--linear-text); font-size: 13px; font-weight: 560; }
 .bidpilot-linear-agent .agent-preview-placeholder span { max-width: 260px; font-size: 12px; line-height: 1.6; }
+.bidpilot-linear-agent .agent-workflow-canvas .agent-preview-body { padding: 0; }
+.bidpilot-linear-agent .agent-workflow-body { display: flex; min-height: 0; flex: 1; }
+.bidpilot-linear-agent .agent-workflow-body > [data-testid="bidpilot-workflow-canvas"] { width: 100%; height: 100%; border: 0; border-radius: 0; }
+.bidpilot-linear-agent .agent-workflow-footer { display: flex; min-height: 50px; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--linear-line); padding: 0 14px 0 16px; }
+.bidpilot-linear-agent .agent-workflow-footer span { color: var(--linear-text-soft); font-size: 11px; line-height: 16px; }
+.bidpilot-linear-agent .agent-workflow-footer button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; border: 0; border-radius: 5px; background: transparent; padding: 6px 8px; color: var(--linear-text); font-size: 12px; font-weight: 520; }
+.bidpilot-linear-agent .agent-workflow-footer button:hover { background: lch(96.5 0 282); }
 .bidpilot-linear-agent .agent-preview-resize-handle { position: relative; z-index: 3; width: 8px; cursor: col-resize; outline: 0; }
 .bidpilot-linear-agent .agent-preview-resize-handle::after { position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: var(--linear-line-strong); content: ""; opacity: 0; transition: opacity 120ms ease; }
 .bidpilot-linear-agent .agent-preview-resize-handle:hover::after,
@@ -344,6 +351,7 @@
   .bidpilot-linear-agent .linear-main.has-preview-canvas { grid-template-columns: minmax(0, 1fr); }
   .bidpilot-linear-agent .agent-preview-resize-handle { display: none; }
   .bidpilot-linear-agent .agent-preview-canvas { position: absolute; z-index: 12; inset: 8px; height: calc(100dvh - 60px); }
+  .bidpilot-linear-agent .agent-workflow-footer { align-items: flex-start; min-height: 62px; padding-top: 10px; padding-bottom: 10px; }
   .bidpilot-linear-agent .chat-switch { max-width: calc(100vw - 118px); }
 }
 

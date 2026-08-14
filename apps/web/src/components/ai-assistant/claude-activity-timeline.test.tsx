@@ -19,10 +19,13 @@ const runningWorkflow: AssistantExecutionItem = {
   ],
 };
 
-function renderTimeline(items: AssistantExecutionItem[]) {
+function renderTimeline(
+  items: AssistantExecutionItem[],
+  onOpenWorkflowCanvas?: (projectId: string) => void,
+) {
   return render(
     <MemoryRouter>
-      <ClaudeActivityTimeline items={items} />
+      <ClaudeActivityTimeline items={items} onOpenWorkflowCanvas={onOpenWorkflowCanvas} />
     </MemoryRouter>,
   );
 }
@@ -159,7 +162,7 @@ describe("ClaudeActivityTimeline", () => {
     expect(screen.getByText("错误代码：remote_download_forbidden")).toBeInTheDocument();
   });
 
-  it("links a section workflow to the project orchestration canvas", () => {
+  it("opens a section workflow in the conversation canvas", () => {
     const workflow: AssistantExecutionItem = {
       ...runningWorkflow,
       id: "workflow-with-project",
@@ -169,13 +172,15 @@ describe("ClaudeActivityTimeline", () => {
         section_key: "technical-approach",
       },
     };
-    renderTimeline([workflow]);
+    const onOpenWorkflowCanvas = vi.fn();
+    renderTimeline([workflow], onOpenWorkflowCanvas);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
     fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
     fireEvent.click(screen.getByRole("button", { name: /Show .*section.* details/i }));
 
-    expect(screen.getByRole("button", { name: "查看任务编排" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "打开任务编排画布" }));
+    expect(onOpenWorkflowCanvas).toHaveBeenCalledWith("project-1");
   });
 
   it("renders a model-proposed canvas action as an explicit click target", () => {
@@ -196,12 +201,14 @@ describe("ClaudeActivityTimeline", () => {
         },
       },
     };
-    renderTimeline([openCanvas]);
+    const onOpenWorkflowCanvas = vi.fn();
+    renderTimeline([openCanvas], onOpenWorkflowCanvas);
 
     fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
     fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
     fireEvent.click(screen.getByRole("button", { name: /Show .*page details/i }));
 
-    expect(screen.getByRole("button", { name: "打开任务编排画布" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "打开任务编排画布" }));
+    expect(onOpenWorkflowCanvas).toHaveBeenCalledWith("project-1");
   });
 });
