@@ -1,7 +1,8 @@
 # BidPilot 生产化与面试交付总 Spec
 
-- 状态：提议，批准后作为唯一开发基线
+- 状态：实施中；本文件是唯一开发与验收基线，已完成事项与剩余发布门禁均以本文件为准
 - 日期：2026-07-27
+- 最近更新：2026-08-05
 - 产品：BidPilot（DocPilot 的招投标场景包）
 - 目标：交付一条可重复验证的、证据驱动的投标响应闭环，并证明 AI 应用、Python 后端、Agent、RAG、异步任务与工程治理能力
 - 关联短版发布门槛：[BidPilot 面试交付版 Agent 工程 Spec](2026-07-27-bidpilot-interview-release-spec.md)
@@ -23,13 +24,119 @@ BidPilot 不能继续按“想到一个界面或 Agent 想法，再临时补一�
 
 ---
 
+## 0.1 前端重构宪法（2026-08-05，优先级最高）
+
+> 本节是 BidPilot 前端重构的不可逾越约束。它优先于本文件其他前端表述、旧页面实现、既有 CSS、临时截图和任何“为了先跑起来”的替代方案。若实现与本节冲突，保留本节，撤回实现；不得把冲突实现包装成“风格统一”“渐进迁移”或“先占位”。
+
+### A. 重构目标不是换皮
+
+BidPilot 要废弃旧工作台的视觉体系、导航顺序、标签命名、页面分布、信息架构与组件组合，重新从零构建面向投标响应团队的 Web 工作台。旧前端只能作为尚未迁移业务能力的临时功能参考，**不是**新前端的设计来源。
+
+唯一允许的两份视觉/交互源代码是：
+
+| 责任范围 | 唯一源稿 | 使用方式 |
+| --- | --- | --- |
+| 完整工作台基座、页面框架、导航层级、栅格、顶栏、列表与画布关系 | `C:\Users\Lenovo\Documents\Playground\opendesign\mockups\linear-reference` | 将原稿组件、DOM 层级、CSS 布局和交互状态迁入 React；以 BidPilot 的真实领域数据替换示例内容 |
+| Agent 对话主体、可见思考、搜索、工具组、多级 Runtime、纵向轨道、展开行为和消息排版 | `C:\Users\Lenovo\Documents\Playground\product-ui-reference-library\mockups\claude-reference` | 将原稿组件、DOM 层级、CSS grid 展开逻辑、字体和状态视觉迁入 React；以真实 Runtime Event 替换静态 mock 数据 |
+
+`reference.html`、原稿 `index.html` 和静态数组只能用于逐项对照，绝不作为产品路由、iframe、静态 fallback 或演示假数据来源。交付物必须是 `apps/web/src` 内可维护的 React/TypeScript 组件。
+
+### B. “100% 复刻”的可验证定义
+
+这里的“100%”不是“同样用了浅色背景、一个侧栏和一些圆角”，而是以下约束同时成立：
+
+1. **源码级迁移。** 每个新工作台/Agent 组件先有对应源稿组件、DOM 子树和 CSS 选择器来源；不得凭截图重画一个近似物，更不得先写自己的组件再声称“参考了原稿”。
+2. **布局与交互同构。** 保留源稿的节点层级、间距、字体、栅格、滚动容器、展开/收起动画、悬浮与选择态。Claude Runtime 的 `grid-template-rows: 0fr -> 1fr` 多级展开、纵向轨道、缩进、细线和图标状态属于不可替换行为。
+3. **真实数据替换 mock。** 允许替换文字、领域对象、图标资产与业务动作；不允许因接入真实数据而改变原稿的视觉层次或把节点塞进自创容器。
+4. **逐视图验收。** 每个迁移页面须在与原稿相同的桌面与窄屏视口进行截图对照；结构、层级、滚动和交互状态必须能一一说明。任何有意差异都必须写进本总 Spec 的迁移表并经用户明确确认。
+
+### C. 严格禁止项
+
+以下任何一项出现，即该页面不验收：
+
+1. 复用旧 `PlatformShell`、旧左侧导航、旧标签顺序、旧“仪表盘/项目/设置/文档”等页面分布，或在新页面中 import 旧工作台布局组件。
+2. 自创的欢迎语、功能说明、营销区、AI 解释段落、假状态、静态 tool trace、占位 dashboard 或“为了显得丰富”而新增的内容区。
+3. 把 Claude 的轨迹替换为圆角卡片列表、通用 `Card` 容器、折叠面板堆叠、Badge 链、终态回放或任意“类似 Claude”的自绘变体。
+4. 在浏览器根据关键词、工具名、最终答案、loading boolean 或 mock 数据生成“思考”“计划”“搜索”“成功”等节点。
+5. 将附件、工具结果、最终答复、审批或后台运行状态塞进同一个聊天气泡，或以浮层卡片取代 Claude 原稿中的轨迹分支。
+6. 把原稿 HTML 直接作为产品页面、iframe 嵌入、复制到 `public/` 后由路由展示，或用静态示例掩盖没有接通的后端。
+7. 以“先占位、稍后替换”“视觉统一”“不需要完全一样”为理由突破本节。缺少后端事件时，先补后端，页面保持未实现状态，不造 UI。
+
+### D. 新工作台的信息架构规则
+
+Linear 原稿是**整个新工作台的构建基座**，不是旧应用外面再包一层 Linear 外壳。新路由、导航、页面和动作必须从 BidPilot 真实业务容器反推，并被映射到原稿已有的信息架构模式；旧页面名称与顺序不得迁移。
+
+新工作台的主域只允许由已经存在或本 Spec 已定义的后端实体支撑：
+
+- `Inbox`：审批、分派、评论、失败恢复、需要人工处理的 Runtime/Workflow 事项；
+- `My work`：当前用户被分配的需求、章节、审核与截止项；
+- `Bid projects`：投标项目、项目状态、资料包、需求、证据、章节、审核和交付物；
+- `Knowledge`：组织内容库、已审核证据、来源、版本与检索；
+- `Runs`：Harness/LangGraph 运行、质量门禁、失败/重试/恢复；
+- `Agent`：独立的 Claude Runtime 画布；
+- `Team / Administration`：成员、角色、provider、额度、审计与组织设置，按权限可见。
+
+每个主域在进入导航前都必须同时具备：对应的后端实体/API、真实数据源、至少一个用户动作和可验证结果。没有业务真相的页面不准占位；没有迁移的旧页面不准伪装成新工作台的一部分。
+
+### E. Agent Runtime 的真实 Trace 宪法
+
+Agent 页面必须呈现一个真实的 Harness 运行时，而不是聊天 UI 加“工具已完成”列表。每个 turn 只从服务器的 durable `RuntimeEvent` 和 SSE projection 建树，按服务端 `sequence` 追加；刷新、重连和历史回放得到同一棵树。
+
+1. 当 DeepSeek V4 Flash 开启 thinking 时，后端必须流式保存并发送 provider 实际返回的 `reasoning_content`。这部分是用户选择模型后可见的 provider reasoning，必须原样（仅经 secret/内部标识脱敏）进入 Claude 原稿的 `ThoughtNode`；不得用最终摘要、工具标题或浏览器推断替代它。
+2. 若模型返回多段可见 reasoning，它们必须分别按到达顺序插入轨迹，可在工具调用前、工具结果后、后续决策前继续出现。不得等待最终文本后再补写、重排或“回放”。
+3. `capability.started/progressed/succeeded/failed`、受控搜索结果、文件读取/写入摘要、审批、取消、LangGraph workflow bridge 和后台 continuation 必须以 `parent_event_id`、`turn_id`、`action_id`、`sequence` 形成多级树，并映射到 Claude 源稿的 `ToolGroup`、`ToolDetail`、`SearchNode` 与 `RuntimeTimeline`。
+4. 最终 assistant 文本只能在对应的真实 `message.delta/message.completed` 到达时进入消息区。执行型 turn 的工具/思考/运行节点先到先显示；客户端不得缓存最终正文后先展示，再把 trace 放到底部。
+5. 允许显示：provider 可见 reasoning、Harness 明确产生的 `public_analysis`、已脱敏工具摘要、搜索查询与公开结果摘要、文件/产物名称、状态与耗时。禁止显示：原始系统提示词、非公开模型内部状态、原始 tool arguments/result、内部 UUID、`tool_call_id`、异常堆栈、密钥与跨项目数据。
+6. Composer 只是功能桥接，保持上传、模型选择、审批、取消和发送能力；它不能替代、覆盖或改写 Claude 对话主体。运行中发送位必须按原稿状态呈现暂停/取消能力，不能无故锁死输入或重复发送。
+
+### E.1 Agent 初始态与产物画布（2026-08-05）
+
+未开始 turn 的 Agent 必须迁移 Linear 原稿的 welcome state：水印、居中 composer、能力入口与示例动作。此时不得显示伪造 Runtime、历史执行输出、说明性空面板，或永久占用宽度的右侧空白画布。
+
+产物画布不是 Agent 的常驻第三栏。只有服务器真实事件声明了可预览产物，且用户显式打开该产物时，才允许按原稿可说明的交互形态打开预览；关闭后主线程恢复全宽。欢迎态与纯对话 turn 始终只有一个主画布。
+
+### F. 滚动、层级与恢复的硬性规则
+
+Agent 主画布采用纵向 flex：唯一消息/轨迹滚动层必须 `min-height: 0; overflow-y: auto`；Composer 是固定底部 sibling，滚动区预留其真实高度。禁止绝对定位遮住消息、父层 `overflow: hidden` 导致无滚动出口、页面和消息区竞争滚动，或把历史列表压在输入框之上。
+
+长运行必须验证：实时新增节点不抢焦点；用户已向上浏览时不强制跳底；手动回到底部后恢复跟随；断线后按 sequence 补齐；取消、失败、审批和后台完成原位更新；同一事件永不重复渲染。
+
+### G. 实施顺序与发布门禁
+
+1. **冻结事件契约。** 先完成/测试 Harness 与 LangGraph 的 `reasoning`、capability、workflow、approval、message 事件、层级和 replay；没有真实流，不写 Trace UI。
+2. **迁移 Claude Runtime。** 只迁移 Agent 主体的源稿 DOM/CSS 与真实 SSE fixture，先完成一个真实 turn 的逐事件垂直切片；不修改其他工作台页面。
+3. **迁移 Linear 工作台。** 在全新 React 工作台目录中按原稿逐页迁移，并以本节 D 的后端领域替换示例数据；旧工作台不得作为新页面的基础或 fallback。
+4. **接入真实后端并验证。** 再接真实 API、权限、加载/失败/空状态、历史回放和跨视图路由；不把 mock 或本地缓存留在生产路径。
+5. **视觉与行为验收。** Playwright 桌面/窄屏截图对照、SSE event-order 测试、重连去重、长滚动、取消、审批、后台完成和真实 provider thinking smoke test 全部通过后，才可称“已迁移”或进入部署。
+
+本节未通过时，禁止提交“前端完成”、禁止部署、禁止把静态页面当作产品演示。
+
+### H. 重构门禁台账
+
+| 门禁 | 当前状态 | 已验证事实 | 尚未通过的部分 |
+| --- | --- | --- | --- |
+| G1-A：Runtime Event/SSE 契约 | reasoning 链路已验证 | `reasoning.delta`、`reasoning.completed` 已升级为 schema `1.2`，有 migration、持久化/replay/SSE 映射与 37 项定向 API Runtime 回归；2026-08-05 以当前后端环境实际调用 `deepseek-v4-flash`，普通调用与 Chat Completions 流式调用均收到 provider `reasoning_content` | 完整 SSE 断线重连演练，以及后续 Claude Runtime React 视图对真实事件的呈现 |
+| G1-B：Harness/LangGraph 真实运行证明 | 进行中 | Harness 工具 loop、审批、取消、后台通知和 Worker Runtime 事件已有契约测试 | 真实模型三次 golden run、LangGraph PostgreSQL 恢复和 workflow bridge 端到端证明 |
+| G2：Claude Runtime React 迁移 | 未开始 | 源稿、事件模型和禁止项已冻结 | 源码级 DOM/CSS 迁移、真实 SSE 绑定、桌面/窄屏截图对照 |
+| G3：Linear Workbench React 迁移 | 进行中 | 新 `workbench-v2` 已是 React/TypeScript 路由；共享壳层按本地 BidPilot Linear 原稿收敛为 `252px` 初始侧栏、全高 `46px` 主栏、原稿 Inter 字体/精确色阶、低对比 hover、键盘焦点与可持久化分栏；中等宽度按原稿收缩为图标导航。项目列表、项目工作集以及 Inbox / My work / Knowledge / Runs / Reviews / Deliverables / 成员 / 管理 / 团队 / 提供商配置 / Account 的真实 API 路由已接入。静态原稿未作为产品路由或 fallback；手动调整的分栏宽度仅保存在浏览器偏好中，业务事实仍来自 API。 | 各页仍需按 `linear-reference` 逐视图复刻密度、滚动边界、hover、窄屏与交互；Agent Claude Runtime 尚未迁移；旧页面隔离和桌面/窄屏截图验收未完成。 |
+
+台账中的“本地实现完成”只表示对应源码与专用 `_test` 数据库回归通过；它不能替代真实 provider、staging、UI 或部署验收。
+
+---
+
 ## 1. 产品定位、用户与边界
 
 ### 1.1 一句话定位
 
-**BidPilot 是面向投标团队的、以证据和审批为中心的协同投标响应工作区。**
+**BidPilot 是面向投标团队的 AI 投标响应与证据治理平台。**
 
 它帮助团队把一份 RFP/招标文件和企业资料，从接收、解析、需求拆解、证据检索、章节起草、多人审核到批准导出，变成可恢复、可解释、可审计的执行流程。
+
+#### 市场侧角色边界
+
+BidPilot 的工作区用户和付费对象是**响应方（投标人、供应商、服务商）的投标团队**，而不是采购方。采购方提出需求、发布或定向邀请 RFP/RFQ、收集方案、评审并定标；投标团队判断是否参与、组织资质/案例/技术/商务材料并提交响应。公开招标公告只是机会来源之一，大型企业也常以定向邀请 RFP、RFQ 或安全问卷的方式采购。
+
+因此，产品对外必须使用“投标响应”“RFP 响应”“证据治理”等表述，不能含混定位为“招标采购平台”。BidPilot 不承担采购公告发布、供应商招募、评标、定标、合同采购或政府交易门户职责。它帮助响应方更快、更完整、更可证明地交付投标材料；采购方从更规范的响应材料中间接受益，但不是本产品的主用户。
 
 它不是：
 
@@ -382,6 +489,94 @@ assemble authorized context
 - 模型错误走红脱敏错误和终态 Run 事件，不能把上游原始错误丢给用户；
 - 同一 `client_request_id` 的 retry 必须 replay，不得生成两条用户消息或重复执行工具。
 
+### 5.2.1 Harness 工程基线（2026-08-04 更新）
+
+本节吸收《深入理解 AI Agent：设计原理与工程实践》中的 Harness、上下文工程、状态栏、异步事件与评测原则。它是当前 `StreamingHarness` 的唯一演进依据；不以“多几个工具”或“前端看起来在思考”替代真实运行时能力。
+
+#### A. 轨迹、状态栏与循环
+
+一次公开 Assistant turn 的模型轨迹是 append-only 的：
+
+```text
+static prefix(system policy + tool schemas)
+  + durable conversation/archive context
+  + current user request
+  + assistant tool call
+  + redacted tool observation
+  + trusted runtime status
+  -> next model turn
+```
+
+`trusted runtime status` 必须由服务端代码从 `RuntimeRun`、`RuntimeAction`、`RuntimeApproval`、`RuntimeEvent` 和已关联的 Workflow Run 计算，不能由模型、用户文本、附件、网页内容或前端 boolean 生成。每个模型回合至少包含下列键值事实：
+
+```text
+turn=3/8
+phase=planning|executing|awaiting_approval|waiting_workflow|finalizing
+active_project=<id-or-none>
+completed_capabilities=[...]
+consecutive_failures=0/3
+pending_approval=<id-or-none>
+linked_workflows=[<run>:running]
+cancel_requested=false
+```
+
+状态栏只服务于模型控制，不能被前端伪造成“思考过程”；但用户界面必须渲染 provider 实际流出的可见 reasoning 和 Harness 明确写出的 `public_analysis`。每一轮先持久化 `plan.updated`，随后把模型流区分为 `reasoning`、工具调用和最终答复三类 transcript part；模型请求工具后，服务端把 tool-call 记录加入内部轨迹，执行后追加结构化 tool observation。默认 8 步、战役任务最多 16 步、每个模型回合最多一个 capability、连续 3 次失败熔断，均由代码执行且必须有回归测试。
+
+模型在同一流里产生可见推理、文本和工具调用时，**工具调用优先于最终答复，但不优先于真实可见推理**：`reasoning_content` 或显式 `public_analysis` 必须按到达顺序流给浏览器；若同一模型回合既产生普通文本又产生工具调用，Harness 只能把该普通文本归类为有来源的 `public_analysis` 或安全缓存，绝不能误当最终答复。只有 Harness 确认本轮不再请求 capability 后，才产生 `message.delta` / `message.completed`。
+
+#### B. Durable event first
+
+`RuntimeEvent` 是唯一运行事实，SSE、历史恢复、通知、Timeline 和诊断页都是它的投影。任何直播 SSE 事件都必须能在断线后由 `GET /runtime/runs/{run_id}/events?after_sequence=N` 重放；不得同时发一条临时 SSE 和一条无法关联的持久事件，再由客户端去猜测去重。
+
+事件最小树形语义如下：
+
+```text
+run.started
+  ├─ reasoning.delta* -> reasoning.completed
+  ├─ plan.updated (turn_id, phase, budget, public_summary)
+  │    ├─ capability.started (capability, action_id)
+  │    │    ├─ capability.progressed (only actual external progress)
+  │    │    ├─ approval.requested / approval.resolved
+  │    │    └─ capability.succeeded | capability.failed
+  │    └─ workflow.linked (workflow_runtime_run_id, execution_run_id)
+  └─ message.delta* -> message.completed
+run.completed | run.failed | run.cancelled
+```
+
+`parent_event_id`、`turn_id` 和 `action_id` 用于稳定分组；它们不是展示性字段。`reasoning.delta` 仅承载模型或 Harness **实际显式输出给当前用户**的可见推理文本：例如 DeepSeek thinking mode 返回的 `reasoning_content`，或由 Harness 明确要求输出并标记为 `public_analysis` 的执行分析。它必须带 `source`、`visibility`、`sequence` 和脱敏结果，供同一授权范围内的 reconnect/history 回放；前端不得根据关键词、工具名或最终答案自行生成这一层。
+
+禁止持久化或展示的仍是：未由 provider API 显式返回的内部状态、system/developer prompt、原始 tool arguments/result、未授权附件正文、堆栈、数据库内部 ID、密钥及跨组织运行数据。大体积产物保存于领域对象/受控记录，Runtime Event 只保留可读引用句柄和必要状态。
+
+#### C. 工具、Skills 与安全边界
+
+Capability 是稳定、带 Pydantic schema 的领域动作；Skill 是可按需加载的程序性 SOP；两者都不是权限来源。工具描述必须包含“何时使用、何时不要使用、输入、输出、风险、后续动作”，服务端仍独立验证 project scope、角色、参数、额度和审批。禁止工具层静默篡改模型参数。
+
+Skill 采用渐进披露：静态前缀只包含名称、摘要、`use when` / `do not use when`；命中后才加载完整 `SKILL.md`，需要细节时继续加载子文档。不得依据关键词把所有 Skill 正文塞进每一轮系统提示词，也不得把未验证的网页、附件、模型输出自动升级为 Skill、长期记忆或权限规则。
+
+#### D. 暂停、后台任务与唤醒
+
+缺参、审批、取消、外部工具结果、Worker/LangGraph 进度和计时器都是持久事件，不是 SSE 连接存活时才存在的内存状态。异步 capability 必须具有明确的 `start`、`status`、`cancel` 语义；启动长工作流只返回受控 run 标识并创建 `workflow_bridge`，Worker 负责持续写入 child Runtime Event。
+
+P0 中，工作流终态通过持久通知和事件进入下一次 Harness 回合，且绝不能重复执行原 capability。后续 P1 的自动继续必须由独立、幂等的事件消费者创建新的 continuation Run；不得从 HTTP SSE 协程或进程内 hook “偷偷继续”。紧急取消在模型或工具边界生效；非紧急外部事件排队到当前原子步骤结束后消费。
+
+#### E. 上下文压缩与长期记忆
+
+静态 system/tool prefix 保持稳定以利缓存；动态上下文按预算追加。先限制工具结果、删除噪声、保留领域引用句柄，再做结构化归档摘要；不要每轮重新总结全部对话。归档摘要至少保留：目标、已验证事实及来源、已执行动作及结果、关键约束、审批/待办、失败和恢复策略、项目/章节/运行标识。压缩失败需要熔断，不得无限调用模型烧额度。
+
+会话轨迹、项目知识、用户长期偏好是三类不同数据：聊天历史不自动成为记忆；记忆必须有用户/组织 scope、来源、置信度、时效和可撤销性；检索到的证据与外部内容一律以不可信数据包注入，不能覆盖 system policy 或授权范围。
+
+#### F. 验收与可观测性
+
+Harness 修改必须新增或保持以下可执行验证：
+
+1. 单轮“查项目 -> 查资料/需求 -> 启动章节 Workflow”按事件顺序重放，且 Timeline 无重复消息/工具；
+2. provider 在工具调用前或工具之间输出可见 reasoning 时，浏览器按 `sequence` 先看到 reasoning 节点、再看到对应工具节点，并在工具结果后继续追加 reasoning 或最终答复；最终答复只出现一次；
+3. 相同 `client_request_id`、断线 reconnect、审批恢复、取消、后台 Worker 完成后回看均不重复扣费、写入或发消息；
+4. 三次连续失败、超步数、审批过期、模型配置不兼容、工具参数不完整均产生稳定错误码和安全终态；
+5. Prompt-injection、跨项目访问、未批准写入/导出、secret/原始 provider 错误泄露的回归测试为 100%。
+
+“看起来像 Claude/Codex 的 Timeline”不是后端验收条件；可靠的事件树、可重放状态、明确控制循环才是。前端只能消费本节事件契约，不能自行伪造计划、成功、进度或审批状态。
+
 ### 5.3 LangGraph 投标工作流规范
 
 当前 Worker 已存在的核心图节点包括 supervisor、RFP parser、memory context、knowledge retriever、content plan、section drafter、quality reviewer、human approval、persist result 和 memory proposals。P0 不重写成另一套图，而是把它收敛到以下输入/输出约束：
@@ -409,21 +604,42 @@ flowchart LR
 5. Checkpoint 用于恢复执行，不替代项目、版本、审批或审计的关系型真相。
 6. 任何模型生成都先成为候选版本，不能直接修改已批准版本或导出物。
 
-### 5.4 现有重复运行时的收口任务
+### 5.4 已收口的公开运行时与剩余验证
 
-仓库中历史上同时存在 `StreamingHarness`、`runtime/operator_graph.py`、`runtime/operator_adapter.py` 与 `agent/graph.py` 等路径。P0 必须完成 runtime inventory：
+仓库历史上曾同时存在 `StreamingHarness`、`runtime/operator_graph.py`、`runtime/operator_adapter.py` 与 `agent/graph.py` 等路径。公开 Assistant 现在固定为：`POST /assistant/stream` -> `stream_runtime_assistant_response` -> `RuntimeRun` / `RuntimeEvent`。不再按 rollout flag 在公开请求中切换到旧服务。
 
-1. 标明每个入口是否仍有生产调用；
-2. 对公开 Assistant 保留一个入口和一套事件协议；
-3. 兼容别名只能在配置解析层存在，不能再分叉业务流程；
-4. 无调用的旧图必须删除，或移动到明确标记的 migration/compatibility 模块并设删除日期；
-5. 用回归测试证明普通重试不会重复模型调用、消息或工具。
+已完成的契约：
+
+1. 新写入事件使用 Runtime schema `1.1`；读取端兼容既有 `1.0` 记录。
+2. Harness、确定性降级路径和 Worker workflow bridge 都写入同一套 durable `RuntimeEvent`；前端只能按 `run_id + event_id/sequence` 重放，不能伪造成功状态。
+3. Workflow 子运行按父 Run 的 `workflow.linked` 事件 sequence 排序，而不是按易漂移的时间戳排序。
+4. `client_request_id` 在 Assistant 与直接 drafting 请求上都参与幂等约束；重放发生在额度预留和模型调用之前。
+5. 失效或已删除的 BYOK provider 配置会明确拒绝 retry，绝不回落使用平台额度。
+
+仍未完成的发布门禁：
+
+1. 在干净 PostgreSQL 环境跑完整 migration、PostgresSaver checkpoint、SSE reconnect/replay 和真实 Worker continuation；SQLite 单测不能替代它。
+2. 对真实平台模型跑固定 golden run 三次，证明停止条件、错误脱敏、审批恢复和 quota 不会重复扣费或重复写入。
+3. 清理或明确隔离不再被公开入口使用的旧运行时模块，并在提交拆分时记录其删除期限。
 
 ---
 
 ## 6. 文档、检索、证据与记忆架构
 
 ### 6.1 文档处理管线
+
+#### 当前 P1-A 事实与 Document Intelligence v2 路线
+
+当前实现已完成 **P1-A 高频投标资料补齐**：格式白名单与签名校验后，PDF/DOCX/TXT/Markdown、DOCX 表格、XLSX 工作表和 CSV 都会进入统一解析管线；稀疏文本 PDF 页会在 Worker 内调用已安装的本地 Tesseract（`chi_sim+eng`）做 OCR。结果保留 parser 版本、`normalized_text`、页/表/工作表 locator 与显式 diagnostics。OCR 没有静默云端 fallback：未安装二进制、语言包缺失、渲染失败、超时和无可提取文本都会作为可查询失败原因持久化，不能被伪装为“已解析”。
+
+当前本地 OCR 只覆盖扫描 PDF 的基础中英文字识别，不宣称完成图片、复杂版面、PPTX、表格视觉结构或手写识别。`DOCPILOT_OCR_ENABLED` 与 `DOCPILOT_OCR_LANGS` 是 Worker 容器显式配置，默认镜像不下载任何外部模型，因此不会在开发机 C 盘产生模型缓存。
+
+后续文档智能按以下顺序继续：
+
+1. **P1-B：视觉与版面理解。** 在固定评测集证明收益后，再评估图片、复杂 PDF、PPTX 的布局/视觉模型 fallback；视觉模型输出只能成为带页码/区域定位的候选证据，不能直接成为业务事实。首选候选是 PP-OCRv5 Mobile 的本地 CPU 部署，但只能作为可选 Worker profile：模型目录必须显式挂载到项目数据盘，先记录镜像增量、吞吐、准确率和失败降级，再允许启用。
+2. **模型协同与成本治理。** 解析、OCR、视觉与生成模型的级联不是当前默认能力。只有在质量、延迟、成本和失败降级都有 benchmark 后，才可由 adapter/router 引入，不允许凭模型名称或提示词假装“大小模型协同”。
+
+验收标准不只是“能读到文字”：每条进入检索或引用的内容必须保留解析方法、版本和稳定 locator；解析失败必须显式可见，不能被空文本或模型猜测伪装为成功。
 
 ```text
 upload -> object storage -> file validation -> parser/OCR -> normalized document version
@@ -519,6 +735,7 @@ system policy
 | 能力 | 用户问题 | 后端优先实现 |
 | --- | --- | --- |
 | Go/No-Go | 这个机会值不值得投入？ | Opportunity、评分维度、风险/能力缺口、决策审计 |
+| 文档智能 v2 | 扫描件、表格和非纯文本资料如何可靠进入证据链？ | 按 6.1 的 P1-A 实现格式识别、原生解析、DOCX 表格、XLSX/CSV、扫描 PDF OCR 与统一 locator；先评测后扩展视觉模型 |
 | 团队与 SME 协作 | 谁回答哪条要求？何时逾期？ | requirement assignment、任务、提及、状态、通知事件 |
 | 截止日期与计划 | 哪些章节拖慢整体交付？ | milestone、SLA、依赖、风险 read model |
 | 组织内容库 | 如何复用已验证的答案而非重复找文件？ | ContentLibraryEntry、审核、生命周期、引用追踪 |
@@ -590,10 +807,86 @@ Assistant 和后台 Workflow 都以持久化 Runtime Event 为源，SSE 是实�
 - `capability.started`、`capability.progress`、`capability.completed`、`capability.failed`；
 - `approval.requested`、`approval.resolved`；
 - `workflow.linked`、`workflow.progress`；
+- `reasoning.delta`、`reasoning.completed`（`source = provider_reasoning | public_analysis`）；
 - `message.delta`、`message.completed`；
 - `run.cancelled`、`run.completed`、`run.failed`。
 
 前端要求：按 `run_id + event_id/sequence` 去重，可从 REST 拉取事件后 reconnect SSE；不能因为 optimistic UI 再创建一条用户消息或伪造一个工具成功。完整 UI 形态（摘要、展开 trace、审批、取消、后台恢复）必须基于这些 fixture 开发。
+
+### 8.4 工作台信息架构约束
+
+前端不是功能列表，也不是一个聊天框外包一圈导航。工作区信息架构必须投影投标响应的真实业务容器与状态：
+
+- **工作区层**：收件箱/待处理事项、投标项目、组织知识库、运行与质量、Agent；
+- **项目层**：概览、投标资料、要求与合规矩阵、证据与引用、响应计划、起草与版本、审核协作、交付导出、运行与审计；
+- **组织/账户层**：成员与角色、模型提供商、使用量/账单、安全与个人偏好，不得挤占主工作导航。
+
+任何主导航或页面都必须同时具备已定义的后端实体、真实数据、用户动作和可验证结果；否则不得以静态“文档”“设置”或装饰性面板占位。先按上述领域对象和 API/SSE 契约定义页面，再进行视觉实现；视觉原型只能决定呈现方式，不能凭空创造业务状态。
+
+#### 8.4.1 Agent 页面源码迁移合同（2026-08-05，阻塞项；受 0.1 前端重构宪法约束）
+
+**状态：当前 `/agent` 尝试未验收、不得宣称完成。** 它曾把旧组件套进自创壳、在最终文本后回放工具记录、并锁死消息滚动；这与本合同冲突。后续实现必须先满足本节，才能进入视觉验收或部署。
+
+##### A. 原稿与边界锁定
+
+唯一允许的视觉/交互来源是以下两套本地原稿：
+
+- Linear 完整工作台源稿：`C:\Users\Lenovo\Documents\Playground\opendesign\mockups\linear-reference`；
+- Claude Agent 对话、运行轨迹与多级展开：`C:\Users\Lenovo\Documents\Playground\product-ui-reference-library\mockups\claude-reference`。
+
+`reference.html` 仅用于人工对照，永远不是产品路由、iframe、静态页面替身或 mock 数据来源。React 实现必须把原稿的实际 DOM 层级、CSS、字体、间距、grid 展开和交互状态迁入组件；组件名称可以变化，呈现结构和行为不能被“参考后重新设计”。
+
+Linear 是**整个新工作台**的源码迁移基座：侧栏、主画布、顶栏、边界、留白、列表与页面组织关系均从该源稿迁入 React。它不授权复用旧 `PlatformShell`、旧导航顺序、旧标签、旧页面分布或自创“概览/待办/组织”等信息架构。BidPilot 的产品信息架构须以后端领域和本 Spec 的工作区/项目/组织边界为准，直接映射为该源稿中的工作台页面，而不是在旧 UI 外包一层 Linear 外壳。
+
+Claude 只负责**Agent 对话主体**。不得为了“统一成 Linear 风格”改写 Claude 的消息排版、纵向轨道、多级 Runtime、步骤节点、工具结果组、字体或 Composer 位置。现阶段允许保留已验证的 composer 行为（上传、模型选择、审批、取消、发送），但它只能是底部功能桥接：旧 `AIAssistantPanel` 的页头、历史栏、消息区、Timeline 和布局不得进入新 Agent 页面，也不得影响 Claude 主体的 DOM/CSS。
+
+##### B. 真实运行时到 Claude 轨迹的映射
+
+Agent 页必须按真实流展示三类内容，且三者都不能由浏览器猜测或回放伪造：
+
+1. **可见推理流**：provider API 实际流出的 reasoning/thinking 内容（当前 DeepSeek V4 Flash Chat Completions 的 `reasoning_content`），或 Harness 明确请求并输出的 `public_analysis`。它们是模型产生、服务端脱敏、带来源标记的 transcript part，不是“工具调用摘要”的关键词替换。
+2. **真实运行轨迹**：Capability、Skill、搜索、审批、Workflow 的实际状态与可公开结果；例如“已读取项目资料”“已加载 DOCX 处理步骤”“正在检索证据”“已启动章节起草”。
+3. **最终答复**：只承载完成后的面向用户结论、引用和下一步。
+
+不得显示的仅是未由 provider API 显式输出的私有内部状态、原始 prompt、原始 tool arguments/result、`tool_call_id`、内部 ID、堆栈和密钥。若模型不支持 reasoning 流，Harness 必须在调用工具前生成并持久化模型写出的 `public_analysis` 事件，或明确标记为“不提供可见推理”；前端不得拿工具名称、关键词或最终答复补造“思考过程”。
+
+所有节点都必须在收到 SSE/durable Runtime Event 的当刻追加或更新到当前 turn 的轨迹。最小事件映射固定如下：
+
+| 后端事实 | Claude 原稿中的呈现 | 前端行为 |
+| --- | --- | --- |
+| `run.started` / `plan.updated` | turn 的运行标题、spinner、公开任务摘要 | 立即创建当前运行组；不可等待最终答复 |
+| `reasoning.delta` / `reasoning.completed` | Claude 原稿中的 `ThoughtNode` | 以收到顺序逐段流入可展开的纵向轨道；标注来源为 provider reasoning 或 Harness public analysis，不能改写为工具摘要 |
+| `capability.started` | 第一层运行节点，例如“检索项目”“读取资料” | 先于任何最终 assistant 文本出现，状态为运行中 |
+| `capability.progressed` / Skill 加载 / 受控外部检索 | 嵌套步骤节点，例如“已加载 DOCX 步骤”“正在查询资料包” | 追加到所属 capability 的纵向轨道，实时更新 |
+| `workflow.linked` / Worker 进度 | 嵌套 Runtime / Workflow 节点 | 显示运行中、已完成、失败、等待审批等真实状态；可展开查看公开步骤 |
+| `approval.requested` / `approval.resolved` | 轨迹中的审批分支 | 在同一 turn 内暂停/恢复，不另造浮层卡片作为主要状态 |
+| `capability.succeeded` / `capability.failed` | 对应节点终态与简短结果 | 原位替换状态；失败显示稳定产品摘要，不能显示原始异常 |
+| `message.delta` / `message.completed` | Claude 原稿中的最终 prose 输出 | 严格按服务端 `sequence` 流入；Harness 对执行型 turn 默认在 capability 终态后才发最终答复，前端不得人为提前展示或延后回放 |
+| `run.completed` / `run.failed` / `run.cancelled` | 运行组终态 | 关闭 spinner，保留可展开的已脱敏轨迹 |
+
+因此，禁止“先输出 AI 正文、任务结束后再把 `executionItems` 补到下方”的回放式 UI，也禁止把模型可见推理伪造成静态欢迎文案。`reasoning`、运行节点与最终文本必须在各自 SSE/durable Runtime Event 到达的当刻按 `sequence` 插入同一条轨迹。若 SSE 或后端事件缺少可见推理、`public_summary`、父子关系、步骤状态或 sequence，先补后端事件契约和 fixture，再做前端；不得用浏览器 local state 猜测成功、进度、推理或工具层级。
+
+##### C. Claude 原稿的非卡片呈现约束
+
+1. Timeline 必须保留 Claude 原稿的纵向轨道、缩进、细线、状态图标及 `grid-template-rows` 展开/收起；展开内容是原轨迹的自然延伸，不得替换成圆角卡片列表。
+2. 不得新增“解释性欢迎文案”“功能清单”“AI 正在思考”装饰块、渐变营销区或任意通用 `Card` 容器。原稿本身存在的搜索结果、代码/文件 diff、运行输出等结构可按原 DOM 使用。
+3. 工具组、子步骤、搜索结果、文件变更和后台 Runtime 必须能多层嵌套，并以稳定 `event_id/parent_event_id/sequence` 建树；页面刷新或 SSE reconnect 后重放相同树，不能重复一条消息或节点。
+4. 用户消息、运行轨迹和最终 prose 必须是三个独立的原稿层次；禁止把附件、工具结果或最终文本塞进同一个聊天气泡。
+
+##### D. 滚动与 Composer 结构
+
+Agent 主画布必须是 `min-height: 0` 的纵向 flex 容器：消息/Timeline 区是唯一 `overflow-y: auto` 的滚动层；composer 是该画布内的固定底部 sibling，并为滚动区预留真实高度。禁止通过绝对定位覆盖消息、对父级设置 `overflow: hidden` 后无滚动出口，或让整个页面与消息区争抢滚动。
+
+验收时必须能滚动到长对话的最后一条运行节点和最终文本，底部 composer 始终可见且不遮挡内容；桌面窄窗口与移动宽度同样成立。
+
+##### E. 实现与验收顺序
+
+1. 先移除被拒绝的 Agent 页面自创布局和旧消息/Timeline 桥接，仅保留后端状态、SSE、上传和 composer 的功能接口；不改其他产品页面。
+2. 按 Claude 原稿源码迁入静态 DOM/CSS，再以测试 fixture 接入一个真实顺序：用户消息 -> `reasoning.delta` -> `capability.started` -> 多级进度/搜索结果 -> `reasoning.delta`（可选）-> 终态 -> `reasoning.completed` -> 最终文本。fixture 必须证明节点按事件到达顺序追加，而不是最终回放。
+3. 接入真实 `RuntimeEvent`/SSE/replay；工具开始、进展、暂停、审批、取消、后台 workflow completion 都必须在不刷新页面的情况下更新同一条轨迹。
+4. 在独立的新工作台 React 目录中逐页迁移 Linear 原稿，并把确定后的 BidPilot 信息架构映射进去；不得从旧 UI 抄导航，也不得在未定义业务实体的情况下填充页面或保留旧工作台作为 fallback。
+
+最低验收证据：桌面与窄屏截图对照原稿、真实 SSE 工具优先顺序、长对话滚动、取消、审批、断线重连、历史回放，以及“没有原始 payload/重复消息/自创卡片”的自动化回归。未同时通过这些验收，禁止写“Claude 风格 Timeline 已完成”“前端已迁移”或“可部署”。
 
 ---
 
@@ -629,6 +922,8 @@ P0 防护：
 - 模型调用记录 provider/model/policy/usage/cost 的红脱敏元数据；
 - 平台试用额度、BYOK 额度和速率限制在服务器端按 user/org 生效，不能依赖前端计数；
 - 上游 4xx/5xx 映射为稳定产品错误，保留可支持的关联 Run ID。
+
+当前平台默认模型配置为：服务端 `DEEPSEEK_API_KEY` 走 DeepSeek Chat Completions，未额外指定时使用 `https://api.deepseek.com/v1` 与 `deepseek-v4-flash`；向量检索走服务端 `OPENROUTER_API_KEY`、`qwen/qwen3-embedding-8b`、1536 维。两类 key 都不得进入浏览器、SSE、审计事件、测试日志或仓库。用户 BYOK 仍通过加密 provider 配置调用，不与平台额度混用。
 
 ### 9.4 运行安全与数据保护
 
@@ -765,6 +1060,8 @@ P0 至少应能按 `run_id` 关联：
 | P0-C5 | Graph state correctness | Worker 图从稳定输入启动/恢复；HITL 与业务审核记录同步；重复 resume 不重复写版本 |
 | P0-C6 | 失败治理 | provider、parser、tool 连续失败停止；错误脱敏、分类、可查 Run ID；无无限 retry |
 
+当前完成度：P0-C1 至 P0-C4 已有实现与契约回归；P0-C5 的稳定输入、HITL、可恢复 checkpoint 与 retry lineage 已落盘，但还需要 PostgreSQL staging 的真实恢复证明；P0-C6 的失败上限、取消、错误脱敏和 provider 失败回归已覆盖，仍需真实模型的三次 golden run。
+
 ### Phase P0-D：上下文、质量与生产试运行证据
 
 | ID | 工作 | 完成条件 |
@@ -787,9 +1084,11 @@ P0 至少应能按 `run_id` 关联：
 
 ### P1/P2 开始条件
 
-- 只有 P0-A 到 P0-E 全部通过后，才开始 P1 的协作、内容库、Go/No-Go、变更管理；
+- 只有 P0-A 到 P0-E 全部通过后，才将 P1 的协作、内容库、Go/No-Go、变更管理纳入可对外承诺的发布范围；
 - 只有 P1 有真实使用数据和 benchmark 后，才考虑 P2 的 WeKnora、图谱、SSO、复杂计费、外部 connector；
 - 任何需求若不能改善上述 DoD，进入 Backlog，不插队。
+
+当前仓库已经有协作、Go/No-Go、内容库和变更管理的领域模型、迁移、API 与回归测试。这些是 **P1 实现资产**，不是 P1 发布完成的声明：仍需在 P0 的迁移、测试、eval 和 staging 演练门禁全部通过后，才允许作为真实团队工作流对外开放。
 
 ---
 
@@ -802,9 +1101,9 @@ P0 至少应能按 `run_id` 关联：
 | FastAPI + Pydantic + SQLAlchemy | 已有 API 领域模块和迁移体系 | 收敛服务边界、补 contract tests |
 | PostgreSQL + pgvector | 已有业务真相与向量检索方向 | 增加 evidence/version/isolation 不变量 |
 | Redis + Celery | 已有异步入口 | 做 idempotency、outbox/补偿和可恢复验证 |
-| Worker LangGraph | 已有 drafting 图与 human approval 节点 | 收敛输入/输出、恢复、业务审批同步 |
-| StreamingHarness | 已有受治理 Assistant 路径 | 消除旧入口、加强多步/replay/错误治理 |
-| RuntimeRun/Event/Approval | 已有 durable trace 基础 | 固定 schema、lineage、SSE replay 和 UI fixture |
+| Worker LangGraph | 已有 drafting 图与 human approval 节点、稳定输入和 durable checkpoint | staging PostgreSQL 证明恢复和重复 resume 不写入重复版本 |
+| StreamingHarness | 公开入口已收敛至 Runtime adapter，具备受治理 capability loop、approval、cancel 与幂等 | 清理旧内部路径并用真实模型 golden run 证明多步执行 |
+| RuntimeRun/Event/Approval | 事件 schema 1.2、lineage、provider visible reasoning、SSE replay 契约已落盘 | 在 staging 验证真实 DeepSeek thinking、reconnect、后台 workflow completion 与 UI 重放 |
 | 混合检索/重排 | 已有 dense + sparse/RRF + rerank 方向 | 以 citation validity 和 retrieval eval 验收 |
 | 记忆 proposal/graph review | 已有受控提案方向 | 做 compaction、授权、评测，不急于图谱投影 |
 | MCP | 已有受治理入口 | 仅作为 adapter，不让其绕过 policy |
@@ -812,12 +1111,13 @@ P0 至少应能按 `run_id` 关联：
 
 ### 13.2 必须修正的架构债
 
-1. 当前历史运行时路径重叠，公开入口、兼容 alias、旧 LangGraph/adapter 的所有权不清。
+1. 公开 Assistant 已收敛，但历史内部运行时模块尚未完全删除或隔离；提交拆分前必须完成 inventory。
 2. 当前工作区存在未收口代码与迁移；在这一状态继续堆功能会让部署、回滚和评测不可重复。
 3. lint/type 检查尚非可靠 release gate，测试依赖专用 `_test` 数据库但缺乏一键可复跑路径。
-4. 公网曾出现缺 migration、provider 配置/模型名不一致、重复消息/重复工具执行等问题；这些必须靠后端约束和回归测试解决，不能靠前端隐藏。
+4. 公网曾出现缺 migration、provider 配置/模型名不一致、重复消息/重复工具执行等问题；当前已有后端约束和回归，但尚缺 staging/真实模型的重复演练证据。
 5. 当前 graph/memory 设计文件明确禁止把 proposal 直接当事实，但产品叙事与前端仍需遵守这一边界。
-6. UI 存在大量质量问题；它们在 P0 只消费稳定 API/事件，视觉重构在后端契约稳定后独立分支执行。
+6. P1-A 基础文档解析已完成；复杂版面、图片、PPTX 和可选本地视觉 OCR 仍需以评测为前提推进。
+7. UI 存在大量质量问题；它们在 P0 只消费稳定 API/事件，视觉重构在后端契约稳定后独立分支执行。
 
 ---
 

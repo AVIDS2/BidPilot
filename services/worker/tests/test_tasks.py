@@ -1,7 +1,19 @@
 import uuid
+from types import SimpleNamespace
 
+import app.tasks as task_module
 from app.db import SessionLocal
-from app.models import AssistantAttachment, Bundle, ExecutionRun, KnowledgeChunk, Organization, Project, RuntimeRun, SourceDocument
+from app.models import (
+    AssistantAttachment,
+    Bundle,
+    ExecutionRun,
+    KnowledgeChunk,
+    Organization,
+    Project,
+    RuntimeEvent,
+    RuntimeRun,
+    SourceDocument,
+)
 from app.tasks import cleanup_assistant_attachments, draft_section, ingest_bundle, ping, reindex_bundle
 from contracts.models import User
 
@@ -25,6 +37,141 @@ def _ensure_test_org(db) -> str:
 
 def test_ping_task() -> None:
     assert ping() == "pong"
+
+
+def test_remote_import_task_persists_result_and_runtime_timeline(monkeypatch) -> None:
+    """A queued artifact import must finish as a durable, replayable child run."""
+    db = SessionLocal()
+    try:
+        suffix = _unique_suffix()
+        org_id = _ensure_test_org(db)
+        user = User(
+            org_id=org_id,
+            email=f"remote-import-{suffix}@example.test",
+            display_name="Remote Import",
+            role="admin",
+            password_hash="test-only",
+        )
+        db.add(user)
+        db.flush()
+        project = Project(
+            name=f"Remote Import {suffix}",
+            slug=f"remote-import-{suffix}",
+            scenario_package="bidpilot",
+            org_id=org_id,
+        )
+        db.add(project)
+        db.flush()
+        bundle = Bundle(project_id=project.id, label="Agent uploads", source_type="agent")
+        db.add(bundle)
+        db.flush()
+        runtime_run = RuntimeRun(
+            kind="remote_import",
+            status="queued",
+            org_id=org_id,
+            user_id=user.id,
+            project_id=project.id,
+            engine="remote_import_worker",
+            trace_id=f"remote-import-trace-{suffix}",
+            policy_snapshot_json={"approval_mode": "risky_only"},
+            input_json={
+                "project_id": project.id,
+                "bundle_id": bundle.id,
+                "url": "https://buyer.example.test/files/tender-software.zip",
+                "filename": "tender-software.zip",
+                "import_mode": "artifact",
+            },
+        )
+        db.add(runtime_run)
+        db.commit()
+        runtime_run_id = runtime_run.id
+        bundle_id = bundle.id
+    finally:
+        db.close()
+
+    cleaned: list[bool] = []
+    downloaded = SimpleNamespace(
+        file_path="/tmp/test-artifact.zip",
+        byte_count=19,
+        checksum="a" * 64,
+        signature=b"PK\x03\x04test-artifact",
+        content_type="application/zip",
+        filename="tender-software.zip",
+        source_url="https://buyer.example.test/files/tender-software.zip",
+        cleanup=lambda: cleaned.append(True),
+    )
+    uploaded = SimpleNamespace(
+        id=f"document-{suffix}",
+        original_filename="tender-software.zip",
+        parse_status="not_applicable",
+        ingest_queued=False,
+    )
+    monkeypatch.setattr(task_module, "download_remote_artifact_to_tempfile", lambda *_args, **_kwargs: downloaded)
+    monkeypatch.setattr(task_module, "upload_artifact_file_command", lambda *_args, **_kwargs: uploaded)
+
+    result = task_module.import_remote_document(runtime_run_id)
+
+    assert result["status"] == "succeeded"
+    assert result["document_id"] == uploaded.id
+    assert result["storage_status"] == "stored_no_parse"
+    assert cleaned == [True]
+    db = SessionLocal()
+    try:
+        runtime_run = db.get(RuntimeRun, runtime_run_id)
+        assert runtime_run is not None
+        assert runtime_run.status == "succeeded"
+        assert runtime_run.result_json is not None
+        assert runtime_run.result_json["document_id"] == uploaded.id
+        assert db.get(Bundle, bundle_id) is not None
+        event_types = [
+            event.event_type
+            for event in (
+                db.query(RuntimeEvent)
+                .filter(RuntimeEvent.run_id == runtime_run_id)
+                .order_by(RuntimeEvent.sequence.asc())
+                .all()
+            )
+        ]
+        assert event_types == [
+            "capability.started",
+            "capability.progressed",
+            "capability.succeeded",
+            "run.completed",
+        ]
+    finally:
+        db.close()
+
+
+def test_transient_embedding_failure_is_scheduled_with_bounded_backoff(monkeypatch) -> None:
+    scheduled: list[dict[str, object]] = []
+
+    class FakeTask:
+        request = SimpleNamespace(retries=1)
+
+        def retry(self, **kwargs):
+            scheduled.append(kwargs)
+
+    monkeypatch.setattr(task_module, "bundle_has_retryable_embedding_failure", lambda _bundle_id: True)
+    retrying_bundles: list[str] = []
+    monkeypatch.setattr(task_module, "mark_bundle_index_retrying", lambda bundle_id: retrying_bundles.append(bundle_id))
+
+    assert task_module._retry_transient_bundle_index(FakeTask(), "bundle-retry") is True
+    assert retrying_bundles == ["bundle-retry"]
+    assert scheduled[0]["countdown"] == 10
+    assert scheduled[0]["max_retries"] == 3
+
+
+def test_transient_embedding_failure_stops_after_retry_budget(monkeypatch) -> None:
+    class ExhaustedTask:
+        request = SimpleNamespace(retries=3)
+
+        def retry(self, **_kwargs):
+            raise AssertionError("retry budget is exhausted")
+
+    monkeypatch.setattr(task_module, "bundle_has_retryable_embedding_failure", lambda _bundle_id: True)
+    monkeypatch.setattr(task_module, "mark_bundle_index_retrying", lambda _bundle_id: (_ for _ in ()).throw(AssertionError("must not mark")))
+
+    assert task_module._retry_transient_bundle_index(ExhaustedTask(), "bundle-final") is False
 
 
 def test_ingest_bundle_task() -> None:
@@ -88,15 +235,17 @@ def test_draft_section_task() -> None:
 
     result = draft_section(run_id, project_id, "technical-approach")
     assert result["run_id"] == run_id
-    assert result["status"] == "succeeded"
+    # Without a trustworthy automatic review, the candidate must wait for
+    # an explicit human decision instead of being silently marked complete.
+    assert result["status"] == "awaiting_human"
 
     # Verify DB state
     db = SessionLocal()
     try:
         r = db.get(ExecutionRun, run_id)
         assert r is not None
-        assert r.status == "succeeded"
-        assert r.finished_at is not None
+        assert r.status == "awaiting_human"
+        assert r.finished_at is None
     finally:
         db.close()
 
@@ -341,7 +490,6 @@ def test_draft_section_cancels_after_graph_work_when_request_arrives_in_flight(m
         runtime_run_id = runtime_run.id
     finally:
         db.close()
-
     def graph_then_request_cancellation(*_args, **_kwargs):
         worker_db = SessionLocal()
         try:
@@ -368,5 +516,77 @@ def test_draft_section_cancels_after_graph_work_when_request_arrives_in_flight(m
         runtime_run = db.get(RuntimeRun, runtime_run_id)
         assert run is not None and run.status == "cancelled"
         assert runtime_run is not None and runtime_run.status == "cancelled"
+    finally:
+        db.close()
+
+
+def test_graph_error_is_not_reported_as_human_approval(monkeypatch) -> None:
+    """A stale LangGraph interrupt marker must never mask a persistence error."""
+    db = SessionLocal()
+    try:
+        suffix = _unique_suffix()
+        org_id = _ensure_test_org(db)
+        user = User(
+            org_id=org_id,
+            email=f"graph-error-{suffix}@example.test",
+            display_name="Graph Error",
+            role="admin",
+            password_hash="test-only",
+        )
+        db.add(user)
+        db.flush()
+        project = Project(
+            name=f"Graph Error {suffix}",
+            slug=f"graph-error-{suffix}",
+            scenario_package="bidpilot",
+            org_id=org_id,
+        )
+        db.add(project)
+        db.flush()
+        run = ExecutionRun(project_id=project.id, run_type="draft_section", status="running")
+        db.add(run)
+        db.flush()
+        runtime_run = RuntimeRun(
+            kind="workflow_bridge",
+            status="running",
+            org_id=org_id,
+            user_id=user.id,
+            project_id=project.id,
+            execution_run_id=run.id,
+            engine="langgraph_workflow",
+            trace_id=f"graph-error-trace-{suffix}",
+            policy_snapshot_json={"approval_mode": "risky_only"},
+        )
+        db.add(runtime_run)
+        db.commit()
+        run_id = run.id
+        project_id = project.id
+        runtime_run_id = runtime_run.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr(task_module, "_USE_LANGGRAPH", True)
+    monkeypatch.setattr(
+        "app.graph.builder.invoke_graph",
+        lambda *_args, **_kwargs: {
+            "__interrupt__": ("stale approval marker",),
+            "error": "response_plan_binding_deliverable_section_mismatch",
+        },
+    )
+
+    result = task_module._execute_draft_section(
+        run_id,
+        project_id,
+        "technical-approach",
+        runtime_run_id=runtime_run_id,
+    )
+
+    assert result["status"] == "error"
+    db = SessionLocal()
+    try:
+        run = db.get(ExecutionRun, run_id)
+        runtime_run = db.get(RuntimeRun, runtime_run_id)
+        assert run is not None and run.status == "failed"
+        assert runtime_run is not None and runtime_run.status == "failed"
     finally:
         db.close()

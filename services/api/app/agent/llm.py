@@ -24,6 +24,12 @@ from pydantic import SecretStr
 
 from app.providers.endpoints import normalize_provider_base_url, profile_client_headers
 from app.runtime.model_limits import OPERATOR_PLANNER_MAX_OUTPUT_TOKENS
+from contracts.chat_config import (
+    DEEPSEEK_CHAT_COMPLETIONS_BASE_URL,
+    DEEPSEEK_V4_FLASH_MODEL,
+    OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL,
+    OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL,
+)
 
 ReasoningEffort = Literal["low", "medium", "high", "extra", "max"]
 
@@ -42,6 +48,47 @@ _ANTHROPIC_REASONING_EFFORT: dict[str, str] = {
     "extra": "xhigh",
     "max": "max",
 }
+
+_DEEPSEEK_REASONING_EFFORT: dict[str, str] = {
+    "low": "low",
+    "medium": "high",
+    "high": "high",
+    "extra": "high",
+    "max": "max",
+}
+
+
+class DeepSeekChatOpenAI(ChatOpenAI):
+    """Keep DeepSeek V4's public reasoning stream on LangChain chunks.
+
+    DeepSeek emits ``delta.reasoning_content`` in its OpenAI-compatible
+    Chat Completions stream.  The installed langchain-openai converter keeps
+    tool chunks and ordinary content but drops that provider field.  Preserve
+    it in ``additional_kwargs`` so the governed runtime can persist and replay
+    exactly what the provider returned, without synthesizing a thought trace.
+    """
+
+    def _convert_chunk_to_generation_chunk(
+        self,
+        chunk: dict[str, Any],
+        default_chunk_class: type,
+        base_generation_info: dict[str, Any] | None,
+    ) -> Any:
+        generation_chunk = super()._convert_chunk_to_generation_chunk(
+            chunk,
+            default_chunk_class,
+            base_generation_info,
+        )
+        if generation_chunk is None:
+            return None
+        choices = chunk.get("choices", []) or chunk.get("chunk", {}).get("choices", [])
+        if not choices or not isinstance(choices[0], dict):
+            return generation_chunk
+        delta = choices[0].get("delta")
+        reasoning = delta.get("reasoning_content") if isinstance(delta, dict) else None
+        if isinstance(reasoning, str) and reasoning:
+            generation_chunk.message.additional_kwargs["reasoning_content"] = reasoning
+        return generation_chunk
 
 
 class AgentModelConfigurationError(ValueError):
@@ -98,20 +145,41 @@ def resolve_agent_model(
 
     assistant_key = _env_value(env, "DOCPILOT_ASSISTANT_API_KEY")
     if assistant_key:
+        assistant_provider_id = _env_value(env, "DOCPILOT_ASSISTANT_PROVIDER_ID") or "deepseek"
+        uses_opencode_go = assistant_provider_id.casefold() == "opencode-go"
         return _platform_model(
             api_key=assistant_key,
             provider_type=_env_value(env, "DOCPILOT_ASSISTANT_PROTOCOL") or "openai",
-            provider_id=_env_value(env, "DOCPILOT_ASSISTANT_PROVIDER_ID") or "deepseek",
+            provider_id=assistant_provider_id,
             base_url=(
                 _env_value(env, "DOCPILOT_ASSISTANT_BASE_URL")
-                or _env_value(env, "DEEPSEEK_BASE_URL")
-                or "https://api.deepseek.com/v1"
+                or (
+                    _env_value(env, "OPENCODE_BASE_URL") or OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL
+                    if uses_opencode_go
+                    else _env_value(env, "DEEPSEEK_BASE_URL") or DEEPSEEK_CHAT_COMPLETIONS_BASE_URL
+                )
             ),
             model=(
                 _env_value(env, "DOCPILOT_ASSISTANT_MODEL")
-                or _env_value(env, "DEEPSEEK_MODEL")
+                or (
+                    _env_value(env, "OPENCODE_MODEL") or OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL
+                    if uses_opencode_go
+                    else _env_value(env, "DEEPSEEK_MODEL")
+                    or (DEEPSEEK_V4_FLASH_MODEL if assistant_provider_id == "deepseek" else None)
+                )
             ),
             source_name="DOCPILOT_ASSISTANT_*",
+        )
+
+    opencode_key = _env_value(env, "OPENCODE_API_KEY")
+    if opencode_key:
+        return _platform_model(
+            api_key=opencode_key,
+            provider_type="openai",
+            provider_id="opencode-go",
+            base_url=_env_value(env, "OPENCODE_BASE_URL") or OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL,
+            model=_env_value(env, "OPENCODE_MODEL") or OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL,
+            source_name="OPENCODE_*",
         )
 
     deepseek_key = _env_value(env, "DEEPSEEK_API_KEY")
@@ -120,8 +188,8 @@ def resolve_agent_model(
             api_key=deepseek_key,
             provider_type="openai",
             provider_id="deepseek",
-            base_url=_env_value(env, "DEEPSEEK_BASE_URL") or "https://api.deepseek.com/v1",
-            model=_env_value(env, "DEEPSEEK_MODEL"),
+            base_url=_env_value(env, "DEEPSEEK_BASE_URL") or DEEPSEEK_CHAT_COMPLETIONS_BASE_URL,
+            model=_env_value(env, "DEEPSEEK_MODEL") or DEEPSEEK_V4_FLASH_MODEL,
             source_name="DEEPSEEK_*",
         )
 
@@ -189,6 +257,27 @@ def _supports_openai_reasoning(base_url: str, model: str) -> bool:
     return "api.openai.com" in base_url.lower() and model.lower().startswith(("o1", "o3", "o4", "gpt-5"))
 
 
+def _supports_deepseek_v4_thinking(
+    provider_id: str | None,
+    base_url: str,
+    model: str,
+) -> bool:
+    """Return whether this is the official DeepSeek V4 thinking surface."""
+    is_deepseek = (provider_id or "").lower() == "deepseek" or "api.deepseek.com" in base_url.lower()
+    return is_deepseek and model.lower().startswith("deepseek-v4-")
+
+
+def _uses_opencode_go_deepseek_v4(
+    provider_id: str | None,
+    base_url: str,
+    model: str,
+) -> bool:
+    return (
+        (provider_id or "").lower() == "opencode-go"
+        or "opencode.ai/zen/go" in base_url.lower()
+    ) and model.lower().startswith("deepseek-v4-")
+
+
 def _supports_anthropic_effort(base_url: str, model: str) -> bool:
     normalized = f"{base_url} {model}".lower()
     return "api.anthropic.com" in normalized and (
@@ -217,8 +306,9 @@ def get_agent_llm(
     Resolution priority:
     1. Explicit parameters (user BYOK from provider_config table)
     2. DOCPILOT_ASSISTANT_* env vars (dedicated assistant LLM)
-    3. DEEPSEEK_* env vars (legacy platform config)
-    4. DOCPILOT_PROVIDER_DOMESTIC_* env vars (shared platform provider)
+    3. OPENCODE_* env vars (OpenCode Go platform profile)
+    4. DEEPSEEK_* env vars (legacy platform config)
+    5. DOCPILOT_PROVIDER_DOMESTIC_* env vars (shared platform provider)
 
     A missing configuration is an explicit server-side error. Never create a
     placeholder client which could fail later with a misleading model error.
@@ -237,6 +327,42 @@ def get_agent_llm(
         resolved.model,
         provider_id=resolved.provider_id,
         reasoning_effort=reasoning_effort,
+    )
+
+
+def get_required_tool_choice_llm(llm: BaseChatModel) -> BaseChatModel:
+    """Return a compatible model for a server-enforced tool-call retry.
+
+    DeepSeek V4 accepts normal tool calls while thinking is enabled, but rejects
+    the OpenAI-compatible ``tool_choice`` control in that mode.  A harness must
+    occasionally require one tool call after the model has already promised a
+    business action in prose.  Reusing the thinking client would turn that
+    correction into a provider 400 instead of a governed approval/action.
+
+    Only that narrowly-scoped retry uses a fresh non-thinking client.  The
+    normal reasoning turn keeps its configured thinking mode and provider
+    settings.  Other providers retain their existing client because their
+    tool-choice semantics are provider-specific.
+    """
+    if not isinstance(llm, DeepSeekChatOpenAI):
+        return llm
+
+    model_name = str(getattr(llm, "model_name", ""))
+    base_url = str(getattr(llm, "openai_api_base", ""))
+    if not _supports_deepseek_v4_thinking("deepseek", base_url, model_name):
+        return llm
+
+    return DeepSeekChatOpenAI(
+        api_key=llm.openai_api_key,
+        base_url=llm.openai_api_base,
+        model=model_name,
+        streaming=True,
+        temperature=0.1,
+        max_completion_tokens=getattr(llm, "max_tokens", None) or OPERATOR_PLANNER_MAX_OUTPUT_TOKENS,
+        max_retries=getattr(llm, "max_retries", None),
+        request_timeout=getattr(llm, "request_timeout", None),
+        default_headers=getattr(llm, "default_headers", None),
+        extra_body={"thinking": {"type": "disabled"}},
     )
 
 
@@ -270,18 +396,33 @@ def _make(
         )
 
     openai_kwargs: dict[str, Any] = {}
-    if reasoning_effort and _supports_openai_reasoning(normalized_base_url, model):
+    uses_deepseek_v4_thinking = _supports_deepseek_v4_thinking(provider_id, normalized_base_url, model)
+    uses_opencode_go_deepseek_v4 = _uses_opencode_go_deepseek_v4(provider_id, normalized_base_url, model)
+    if reasoning_effort and uses_deepseek_v4_thinking:
+        # DeepSeek V4 requires both the effort selector and an explicit
+        # thinking opt-in.  ``extra`` is a product-level setting; Flash maps
+        # it to the closest documented provider level, ``high``.
+        openai_kwargs["reasoning_effort"] = _DEEPSEEK_REASONING_EFFORT[reasoning_effort]
+        openai_kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+    elif reasoning_effort and uses_opencode_go_deepseek_v4:
+        # Pi's OpenCode Go adapter records that this route rejects a combined
+        # ``thinking`` and ``reasoning_effort`` request for DeepSeek V4. The
+        # product-level effort still shapes the server prompt; the gateway gets
+        # only its stable native thinking switch.
+        openai_kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
+    elif reasoning_effort and _supports_openai_reasoning(normalized_base_url, model):
         openai_kwargs["reasoning_effort"] = _OPENAI_REASONING_EFFORT[reasoning_effort]
     # langchain-openai normalizes its legacy `max_tokens` argument to this
     # current Chat Completions field even for custom base URLs. Pass it
     # explicitly so the planner boundary is visible and warning-free.
     openai_kwargs["max_completion_tokens"] = OPERATOR_PLANNER_MAX_OUTPUT_TOKENS
-    return ChatOpenAI(
+    chat_model_class = DeepSeekChatOpenAI if uses_deepseek_v4_thinking else ChatOpenAI
+    return chat_model_class(
         api_key=secret_api_key,
         base_url=normalized_base_url,
         model=model,
         streaming=True,
-        temperature=0.7,
+        temperature=None if uses_deepseek_v4_thinking else 0.7,
         default_headers=client_headers or None,
         **openai_kwargs,
     )

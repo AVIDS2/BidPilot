@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from contracts.runtime import (
+    RUNTIME_EVENT_SCHEMA_VERSION,
     RuntimeActionStatus,
     RuntimeApprovalDecision,
     RuntimeApprovalStatus,
@@ -24,7 +25,8 @@ def test_runtime_event_requires_a_monotonic_sequence_and_public_summary() -> Non
     assert event.sequence == 2
     assert event.payload["count"] == 2
     assert event.event_id
-    assert event.schema_version == "1.1"
+    assert event.schema_version == "1.2"
+    assert RUNTIME_EVENT_SCHEMA_VERSION == "1.2"
 
     with pytest.raises(ValidationError):
         RuntimeEventRecord(

@@ -1,4 +1,5 @@
 import os
+from collections.abc import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -20,3 +21,8 @@ def get_session() -> Session:
         yield session
     finally:
         session.close()
+
+
+def get_db() -> Generator[Session, None, None]:
+    """FastAPI-compatible session dependency for shared domain services."""
+    yield from get_session()

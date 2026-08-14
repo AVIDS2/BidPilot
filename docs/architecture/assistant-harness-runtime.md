@@ -120,3 +120,50 @@ Before changing this runtime, preserve tests for:
 - attachment hydration from server-owned staged metadata
 - redacted provider/model failures after the SSE stream starts
 - workflow bridge linkage between assistant run and worker execution
+
+## External MCP tools (sensing extensions)
+
+The Harness can load read-style tools from allowlisted external MCP servers.
+This follows the trust boundary in AI-Agents-in-Depth 4.3:
+
+- **Allowlist only** — servers must be listed in `DOCPILOT_MCP_SERVERS`.
+- **Namespace prefix** — every tool is exposed as `mcp_<server>_<tool>` so a
+  remote server cannot shadow a product capability.
+- **Sensing-only by default** — MCP tools are read boundaries. Mutations still
+  go through `execute_capability` (approval / quota / tenant / audit). Mark a
+  server `"trusted_mutations": true` only when you explicitly trust it.
+- **Degradation** — an unreachable server is skipped and never blocks a turn.
+
+### Configuration
+
+`DOCPILOT_MCP_SERVERS` is a JSON array. API keys are passed per server via the
+`env` map and must be referenced from deployment secrets, never committed:
+
+```json
+[
+  {
+    "name": "tavily",
+    "command": "npx",
+    "args": ["-y", "tavily-mcp"],
+    "env": { "TAVILY_API_KEY": "${TAVILY_API_KEY}" }
+  }
+]
+```
+
+`DOCPILOT_MCP_TRUSTED_MUTATIONS` is a comma-separated list of server names that
+may expose mutation tools.
+
+### Skills (progressive disclosure)
+
+Skills live under `docs/agent-skills/<name>/SKILL.md` with standard YAML
+frontmatter (`name`, `description`). The Harness loads Level-1 metadata
+(name + description) into `AVAILABLE_SKILLS` every turn and reads the selected
+skill body (Level 2) only when routed. Routing runs against the description
+(English + Chinese fragments) plus a legacy trigger table, ranked by
+specificity.
+
+Current skills:
+
+- `bid-outline-first` — resolve outline `section_key` before drafting
+- `bid-research` — external research, fetch pages into project, cite
+- `bid-tender-writer` — five-stage tender technical response workflow

@@ -49,6 +49,7 @@ REQUIRED_PRODUCTION_VARIABLES = [
 
 PROVIDER_KEY_VARIABLES = [
     "DOCPILOT_ASSISTANT_API_KEY",
+    "OPENCODE_API_KEY",
     "DOCPILOT_PROVIDER_OPENAI_API_KEY",
     "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
     "DEEPSEEK_API_KEY",
@@ -64,6 +65,11 @@ SMTP_PRODUCTION_VARIABLES = [
     "DOCPILOT_SMTP_PASS",
     "DOCPILOT_SMTP_FROM",
 ]
+RESEND_PRODUCTION_KEY_VARIABLES = [
+    "DOCPILOT_RESEND_API_KEY",
+    "RESEND_API_KEY",
+]
+RESEND_DEFAULT_FROM = "BidPilot <notifications@updates.rglens.com>"
 
 STRIPE_BILLING_REQUIRED_IF_ENABLED = [
     "DOCPILOT_STRIPE_SECRET_KEY",
@@ -139,9 +145,16 @@ def _has_complete_platform_assistant_model(env: Mapping[str, str]) -> bool:
     if assistant_key and assistant_model:
         return True
 
-    if _is_configured_model_value(env, "DEEPSEEK_API_KEY") and _is_configured_model_value(
-        env, "DEEPSEEK_MODEL"
-    ):
+    # OpenCode Go defaults to the reviewed OpenAI-compatible endpoint and
+    # `deepseek-v4-flash` profile. Treat it like the official DeepSeek default:
+    # this is a code-level contract, not an arbitrary gateway inference.
+    if _is_configured_model_value(env, "OPENCODE_API_KEY"):
+        return True
+
+    # DeepSeek defaults to the explicitly supported platform model
+    # ``deepseek-v4-flash`` when no override is supplied. This is a code-level
+    # deployment contract, unlike an arbitrary custom gateway model.
+    if _is_configured_model_value(env, "DEEPSEEK_API_KEY"):
         return True
 
     domestic_key = any(
@@ -252,11 +265,34 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
     if secrets_key and not _is_fernet_key(secrets_key):
         errors.append("DOCPILOT_SECRETS_KEY must be a valid Fernet key")
 
-    for name in SMTP_PRODUCTION_VARIABLES:
-        if _is_missing(env.get(name)):
-            errors.append(f"{name} is required for production email")
-        elif _is_placeholder(env[name]):
+    resend_key = next(
+        (
+            env[name]
+            for name in RESEND_PRODUCTION_KEY_VARIABLES
+            if not _is_missing(env.get(name)) and not _is_placeholder(env[name])
+        ),
+        None,
+    )
+    resend_sender = env.get("DOCPILOT_RESEND_FROM", RESEND_DEFAULT_FROM)
+    resend_sender_valid = not _is_missing(resend_sender) and not _is_placeholder(resend_sender)
+    smtp_configured = all(
+        not _is_missing(env.get(name)) and not _is_placeholder(env[name])
+        for name in SMTP_PRODUCTION_VARIABLES
+    )
+
+    for name in RESEND_PRODUCTION_KEY_VARIABLES:
+        value = env.get(name)
+        if value and _is_placeholder(value):
             errors.append(f"{name} must not use a placeholder value")
+    if env.get("DOCPILOT_RESEND_FROM") and _is_placeholder(env["DOCPILOT_RESEND_FROM"]):
+        errors.append("DOCPILOT_RESEND_FROM must not use a placeholder value")
+
+    if not resend_key or not resend_sender_valid:
+        for name in SMTP_PRODUCTION_VARIABLES:
+            if _is_missing(env.get(name)):
+                errors.append(f"{name} is required for production email")
+            elif _is_placeholder(env[name]):
+                errors.append(f"{name} must not use a placeholder value")
 
     if not any(
         not _is_missing(env.get(name)) and not _is_placeholder(env[name])

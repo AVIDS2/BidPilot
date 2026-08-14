@@ -62,6 +62,7 @@ class AssistantRequest(BaseModel):
     provider_config_id: str | None = None
     reasoning_effort: AssistantReasoningEffort | None = None
     approval_mode: AssistantApprovalMode = "risky_only"
+    locale: Literal["en", "zh-CN"] = "zh-CN"
     confirmation: AssistantConfirmation | None = None
     attachments: list[AssistantAttachmentPayload] = Field(default_factory=list)
 

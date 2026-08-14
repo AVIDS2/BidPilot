@@ -29,6 +29,7 @@ def list_documents(
 async def upload_document(
     file: UploadFile = File(...),
     bundle_id: str | None = Query(None),
+    defer_ingest: bool = Query(False),
     form_bundle_id: str | None = Form(None, alias="bundle_id"),
     assistant_attachment_id: str | None = Form(None),
     supersedes_document_id: str | None = Form(None),
@@ -48,6 +49,7 @@ async def upload_document(
         current_user=current_user,
         assistant_attachment_id=assistant_attachment_id,
         supersedes_document_id=supersedes_document_id,
+        queue_ingest=not defer_ingest,
     )
 
 

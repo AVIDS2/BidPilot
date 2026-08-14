@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session
@@ -14,9 +15,67 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
 from app.db import SessionLocal, get_db
-from app.models import Notification
+from app.models import Notification, NotificationPreference
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+class NotificationPreferencesRead(BaseModel):
+    in_app_enabled: bool = True
+    email_enabled: bool = True
+    review_updates: bool = True
+    agent_updates: bool = True
+    radar_updates: bool = True
+    material_updates: bool = True
+
+
+class NotificationPreferencesUpdate(BaseModel):
+    in_app_enabled: bool | None = None
+    email_enabled: bool | None = None
+    review_updates: bool | None = None
+    agent_updates: bool | None = None
+    radar_updates: bool | None = None
+    material_updates: bool | None = None
+
+
+def _preferences_read(preferences: NotificationPreference | None) -> NotificationPreferencesRead:
+    if preferences is None:
+        return NotificationPreferencesRead()
+    return NotificationPreferencesRead(
+        in_app_enabled=preferences.in_app_enabled,
+        email_enabled=preferences.email_enabled,
+        review_updates=preferences.review_updates,
+        agent_updates=preferences.agent_updates,
+        radar_updates=preferences.radar_updates,
+        material_updates=preferences.material_updates,
+    )
+
+
+@router.get("/preferences", response_model=NotificationPreferencesRead)
+def get_notification_preferences(
+    user: CurrentUser = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> NotificationPreferencesRead:
+    return _preferences_read(
+        db.scalar(select(NotificationPreference).where(NotificationPreference.user_id == user.id))
+    )
+
+
+@router.patch("/preferences", response_model=NotificationPreferencesRead)
+def update_notification_preferences(
+    payload: NotificationPreferencesUpdate,
+    user: CurrentUser = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> NotificationPreferencesRead:
+    preferences = db.scalar(select(NotificationPreference).where(NotificationPreference.user_id == user.id))
+    if preferences is None:
+        preferences = NotificationPreference(user_id=user.id)
+        db.add(preferences)
+    for field_name, value in payload.model_dump(exclude_none=True).items():
+        setattr(preferences, field_name, value)
+    db.commit()
+    db.refresh(preferences)
+    return _preferences_read(preferences)
 
 
 def _serialize(n: Notification) -> dict:

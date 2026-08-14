@@ -6,7 +6,10 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from io import BytesIO
 import logging
+import os
 from pathlib import Path
+import shutil
+import subprocess
 from time import time
 from uuid import uuid4
 
@@ -360,14 +363,10 @@ def extract_attachment_text(
     attachment_kind: AssistantAttachmentKind = kind or ("image" if mime_type.startswith("image/") else "file")
 
     if attachment_kind == "image" or mime_type.startswith("image/"):
-        return _response(
+        return _extract_image_ocr(
             name=safe_name,
-            kind="image",
             mime_type=mime_type,
-            size=len(data),
-            status="unsupported",
-            text="",
-            error="当前不能读取图片像素或 OCR；请补充图片内容描述，或等待视觉模型接入。",
+            data=data,
         )
 
     text = ""
@@ -456,7 +455,8 @@ def build_attachment_context(message: str, attachments: list[AssistantAttachment
 
         if attachment.kind == "image":
             sections.append(
-                f"{header}\n说明：当前不能读取图片像素或 OCR；只能使用文件名、MIME 类型和用户额外描述。"
+                f"{header}\n说明：当前不能读取图片像素或 OCR；图片没有可用的 OCR 正文。"
+                f"{attachment.error or '请结合用户对图片的描述。'}"
             )
             continue
 
@@ -555,6 +555,81 @@ def _extract_pdf(data: bytes) -> str:
         )
     finally:
         doc.close()
+
+
+def _extract_image_ocr(*, name: str, mime_type: str, data: bytes) -> AssistantAttachmentUploadResponse:
+    """Run bounded local OCR before the assistant turn.
+
+    The worker image includes Tesseract and the API uses the same language
+    defaults. If OCR is not installed in a development environment, the
+    attachment remains usable as a visual preview and the response explains
+    the missing capability instead of pretending the image was read.
+    """
+    if os.getenv("DOCPILOT_ASSISTANT_OCR_ENABLED", "true").lower() in {"0", "false", "off", "no"}:
+        return _response(
+            name=name,
+            kind="image",
+            mime_type=mime_type,
+            size=len(data),
+            status="unsupported",
+            text="",
+            error="图片 OCR 已被配置关闭。",
+        )
+
+    binary = shutil.which("tesseract")
+    if not binary:
+        return _response(
+            name=name,
+            kind="image",
+            mime_type=mime_type,
+            size=len(data),
+            status="unsupported",
+            text="",
+            error="当前运行环境未安装 OCR 引擎；图片仍可预览，但暂不能提取文字。",
+        )
+
+    languages = os.getenv("DOCPILOT_ASSISTANT_OCR_LANG", "chi_sim+eng")
+    try:
+        result = subprocess.run(
+            [binary, "stdin", "stdout", "-l", languages, "--psm", "6"],
+            input=data,
+            capture_output=True,
+            timeout=20,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("tesseract exited with a non-zero status")
+        text = _normalize_text(result.stdout.decode("utf-8", errors="replace"))
+    except Exception as exc:  # Defensive: a bad image must not break chat.
+        logger.warning("Assistant image OCR failed: filename=%s error_type=%s", name, type(exc).__name__)
+        return _response(
+            name=name,
+            kind="image",
+            mime_type=mime_type,
+            size=len(data),
+            status="failed",
+            text="",
+            error="图片 OCR 失败，请确认图片清晰后重试。",
+        )
+
+    if not text:
+        return _response(
+            name=name,
+            kind="image",
+            mime_type=mime_type,
+            size=len(data),
+            status="empty",
+            text="",
+            error="图片中没有识别到可读文字。",
+        )
+    return _response(
+        name=name,
+        kind="image",
+        mime_type=mime_type,
+        size=len(data),
+        status="extracted",
+        text=_truncate(text, MAX_ATTACHMENT_TEXT_CHARS),
+    )
 
 
 def _decode_text(data: bytes) -> str:

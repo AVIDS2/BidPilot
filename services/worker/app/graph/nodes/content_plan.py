@@ -209,6 +209,7 @@ def content_plan_node(state: BidPilotState) -> dict:
                 db,
                 project_id=state["project_id"],
                 section_key=section_key,
+                deliverable_section_id=state.get("deliverable_section_id"),
             )
             # Only durable requirement assignments are allowed to shape the
             # model-facing plan. Graph state is not the business source of truth.
@@ -311,6 +312,8 @@ def content_plan_node(state: BidPilotState) -> dict:
                 "draft_model_used": "",
                 "review_result": None,
                 "review_passed": False,
+                "review_status": "not_started",
+                "review_degradation_code": None,
                 "claim_candidates": [],
                 "claim_integrity_status": "not_assessed",
                 # Consume the rejection so a later supervisor pass does not loop.

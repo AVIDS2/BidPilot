@@ -136,6 +136,10 @@ def _node_summary(node_name: str, result: dict) -> str:
         return "章节草稿已生成。" if result.get("draft_created") else "章节草稿未能生成。"
     if node_name == "quality_reviewer":
         review = result.get("review_result") or {}
+        if result.get("review_status") == "degraded":
+            return "自动审核不可用，已转人工复核。"
+        if result.get("review_status") == "blocked":
+            return "审核所需的计划或证据已失效。"
         return "质量审核已通过。" if review.get("passed") else "质量审核发现待处理问题。"
     if node_name == "human_approval":
         return "人工审核意见已收到。"
@@ -180,6 +184,8 @@ def _node_payload(node_name: str, result: dict) -> dict:
         review = result.get("review_result") or {}
         return {
             "passed": bool(review.get("passed")),
+            "review_status": result.get("review_status"),
+            "review_degradation_code": result.get("review_degradation_code"),
             "score": review.get("overall_score"),
             "claim_candidate_count": len(result.get("claim_candidates", [])),
             "claim_integrity_status": result.get("claim_integrity_status"),
@@ -433,6 +439,7 @@ def invoke_graph(
     project_id: str,
     section_key: str,
     run_id: str,
+    deliverable_section_id: str | None = None,
     provider_config_id: str | None = None,
     reasoning_effort: str | None = None,
     review_feedback: str | None = None,
@@ -467,6 +474,7 @@ def invoke_graph(
     initial_state: BidPilotState = {
         "project_id": project_id,
         "section_key": section_key,
+        "deliverable_section_id": deliverable_section_id,
         "run_id": run_id,
         "runtime_run_id": runtime_run_id,
         "provider_config_id": provider_config_id,
@@ -497,6 +505,8 @@ def invoke_graph(
         "provider_error_code": None,
         "review_result": None,  # type: ignore[typeddict-item]
         "review_passed": False,
+        "review_status": "not_started",
+        "review_degradation_code": None,
         "claim_candidates": [],
         "claim_integrity_status": "not_assessed",
         "section_version_id": None,

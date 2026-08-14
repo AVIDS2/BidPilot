@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import json
 import uuid
+from datetime import UTC, datetime
+from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 from app.auth.schemas import CurrentUser
 from app.models import Project, RuntimeRun, User
+from app.runtime.assistant_adapter import _render_runtime_event
 from app.runtime.events import RuntimeEventDraft, list_events_after, publish_event
 from app.runtime.repository import get_visible_runtime_run
 from contracts.runtime import RuntimeEventType
@@ -63,6 +68,96 @@ def test_publish_allocates_contiguous_sequences_and_redacts_payload(
     assert (first.sequence, second.sequence) == (1, 2)
     assert second.payload_json == {"api_key": "***redacted***", "query": "示例"}
     assert [event.sequence for event in list_events_after(test_db, run.id, after_sequence=1)] == [2]
+
+
+def test_publish_normalizes_non_json_capability_values(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    run = _runtime_run(test_db, default_org_id, default_user_id)
+    observed_at = datetime(2026, 8, 8, 13, 42, 45, tzinfo=UTC)
+    source_id = uuid.uuid4()
+
+    event = publish_event(
+        test_db,
+        run.id,
+        RuntimeEventDraft(
+            type=RuntimeEventType.CAPABILITY_SUCCEEDED,
+            public_summary="需求已读取。",
+            payload={
+                "observed_at": observed_at,
+                "source_id": source_id,
+                "score": Decimal("12.50"),
+                "binary": b"not-for-json",
+            },
+        ),
+    )
+
+    assert event.payload_json == {
+        "observed_at": observed_at.isoformat(),
+        "source_id": str(source_id),
+        "score": "12.50",
+        "binary": "<binary:12 bytes>",
+    }
+
+
+def test_publish_persists_provider_reasoning_as_a_replayable_event(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    run = _runtime_run(test_db, default_org_id, default_user_id)
+
+    event = publish_event(
+        test_db,
+        run.id,
+        RuntimeEventDraft(
+            type=RuntimeEventType.REASONING_DELTA,
+            public_summary="先检查现有项目，再决定下一步。",
+            payload={"turn_id": "turn-1", "source": "provider", "api_key": "sk-never-store"},
+        ),
+    )
+
+    assert event.event_type == RuntimeEventType.REASONING_DELTA.value
+    assert event.schema_version == "1.2"
+    assert event.payload_json == {
+        "turn_id": "turn-1",
+        "source": "provider",
+        "api_key": "***redacted***",
+    }
+
+
+def test_provider_reasoning_event_is_not_exposed_to_the_sse_stream() -> None:
+    event = SimpleNamespace(
+        id="event-1",
+        run_id="run-1",
+        parent_event_id="turn-event-1",
+        sequence=3,
+        event_type=RuntimeEventType.REASONING_DELTA.value,
+        public_summary="先读取项目资料。",
+        payload_json={"turn_id": "turn-1", "source": "provider", "chunk_index": 0},
+        created_at=datetime.now(UTC),
+    )
+
+    rendered = _render_runtime_event(event, "conversation-1")
+
+    assert rendered == []
+
+
+def test_legacy_generated_narration_is_not_replayed_to_the_sse_stream() -> None:
+    event = SimpleNamespace(
+        id="event-legacy-reasoning-1",
+        run_id="run-1",
+        parent_event_id="turn-event-1",
+        sequence=3,
+        event_type=RuntimeEventType.REASONING_DELTA.value,
+        public_summary="为推进当前任务，我先导出交付物，再根据真实结果决定下一步。",
+        payload_json={"turn_id": "turn-1", "source": "harness"},
+        created_at=datetime.now(UTC),
+    )
+
+    assert _render_runtime_event(event, "conversation-1") == []
 
 
 def test_project_runtime_run_is_hidden_from_non_member(
@@ -150,7 +245,7 @@ def test_runtime_event_api_replays_only_events_after_cursor(
                 "type": "capability.succeeded",
                 "public_summary": "已找到 2 个项目。",
                 "payload": {"count": 2},
-                "schema_version": "1.1",
+                "schema_version": "1.2",
                 "timestamp": second.created_at.isoformat(),
             }
         ]

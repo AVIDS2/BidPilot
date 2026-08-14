@@ -131,6 +131,7 @@ def run_draft(
     review_feedback: str | None = None,
     provider_config_id: str | None = None,
     reasoning_effort: str | None = None,
+    deliverable_section_id: str | None = None,
 ) -> dict[str, str]:
     """Execute the full drafting pipeline for a section.
 
@@ -214,15 +215,26 @@ def run_draft(
     section_version_id = None
     db = SessionLocal()
     try:
-        section = db.scalar(
-            select(DeliverableSection)
-            .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
-            .where(
-                Deliverable.project_id == project_id,
-                DeliverableSection.section_key == section_key,
-            )
-            .limit(1)
-        )
+        if deliverable_section_id:
+            section = db.get(DeliverableSection, deliverable_section_id)
+            deliverable = db.get(Deliverable, section.deliverable_id) if section else None
+            if section is None or deliverable is None or deliverable.project_id != project_id:
+                raise ValueError("deliverable_section_not_found")
+            if section.section_key != section_key:
+                raise ValueError("deliverable_section_key_mismatch")
+        else:
+            matching_sections = list(db.scalars(
+                select(DeliverableSection)
+                .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
+                .where(
+                    Deliverable.project_id == project_id,
+                    DeliverableSection.section_key == section_key,
+                )
+                .limit(2)
+            ).all())
+            if len(matching_sections) > 1:
+                raise ValueError("deliverable_section_ambiguous")
+            section = matching_sections[0] if matching_sections else None
         if section is not None:
             # Determine next version number
             existing = db.scalar(

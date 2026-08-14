@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+from collections.abc import AsyncIterator
+from contextlib import suppress
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -39,10 +42,8 @@ from .attachments import (
 )
 from .runtime import classify_locally
 from .schemas import AssistantAttachmentUploadResponse, AssistantIntent, AssistantRequest
-from .service import stream_assistant_response
 from app.runtime.assistant_adapter import (
     _is_confirmation_followup,
-    runtime_v1_enabled,
     stream_runtime_assistant_response,
 )
 from app.runtime.operator_adapter import stream_existing_assistant_run, stream_operator_assistant_response
@@ -57,6 +58,59 @@ LEGACY_ASSISTANT_ENGINE_ALIASES = {
     "streaming_harness": "harness",
 }
 LEGACY_ASSISTANT_ENGINE_ALIAS_RETIREMENT_DATE = "2026-09-30"
+SSE_HEARTBEAT_SECONDS = max(5, int(os.getenv("DOCPILOT_ASSISTANT_SSE_HEARTBEAT_SECONDS", "12")))
+
+
+async def _with_sse_heartbeats(
+    stream: AsyncIterator[str],
+    *,
+    heartbeat_seconds: float | None = None,
+) -> AsyncIterator[str]:
+    """Keep an assistant SSE response alive while its upstream is quiet.
+
+    The pending ``anext`` task is deliberately not cancelled on a heartbeat;
+    cancelling it would also cancel the Harness/provider generator that owns
+    the durable run. A comment frame is valid SSE and ignored by clients.
+    """
+    interval = heartbeat_seconds if heartbeat_seconds is not None else SSE_HEARTBEAT_SECONDS
+    iterator = stream.__aiter__()
+    pending: asyncio.Task[str] | None = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.create_task(anext(iterator))
+            done, _ = await asyncio.wait({pending}, timeout=interval)
+            if not done:
+                yield ": keep-alive\n\n"
+                continue
+            try:
+                event = pending.result()
+            except StopAsyncIteration:
+                return
+            finally:
+                pending = None
+            yield event
+    finally:
+        if pending is not None and not pending.done():
+            pending.cancel()
+            with suppress(asyncio.CancelledError):
+                await pending
+        close = getattr(iterator, "aclose", None)
+        if close is not None:
+            with suppress(RuntimeError):
+                await close()
+
+
+def _assistant_sse_response(stream: AsyncIterator[str]) -> StreamingResponse:
+    return StreamingResponse(
+        _with_sse_heartbeats(stream),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _assistant_engine() -> str:
@@ -168,15 +222,7 @@ async def assistant_stream(
             ),
         )
         if existing is not None:
-            return StreamingResponse(
-                stream_existing_assistant_run(db, existing),
-                media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "X-Accel-Buffering": "no",
-                },
-            )
+            return _assistant_sse_response(stream_existing_assistant_run(db, existing))
 
     project_id = resolve_conversation_project_context(
         db,
@@ -205,19 +251,13 @@ async def assistant_stream(
         user,
         payload,
     ):
-        return StreamingResponse(
+        return _assistant_sse_response(
             stream_runtime_assistant_response(
                 db,
                 user,
                 payload,
                 intent_override=deterministic_demo_intent,
-            ),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
+            )
         )
 
     provider_source, provider_type, provider_id, api_key, base_url, model, provider_config_id = _resolve_request_provider(db, user, payload)
@@ -229,7 +269,7 @@ async def assistant_stream(
 
     assistant_engine = _assistant_engine()
     if assistant_engine == "harness":
-        return StreamingResponse(
+        return _assistant_sse_response(
             stream_operator_assistant_response(
                 db,
                 user,
@@ -240,28 +280,10 @@ async def assistant_stream(
                 api_key=api_key,
                 base_url=base_url,
                 model=model,
-            ),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
+            )
         )
     if assistant_engine == "deterministic":
-        return StreamingResponse(
-            (
-                stream_runtime_assistant_response(db, user, payload)
-                if runtime_v1_enabled()
-                else stream_assistant_response(db, user, payload)
-            ),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
+        return _assistant_sse_response(stream_runtime_assistant_response(db, user, payload))
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail=f"Unsupported assistant runtime: {assistant_engine}",

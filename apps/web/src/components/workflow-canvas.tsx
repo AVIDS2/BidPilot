@@ -8,12 +8,9 @@ import {
   type Edge,
   type Node,
 } from "@xyflow/react";
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
 import { CheckCircle2Icon, CircleDotIcon, ClockIcon, FileSearchIcon, FileTextIcon, SaveIcon, ShieldCheckIcon, SparklesIcon, UserCheckIcon, XCircleIcon } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import type { AgentNode, AgentNodeStatus } from "@/components/agent-status-stream";
-import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
@@ -51,49 +48,75 @@ const WORKFLOW_STEPS: WorkflowStep[] = [
     icon: FileSearchIcon,
   },
   {
+    id: "memory_context",
+    label: "加载项目记忆",
+    description: "读取已授权的项目知识与历史决策",
+    position: { x: 320, y: 285 },
+    icon: FileSearchIcon,
+  },
+  {
     id: "knowledge_retriever",
     label: "检索证据",
     description: "匹配可引用的知识片段与项目证据",
-    position: { x: 600, y: 40 },
+    position: { x: 600, y: 170 },
     icon: FileSearchIcon,
+  },
+  {
+    id: "content_plan",
+    label: "编排响应计划",
+    description: "把要求与证据整理为可执行章节结构",
+    position: { x: 880, y: 40 },
+    icon: SparklesIcon,
   },
   {
     id: "section_drafter",
     label: "起草章节",
     description: "结合需求和证据生成章节草稿",
-    position: { x: 600, y: 300 },
+    position: { x: 880, y: 300 },
     icon: FileTextIcon,
   },
   {
     id: "quality_reviewer",
     label: "质量审核",
     description: "检查草稿完整性、可信度和引用质量",
-    position: { x: 880, y: 170 },
+    position: { x: 1160, y: 170 },
     icon: ShieldCheckIcon,
   },
   {
     id: "human_approval",
     label: "人工确认",
     description: "等待用户批准或驳回生成结果",
-    position: { x: 1160, y: 40 },
+    position: { x: 1440, y: 385 },
     icon: UserCheckIcon,
   },
   {
     id: "persist_result",
     label: "保存结果",
     description: "写入版本、证据关系和审计记录",
-    position: { x: 1160, y: 300 },
+    position: { x: 1440, y: 170 },
+    icon: SaveIcon,
+  },
+  {
+    id: "memory_proposals",
+    label: "知识提案",
+    description: "将可复用结论作为待审核知识提案保存",
+    position: { x: 1720, y: 170 },
     icon: SaveIcon,
   },
 ];
 
 const WORKFLOW_EDGES: Edge[] = [
   { id: "supervisor-rfp_parser", source: "supervisor", target: "rfp_parser", type: "smoothstep" },
-  { id: "rfp_parser-knowledge_retriever", source: "rfp_parser", target: "knowledge_retriever", type: "smoothstep" },
-  { id: "knowledge_retriever-section_drafter", source: "knowledge_retriever", target: "section_drafter", type: "smoothstep" },
+  { id: "rfp_parser-memory_context", source: "rfp_parser", target: "memory_context", type: "smoothstep" },
+  { id: "memory_context-knowledge_retriever", source: "memory_context", target: "knowledge_retriever", type: "smoothstep" },
+  { id: "knowledge_retriever-content_plan", source: "knowledge_retriever", target: "content_plan", type: "smoothstep" },
+  { id: "content_plan-section_drafter", source: "content_plan", target: "section_drafter", type: "smoothstep" },
   { id: "section_drafter-quality_reviewer", source: "section_drafter", target: "quality_reviewer", type: "smoothstep" },
-  { id: "quality_reviewer-human_approval", source: "quality_reviewer", target: "human_approval", type: "smoothstep" },
   { id: "quality_reviewer-persist_result", source: "quality_reviewer", target: "persist_result", type: "smoothstep" },
+  { id: "quality_reviewer-content_plan", source: "quality_reviewer", target: "content_plan", type: "smoothstep" },
+  { id: "persist_result-human_approval", source: "persist_result", target: "human_approval", type: "smoothstep" },
+  { id: "human_approval-persist_result", source: "human_approval", target: "persist_result", type: "smoothstep" },
+  { id: "persist_result-memory_proposals", source: "persist_result", target: "memory_proposals", type: "smoothstep" },
 ];
 
 const STATUS_LABELS: Record<AgentNodeStatus, string> = {
@@ -113,7 +136,7 @@ const STATUS_DESCRIPTIONS: Record<AgentNodeStatus, string> = {
 function statusTone(status: AgentNodeStatus) {
   switch (status) {
     case "running":
-      return "border-primary/45 bg-primary/8 text-primary shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_26%,transparent),0_20px_44px_-32px_color-mix(in_oklch,var(--primary)_55%,transparent)]";
+      return "border-primary/45 bg-primary/8 text-primary";
     case "completed":
       return "border-primary/20 bg-card text-foreground";
     case "failed":
@@ -177,61 +200,15 @@ function getStepStatusDescription(stepId: string, status: AgentNodeStatus, isWai
 
 function WorkflowNode({ data }: { data: WorkflowNodeData }) {
   const Icon = data.icon;
-  const nodeRef = useRef<HTMLDivElement | null>(null);
-  const prefersReducedMotion = usePrefersReducedMotion();
-
-  useGSAP(
-    () => {
-      if (prefersReducedMotion || !nodeRef.current) return;
-
-      gsap.fromTo(
-        nodeRef.current,
-        { autoAlpha: 0, y: 10, scale: 0.985 },
-        { autoAlpha: 1, y: 0, scale: 1, duration: 0.42, ease: "power3.out" },
-      );
-
-      if (data.status === "running") {
-        gsap.to(nodeRef.current, {
-          y: -2,
-          duration: 1.1,
-          ease: "sine.inOut",
-          repeat: -1,
-          yoyo: true,
-        });
-        gsap.to(".workflow-node-orb", {
-          scale: 1.18,
-          autoAlpha: 0.46,
-          duration: 1.15,
-          ease: "sine.inOut",
-          repeat: -1,
-          yoyo: true,
-        });
-      }
-
-      if (data.status === "completed") {
-        gsap.fromTo(
-          ".workflow-node-status",
-          { scale: 0.7, rotate: -16 },
-          { scale: 1, rotate: 0, duration: 0.46, ease: "back.out(1.8)" },
-        );
-      }
-    },
-    { dependencies: [data.status, prefersReducedMotion], scope: nodeRef },
-  );
 
   return (
     <div
-      ref={nodeRef}
       aria-label={`${data.label}：${data.statusLabel}`}
       className={cn(
-        "relative w-60 overflow-hidden rounded-[1.15rem] border p-3 shadow-sm transition-[border-color,box-shadow,background-color]",
-        data.status === "running" && "workflow-node-running",
+        "relative w-60 overflow-hidden rounded-lg border p-3 transition-[border-color,background-color]",
         statusTone(data.status),
       )}
     >
-      {data.status === "running" && (
-        <div className="workflow-node-orb pointer-events-none absolute -right-8 -top-8 size-24 rounded-full bg-primary/15 blur-2xl" />
-      )}
       <Handle type="target" position={Position.Left} className="!bg-border" />
       <div
         className={cn(
@@ -242,7 +219,7 @@ function WorkflowNode({ data }: { data: WorkflowNodeData }) {
         )}
       />
       <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-background/80 ring-1 ring-border/70">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-background ring-1 ring-border/70">
           <Icon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -325,7 +302,9 @@ export function WorkflowCanvas({
           statusDescription: step.statusDescription,
           summary: step.summary,
         },
-        draggable: false,
+        // Repositioning is a personal view preference.  It never changes the
+        // durable LangGraph definition or its execution edges.
+        draggable: true,
       };
     });
   }, [stepStates]);
@@ -349,7 +328,7 @@ export function WorkflowCanvas({
   if (isMobile) {
     return (
       <div
-        className="overflow-hidden rounded-[1.2rem] border bg-[linear-gradient(180deg,color-mix(in_oklch,var(--card)_96%,var(--background)),color-mix(in_oklch,var(--muted)_45%,transparent))] p-3 shadow-sm"
+        className="overflow-hidden rounded-lg border bg-card p-3"
         data-testid="bidpilot-workflow-canvas"
       >
         <div className="flex flex-col">
@@ -361,9 +340,9 @@ export function WorkflowCanvas({
                 {!isLast && <div className="absolute left-5 top-10 h-[calc(100%-2.5rem)] w-px bg-border" />}
                 <div
                   className={cn(
-                    "relative z-10 flex size-10 shrink-0 items-center justify-center rounded-2xl border bg-background",
+                    "relative z-10 flex size-10 shrink-0 items-center justify-center rounded-md border bg-background",
                     step.status === "running" && "workflow-node-running",
-                    step.status === "running" && "border-primary/40 text-primary shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_12%,transparent)]",
+                    step.status === "running" && "border-primary/40 text-primary",
                     step.status === "completed" && "border-primary/25 text-primary",
                     step.status === "failed" && "border-destructive/40 text-destructive",
                     step.status === "pending" && "text-muted-foreground/60",
@@ -373,7 +352,7 @@ export function WorkflowCanvas({
                 </div>
                 <div
                   className={cn(
-                    "min-w-0 flex-1 rounded-2xl border bg-background/70 p-3",
+                    "min-w-0 flex-1 rounded-md border bg-background/70 p-3",
                     step.status === "running" && "border-primary/30 bg-primary/5",
                     step.status === "failed" && "border-destructive/30 bg-destructive/5",
                   )}
@@ -396,7 +375,7 @@ export function WorkflowCanvas({
 
   return (
     <div
-      className="relative h-[440px] overflow-hidden rounded-[1.35rem] border bg-[radial-gradient(circle_at_20%_10%,color-mix(in_oklch,var(--primary)_10%,transparent),transparent_34%),linear-gradient(180deg,color-mix(in_oklch,var(--card)_96%,var(--background)),color-mix(in_oklch,var(--muted)_55%,transparent))] shadow-sm"
+      className="relative h-[500px] overflow-hidden rounded-lg border bg-card"
       data-testid="bidpilot-workflow-canvas"
     >
       {statusHeadline && (
@@ -413,7 +392,7 @@ export function WorkflowCanvas({
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.18 }}
-        nodesDraggable={false}
+        nodesDraggable
         nodesConnectable={false}
         elementsSelectable
         proOptions={{ hideAttribution: true }}

@@ -147,7 +147,7 @@ uv run --directory services/api python -c "from cryptography.fernet import Ferne
 
 Never commit this value. For Aliyun Bailian/DashScope keys, remove the default `0.0.0.0/0` and `::/0` API key whitelist entries and allow only known server egress IPs.
 
-Official platform provider keys must stay server-side. In local development the worker accepts `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `ALIYUN_API_KEY`, or `DASHSCOPE_API_KEY` for Aliyun-compatible chat calls. In staging/production, prefer `DOCPILOT_PROVIDER_DOMESTIC_API_KEY` injected by the deployment secret manager. Never expose official or user-supplied provider keys to the browser.
+Official platform provider keys must stay server-side. The preferred BidPilot platform profile is `OPENCODE_API_KEY`, which resolves to OpenCode Go's OpenAI-compatible Chat Completions endpoint `https://opencode.ai/zen/go/v1` and `deepseek-v4-flash`; optional overrides are `OPENCODE_BASE_URL` and `OPENCODE_MODEL`. It can be used directly, or explicitly through `DOCPILOT_ASSISTANT_PROVIDER_ID=opencode-go` with `DOCPILOT_ASSISTANT_API_KEY`. In local development the worker also accepts `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `ALIYUN_API_KEY`, or `DASHSCOPE_API_KEY` for Aliyun-compatible chat calls. Choose one platform profile per deployment to keep API, Worker, and assistant runs consistent. Never expose official or user-supplied provider keys to the browser.
 
 `DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING` is a required non-secret server-side
 integer in staging and production. It is the per-workspace hard maximum for
@@ -170,13 +170,15 @@ catalogue, and invoice matching are still separate launch requirements.
 
 `DOCPILOT_ASSISTANT_ENGINE=harness` is the production default. It uses the product runtime policy, idempotency, approval, and event contracts; `deterministic` remains a local/test fallback. `operator` and `streaming_harness` are temporary configuration aliases only and must not appear in new deployment files.
 
-SMTP is considered configured only when `DOCPILOT_SMTP_HOST`,
-`DOCPILOT_SMTP_USER`, `DOCPILOT_SMTP_PASS`, and `DOCPILOT_SMTP_FROM` are all
-present. Use an app password or provider credential rather than the mailbox's
-interactive login password; set `DOCPILOT_SMTP_FROM_NAME=BidPilot` for the
-display name. A personal mailbox can be acceptable for a short pilot but does
-not establish the domain authentication needed for reliable production
-delivery.
+Resend is the preferred transactional email provider. Set `RESEND_API_KEY`
+and, when a different verified domain is needed, `DOCPILOT_RESEND_FROM`.
+The default sender is `BidPilot <notifications@updates.rglens.com>`, which must
+remain verified in the Resend account. SMTP remains a compatible fallback and
+is configured only when `DOCPILOT_SMTP_HOST`, `DOCPILOT_SMTP_USER`,
+`DOCPILOT_SMTP_PASS`, and `DOCPILOT_SMTP_FROM` are all present. Use an app
+password or provider credential rather than a mailbox's interactive login
+password; a personal mailbox is suitable only for a short pilot and does not
+provide the domain authentication needed for reliable production delivery.
 
 `DOCPILOT_AGENT_MEMORY_EMBEDDING_TIMEOUT_SECONDS` defaults to `2.5` and is capped at five seconds. It applies only to optional automatic memory recall during an Agent turn: when no authorized memory exists, no embedding request is sent; when the provider is slow or unavailable, the Agent continues with lexical recall and explicit degraded state rather than blocking the conversation.
 

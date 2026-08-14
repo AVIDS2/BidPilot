@@ -44,12 +44,12 @@ def test_campaign_public_formatter() -> None:
 
 def test_run_section_campaign_framework_auto_continues(monkeypatch) -> None:
     outline_items = [
-        {"section_key": "exec-summary", "title": "执行摘要", "has_content": False},
-        {"section_key": "solution", "title": "技术方案", "has_content": False},
-        {"section_key": "pricing", "title": "报价", "has_content": False},
+        {"id": "section-exec", "section_key": "exec-summary", "title": "执行摘要", "has_content": False},
+        {"id": "section-solution", "section_key": "solution", "title": "技术方案", "has_content": False},
+        {"id": "section-pricing", "section_key": "pricing", "title": "报价", "has_content": False},
         {"section_key": "done", "title": "已写", "has_content": True},
     ]
-    written: list[str] = []
+    written: list[tuple[str, str | None]] = []
 
     def fake_outline(db, user, arguments):
         return SimpleNamespace(
@@ -61,7 +61,7 @@ def test_run_section_campaign_framework_auto_continues(monkeypatch) -> None:
         )
 
     def fake_write(db, user, arguments):
-        written.append(arguments["section_key"])
+        written.append((arguments["section_key"], arguments.get("section_id")))
         return SimpleNamespace(result={"section_key": arguments["section_key"]})
 
     monkeypatch.setattr("app.assistant.tools.get_project_outline", fake_outline)
@@ -78,7 +78,11 @@ def test_run_section_campaign_framework_auto_continues(monkeypatch) -> None:
     assert result.result["remaining_count"] == 0
     assert result.result["has_more"] is False
     assert result.result["waves_run"] >= 2
-    assert written == ["exec-summary", "solution", "pricing"]
+    assert written == [
+        ("exec-summary", "section-exec"),
+        ("solution", "section-solution"),
+        ("pricing", "section-pricing"),
+    ]
 
 
 def test_run_section_campaign_plan_mode(monkeypatch) -> None:

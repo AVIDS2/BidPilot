@@ -1,5 +1,6 @@
 """Test invitation flow — invite, accept, register."""
 import uuid
+from unittest.mock import patch
 
 from app.models import (
     Invitation,
@@ -8,7 +9,7 @@ from app.models import (
     OrganizationSubscription,
     User,
 )
-from app.auth.service import register_user_command
+from app.auth.service import login_command, register_user_command
 from app.auth.schemas import UserRegister
 from app.invitations.service import accept_invitation_command, create_invitation_command
 
@@ -21,9 +22,6 @@ def test_create_invitation(test_db, client):
     """Admin should be able to create an invitation."""
     suffix = _uid()
     email = f"inv-admin-{suffix}@docpilot.ai"
-    from app.auth.service import _get_or_create_default_org
-    from app.auth.service import login_command
-    _get_or_create_default_org(test_db)
     register_user_command(test_db, UserRegister(email=email, display_name="Inv Admin", password="Test1234"))
     u = test_db.query(User).filter_by(email=email).first()
     u.role = "admin"
@@ -46,12 +44,32 @@ def test_create_invitation(test_db, client):
     assert resp.json()["status"] == "pending"
 
 
+def test_create_invitation_survives_transactional_email_failure(test_db, client):
+    """A persisted invitation must not be reported as failed if Resend is down."""
+    suffix = _uid()
+    email = f"inv-mail-failure-{suffix}@docpilot.ai"
+    register_user_command(test_db, UserRegister(email=email, display_name="Invite Admin", password="Test1234"))
+    user = test_db.query(User).filter_by(email=email).one()
+    user.role = "admin"
+    user.email_verified = True
+    test_db.query(OrganizationMembership).filter_by(org_id=user.org_id, user_id=user.id).one().role = "admin"
+    test_db.commit()
+    token = login_command(test_db, email, "Test1234").access_token
+
+    with patch("app.invitations.router.send_invitation_email", side_effect=RuntimeError("Resend unavailable")):
+        response = client.post(
+            "/invitations",
+            json={"email": f"invitee-mail-failure-{suffix}@docpilot.ai"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "pending"
+
+
 def test_workspace_member_cannot_create_invitation(test_db, client):
     suffix = _uid()
     email = f"inv-member-{suffix}@docpilot.ai"
-    from app.auth.service import _get_or_create_default_org, login_command
-
-    _get_or_create_default_org(test_db)
     register_user_command(
         test_db,
         UserRegister(email=email, display_name="Invitation Member", password="Test1234"),
@@ -245,8 +263,7 @@ def test_revoke_invitation(test_db, client):
     """Admin should be able to revoke an invitation."""
     suffix = _uid()
     email = f"rev-admin-{suffix}@docpilot.ai"
-    from app.auth.service import _get_or_create_default_org, login_command
-    _get_or_create_default_org(test_db)
+    from app.auth.service import login_command
     register_user_command(test_db, UserRegister(email=email, display_name="Rev Admin", password="Test1234"))
     u = test_db.query(User).filter_by(email=email).first()
     u.role = "admin"

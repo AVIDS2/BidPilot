@@ -164,9 +164,15 @@ _CAPABILITIES = (
         RuntimeRiskLevel.READ,
     ),
     CapabilityDefinition(
+        "discover_remote_documents",
+        "发现远程资料附件",
+        "Discover remote document links",
+        RuntimeRiskLevel.READ,
+    ),
+    CapabilityDefinition(
         "fetch_url_to_project",
-        "下载网页到项目",
-        "Fetch URL into project",
+        "入库远程资料",
+        "Import remote artifact into project",
         RuntimeRiskLevel.COSTING,
         "bundles.write",
         requires_approval_in_risky_only=True,
@@ -238,6 +244,7 @@ _REQUIRED_ARGUMENT_FIELDS: dict[str, tuple[str, ...]] = {
     "submit_review_decision": ("project_id", "section_id", "section_version_id", "decision"),
     "write_section": ("project_id", "section_key", "content_markdown"),
     "web_search": ("query",),
+    "discover_remote_documents": ("url",),
     "fetch_url_to_project": ("project_id", "url"),
     "semantic_search": ("project_id", "query"),
     "run_section_campaign": ("project_id",),
@@ -310,9 +317,11 @@ def format_approval_request(capability_name: str, arguments: dict[str, Any]) -> 
         return f"确认导出 {str(arguments.get('format') or 'docx').upper()} 文件吗？"
     if capability_name == "fetch_url_to_project":
         url = arguments.get("url")
+        mode = arguments.get("import_mode") or "artifact"
         if isinstance(url, str) and url.strip():
-            return f"确认把网页资源下载到项目吗？\n{url.strip()[:120]}"
-        return "确认把网页资源下载到当前项目资料包吗？"
+            target = "网页研究证据" if mode == "web_evidence" else "远程资料文件"
+            return f"确认把这个{target}入库到项目资料包吗？\n{url.strip()[:120]}"
+        return "确认把远程资料文件入库到当前项目资料包吗？"
     if capability_name == "upload_document":
         return "确认把文件上传/入库到当前项目资料包吗？"
     if capability_name == "generate_readiness_pack":
@@ -452,6 +461,7 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
                 "status",
                 "has_content",
                 "deliverable_id",
+                "deliverable_title",
                 "id",
             ),
         )
@@ -481,6 +491,7 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
                 "has_content",
                 "in_template",
                 "deliverable_id",
+                "deliverable_title",
                 "id",
             ),
         )
@@ -518,18 +529,44 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
         if pending_reviews:
             pending_reviews_payload["items"] = pending_reviews
         return PublicCapabilityResult(f"有 {count} 个待处理评审。", pending_reviews_payload)
+    if capability_name == "list_documents":
+        documents = _public_items(
+            result.get("items"),
+            (
+                "id",
+                "original_filename",
+                "parse_status",
+                "index_status",
+                "bundle_label",
+                "bundle_status",
+                "parse_error_code",
+                "index_error_code",
+            ),
+        )
+        status_counts = _document_status_counts(documents)
+        payload: dict[str, Any] = {"count": count, **status_counts}
+        if documents:
+            payload["documents"] = documents
+        return PublicCapabilityResult(_document_status_summary(count, status_counts), payload)
+    if capability_name == "list_readiness_gaps":
+        gaps = _public_items(
+            result.get("items"),
+            ("id", "requirement_text", "risk_level", "coverage_status", "evidence_status"),
+        )
+        kind = result.get("kind")
+        payload: dict[str, Any] = {"count": count}
+        if isinstance(kind, str):
+            payload["kind"] = kind
+        if gaps:
+            payload["gaps"] = gaps
+        return PublicCapabilityResult(f"找到 {count} 个待处理缺口。", payload)
     if capability_name in {
         "list_project_bundles",
         "list_evidence",
-        "list_documents",
         "get_section_versions",
         "get_runtime_status",
     }:
         return PublicCapabilityResult(f"已找到 {count} 条相关记录。", {"count": count})
-    if capability_name == "list_readiness_gaps":
-        items = result.get("items")
-        if isinstance(items, list):
-            return PublicCapabilityResult(f"找到 {len(items)} 个待处理缺口。", {"count": len(items)})
     if capability_name == "get_readiness_summary":
         score = result.get("readiness_score")
         if isinstance(score, (int, float)):
@@ -611,17 +648,31 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
             f"联网搜索返回 {count} 条结果。",
             {k: v for k, v in payload.items() if v is not None},
         )
+    if capability_name == "discover_remote_documents":
+        items = _public_items(result.get("items"), ("title", "filename", "url", "content_type_hint"))
+        payload = {"count": count, "url": result.get("url")}
+        if items:
+            payload["items"] = items
+        summary = (
+            f"发现 {count} 个可能的远程资料附件，尚未下载。"
+            if count
+            else "没有发现可识别的远程资料附件，尚未下载。"
+        )
+        return PublicCapabilityResult(summary, {key: value for key, value in payload.items() if value is not None})
     if capability_name in {"fetch_url_to_project", "upload_document"}:
         payload = {
             key: result[key]
             for key in (
                 "project_id",
                 "bundle_id",
+                "bundle_label",
                 "document_id",
                 "filename",
                 "bytes",
                 "source_url",
+                "import_mode",
                 "parse_status",
+                "storage_status",
                 "attachment_count",
                 "ingest_queued",
             )
@@ -629,7 +680,17 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
         }
         if capability_name == "fetch_url_to_project":
             name = result.get("filename") or "资源"
-            return PublicCapabilityResult(f"已下载「{name}」到项目。", payload)
+            if result.get("storage_status") == "stored_no_parse":
+                return PublicCapabilityResult(
+                    f"已将「{name}」归档到项目资料包，可下载使用；该格式不参与文本解析。",
+                    payload,
+                )
+            if result.get("ingest_queued") is False:
+                return PublicCapabilityResult(
+                    f"已将「{name}」入库到项目，但解析任务尚未投递，可在资料中心重试。",
+                    payload,
+                )
+            return PublicCapabilityResult(f"已将「{name}」入库到项目并已投递解析。", payload)
         name = result.get("filename") or "文档"
         if "attachment_count" in result:
             return PublicCapabilityResult(
@@ -712,6 +773,44 @@ def _public_campaign_failures(value: Any) -> list[dict[str, str]]:
             }
         )
     return failures
+
+
+def _document_status_counts(documents: list[dict[str, Any]]) -> dict[str, int]:
+    """Summarize document readiness for the Agent without exposing document text."""
+    counts = {
+        "indexed_count": 0,
+        "processing_count": 0,
+        "retry_needed_count": 0,
+        "archived_count": 0,
+    }
+    for document in documents:
+        parse_status = document.get("parse_status")
+        index_status = document.get("index_status")
+        if parse_status == "not_applicable" or index_status == "not_applicable":
+            counts["archived_count"] += 1
+        elif parse_status == "parsed" and index_status == "indexed":
+            counts["indexed_count"] += 1
+        elif parse_status == "failed" or index_status in {"failed", "degraded", "transient_failure"}:
+            counts["retry_needed_count"] += 1
+        else:
+            counts["processing_count"] += 1
+    return counts
+
+
+def _document_status_summary(count: int, status_counts: dict[str, int]) -> str:
+    if count == 0:
+        return "当前项目没有已入库文档。"
+
+    parts: list[str] = []
+    if status_counts["indexed_count"]:
+        parts.append(f"{status_counts['indexed_count']} 个已完成解析并建立检索索引")
+    if status_counts["processing_count"]:
+        parts.append(f"{status_counts['processing_count']} 个正在处理")
+    if status_counts["retry_needed_count"]:
+        parts.append(f"{status_counts['retry_needed_count']} 个需要重试")
+    if status_counts["archived_count"]:
+        parts.append(f"{status_counts['archived_count']} 个为仅归档附件、不可语义检索")
+    return f"找到 {count} 个文档：" + "；".join(parts) + "。"
 
 
 def _is_public_failure_code(value: str) -> bool:

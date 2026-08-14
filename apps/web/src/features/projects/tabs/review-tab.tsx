@@ -25,7 +25,12 @@ interface ReviewTabProps {
   onSelectSection: (id: string) => void;
   onSelectThread: (id: string | null) => void;
   onAddComment: (threadId: string, body: string) => void;
-  onSubmitDecision: (sectionId: string, decision: string, comment: string | null) => void;
+  onSubmitDecision: (
+    sectionId: string,
+    sectionVersionId: string,
+    decision: string,
+    comment: string | null,
+  ) => void;
   addCommentPending: boolean;
   submitDecisionPending: boolean;
 }
@@ -331,7 +336,7 @@ export function ReviewTab({
               </div>
             )}
 
-            {selectedSectionId && (
+            {selectedSectionId && latestVersion && (
               <div className="rounded-2xl border bg-muted/20 p-3">
                 <p className="mb-2 text-xs font-medium text-muted-foreground">{t("review.submitDecision")}</p>
                 <div className="flex flex-col gap-2">
@@ -344,7 +349,12 @@ export function ReviewTab({
                     <Button
                       size="sm"
                       disabled={submitDecisionPending}
-                      onClick={() => onSubmitDecision(selectedSectionId, "approved", reviewDecisionComment || null)}
+                      onClick={() => onSubmitDecision(
+                        selectedSectionId,
+                        latestVersion.id,
+                        "approved",
+                        reviewDecisionComment || null,
+                      )}
                     >
                       {submitDecisionPending && <Spinner data-icon="inline-start" />}
                       <CheckCircle2Icon />
@@ -354,7 +364,12 @@ export function ReviewTab({
                       size="sm"
                       variant="destructive"
                       disabled={submitDecisionPending}
-                      onClick={() => onSubmitDecision(selectedSectionId, "rejected", reviewDecisionComment || null)}
+                      onClick={() => onSubmitDecision(
+                        selectedSectionId,
+                        latestVersion.id,
+                        "rejected",
+                        reviewDecisionComment || null,
+                      )}
                     >
                       {submitDecisionPending && <Spinner data-icon="inline-start" />}
                       <XCircleIcon />
@@ -363,6 +378,9 @@ export function ReviewTab({
                   </div>
                 </div>
               </div>
+            )}
+            {selectedSectionId && !latestVersion && (
+              <p className="text-xs text-muted-foreground">生成草稿后才能提交审核决定。</p>
             )}
           </div>
         </CardContent>

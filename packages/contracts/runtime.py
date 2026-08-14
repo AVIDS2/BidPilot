@@ -10,9 +10,16 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+# Public runtime events are persisted and replayed by both API and Worker.
+# New writers must use this version; readers continue accepting earlier
+# versions so existing conversations remain replayable.
+RUNTIME_EVENT_SCHEMA_VERSION = "1.2"
+
+
 class RuntimeRunKind(StrEnum):
     ASSISTANT_TURN = "assistant_turn"
     WORKFLOW_BRIDGE = "workflow_bridge"
+    REMOTE_IMPORT = "remote_import"
     SYSTEM_RECOVERY = "system_recovery"
 
 
@@ -78,6 +85,8 @@ class RuntimeEventType(StrEnum):
     APPROVAL_REQUESTED = "approval.requested"
     APPROVAL_RESOLVED = "approval.resolved"
     WORKFLOW_LINKED = "workflow.linked"
+    REASONING_DELTA = "reasoning.delta"
+    REASONING_COMPLETED = "reasoning.completed"
     MESSAGE_DELTA = "message.delta"
     MESSAGE_COMPLETED = "message.completed"
     RUN_COMPLETED = "run.completed"
@@ -128,7 +137,7 @@ class RuntimeEventRecord(_RuntimeContract):
     type: RuntimeEventType
     public_summary: str = Field(min_length=1, max_length=2000)
     payload: dict[str, Any] = Field(default_factory=dict)
-    schema_version: Literal["1.0", "1.1"] = "1.1"
+    schema_version: Literal["1.0", "1.1", "1.2"] = RUNTIME_EVENT_SCHEMA_VERSION
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -169,4 +178,5 @@ __all__ = [
     "RuntimeRiskLevel",
     "RuntimeRunKind",
     "RuntimeRunStatus",
+    "RUNTIME_EVENT_SCHEMA_VERSION",
 ]

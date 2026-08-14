@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.assistant.audit import redact_arguments
 from app.models import RuntimeEvent
-from contracts.runtime import RuntimeEventRecord, RuntimeEventType
+from contracts.runtime import RUNTIME_EVENT_SCHEMA_VERSION, RuntimeEventRecord, RuntimeEventType
 
 from .repository import get_runtime_run_for_update
 
@@ -53,7 +53,7 @@ def append_events(
             event_type=event.type.value,
             public_summary=event.public_summary,
             payload_json=redact_arguments(event.payload),
-            schema_version="1.1",
+            schema_version=RUNTIME_EVENT_SCHEMA_VERSION,
         )
         for offset, event in enumerate(events, start=1)
     ]

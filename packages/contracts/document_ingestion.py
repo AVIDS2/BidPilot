@@ -12,6 +12,7 @@ from pathlib import PurePath
 
 
 class DocumentParseStatus(StrEnum):
+    NOT_APPLICABLE = "not_applicable"
     PENDING = "pending"
     PARSING = "parsing"
     PARSED = "parsed"
@@ -19,6 +20,7 @@ class DocumentParseStatus(StrEnum):
 
 
 class DocumentIndexStatus(StrEnum):
+    NOT_APPLICABLE = "not_applicable"
     PENDING = "pending"
     INDEXING = "indexing"
     INDEXED = "indexed"
@@ -38,17 +40,52 @@ class BundleIngestStatus(StrEnum):
 
 
 MAX_SOURCE_DOCUMENT_BYTES = 25 * 1024 * 1024
+# Downloadable supporting artifacts (for example bidder software packages)
+# are not parsed or embedded. Keep a separate bounded limit so a legitimate
+# ZIP does not get rejected by the text-document ingestion limit while still
+# preventing an unbounded agent-triggered download.
+MAX_STORED_ARTIFACT_BYTES = 512 * 1024 * 1024
 MAX_DOCUMENT_PARSE_ATTEMPTS = 3
 
 _GENERIC_CONTENT_TYPES = {"", "application/octet-stream", "binary/octet-stream"}
 _MIME_BY_EXTENSION = {
     ".pdf": "application/pdf",
+    ".doc": "application/msword",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".zip": "application/zip",
+    ".rar": "application/vnd.rar",
+    ".7z": "application/x-7z-compressed",
+    ".csv": "text/csv",
     ".txt": "text/plain",
     ".md": "text/markdown",
     ".markdown": "text/markdown",
 }
-SUPPORTED_SOURCE_DOCUMENT_MIME_TYPES = frozenset(_MIME_BY_EXTENSION.values())
+PARSEABLE_SOURCE_DOCUMENT_MIME_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/csv",
+        "text/plain",
+        "text/markdown",
+    }
+)
+STORED_ARTIFACT_MIME_TYPES = frozenset(
+    {
+        "application/msword",
+        "application/vnd.ms-excel",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/zip",
+        "application/vnd.rar",
+        "application/x-7z-compressed",
+    }
+)
+SUPPORTED_SOURCE_DOCUMENT_MIME_TYPES = PARSEABLE_SOURCE_DOCUMENT_MIME_TYPES | STORED_ARTIFACT_MIME_TYPES
 
 # A bundle is not just a storage bucket.  Requirement Ledger entries are buyer
 # obligations, so supplier capability and case-study material must remain
@@ -94,17 +131,36 @@ def canonical_source_document_mime_type(*, filename: str, content_type: str) -> 
     return _MIME_BY_EXTENSION.get(PurePath(filename).suffix.lower())
 
 
+def source_document_is_parseable(mime_type: str) -> bool:
+    """Return whether the ingestion worker can extract searchable text."""
+
+    return mime_type in PARSEABLE_SOURCE_DOCUMENT_MIME_TYPES
+
+
 def source_document_validation_error(*, data: bytes, mime_type: str) -> str | None:
     """Return a safe public validation code, never parser/provider details."""
 
     if not data:
         return "empty_document"
-    if len(data) > MAX_SOURCE_DOCUMENT_BYTES:
+    byte_limit = (
+        MAX_STORED_ARTIFACT_BYTES
+        if mime_type in STORED_ARTIFACT_MIME_TYPES
+        else MAX_SOURCE_DOCUMENT_BYTES
+    )
+    if len(data) > byte_limit:
         return "document_too_large"
     if mime_type == "application/pdf" and not data.startswith(b"%PDF-"):
         return "invalid_pdf_signature"
     if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" and not data.startswith(b"PK"):
         return "invalid_docx_signature"
+    if mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" and not data.startswith(b"PK"):
+        return "invalid_xlsx_signature"
+    if mime_type == "application/zip" and not data.startswith(b"PK"):
+        return "invalid_zip_signature"
+    if mime_type == "application/vnd.rar" and not data.startswith(b"Rar!"):
+        return "invalid_rar_signature"
+    if mime_type == "application/x-7z-compressed" and not data.startswith(b"7z\xbc\xaf\x27\x1c"):
+        return "invalid_7z_signature"
     return None
 
 
@@ -113,10 +169,14 @@ __all__ = [
     "DocumentIndexStatus",
     "DocumentParseStatus",
     "MAX_DOCUMENT_PARSE_ATTEMPTS",
+    "MAX_STORED_ARTIFACT_BYTES",
     "MAX_SOURCE_DOCUMENT_BYTES",
+    "PARSEABLE_SOURCE_DOCUMENT_MIME_TYPES",
     "REQUIREMENT_SOURCE_BUNDLE_TYPES",
+    "STORED_ARTIFACT_MIME_TYPES",
     "SUPPORTED_SOURCE_DOCUMENT_MIME_TYPES",
     "bundle_contributes_requirements",
     "canonical_source_document_mime_type",
     "source_document_validation_error",
+    "source_document_is_parseable",
 ]

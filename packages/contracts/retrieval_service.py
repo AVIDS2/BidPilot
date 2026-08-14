@@ -24,7 +24,6 @@ from .retrieval_repository import (
     RankedKnowledgeChunk,
     search_dense_candidates,
     search_fts_candidates,
-    search_portable_lexical_candidates,
     search_trigram_candidates,
     supports_postgresql_retrieval,
 )
@@ -182,17 +181,37 @@ def retrieve_project_evidence(
         )
         _add_ranked_records(rankings, records, "trigram", trigram_candidates)
     else:
-        # Test/dev backends do not implement pgvector, FTS, or pg_trgm. Keep
-        # the result project-scoped and explicitly mark the weaker fallback.
-        degraded_reasons.extend(("dense_unavailable", "postgresql_retrieval_unavailable"))
-        fts_candidates = search_portable_lexical_candidates(
+        # Test/dev backends do not implement PostgreSQL operators. The shared
+        # repositories provide bounded local adapters so contract tests still
+        # exercise dense/sparse fusion and citation behavior.
+        degraded_reasons.append("postgresql_retrieval_unavailable")
+        if profile_id and query_embedding:
+            dense_candidates = search_dense_candidates(
+                db,
+                project_id=project_id,
+                profile_id=profile_id,
+                query_embedding=query_embedding,
+                top_k=candidate_limit,
+            )
+        else:
+            degraded_reasons.append("dense_unavailable")
+        _add_ranked_records(rankings, records, "dense", dense_candidates)
+
+        fts_candidates = search_fts_candidates(
             db,
             project_id=project_id,
-            raw_query=raw_query,
             normalized_query=normalized_query,
             top_k=candidate_limit,
         )
         _add_ranked_records(rankings, records, "fts", fts_candidates)
+
+        trigram_candidates = search_trigram_candidates(
+            db,
+            project_id=project_id,
+            raw_query=raw_query,
+            top_k=candidate_limit,
+        )
+        _add_ranked_records(rankings, records, "trigram", trigram_candidates)
 
     fused_candidates = list(reciprocal_rank_fusion(rankings))
     rrf_ranks = {

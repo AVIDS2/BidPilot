@@ -15,6 +15,7 @@ LOCAL_CORS_ORIGINS = [
     "http://localhost:5176",
     "http://127.0.0.1:5176",
 ]
+LOCAL_CORS_ORIGIN_REGEX = r"^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$"
 
 
 def _clean_origin(value: str) -> str:
@@ -35,3 +36,11 @@ def get_cors_origins() -> list[str]:
         return LOCAL_CORS_ORIGINS.copy()
     origins = [_clean_origin(item) for item in raw.split(",")]
     return [origin for origin in origins if origin]
+
+
+def get_cors_origin_regex() -> str | None:
+    """Allow arbitrary local Vite ports without loosening deployed environments."""
+    environment = os.environ.get("DOCPILOT_ENV", "local").strip().lower()
+    if environment in {"production", "staging"}:
+        return None
+    return LOCAL_CORS_ORIGIN_REGEX

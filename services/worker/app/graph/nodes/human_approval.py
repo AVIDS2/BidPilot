@@ -44,6 +44,8 @@ def human_approval_node(state: BidPilotState) -> dict:
     section_key: str = state["section_key"]
     draft_markdown: str = state.get("draft_markdown", "")
     review_result = state.get("review_result")
+    review_status = state.get("review_status", "not_started")
+    review_degradation_code = state.get("review_degradation_code")
     iteration: int = state.get("iteration", 0)
 
     # Build the payload surfaced to the human reviewer while paused.
@@ -53,10 +55,17 @@ def human_approval_node(state: BidPilotState) -> dict:
         "draft_preview": draft_markdown[:2000],
         "review_score": review_result.get("overall_score") if review_result else None,
         "review_issues": review_result.get("issues", []) if review_result else [],
+        "review_status": review_status,
+        "review_degradation_code": review_degradation_code,
         "iteration": iteration,
         "section_version_id": state.get("section_version_id"),
         "instructions": (
-            "Review the draft and respond with a dict containing:\n"
+            (
+                "Automatic review is unavailable. Verify the draft, requirement coverage, and citations manually.\n"
+                if review_status == "degraded"
+                else ""
+            )
+            + "Review the draft and respond with a dict containing:\n"
             "  decision: 'approved' | 'rejected_with_feedback'\n"
             "  feedback: optional string with improvement notes"
         ),
@@ -104,6 +113,7 @@ def human_approval_node(state: BidPilotState) -> dict:
             f"section={section_key}, iteration={iteration}, "
             f"draft_len={len(draft_markdown)}, "
             f"review_score={review_result.get('overall_score') if review_result else None}"
+            f", review_status={review_status}"
         ),
         output_summary=(
             f"decision={decision}, "

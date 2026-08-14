@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
+from enum import Enum
+import json
 import re
 from typing import Any
+from uuid import UUID
 
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -238,16 +244,39 @@ def record_action_failed(db: Session, audit: AssistantActionAudit, error_message
 
 
 def redact_arguments(value: Any) -> Any:
-    """Return a deep-redacted copy of nested tool arguments."""
-    if isinstance(value, dict):
+    """Return a deep-redacted, JSON-safe copy of a runtime payload.
+
+    Runtime actions and events are persisted in JSON columns. Capability
+    adapters may return normal Python values such as ``datetime`` or
+    ``Decimal``; serializing them here keeps a successful tool call from
+    breaking the entire assistant SSE lifecycle.
+    """
+    if isinstance(value, BaseModel):
+        return redact_arguments(value.model_dump(mode="json"))
+    if isinstance(value, Mapping):
         return {
-            key: "***redacted***" if _is_sensitive_key(key) else redact_arguments(child)
+            str(key): "***redacted***"
+            if _is_sensitive_key(str(key))
+            else redact_arguments(child)
             for key, child in value.items()
         }
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple, set, frozenset)):
         return [redact_arguments(item) for item in value]
     if isinstance(value, str):
         return redact_text(value)
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if isinstance(value, (UUID, Decimal)):
+        return str(value)
+    if isinstance(value, Enum):
+        return redact_arguments(value.value)
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return f"<binary:{len(value)} bytes>"
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError):
+        # Unknown custom objects are not a safe or stable event payload.
+        return f"<unsupported:{type(value).__name__}>"
     return deepcopy(value)
 
 

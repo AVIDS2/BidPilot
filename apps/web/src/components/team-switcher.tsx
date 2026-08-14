@@ -74,7 +74,7 @@ export function TeamSwitcher({
                 <DropdownMenuItem
                   key={team.name}
                   onClick={() => setActiveTeam(team)}
-                  className="gap-2 p-2 text-muted-foreground focus:text-white focus:bg-[rgba(163,163,163,0.08)]"
+                  className="gap-2 p-2 text-muted-foreground focus:bg-accent focus:text-accent-foreground"
                 >
                   <div className="flex size-7 items-center justify-center rounded-lg">
                     {team.logo}

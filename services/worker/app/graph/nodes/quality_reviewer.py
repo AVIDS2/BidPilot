@@ -350,7 +350,7 @@ def _load_authorized_plan_requirements(state: BidPilotState) -> tuple[list[dict]
 
 
 def quality_reviewer_node(state: BidPilotState) -> dict:
-    """Review a draft with a governed model call and deterministic fallback."""
+    """Review a draft without allowing an unavailable model to auto-pass it."""
     start = time.monotonic()
     section_key: str = state["section_key"]
     draft_markdown: str = state.get("draft_markdown", "")
@@ -364,6 +364,7 @@ def quality_reviewer_node(state: BidPilotState) -> dict:
     degradation_code: str | None = None
     claim_candidates: list[ClaimCandidate] = []
     claim_integrity_status = "not_applicable"
+    review_status = "not_started"
     evidence_chunks: list[dict] = []
     evidence_state_update: dict = {}
     response_plan_state_update: dict = {}
@@ -410,6 +411,7 @@ def quality_reviewer_node(state: BidPilotState) -> dict:
                 reservation_key=call_reservation_key,
         )
         review_method = "llm"
+        review_status = "passed" if review["passed"] else "failed"
         claim_integrity_status = (
             "proposed"
             if claim_candidates
@@ -430,6 +432,7 @@ def quality_reviewer_node(state: BidPilotState) -> dict:
             else "response_plan_unavailable"
         )
         claim_integrity_status = "invalid_evidence_set" if isinstance(exc, EvidenceSetScopeError) else "invalid_response_plan"
+        review_status = "blocked"
     except ProviderInvocationError as exc:
         if isinstance(run_id, str) and run_id:
             resolve_workflow_model_call_failure(
@@ -441,8 +444,16 @@ def quality_reviewer_node(state: BidPilotState) -> dict:
         review = _deterministic_review(
             {**state, "evidence_chunks": evidence_chunks, "requirements": requirements}
         )
+        # Deterministic checks can explain a model outage but cannot attest to
+        # semantic quality. Preserve their findings while requiring a human.
+        review["passed"] = False
+        review["issues"] = [
+            "自动质量审核不可用；必须由人工复核后才能批准此版本。",
+            *review["issues"],
+        ]
         degradation_code = exc.error_code
         claim_integrity_status = "degraded"
+        review_status = "degraded"
 
     duration_ms = int((time.monotonic() - start) * 1000)
     output = (
@@ -469,7 +480,9 @@ def quality_reviewer_node(state: BidPilotState) -> dict:
         **response_plan_state_update,
         "evidence_chunks": evidence_chunks,
         "review_result": review,
-        "review_passed": review["passed"],
+        "review_passed": review_status == "passed",
+        "review_status": review_status,
+        "review_degradation_code": degradation_code,
         "claim_candidates": claim_candidates,
         "claim_integrity_status": claim_integrity_status,
         "error": (

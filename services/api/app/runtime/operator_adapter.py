@@ -29,7 +29,7 @@ from app.chat.service import (
 )
 from app.memory.schemas import MemoryContextRead
 from app.memory.service import memory_context_for_agent
-from app.models import RuntimeAction, RuntimeApproval, RuntimeRun
+from app.models import RuntimeAction, RuntimeApproval, RuntimeEvent, RuntimeRun
 from app.agent.llm import get_agent_llm
 from app.usage.schemas import ProviderSource
 from app.usage.service import UsageLimitExceeded, reserve_assistant_model_tokens
@@ -265,10 +265,21 @@ async def stream_operator_assistant_response(
         return
 
     run = creation.run
-    save_message(db, conversation_id, "user", payload.message)
+    user_message = save_message(
+        db,
+        conversation_id,
+        "user",
+        payload.message,
+        attachments=payload.attachments,
+    )
     yield _sse(
         "assistant.start",
-        {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "thinking"},
+        {
+            "conversation_id": conversation_id,
+            "runtime_run_id": run.id,
+            "user_message_id": user_message.id,
+            "state": "thinking",
+        },
     )
     if engine == "streaming_harness":
         try:
@@ -331,6 +342,7 @@ async def stream_operator_assistant_response(
             approval_mode=payload.approval_mode,
             provider_config_id=payload.provider_config_id,
             reasoning_effort=payload.reasoning_effort,
+            locale=payload.locale,
             after_sequence=1,
         ):
             yield event
@@ -543,14 +555,16 @@ async def _invoke_operator_graph(
             project_id=run.project_id,
             runtime_run_id=run.id,
         )
-        if reservation is None:
-            return
         try:
+            # A budget lookup still locks the organization row when the
+            # workspace has no configured ceiling. Do not retain that lock for
+            # the lifetime of a planner invocation.
             db.commit()
         except Exception:
             db.rollback()
             raise
-        active_reservation_keys.append(reservation_key)
+        if reservation is not None:
+            active_reservation_keys.append(reservation_key)
 
     def mark_active_reservations_uncertain() -> None:
         if not active_reservation_keys:
@@ -720,22 +734,79 @@ async def _invoke_operator_graph(
 
 
 def _bounded_conversation_context(db: Session, conversation_id: str) -> ConversationContextWindow:
-    """Load a bounded recent window and make dropped history explicit to the model."""
+    """Load recent transcript rows plus any runtime-only terminal replies.
+
+    A disconnected SSE stream can leave ``message.completed`` durable while
+    the corresponding ``chat_messages`` row was never committed. The runtime
+    event is redacted public text, so it is a valid transcript projection for
+    the next model turn and prevents the UI/model from diverging.
+    """
+    limit = _MAX_CONVERSATION_SOURCE_MESSAGES
     messages, history_window_truncated = get_recent_conversation_messages(
         db,
         conversation_id,
-        limit=_MAX_CONVERSATION_SOURCE_MESSAGES,
+        limit=limit,
     )
+    source: list[tuple[float, str, str]] = [
+        (
+            message.created_at.timestamp() if message.created_at is not None else 0.0,
+            message.role,
+            _message_with_attachment_context(message),
+        )
+        for message in messages
+    ]
+    known_contents = {content.strip() for _, _, content in source if content.strip()}
+    runtime_messages = (
+        db.query(RuntimeEvent)
+        .join(RuntimeRun, RuntimeEvent.run_id == RuntimeRun.id)
+        .filter(
+            RuntimeRun.conversation_id == conversation_id,
+            RuntimeEvent.event_type == "message.completed",
+        )
+        .order_by(RuntimeEvent.created_at.asc(), RuntimeEvent.sequence.asc())
+        .limit(limit + 1)
+        .all()
+    )
+    for event in runtime_messages:
+        content = event.public_summary.strip()
+        if not content or content in known_contents:
+            continue
+        known_contents.add(content)
+        source.append(
+            (
+                event.created_at.timestamp() if event.created_at is not None else 0.0,
+                "assistant",
+                content,
+            )
+        )
+    source.sort(key=lambda item: item[0])
+    if len(source) > limit:
+        history_window_truncated = True
+        source = source[-limit:]
     return compact_conversation_context(
         [
             {
-                "role": message.role,
-                "content": message.content,
+                "role": role,
+                "content": content,
             }
-            for message in messages
+            for _, role, content in source
         ],
         history_window_truncated=history_window_truncated,
     )
+
+
+def _message_with_attachment_context(message: object) -> str:
+    """Keep prior turn attachments in the bounded, untrusted chat trajectory."""
+    content = str(getattr(message, "content", "")).strip()
+    attachments = getattr(message, "attachments", ()) or ()
+    sections: list[str] = []
+    for attachment in attachments:
+        text = str(getattr(attachment, "extracted_text", "") or "").strip()
+        if not text:
+            continue
+        name = str(getattr(attachment, "name", "附件"))[:255]
+        sections.append(f"历史附件《{name}》可读正文：\n{text}")
+    return "\n\n".join([content, *sections]).strip()
 
 
 def _load_authorized_memory_context(

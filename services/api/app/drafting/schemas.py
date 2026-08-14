@@ -2,23 +2,35 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-ReasoningEffort = Literal["low", "medium", "high", "extra", "max", "ultra"]
+# Public API contract: five stable reasoning levels shared by the assistant
+# and workflow entry points.  Old clients are normalized inside the runtime,
+# but must not extend this documented request surface.
+ReasoningEffort = Literal["low", "medium", "high", "extra", "max"]
 
 
 class DraftSectionRequest(BaseModel):
     project_id: str
     section_key: str
+    # section_key is retained for readable workflow prompts and retrieval;
+    # section_id makes the write target unambiguous when a project has more
+    # than one deliverable with the same section key.
+    section_id: str | None = None
+    client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
     provider_config_id: str | None = None
     reasoning_effort: ReasoningEffort | None = None
+    max_iterations: int | None = Field(default=None, ge=1, le=5)
     parent_runtime_run_id: str | None = None
 
 
 class RedraftSectionRequest(BaseModel):
     project_id: str
     section_key: str
+    section_id: str | None = None
+    client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
     review_feedback: str | None = Field(default=None, max_length=4_000)
     provider_config_id: str | None = None
     reasoning_effort: ReasoningEffort | None = None
+    max_iterations: int | None = Field(default=None, ge=1, le=5)
     parent_runtime_run_id: str | None = None
 
 

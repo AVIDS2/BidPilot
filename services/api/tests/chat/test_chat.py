@@ -139,12 +139,19 @@ class TestChatConversationsEndpoint:
 
         response = client.post("/chat/stream", json={"message": "请帮我创建一个新项目"})
         assert response.status_code == 200
+        conversation_id = next(
+            json.loads(line[6:])["conversation_id"]
+            for part in response.text.strip().split("\n\n")
+            for line in part.splitlines()
+            if line.startswith("data: ") and "conversation_id" in line
+        )
 
         response = client.get("/chat/conversations")
         assert response.status_code == 200
         items = response.json()
         assert items
-        assert items[0]["title"] == "请帮我创建一个新项目"
+        created = next(item for item in items if item["id"] == conversation_id)
+        assert created["title"] == "请帮我创建一个新项目"
 
     def test_assistant_stream_can_generate_auto_title(self, client, test_db, clear_dev_user_chat_state, monkeypatch):
         """Assistant sessions should still reuse the conversation title generation flow."""
@@ -178,6 +185,20 @@ class TestChatConversationsEndpoint:
         refreshed = client.get("/chat/conversations").json()
         assert refreshed[0]["title"] == "招投标项目初始化"
 
+        pinned = client.patch(
+            f"/chat/conversations/{conversation_id}",
+            json={"is_pinned": True},
+        )
+        assert pinned.status_code == 200
+        assert pinned.json()["is_pinned"] is True
+
+        unpinned = client.patch(
+            f"/chat/conversations/{conversation_id}",
+            json={"is_pinned": False},
+        )
+        assert unpinned.status_code == 200
+        assert unpinned.json()["is_pinned"] is False
+
 
 class TestChatHistoryEndpoint:
     """Tests for GET /chat/conversations/{id}/messages."""
@@ -210,6 +231,61 @@ class TestChatService:
         assert messages[1]["role"] == "user"
         assert "UNTRUSTED_CONTEXT_JSON" in messages[1]["content"]
         assert injection in messages[1]["content"]
+
+    def test_fork_conversation_copies_only_the_prefix_before_a_user_checkpoint(
+        self,
+        test_db,
+        chat_test_user_id,
+    ) -> None:
+        from app.chat.service import (
+            create_conversation,
+            fork_conversation_from_checkpoint,
+            get_conversation_messages,
+            save_message,
+        )
+
+        source = create_conversation(test_db, chat_test_user_id, None)
+        save_message(test_db, source.id, "user", "先查看项目")
+        save_message(test_db, source.id, "assistant", "已找到项目")
+        checkpoint = save_message(test_db, source.id, "user", "检查资料完整度")
+        save_message(test_db, source.id, "assistant", "资料尚不完整")
+
+        branch, copied = fork_conversation_from_checkpoint(
+            test_db,
+            conversation_id=source.id,
+            user_id=chat_test_user_id,
+            checkpoint_message_id=checkpoint.id,
+        )
+
+        assert branch.source_conversation_id == source.id
+        assert branch.checkpoint_message_id == checkpoint.id
+        assert [(message.role, message.content) for message in copied] == [
+            ("user", "先查看项目"),
+            ("assistant", "已找到项目"),
+        ]
+        assert [(message.role, message.content) for message in get_conversation_messages(test_db, branch.id)] == [
+            ("user", "先查看项目"),
+            ("assistant", "已找到项目"),
+        ]
+
+    def test_fork_conversation_rejects_an_assistant_message_as_checkpoint(
+        self,
+        test_db,
+        chat_test_user_id,
+    ) -> None:
+        from app.chat.service import create_conversation, fork_conversation_from_checkpoint, save_message
+
+        source = create_conversation(test_db, chat_test_user_id, None)
+        save_message(test_db, source.id, "user", "先查看项目")
+        assistant_message = save_message(test_db, source.id, "assistant", "已找到项目")
+
+        with pytest.raises(ValueError, match="Only a user message"):
+            fork_conversation_from_checkpoint(
+                test_db,
+                conversation_id=source.id,
+                user_id=chat_test_user_id,
+                checkpoint_message_id=assistant_message.id,
+            )
 
     def test_stream_chat_response_redacts_provider_exception(
         self,
@@ -298,6 +374,36 @@ class TestChatService:
         assert provider.api_key == "deepseek-test-key"
         assert provider.base_url == "https://api.deepseek.com/v1"
         assert provider.model == "deepseek-v4-flash"
+
+    def test_resolve_platform_chat_provider_prefers_opencode_go(self, monkeypatch):
+        import importlib
+        from app.chat import service as chat_service
+
+        monkeypatch.setenv("OPENCODE_API_KEY", "opencode-test-key")
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
+
+        reloaded = importlib.reload(chat_service)
+        provider = reloaded._resolve_platform_chat_provider()
+
+        assert provider is not None
+        assert provider.provider_id == "opencode-go"
+        assert provider.base_url == "https://opencode.ai/zen/go/v1"
+        assert provider.model == "deepseek-v4-flash"
+
+    def test_resolve_platform_chat_provider_prefers_deepseek_over_legacy_domestic_env(self, monkeypatch):
+        """One official platform model keeps chat and workflow defaults aligned."""
+        import importlib
+        from app.chat import service as chat_service
+
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
+        monkeypatch.setenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", "legacy-domestic-key")
+        reloaded = importlib.reload(chat_service)
+
+        provider = reloaded._resolve_platform_chat_provider()
+
+        assert provider is not None
+        assert provider.provider_id == "deepseek"
+        assert provider.api_key == "deepseek-test-key"
 
     def test_resolve_provider_config_explicit_id(self, test_db, chat_test_user_id):
         """Resolves provider config by explicit ID."""

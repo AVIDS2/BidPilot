@@ -33,6 +33,9 @@ class CurrentUser(BaseModel):
     disabled: bool = False
     org_id: str = ""
     org_slug: str = ""
+    # Present only on registration. True means the provider accepted the
+    # verification email, not that the recipient has already received it.
+    verification_email_accepted: bool | None = None
 
 
 class UserUpdate(BaseModel):

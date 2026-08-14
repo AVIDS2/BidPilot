@@ -19,6 +19,7 @@ def test_bootstrap_admin_creates_admin_when_user_missing() -> None:
         assert result.status == "created"
         assert result.user.email == email
         assert result.user.role == "admin"
+        assert result.user.org_slug.startswith("personal-")
     finally:
         db.close()
 

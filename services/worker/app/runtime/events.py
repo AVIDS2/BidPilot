@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 
 from app.db import SessionLocal
 from app.models import Notification, RuntimeEvent, RuntimeRun
-from contracts.runtime import RuntimeEventType
+from contracts.runtime import RUNTIME_EVENT_SCHEMA_VERSION, RuntimeEventType
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def publish_runtime_event(
             event_type=event_type.value,
             public_summary=redact_text(public_summary),
             payload_json=safe_payload,
-            schema_version="1.0",
+            schema_version=RUNTIME_EVENT_SCHEMA_VERSION,
         )
         db.add(event)
         db.commit()
@@ -344,7 +344,7 @@ def _finish_runtime_run(
                 event_type=event_type.value,
                 public_summary=summary,
                 payload_json={"status": status, **({"error_code": error_code} if error_code else {})},
-                schema_version="1.0",
+                schema_version=RUNTIME_EVENT_SCHEMA_VERSION,
             )
         )
         if wake_status:

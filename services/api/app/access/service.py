@@ -36,6 +36,22 @@ def resolve_project_access(
             Project.status != "deleted",
         )
     )
+    if project is None and project_id:
+        # Accept the 8-char short_id that assistant search_projects surfaces.
+        # A short prefix is only resolvable when it is unambiguous inside the
+        # caller's organization; otherwise the caller must ask for the full id.
+        prefix = project_id.lower()
+        candidates = list(
+            db.scalars(
+                select(Project).where(
+                    Project.id.startswith(prefix),
+                    Project.org_id == (current_user.org_id or "default"),
+                    Project.status != "deleted",
+                )
+            )
+        )
+        if len(candidates) == 1:
+            project = candidates[0]
     if project is None:
         return None
 

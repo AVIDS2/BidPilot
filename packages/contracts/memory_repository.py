@@ -6,6 +6,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from math import sqrt
 from typing import Literal
 
 from sqlalchemy import case, false, func, literal_column, or_, select
@@ -23,6 +24,7 @@ from .models import (
     RequirementItem,
     SourceDocument,
 )
+from .retrieval import normalize_retrieval_text
 
 
 _TEXT_CONFIG = literal_column("'simple'::regconfig")
@@ -81,6 +83,96 @@ def _base_statement(*, org_id: str, user_id: str, project_id: str | None, now: d
     )
 
 
+def _uses_postgres(db: Session) -> bool:
+    """Keep PostgreSQL search operators out of the SQLite unit-test adapter."""
+
+    return db.get_bind().dialect.name == "postgresql"
+
+
+def _local_candidate_limit(top_k: int) -> int:
+    return max(_limit(top_k) * 8, 64)
+
+
+def _search_local_lexical_candidates(
+    db: Session,
+    *,
+    org_id: str,
+    user_id: str,
+    project_id: str | None,
+    normalized_query: str,
+    now: datetime,
+    top_k: int,
+    method: Literal["fts", "trigram"],
+) -> list[RankedMemoryRecord]:
+    """Bounded deterministic fallback used only by non-PostgreSQL test DBs."""
+
+    terms = tuple(dict.fromkeys(term for term in normalized_query.split() if term))
+    if not terms:
+        return []
+    statement = (
+        _base_statement(org_id=org_id, user_id=user_id, project_id=project_id, now=now)
+        .order_by(MemoryRecord.updated_at.desc(), MemoryRecord.id.asc())
+        .limit(_local_candidate_limit(top_k))
+    )
+    ranked: list[RankedMemoryRecord] = []
+    for record in db.scalars(statement).all():
+        text = (record.retrieval_text or "").casefold()
+        matched_terms = sum(term in text for term in terms)
+        if not matched_terms:
+            continue
+        ranked.append(
+            RankedMemoryRecord(
+                record=record,
+                score=matched_terms / len(terms),
+                method=method,
+            )
+        )
+    return sorted(ranked, key=lambda candidate: (-candidate.score, candidate.record_id))[: _limit(top_k)]
+
+
+def _search_local_dense_candidates(
+    db: Session,
+    *,
+    org_id: str,
+    user_id: str,
+    project_id: str | None,
+    profile_id: str,
+    query_embedding: list[float],
+    now: datetime,
+    top_k: int,
+) -> list[RankedMemoryRecord]:
+    """Small, scope-safe cosine fallback for SQLite unit tests only."""
+
+    query_norm = sqrt(sum(value * value for value in query_embedding))
+    if not query_norm:
+        return []
+    statement = (
+        _base_statement(org_id=org_id, user_id=user_id, project_id=project_id, now=now)
+        .where(
+            MemoryRecord.embedding_profile == profile_id,
+            MemoryRecord.embedding.isnot(None),
+        )
+        .order_by(MemoryRecord.id.asc())
+        .limit(_local_candidate_limit(top_k))
+    )
+    ranked: list[RankedMemoryRecord] = []
+    for record in db.scalars(statement).all():
+        try:
+            embedding = [float(value) for value in record.embedding]
+        except (TypeError, ValueError):
+            continue
+        if len(embedding) != len(query_embedding):
+            continue
+        embedding_norm = sqrt(sum(value * value for value in embedding))
+        if not embedding_norm:
+            continue
+        score = sum(left * right for left, right in zip(embedding, query_embedding)) / (
+            embedding_norm * query_norm
+        )
+        ranked.append(RankedMemoryRecord(record=record, score=score, method="dense"))
+    return sorted(ranked, key=lambda candidate: (-candidate.score, candidate.record_id))[: _limit(top_k)]
+
+
 def has_visible_memory(
     db: Session,
     *,
@@ -115,6 +207,17 @@ def search_dense_memory_candidates(
     """Run exact-profile dense recall only after scope filtering."""
     if not query_embedding:
         return []
+    if not _uses_postgres(db):
+        return _search_local_dense_candidates(
+            db,
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            profile_id=profile_id,
+            query_embedding=query_embedding,
+            now=now,
+            top_k=top_k,
+        )
     distance = MemoryRecord.embedding.cosine_distance(query_embedding)
     stmt = (
         _base_statement(org_id=org_id, user_id=user_id, project_id=project_id, now=now)
@@ -145,6 +248,17 @@ def search_fts_memory_candidates(
     """Retrieve lexical memory candidates with a bounded CJK-aware OR fallback."""
     if not normalized_query.strip():
         return []
+    if not _uses_postgres(db):
+        return _search_local_lexical_candidates(
+            db,
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            normalized_query=normalized_query,
+            now=now,
+            top_k=top_k,
+            method="fts",
+        )
     search_vector = func.to_tsvector(_TEXT_CONFIG, MemoryRecord.retrieval_text)
     strict_query = func.websearch_to_tsquery(_TEXT_CONFIG, normalized_query)
     strict_results = _run_fts_query(
@@ -219,6 +333,17 @@ def search_trigram_memory_candidates(
     query = raw_query.strip()
     if not query:
         return []
+    if not _uses_postgres(db):
+        return _search_local_lexical_candidates(
+            db,
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            normalized_query=normalize_retrieval_text(query),
+            now=now,
+            top_k=top_k,
+            method="trigram",
+        )
     phrase_match = MemoryRecord.body_markdown.ilike(f"%{query}%")
     similarity = func.similarity(MemoryRecord.body_markdown, query)
     phrase_boost = case((phrase_match, 1.0), else_=0.0)

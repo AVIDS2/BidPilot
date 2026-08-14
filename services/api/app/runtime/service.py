@@ -19,7 +19,7 @@ from app.assistant.audit import redact_arguments, redact_text
 from app.access.service import require_project_capability
 from app.audit.service import record_audit_event
 from app.auth.schemas import CurrentUser
-from app.models import ExecutionRun, Project, RuntimeAction, RuntimeApproval, RuntimeRun
+from app.models import ExecutionRun, Project, RuntimeAction, RuntimeApproval, RuntimeEvent, RuntimeRun
 from contracts.runtime import (
     RuntimeActionStatus,
     RuntimeApprovalDecisionType,
@@ -73,6 +73,18 @@ class RuntimeRunCreation:
 
     run: RuntimeRun
     created: bool
+
+
+def _action_event_payload(action: RuntimeAction, **payload: Any) -> dict[str, Any]:
+    """Return the stable, public correlation fields for one action event."""
+    value: dict[str, Any] = {
+        "capability": action.capability_name,
+        "action_id": action.id,
+    }
+    if action.turn_id:
+        value["turn_id"] = action.turn_id
+    value.update(payload)
+    return value
 
 
 def list_runtime_runs_query(
@@ -348,18 +360,46 @@ def list_linked_workflow_runs(
     its own replayable RuntimeEvent timeline.
     """
     parent = get_visible_runtime_run(db, parent_run_id, current_user)
-    return list(
+    children = list(
         db.scalars(
             select(RuntimeRun)
             .where(
                 RuntimeRun.parent_run_id == parent.id,
-                RuntimeRun.kind == "workflow_bridge",
+                RuntimeRun.kind.in_(("workflow_bridge", "remote_import")),
                 RuntimeRun.org_id == current_user.org_id,
                 RuntimeRun.user_id == current_user.id,
             )
             .order_by(RuntimeRun.created_at.asc(), RuntimeRun.id.asc())
             .limit(max(1, min(limit, 100)))
         )
+    )
+    # ``created_at`` is only second/microsecond-resolution depending on the
+    # database.  A parent RuntimeEvent already gives every launched child a
+    # durable, monotonic sequence, so use it as the canonical visual/runtime
+    # order when it is available.
+    linked_events = list(
+        db.scalars(
+            select(RuntimeEvent)
+            .where(
+                RuntimeEvent.run_id == parent.id,
+                RuntimeEvent.event_type == RuntimeEventType.WORKFLOW_LINKED.value,
+            )
+            .order_by(RuntimeEvent.sequence.asc())
+        )
+    )
+    linked_sequence_by_child_id = {
+        event.payload_json.get("workflow_runtime_run_id"): event.sequence
+        for event in linked_events
+        if isinstance(event.payload_json, dict)
+        and isinstance(event.payload_json.get("workflow_runtime_run_id"), str)
+    }
+    return sorted(
+        children,
+        key=lambda child: (
+            linked_sequence_by_child_id.get(child.id, 2**31 - 1),
+            child.created_at,
+            child.id,
+        ),
     )
 
 
@@ -369,6 +409,9 @@ def complete_runtime_run(
     message: str,
     *,
     result_json: dict[str, Any] | None = None,
+    parent_event_id: str | None = None,
+    message_delta_emitted: bool = False,
+    terminal_state: str | None = None,
 ) -> RuntimeRun:
     """Persist the user-facing result and terminal events as one transaction.
 
@@ -385,6 +428,9 @@ def complete_runtime_run(
         terminal_summary="任务已完成。",
         allowed_statuses={"running"},
         result_json=result_json,
+        parent_event_id=parent_event_id,
+        message_delta_emitted=message_delta_emitted,
+        terminal_state=terminal_state,
     )
 
 
@@ -395,6 +441,7 @@ def fail_runtime_run(
     *,
     error_code: str = "runtime_failed",
     result_json: dict[str, Any] | None = None,
+    parent_event_id: str | None = None,
 ) -> RuntimeRun:
     """Record a safe terminal failure without leaking provider or tool details."""
     return _finish_runtime_run(
@@ -407,10 +454,17 @@ def fail_runtime_run(
         allowed_statuses={"queued", "running", "awaiting_approval", "cancel_requested"},
         result_json=result_json,
         error_code=error_code,
+        parent_event_id=parent_event_id,
     )
 
 
-def cancel_runtime_run(db: Session, run_id: str, message: str = "已取消这次操作。") -> RuntimeRun:
+def cancel_runtime_run(
+    db: Session,
+    run_id: str,
+    message: str = "已取消这次操作。",
+    *,
+    parent_event_id: str | None = None,
+) -> RuntimeRun:
     """Persist a user-requested cancellation and its terminal evidence."""
     return _finish_runtime_run(
         db,
@@ -420,6 +474,7 @@ def cancel_runtime_run(db: Session, run_id: str, message: str = "已取消这次
         terminal_event=RuntimeEventType.RUN_CANCELLED,
         terminal_summary="任务已取消。",
         allowed_statuses={"queued", "running", "awaiting_approval", "cancel_requested"},
+        parent_event_id=parent_event_id,
     )
 
 
@@ -594,6 +649,9 @@ def _finish_runtime_run(
     allowed_statuses: set[str],
     result_json: dict[str, Any] | None = None,
     error_code: str | None = None,
+    parent_event_id: str | None = None,
+    message_delta_emitted: bool = False,
+    terminal_state: str | None = None,
 ) -> RuntimeRun:
     safe_message = redact_text(message).strip()
     if not safe_message:
@@ -622,13 +680,20 @@ def _finish_runtime_run(
             *cancellation_events,
             RuntimeEventDraft(
                 type=RuntimeEventType.MESSAGE_COMPLETED,
+                parent_event_id=parent_event_id,
                 public_summary=safe_message,
-                payload={"message": safe_message},
+                payload={"message": safe_message, "delta_emitted": message_delta_emitted},
             ),
             RuntimeEventDraft(
                 type=terminal_event,
+                parent_event_id=parent_event_id,
                 public_summary=terminal_summary,
-                payload={"status": terminal_status, **({"error_code": error_code} if error_code else {})},
+                payload={
+                    "status": terminal_status,
+                    "state": terminal_state
+                    or ("failed" if terminal_event is RuntimeEventType.RUN_FAILED else "completed"),
+                    **({"error_code": error_code} if error_code else {}),
+                },
             ),
         ],
     )
@@ -659,12 +724,13 @@ def _cancel_pending_approvals(db: Session, run: RuntimeRun) -> list[RuntimeEvent
         events.append(
             RuntimeEventDraft(
                 type=RuntimeEventType.APPROVAL_RESOLVED,
+                parent_event_id=action.parent_event_id,
                 public_summary="已取消待确认操作。",
-                payload={
-                    "approval_id": approval.id,
-                    "capability": action.capability_name,
-                    "status": RuntimeApprovalStatus.CANCELLED.value,
-                },
+                payload=_action_event_payload(
+                    action,
+                    approval_id=approval.id,
+                    status=RuntimeApprovalStatus.CANCELLED.value,
+                ),
             )
         )
     return events
@@ -704,20 +770,23 @@ def expire_runtime_approval_if_due(
         [
             RuntimeEventDraft(
                 type=RuntimeEventType.APPROVAL_RESOLVED,
+                parent_event_id=action.parent_event_id,
                 public_summary=message,
-                payload={
-                    "approval_id": approval.id,
-                    "capability": action.capability_name,
-                    "status": RuntimeApprovalStatus.EXPIRED.value,
-                },
+                payload=_action_event_payload(
+                    action,
+                    approval_id=approval.id,
+                    status=RuntimeApprovalStatus.EXPIRED.value,
+                ),
             ),
             RuntimeEventDraft(
                 type=RuntimeEventType.MESSAGE_COMPLETED,
+                parent_event_id=action.parent_event_id,
                 public_summary=message,
                 payload={"message": message},
             ),
             RuntimeEventDraft(
                 type=RuntimeEventType.RUN_FAILED,
+                parent_event_id=action.parent_event_id,
                 public_summary="任务因审批过期而结束。",
                 payload={"status": "expired", "error_code": "approval_expired"},
             ),
@@ -768,9 +837,51 @@ def execute_capability(
     capability_name: str,
     arguments: dict[str, Any],
     action_key: str,
+    parent_event_id: str | None = None,
+    turn_id: str | None = None,
     executor: CapabilityExecutor | None = None,
 ) -> RuntimeCapabilityExecution:
-    """Execute one capability at most once for a runtime action key."""
+    """Prepare and execute one capability at most once for an action key.
+
+    Most callers use this convenience boundary. The streaming Harness uses the
+    two public lifecycle steps below so it can expose the durable
+    ``capability.started`` event before the domain operation begins.
+    """
+    prepared = prepare_capability_execution(
+        db,
+        user,
+        run_id=run_id,
+        capability_name=capability_name,
+        arguments=arguments,
+        action_key=action_key,
+        parent_event_id=parent_event_id,
+        turn_id=turn_id,
+    )
+    if (
+        prepared.approval is not None
+        or prepared.action.status != RuntimeActionStatus.PENDING.value
+    ):
+        return prepared
+    return execute_prepared_capability(
+        db,
+        user,
+        action_id=prepared.action.id,
+        executor=executor,
+    )
+
+
+def prepare_capability_execution(
+    db: Session,
+    user: CurrentUser,
+    *,
+    run_id: str,
+    capability_name: str,
+    arguments: dict[str, Any],
+    action_key: str,
+    parent_event_id: str | None = None,
+    turn_id: str | None = None,
+) -> RuntimeCapabilityExecution:
+    """Persist one action and its initial event without running side effects."""
     run = get_visible_runtime_run(db, run_id, user)
     definition = get_capability_definition(capability_name)
     missing_fields = missing_required_capability_arguments(definition.name, arguments)
@@ -793,6 +904,8 @@ def execute_capability(
     )
     action = RuntimeAction(
         run_id=run.id,
+        parent_event_id=parent_event_id,
+        turn_id=turn_id,
         action_key=action_key,
         capability_name=definition.name,
         status=initial_status,
@@ -810,8 +923,9 @@ def execute_capability(
         run.id,
         RuntimeEventDraft(
             type=RuntimeEventType.CAPABILITY_STARTED,
+            parent_event_id=action.parent_event_id,
             public_summary=f"正在{definition.label_zh}。",
-            payload={"capability": definition.name},
+            payload=_action_event_payload(action, title=definition.label_zh),
         ),
     )
 
@@ -836,12 +950,34 @@ def execute_capability(
             run.id,
             RuntimeEventDraft(
                 type=RuntimeEventType.CAPABILITY_FAILED,
+                parent_event_id=action.parent_event_id,
                 public_summary=policy.public_message,
-                payload={"capability": definition.name, "reason_code": policy.reason_code},
+                payload=_action_event_payload(
+                    action,
+                    title=definition.label_zh,
+                    reason_code=policy.reason_code,
+                ),
             ),
         )
         return RuntimeCapabilityExecution(action=action)
 
+    return RuntimeCapabilityExecution(action=action)
+
+
+def execute_prepared_capability(
+    db: Session,
+    user: CurrentUser,
+    *,
+    action_id: str,
+    executor: CapabilityExecutor | None = None,
+) -> RuntimeCapabilityExecution:
+    """Execute a prepared action after its started event is observable."""
+    action = db.scalar(select(RuntimeAction).where(RuntimeAction.id == action_id).with_for_update())
+    if action is None:
+        raise ValueError("Runtime action not found")
+    run = get_visible_runtime_run(db, action.run_id, user)
+    if action.status != RuntimeActionStatus.PENDING.value:
+        return _replay_existing_action(db, action)
     return _execute_action(db, user, run, action, executor)
 
 
@@ -881,12 +1017,13 @@ def resolve_approval(
             run.id,
             RuntimeEventDraft(
                 type=RuntimeEventType.APPROVAL_RESOLVED,
+                parent_event_id=action.parent_event_id,
                 public_summary="已拒绝该操作。",
-                payload={
-                    "approval_id": approval.id,
-                    "capability": action.capability_name,
-                    "status": RuntimeApprovalStatus.REJECTED.value,
-                },
+                payload=_action_event_payload(
+                    action,
+                    approval_id=approval.id,
+                    status=RuntimeApprovalStatus.REJECTED.value,
+                ),
             ),
         )
         return RuntimeCapabilityExecution(action=action, approval=approval)
@@ -909,12 +1046,13 @@ def resolve_approval(
         run.id,
         RuntimeEventDraft(
             type=RuntimeEventType.APPROVAL_RESOLVED,
+            parent_event_id=action.parent_event_id,
             public_summary="审批已通过，正在继续执行。",
-            payload={
-                "approval_id": approval.id,
-                "capability": action.capability_name,
-                "status": approval.status,
-            },
+            payload=_action_event_payload(
+                action,
+                approval_id=approval.id,
+                status=approval.status,
+            ),
         ),
     )
     execution = _execute_action(db, user, run, action, executor)
@@ -1005,8 +1143,9 @@ def _create_pending_approval(
         run.id,
         RuntimeEventDraft(
             type=RuntimeEventType.APPROVAL_REQUESTED,
+            parent_event_id=action.parent_event_id,
             public_summary="该操作需要你的确认。",
-            payload=payload,
+            payload=_action_event_payload(action, **payload),
         ),
     )
     return approval
@@ -1031,6 +1170,7 @@ def _execute_action(
             "start_draft_section",
             "start_redraft_section",
             "run_section_campaign",
+            "fetch_url_to_project",
         }:
             execution_arguments.setdefault("parent_runtime_run_id", run.id)
         raw_result = execute(db, user, execution_arguments)
@@ -1061,8 +1201,13 @@ def _execute_action(
             run.id,
             RuntimeEventDraft(
                 type=RuntimeEventType.CAPABILITY_FAILED,
+                parent_event_id=action.parent_event_id,
                 public_summary=failure.message,
-                payload={"capability": action.capability_name, "reason_code": action.error_code},
+                payload=_action_event_payload(
+                    action,
+                    title=get_capability_definition(action.capability_name).label_zh,
+                    reason_code=action.error_code,
+                ),
             ),
         )
         raise
@@ -1087,8 +1232,11 @@ def _execute_action(
         run.id,
         RuntimeEventDraft(
             type=RuntimeEventType.CAPABILITY_SUCCEEDED,
+            parent_event_id=action.parent_event_id,
             public_summary=public_result.summary,
-            payload={"capability": action.capability_name, **public_result.payload},
+            # A capability result may include a domain ``title`` (for example,
+            # a newly-created deliverable). Keep that value unchanged.
+            payload=_action_event_payload(action, **public_result.payload),
         ),
     )
     return RuntimeCapabilityExecution(action=action, result=public_result)

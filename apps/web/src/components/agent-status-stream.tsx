@@ -71,7 +71,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
   const processEvent = useCallback(
     (event: string, data: unknown) => {
       setState((prev) => {
-        let next = { ...prev };
+        const next = { ...prev };
         const parsed = data as Record<string, unknown>;
 
         switch (event) {

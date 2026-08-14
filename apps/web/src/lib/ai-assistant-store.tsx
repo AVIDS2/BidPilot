@@ -10,26 +10,36 @@ import {
 } from "react";
 import {
   cancelRuntimeWorkflow,
+  forkChatConversation,
   getChatConversationMessages,
   listRuntimeEvents,
   listRuntimeRuns,
   listChatConversations,
   type ChatConversationRead,
+  type ChatMessageRead,
 } from "@/lib/api";
-import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser-storage";
+import {
+  getStoredValue,
+  removeStoredValue,
+  setStoredValue,
+} from "@/lib/browser-storage";
 import {
   advanceRuntimeSequenceCursor,
   isRuntimeSequenceNewer,
   isTerminalRuntimeEvent,
+  recoverRuntimeMessageFromEvents,
   runtimeEventToAssistantEvents,
   type RuntimeEventCursor,
 } from "@/lib/runtime-event-feed";
 import {
   appendNarrativePart,
+  appendReasoningPart,
+  completeReasoningPart,
   ensureTurnPart,
   narrativeTextFromParts,
   type AssistantTranscriptPart,
 } from "@/lib/assistant-transcript";
+import i18n from "@/lib/i18n";
 
 /* ─── Types ─── */
 
@@ -48,6 +58,10 @@ export type AssistantStatus =
 
 export interface ChatMessage {
   id: string;
+  /** Server primary key when this message was persisted. */
+  durableId?: string;
+  /** Durable runtime owner for replaying this response's event tree. */
+  runtimeRunId?: string;
   role: "user" | "assistant";
   content: string;
   /** Ordered narrative/turn parts for Pi-style interleaved rendering. */
@@ -80,6 +94,7 @@ export interface AssistantRequestAttachment {
 
 interface SendAssistantOptions {
   displayContent?: string;
+  conversationId?: string | null;
   attachments?: ChatMessageAttachment[];
   requestAttachments?: AssistantRequestAttachment[];
   providerConfigId?: string | null;
@@ -201,7 +216,16 @@ type Action =
   | { type: "UPDATE_CONVERSATION_TITLE"; conversationId: string; title: string }
   | { type: "ADD_MESSAGE"; message: ChatMessage }
   | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
+  | { type: "SET_LAST_USER_DURABLE_ID"; durableId: string }
   | { type: "UPDATE_LAST_ASSISTANT"; content: string }
+  | {
+      type: "APPEND_VISIBLE_REASONING";
+      content: string;
+      turnId?: string;
+      title?: string;
+      source?: "provider" | "harness";
+    }
+  | { type: "COMPLETE_VISIBLE_REASONING"; turnId?: string }
   | { type: "ENSURE_TRANSCRIPT_TURN"; turnId: string }
   | { type: "FINALIZE_OPEN_EXECUTION_ITEMS"; runtimeRunId?: string; failed?: boolean }
   | { type: "FLUSH_READY_ASSISTANT_CONTENT" }
@@ -286,6 +310,13 @@ function isOpenExecutionStatus(status: AssistantExecutionItem["status"]) {
   return status === "running" || status === "pending";
 }
 
+function executionIdentity(item: AssistantExecutionItem) {
+  if (item.toolCallId) return `tool-call:${item.toolCallId}`;
+  if (item.runtimeRunId) return `runtime-run:${item.runtimeRunId}`;
+  if (item.runId) return `run:${item.runId}`;
+  return null;
+}
+
 function matchExecutionItem(
   item: AssistantExecutionItem,
   action: {
@@ -359,6 +390,45 @@ function appendAssistantContent(state: AIAssistantState, messageId: string, cont
   };
 }
 
+function appendAssistantReasoning(
+  state: AIAssistantState,
+  content: string,
+  turnId?: string,
+  title?: string,
+  source?: "provider" | "harness",
+): AIAssistantState {
+  const messageId = state.activeAssistantMessageId ?? getLastAssistantMessageId(state);
+  if (!messageId) return state;
+  return {
+    ...state,
+    messages: state.messages.map((message) =>
+      message.id === messageId && message.role === "assistant"
+        ? {
+            ...message,
+            transcriptParts: appendReasoningPart(message.transcriptParts, content, {
+              turnId,
+              title,
+              source,
+            }),
+          }
+        : message,
+    ),
+  };
+}
+
+function completeAssistantReasoning(state: AIAssistantState, turnId?: string): AIAssistantState {
+  const messageId = state.activeAssistantMessageId ?? getLastAssistantMessageId(state);
+  if (!messageId) return state;
+  return {
+    ...state,
+    messages: state.messages.map((message) =>
+      message.id === messageId && message.role === "assistant"
+        ? { ...message, transcriptParts: completeReasoningPart(message.transcriptParts, turnId) }
+        : message,
+    ),
+  };
+}
+
 function ensureAssistantTurnPart(state: AIAssistantState, turnId: string | undefined): AIAssistantState {
   if (!turnId) return state;
   const messageId = state.activeAssistantMessageId ?? getLastAssistantMessageId(state);
@@ -376,8 +446,8 @@ function ensureAssistantTurnPart(state: AIAssistantState, turnId: string | undef
 function appendOrBufferAssistantContent(state: AIAssistantState, content: string): AIAssistantState {
   const messageId = state.activeAssistantMessageId ?? getLastAssistantMessageId(state);
   if (!messageId) return state;
-  // Streaming harness interleaves narrative with tools. Always surface text
-  // immediately so the UI does not look frozen while tools execute.
+  // The runtime is the chronology authority. Rendering immediately preserves
+  // reasoning -> tool -> answer order instead of replaying prose at the end.
   return appendAssistantContent(state, messageId, content);
 }
 
@@ -445,9 +515,26 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         pendingConfirmation: null,
         sessionError: null,
       };
+    case "SET_LAST_USER_DURABLE_ID": {
+      let messageIndex = -1;
+      for (let index = state.messages.length - 1; index >= 0; index -= 1) {
+        if (state.messages[index].role === "user") {
+          messageIndex = index;
+          break;
+        }
+      }
+      if (messageIndex < 0) return state;
+      const messages = [...state.messages];
+      messages[messageIndex] = { ...messages[messageIndex], durableId: action.durableId };
+      return { ...state, messages };
+    }
     case "UPDATE_LAST_ASSISTANT": {
       return appendOrBufferAssistantContent(state, action.content);
     }
+    case "APPEND_VISIBLE_REASONING":
+      return appendAssistantReasoning(state, action.content, action.turnId, action.title, action.source);
+    case "COMPLETE_VISIBLE_REASONING":
+      return completeAssistantReasoning(state, action.turnId);
     case "ENSURE_TRANSCRIPT_TURN":
       return ensureAssistantTurnPart(state, action.turnId);
     case "FINALIZE_OPEN_EXECUTION_ITEMS": {
@@ -517,13 +604,34 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "SET_STATUS":
       return { ...state, status: action.status };
     case "ADD_EXECUTION_ITEM":
-      return {
-        ...state,
-        executionItems: [
-          ...state.executionItems,
-          { ...action.item, messageId: action.item.messageId ?? state.activeAssistantMessageId ?? undefined },
-        ],
-      };
+      {
+        const incoming = {
+          ...action.item,
+          messageId: action.item.messageId ?? state.activeAssistantMessageId ?? undefined,
+        };
+        const identity = executionIdentity(incoming);
+        const existingIndex = identity
+          ? state.executionItems.findIndex((item) => executionIdentity(item) === identity)
+          : -1;
+        if (existingIndex < 0) {
+          return { ...state, executionItems: [...state.executionItems, incoming] };
+        }
+
+        const existing = state.executionItems[existingIndex];
+        const keepTerminalStatus =
+          !isOpenExecutionStatus(existing.status) && isOpenExecutionStatus(incoming.status);
+        const merged = {
+          ...existing,
+          ...incoming,
+          id: existing.id,
+          messageId: existing.messageId ?? incoming.messageId,
+          status: keepTerminalStatus ? existing.status : incoming.status,
+          isRunning: keepTerminalStatus ? existing.isRunning : incoming.isRunning,
+        };
+        const executionItems = [...state.executionItems];
+        executionItems[existingIndex] = merged;
+        return { ...state, executionItems };
+      }
     case "UPDATE_EXECUTION_ITEM": {
       let updated = false;
       const executionItems = state.executionItems.map((item) => {
@@ -658,6 +766,7 @@ interface AssistantSseHandlingOptions {
   onRuntimeRun?: (runId: string) => void;
   onConversation?: (conversationId: string) => void;
   onTerminal?: () => void;
+  navigate?: (path: string) => void;
 }
 
 function handleAssistantSsePart(
@@ -682,7 +791,7 @@ function handleAssistantSseEvent(
     if (options?.shouldHandleRuntimeEvent && !options.shouldHandleRuntimeEvent(parsed)) return;
   }
 
-  const state = typeof parsed.state === "string" ? (parsed.state as AssistantStatus) : undefined;
+  const state = asAssistantStatus(parsed.state);
   if (state) {
     dispatch({ type: "SET_STATUS", status: state });
   }
@@ -693,10 +802,35 @@ function handleAssistantSseEvent(
       dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
       options?.onConversation?.(conversationId);
     }
+    const userMessageId = parsed.user_message_id;
+    if (typeof userMessageId === "string") {
+      dispatch({ type: "SET_LAST_USER_DURABLE_ID", durableId: userMessageId });
+    }
     return;
   }
 
   if (eventType === "assistant.intent_detected") {
+    return;
+  }
+
+  if (eventType === "assistant.plan_updated") {
+    const items = Array.isArray(parsed.items) ? parsed.items : [];
+    const titles = items
+      .map((item) => asRecord(item).title)
+      .filter((title): title is string => typeof title === "string" && title.length > 0);
+    dispatch({
+      type: "APPEND_VISIBLE_REASONING",
+      content: typeof parsed.summary === "string" && parsed.summary.trim()
+        ? parsed.summary
+        : titles.length > 0 ? `执行计划：${titles.join("、")}。` : "已更新执行计划。",
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : undefined,
+      title: "执行计划",
+      source: "harness",
+    });
+    dispatch({
+      type: "COMPLETE_VISIBLE_REASONING",
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : undefined,
+    });
     return;
   }
 
@@ -726,14 +860,40 @@ function handleAssistantSseEvent(
         summary: String(parsed.message ?? ""),
       },
     });
+    // Confirmation is an intentional pause: the server can close this SSE
+    // response while the durable run waits for the user's decision. Treat it
+    // as a settled stream, not as a lost connection.
+    options?.onTerminal?.();
     return;
   }
 
   if (eventType === "assistant.turn_started") {
-    const turnId = typeof parsed.turn_id === "string" ? parsed.turn_id : undefined;
-    if (turnId) {
-      dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
-    }
+    // A turn becomes visible with its first reasoning or tool event. Creating
+    // an empty block here would place the tool timeline before streamed
+    // provider reasoning and turn a live trace into a replay.
+    return;
+  }
+
+  if (eventType === "assistant.reasoning" && typeof parsed.content === "string") {
+    // Only the Harness may publish user-facing reasoning. Provider thinking
+    // tokens are private model state and must never become transcript text.
+    if (parsed.source !== "harness") return;
+    dispatch({
+      type: "APPEND_VISIBLE_REASONING",
+      content: parsed.content,
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : undefined,
+      title: typeof parsed.title === "string" ? parsed.title : undefined,
+      source: "harness",
+    });
+    return;
+  }
+
+  if (eventType === "assistant.reasoning_completed") {
+    if (parsed.source !== "harness") return;
+    dispatch({
+      type: "COMPLETE_VISIBLE_REASONING",
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : undefined,
+    });
     return;
   }
 
@@ -783,7 +943,6 @@ function handleAssistantSseEvent(
     if (turnId) {
       dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
     }
-    dispatch({ type: "CLEAR_TRANSIENT_STATE" });
     dispatch({
       type: "ADD_EXECUTION_ITEM",
       item: {
@@ -867,16 +1026,10 @@ function handleAssistantSseEvent(
       return;
     }
     if (toolName === "open_page" && typeof result.route === "string") {
-      window.history.pushState({}, "", result.route);
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      options?.navigate?.(result.route);
     }
-    if (
-      (toolName === "create_demo_workspace" || toolName === "create_project") &&
-      typeof result.id === "string"
-    ) {
-      window.history.pushState({}, "", `/projects/${encodeURIComponent(result.id)}`);
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    }
+    // Creating a project is an Agent result, not a navigation command. Keep
+    // the user in the conversation so the next step can be confirmed there.
     return;
   }
 
@@ -986,6 +1139,10 @@ function handleAssistantSseEvent(
     // CAPABILITY_* events previously left a ghost running card beside the
     // completed one.
     dispatch({ type: "FINALIZE_OPEN_EXECUTION_ITEMS", runtimeRunId, failed: parsed.state === "failed" });
+    // A terminal event without an explicit state is still a completed turn.
+    // Keeping the previous `thinking` state here leaves the composer stuck
+    // even though the server has closed the response successfully.
+    dispatch({ type: "SET_STATUS", status: state ?? "completed" });
     options?.onTerminal?.();
   }
 }
@@ -995,6 +1152,22 @@ function asRecord(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+function asAssistantStatus(value: unknown): AssistantStatus | undefined {
+  if (
+    value === "idle" ||
+    value === "thinking" ||
+    value === "needs_input" ||
+    value === "needs_confirmation" ||
+    value === "executing_tool" ||
+    value === "running_workflow" ||
+    value === "completed" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 /* ─── Context ─── */
@@ -1020,6 +1193,7 @@ interface AIAssistantContextValue {
   refreshConversations: () => Promise<void>;
   loadConversation: (conversationId: string) => Promise<void>;
   startNewConversation: () => void;
+  retryFromCheckpoint: (checkpointMessageId: string, content: string) => Promise<void>;
   updateConversationTitle: (conversationId: string, title: string) => void;
 }
 
@@ -1287,10 +1461,110 @@ export function isAssistantBusy(status: AssistantStatus) {
   return ["thinking", "executing_tool", "running_workflow"].includes(status);
 }
 
-export function AIAssistantProvider({ children }: { children: ReactNode }) {
+function toStoredChatMessages(items: ChatMessageRead[]): ChatMessage[] {
+  return items.map((item, index) => ({
+    id: item.id,
+    durableId: item.id,
+    runtimeRunId: item.runtime_run_id ?? undefined,
+    role: item.role,
+    content: item.content,
+    timestamp: item.created_at ? Date.parse(item.created_at) || Date.now() + index : Date.now() + index,
+    attachments: item.attachments?.map((attachment) => ({
+      id: attachment.assistant_attachment_id ?? attachment.id,
+      name: attachment.name,
+      kind: attachment.kind,
+      size: attachment.size,
+      status: attachment.extraction_status === "failed" ? "failed" : "uploaded",
+      documentId: attachment.document_id ?? undefined,
+    })),
+  }));
+}
+
+function mergeRecoveredRuntimeMessage(
+  messages: ChatMessage[],
+  recovered: ReturnType<typeof recoverRuntimeMessageFromEvents>,
+): { messages: ChatMessage[]; messageId?: string } {
+  if (!recovered) return { messages };
+  const timestamp = recovered.timestamp ?? Date.now();
+  const sameTurn = (message: ChatMessage) =>
+    message.role === "assistant" &&
+    (recovered.timestamp === undefined || Math.abs(message.timestamp - timestamp) < 120_000);
+
+  const exactIndex = messages.findIndex(
+    (message) => sameTurn(message) && message.content.trim() === recovered.content,
+  );
+  if (exactIndex >= 0) {
+    return { messages, messageId: messages[exactIndex].id };
+  }
+
+  const partialIndex = messages.findIndex(
+    (message) =>
+      sameTurn(message) &&
+      message.content.trim().length > 0 &&
+      recovered.content.startsWith(message.content.trim()),
+  );
+  if (partialIndex >= 0) {
+    const next = [...messages];
+    next[partialIndex] = { ...next[partialIndex], content: recovered.content, timestamp };
+    return { messages: next, messageId: next[partialIndex].id };
+  }
+
+  const message: ChatMessage = {
+    id: `runtime-${recovered.runId}-assistant-message`,
+    role: "assistant",
+    content: recovered.content,
+    timestamp,
+  };
+  const insertAt = messages.findIndex((item) => item.timestamp > timestamp);
+  if (insertAt < 0) return { messages: [...messages, message], messageId: message.id };
+  return {
+    messages: [...messages.slice(0, insertAt), message, ...messages.slice(insertAt)],
+    messageId: message.id,
+  };
+}
+
+function findAssistantMessageNearTimestamp(
+  messages: ChatMessage[],
+  timestampSource: string | null | undefined,
+): string | undefined {
+  const timestamp = timestampSource ? Date.parse(timestampSource) : Number.NaN;
+  if (!Number.isFinite(timestamp)) return undefined;
+  const candidates = messages.filter((message) => message.role === "assistant");
+  if (candidates.length === 0) return undefined;
+  const closest = candidates.reduce((best, message) =>
+    Math.abs(message.timestamp - timestamp) < Math.abs(best.timestamp - timestamp) ? message : best,
+  );
+  // A durable assistant reply is committed immediately after its run. Do not
+  // attach an otherwise unplaceable trace to an unrelated conversation turn.
+  return Math.abs(closest.timestamp - timestamp) < 120_000 ? closest.id : undefined;
+}
+
+export function AIAssistantProvider({
+  children,
+  navigate,
+}: {
+  children: ReactNode;
+  navigate?: (path: string) => void;
+}) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // Navigation is optional: unit tests mount the provider without a Router,
+  // and the app shell passes the real router navigate via a wrapper inside
+  // BrowserRouter. Without it, tool-driven page transitions are a no-op.
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const runtimeEventCursorsRef = useRef<RuntimeEventCursor>({});
   const activeStreamAbortRef = useRef<AbortController | null>(null);
+  const activeAssistantRuntimeRunRef = useRef<string | null>(null);
+  // A previous history request may resolve after the user has picked another
+  // conversation. Only the newest request is allowed to project server state.
+  const conversationLoadVersionRef = useRef(0);
+  // Once the user explicitly starts a new conversation, do not let the
+  // mount-time restore effect put the previous conversation back.
+  const didAutoRestoreRef = useRef(false);
+  // React state updates are asynchronous. Keep a synchronous lock as the
+  // request boundary so double-clicks cannot create two server runtimes before
+  // the busy state reaches the composer.
+  const assistantRequestInFlightRef = useRef(false);
 
   const shouldHandleRuntimeEvent = useCallback((data: Record<string, unknown>) => {
     const runId = typeof data.runtime_run_id === "string" ? data.runtime_run_id : undefined;
@@ -1327,6 +1601,8 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   }, [state.currentContext.projectId]);
 
   const loadConversation = useCallback(async (conversationId: string) => {
+    const loadVersion = ++conversationLoadVersionRef.current;
+    const isCurrentLoad = () => conversationLoadVersionRef.current === loadVersion;
     setStoredValue("lastAssistantConversationId", conversationId);
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
     dispatch({ type: "CLEAR_MESSAGES" });
@@ -1335,43 +1611,68 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "SET_STATUS", status: "thinking" });
     try {
       const history = await getChatConversationMessages(conversationId);
-      const messages = history.items.map((item, index) => ({
-        id: `${conversationId}-${index}`,
-        role: item.role,
-        content: item.content,
-        timestamp: Date.now() + index,
-      }));
+      if (!isCurrentLoad()) return;
+      const messages = toStoredChatMessages(history.items);
       dispatch({
         type: "REPLACE_MESSAGES",
         messages,
       });
 
-      // Point tool cards at the last assistant message in this history.
-      const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-      if (lastAssistant) {
-        dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: lastAssistant.id });
-      }
-
       // Replay durable runtime tool events so history shows L1/L2 tool cards,
-      // not only plain assistant text.
+      // not only plain assistant text. Runtime events also repair a missing
+      // chat row when the browser disconnected before the final save commit.
+      let restoredMessages = messages;
+      const runtimeReplay: Array<{
+        runId: string;
+        messageId?: string;
+        events: Awaited<ReturnType<typeof listRuntimeEvents>>["items"];
+      }> = [];
       try {
         const runs = await listRuntimeRuns(12, conversationId);
+        if (!isCurrentLoad()) return;
         // Replay oldest→newest so tool order matches conversation flow.
         for (const run of [...runs].reverse()) {
           const response = await listRuntimeEvents(run.id, 0);
-          for (const event of response.items) {
+          if (!isCurrentLoad()) return;
+          const merged = mergeRecoveredRuntimeMessage(
+            restoredMessages,
+            recoverRuntimeMessageFromEvents(run.id, response.items),
+          );
+          restoredMessages = merged.messages;
+          runtimeReplay.push({
+            runId: run.id,
+            messageId:
+              restoredMessages.find((message) => message.runtimeRunId === run.id)?.id ??
+              merged.messageId ??
+              findAssistantMessageNearTimestamp(restoredMessages, run.finished_at ?? run.created_at),
+            events: response.items,
+          });
+        }
+        if (!isCurrentLoad()) return;
+        if (restoredMessages !== messages) {
+          dispatch({ type: "REPLACE_MESSAGES", messages: restoredMessages });
+        }
+
+        // A run belongs to its own assistant response, never to whichever
+        // response happened to be last when the transcript was restored.
+        for (const { messageId, events } of runtimeReplay) {
+          if (!messageId) continue;
+          dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId });
+          for (const event of events) {
             for (const compatibilityEvent of runtimeEventToAssistantEvents(
               event,
               conversationId,
             )) {
-              // Only restore tool lifecycle cards. Skip text (already in chat history)
-              // and workflow_started (would kick off live polling).
+              // Text is already in chat history. Reasoning and tool lifecycle
+              // are durable trace data and must survive a reload.
               if (
                 compatibilityEvent.eventType !== "assistant.tool_started" &&
                 compatibilityEvent.eventType !== "assistant.tool_succeeded" &&
                 compatibilityEvent.eventType !== "assistant.tool_failed" &&
                 compatibilityEvent.eventType !== "assistant.turn_started" &&
-                compatibilityEvent.eventType !== "assistant.turn_finished"
+                compatibilityEvent.eventType !== "assistant.turn_finished" &&
+                compatibilityEvent.eventType !== "assistant.reasoning" &&
+                compatibilityEvent.eventType !== "assistant.reasoning_completed"
               ) {
                 continue;
               }
@@ -1384,14 +1685,17 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (replayError) {
+        if (!isCurrentLoad()) return;
         console.error("Failed to restore tool transcript:", replayError);
       }
 
+      if (!isCurrentLoad()) return;
       // History is complete — never leave restored tools stuck in "running".
       dispatch({ type: "FINALIZE_OPEN_EXECUTION_ITEMS" });
       dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: null });
       dispatch({ type: "OPEN", mode: "panel" });
     } catch (error) {
+      if (!isCurrentLoad()) return;
       console.error("Failed to load chat history:", error);
       removeStoredValue("lastAssistantConversationId");
       // Keep the conversation selected but restore a visible error instead of a
@@ -1408,7 +1712,9 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         ],
       });
     } finally {
-      dispatch({ type: "SET_STATUS", status: "idle" });
+      if (isCurrentLoad()) {
+        dispatch({ type: "SET_STATUS", status: "idle" });
+      }
     }
   }, []);
 
@@ -1458,7 +1764,16 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   const stopAssistantResponse = useCallback(() => {
     const controller = activeStreamAbortRef.current;
     if (!controller || controller.signal.aborted) return;
-    controller.abort();
+    const runtimeRunId = activeAssistantRuntimeRunRef.current;
+    if (!runtimeRunId) {
+      // The request has not exposed a durable run ID yet.
+      controller.abort();
+      return;
+    }
+    void cancelRuntimeWorkflow(runtimeRunId).catch((error: unknown) => {
+      console.error("Failed to cancel assistant runtime:", error);
+      controller.abort();
+    });
   }, []);
 
   useEffect(
@@ -1469,6 +1784,8 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   );
 
   const startNewConversation = useCallback(() => {
+    conversationLoadVersionRef.current += 1;
+    didAutoRestoreRef.current = true;
     removeStoredValue("lastAssistantConversationId");
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: null });
     dispatch({ type: "CLEAR_MESSAGES" });
@@ -1484,7 +1801,6 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   }, [refreshConversations]);
 
   // Auto-restore the last conversation once when the assistant surface mounts.
-  const didAutoRestoreRef = useRef(false);
   useEffect(() => {
     if (didAutoRestoreRef.current) return;
     if (state.currentConversationId || state.messages.length > 0) {
@@ -1516,7 +1832,13 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           ? "确认执行"
           : "取消操作"
         : (options?.displayContent ?? content).trim();
-      if (!displayContent || isAssistantBusy(state.status)) return;
+      if (!displayContent || isAssistantBusy(state.status) || assistantRequestInFlightRef.current) return;
+      assistantRequestInFlightRef.current = true;
+      const targetConversationId = options?.conversationId ?? state.currentConversationId;
+      if (targetConversationId && targetConversationId !== state.currentConversationId) {
+        setStoredValue("lastAssistantConversationId", targetConversationId);
+        dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: targetConversationId });
+      }
 
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
@@ -1539,15 +1861,18 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: aiMsg.id });
 
       let activeRuntimeRunId: string | null = null;
-      let activeConversationId = state.currentConversationId;
+      activeAssistantRuntimeRunRef.current = null;
+      let activeConversationId = targetConversationId;
       let receivedTerminalEvent = false;
       const abortController = new AbortController();
       activeStreamAbortRef.current = abortController;
       dispatch({ type: "SET_STREAMING", streaming: true });
       const sseOptions: AssistantSseHandlingOptions = {
         shouldHandleRuntimeEvent,
+        navigate: (path) => navigateRef.current?.(path),
         onRuntimeRun: (runId) => {
           activeRuntimeRunId = runId;
+          activeAssistantRuntimeRunRef.current = runId;
         },
         onConversation: (conversationId) => {
           activeConversationId = conversationId;
@@ -1574,6 +1899,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
 
       try {
         const token = getAuthToken();
+        const clientRequestId = crypto.randomUUID();
         const response = await fetch(`${API_BASE}/assistant/stream`, {
           method: "POST",
           signal: abortController.signal,
@@ -1583,11 +1909,13 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           },
           body: JSON.stringify({
             message: content,
+            client_request_id: clientRequestId,
             project_id: state.currentContext.projectId,
-            conversation_id: state.currentConversationId,
+            conversation_id: targetConversationId,
             provider_config_id: options?.providerConfigId ?? state.selectedProviderConfigId,
             reasoning_effort: options?.reasoningEffort ?? state.reasoningEffort,
             approval_mode: options?.approvalMode ?? state.approvalMode,
+            locale: i18n.resolvedLanguage === "en" ? "en" : "zh-CN",
             confirmation,
             attachments: options?.requestAttachments ?? [],
           }),
@@ -1629,12 +1957,26 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        // A proxy is allowed to close a response immediately after an SSE
+        // frame. Consume the final unterminated frame before deciding whether
+        // this request reached a terminal state.
+        if (buffer.trim()) {
+          handleAssistantSsePart(buffer, dispatch, sseOptions);
+        }
+
         if (abortController.signal.aborted) {
           dispatch({ type: "STOP_ACTIVE_RESPONSE" });
           return;
         }
 
-        await recoverDurableTimeline();
+        const recovered = await recoverDurableTimeline();
+        if (!receivedTerminalEvent && !recovered.terminal) {
+          dispatch({
+            type: "SET_SESSION_ERROR",
+            message: "助手连接已结束，但运行记录未报告终态。已解除待发送队列，请重试或查看运行记录。",
+            errorCode: "assistant_stream_incomplete",
+          });
+        }
       } catch (err) {
         if (abortController.signal.aborted) {
           dispatch({ type: "STOP_ACTIVE_RESPONSE" });
@@ -1664,8 +2006,10 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
             : message;
         dispatch({ type: "SET_SESSION_ERROR", message: friendly, errorCode });
       } finally {
+        assistantRequestInFlightRef.current = false;
         if (activeStreamAbortRef.current === abortController) {
           activeStreamAbortRef.current = null;
+          activeAssistantRuntimeRunRef.current = null;
           dispatch({ type: "SET_STREAMING", streaming: false });
         }
         void refreshConversations();
@@ -1688,6 +2032,43 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       await sendAssistantRequest(content, options);
     },
     [sendAssistantRequest],
+  );
+
+  const retryFromCheckpoint = useCallback(
+    async (checkpointMessageId: string, content: string) => {
+      const sourceConversationId = state.currentConversationId;
+      const nextContent = content.trim();
+      if (
+        !sourceConversationId ||
+        !checkpointMessageId ||
+        !nextContent ||
+        isAssistantBusy(state.status) ||
+        assistantRequestInFlightRef.current
+      ) {
+        return;
+      }
+
+      try {
+        const branch = await forkChatConversation(sourceConversationId, checkpointMessageId);
+        const messages = toStoredChatMessages(branch.items);
+        setStoredValue("lastAssistantConversationId", branch.conversation.id);
+        dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: branch.conversation.id });
+        dispatch({ type: "REPLACE_MESSAGES", messages });
+        dispatch({ type: "SET_STATUS", status: "idle" });
+        dispatch({ type: "OPEN", mode: "panel" });
+        await sendAssistantRequest(nextContent, {
+          displayContent: nextContent,
+          conversationId: branch.conversation.id,
+        });
+      } catch (error) {
+        console.error("Failed to create assistant checkpoint branch:", error);
+        dispatch({
+          type: "SET_SESSION_ERROR",
+          message: "无法从该检查点创建新对话，请稍后重试。",
+        });
+      }
+    },
+    [sendAssistantRequest, state.currentConversationId, state.status],
   );
 
   const confirmAssistantAction = useCallback(
@@ -1739,6 +2120,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         refreshConversations,
         loadConversation,
         startNewConversation,
+        retryFromCheckpoint,
         updateConversationTitle,
       }}
     >

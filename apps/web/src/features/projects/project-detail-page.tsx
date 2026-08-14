@@ -329,7 +329,19 @@ export function ProjectDetailPage() {
   const generateReadinessPackMut = useMutation({ mutationFn: () => generateReadinessPack(id!), onSuccess: () => toast.success(t("requirements.ledger.packGenerated")), onError: () => toast.error(t("requirements.ledger.packFailed")) });
   const retryMut = useMutation({ mutationFn: retryExecutionRun, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["runs", id] }); toast.success(t("runs.retryStarted")); }, onError: () => toast.error(t("runs.retryFailed")) });
   const addCommentMut = useMutation({ mutationFn: createReviewComment, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["review-comments", selectedThreadId] }); toast.success(t("review.commentAdded")); }, onError: () => toast.error(t("review.commentFailed")) });
-  const submitDecisionMut = useMutation({ mutationFn: submitReviewDecision, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["review-threads", selectedSectionId] }); toast.success(t("review.decisionSubmitted")); }, onError: () => toast.error(t("review.decisionFailed")) });
+  const submitDecisionMut = useMutation({
+    mutationFn: submitReviewDecision,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["review-threads", selectedSectionId] }),
+        queryClient.invalidateQueries({ queryKey: ["versions", selectedSectionId] }),
+        queryClient.invalidateQueries({ queryKey: ["sections", selectedDeliverableId] }),
+        queryClient.invalidateQueries({ queryKey: ["deliverables", id] }),
+      ]);
+      toast.success(t("review.decisionSubmitted"));
+    },
+    onError: () => toast.error(t("review.decisionFailed")),
+  });
   const invalidateProjectMembers = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["project-members", id] }),
@@ -567,7 +579,7 @@ export function ProjectDetailPage() {
           <RunsTab runs={runs ?? []} onRetry={(rid) => retryMut.mutate(rid)} retrying={retryMut.isPending} onConfirm={showConfirm} t={(k, o) => t(k, o as Record<string, unknown>)} />
         </AnimatedTabContent>
         <AnimatedTabContent value="review" currentValue={activeTab}>
-          <ReviewTab sections={sections} sectionVersions={sectionVersions} reviewThreads={reviewThreads} reviewComments={reviewComments} selectedSectionId={selectedSectionId} selectedThreadId={selectedThreadId} onSelectSection={setSelectedSectionId} onSelectThread={setSelectedThreadId} onAddComment={(tid, body) => addCommentMut.mutate({ thread_id: tid, body })} onSubmitDecision={(sid, dec, cmt) => submitDecisionMut.mutate({ section_id: sid, decision: dec as "approved" | "rejected", comment: cmt })} addCommentPending={addCommentMut.isPending} submitDecisionPending={submitDecisionMut.isPending} />
+          <ReviewTab sections={sections} sectionVersions={sectionVersions} reviewThreads={reviewThreads} reviewComments={reviewComments} selectedSectionId={selectedSectionId} selectedThreadId={selectedThreadId} onSelectSection={setSelectedSectionId} onSelectThread={setSelectedThreadId} onAddComment={(tid, body) => addCommentMut.mutate({ thread_id: tid, body })} onSubmitDecision={(sid, versionId, dec, cmt) => submitDecisionMut.mutate({ section_id: sid, section_version_id: versionId, decision: dec as "approved" | "rejected", comment: cmt })} addCommentPending={addCommentMut.isPending} submitDecisionPending={submitDecisionMut.isPending} />
         </AnimatedTabContent>
         <AnimatedTabContent value="export" currentValue={activeTab}>
           <ExportTab deliverables={deliverables ?? []} />

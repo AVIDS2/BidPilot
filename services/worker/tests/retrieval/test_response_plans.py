@@ -276,3 +276,52 @@ def test_response_plan_binding_rejects_cross_project_and_cross_run_scope() -> No
     finally:
         db.rollback()
         db.close()
+
+
+def test_response_plan_requires_exact_section_for_duplicate_section_keys() -> None:
+    suffix = uuid4().hex[:8]
+    db = SessionLocal()
+    try:
+        project, first_section, _, _, _, _ = _create_response_plan_scope(
+            db,
+            suffix=suffix,
+            name="duplicate",
+        )
+        second_deliverable = Deliverable(
+            id=str(uuid4()),
+            project_id=project.id,
+            type="proposal",
+            title="Second proposal",
+            status="draft",
+        )
+        second_section = DeliverableSection(
+            id=str(uuid4()),
+            deliverable_id=second_deliverable.id,
+            section_key=first_section.section_key,
+            title="Second technical approach",
+            status="draft",
+            assignee_type="ai",
+            sort_order=1,
+        )
+        db.add_all((second_deliverable, second_section))
+        db.commit()
+
+        with pytest.raises(ResponsePlanScopeError, match="response_plan_section_ambiguous"):
+            ensure_response_plan_section(
+                db,
+                project_id=project.id,
+                section_key=first_section.section_key,
+            )
+
+        exact = ensure_response_plan_section(
+            db,
+            project_id=project.id,
+            section_key=second_section.section_key,
+            deliverable_section_id=second_section.id,
+        )
+
+        assert exact.deliverable_section_id == second_section.id
+        assert exact.deliverable_section_id != first_section.id
+    finally:
+        db.rollback()
+        db.close()

@@ -34,6 +34,42 @@ It fills the gap between the user's existing infrastructure-heavy projects and a
 - engineering managers evaluating enterprise AI system design
 - reviewers interested in auditability, governance, and document traceability
 
+## Product surfaces and audiences
+
+DocPilot/BidPilot has three deliberately separate product surfaces. They may
+share an identity provider and a common component library, but they must not
+share navigation, default pages, or authorization scope.
+
+### 1. Tenant administration console
+
+Used by the customer organization's tenant administrators. It manages only
+that organization's subscription/entitlements, workspace profile, members,
+roles, response teams, approval rules, document templates, and approved AI or
+integration capabilities. It must never expose other tenants or platform
+operations.
+
+### 2. Tenant bid workspace
+
+Used by the people doing bid-response work: proposal managers, solution
+architects, writers, commercial/legal contributors, and reviewers. Its primary
+objects are opportunities, projects, source materials, requirements, response
+plans, sections/evidence, review work, and deliverables. The AI Agent is a
+first-class, tenant-scoped natural-language operator across this workspace; it
+does not replace the human-operable work surfaces.
+
+### 3. DocPilot internal operations console
+
+Used only by DocPilot engineering, support, security, and operations staff. It
+manages tenant lifecycle, product-level usage and billing, service health,
+provider/MCP governance, incident response, release controls, and cross-tenant
+audit under explicit internal authorization. It is deployed and authorized
+separately from customer product surfaces.
+
+Execution traces, provider diagnostics, and raw service logs are diagnostic
+evidence. They are visible in context after a failed/recoverable business task
+or to authorized operators; they are not a primary navigation destination for
+ordinary bid users.
+
 ## Core problems to solve
 
 1. large document bundles are hard to normalize into a consistent working set
@@ -141,6 +177,23 @@ Provides:
 - Observability: `OpenTelemetry`, `Langfuse`
 - Deployment: `Docker Compose` first, `Kubernetes-ready` architecture
 
+### Managed infrastructure policy
+
+The product may use Supabase as a managed implementation of PostgreSQL,
+pgvector, object storage, authentication, realtime collaboration, backups, and
+infrastructure administration. These are reusable infrastructure concerns and
+must not be reimplemented by BidPilot.
+
+FastAPI remains the business control-plane boundary. Browser clients call
+BidPilot APIs rather than directly holding administrative database or storage
+credentials. BidPilot owns its domain model, tenant authorization, approval
+policy, document parsing/OCR orchestration, evidence extraction, LangGraph
+workflows, Agent capability governance, and product audit semantics.
+
+Raw source files belong in managed object storage; PostgreSQL stores metadata,
+references, lifecycle state, and structured business truth. Supabase secret or
+service-role credentials are server-only and must never reach browser bundles.
+
 ## Architecture constraints
 
 - business truth must remain in `PostgreSQL`
@@ -148,6 +201,11 @@ Provides:
 - the system must run locally in development without cloud-only dependencies
 - deployment must support both single-node and future multi-service modes
 - every generation action must be traceable to evidence, inputs, and actor
+- every customer-facing screen must expose a meaningful human action or an
+  actionable decision; passive runtime logs do not qualify as a product work
+  surface
+- tenant data, tenant administration, and internal platform operations must
+  remain separately authorized and separately navigated
 
 ## Key domain concepts
 

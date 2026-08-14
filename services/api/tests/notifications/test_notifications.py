@@ -17,3 +17,28 @@ def test_mark_all_notifications_read_is_noop(client) -> None:
 
     assert response.status_code == 204
     assert response.content == b""
+
+
+def test_notification_preferences_default_and_update(client) -> None:
+    initial = client.get("/notifications/preferences")
+
+    assert initial.status_code == 200
+    assert initial.json() == {
+        "in_app_enabled": True,
+        "email_enabled": True,
+        "review_updates": True,
+        "agent_updates": True,
+        "radar_updates": True,
+        "material_updates": True,
+    }
+
+    updated = client.patch(
+        "/notifications/preferences",
+        json={"email_enabled": False, "review_updates": False},
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["email_enabled"] is False
+    assert updated.json()["review_updates"] is False
+    assert updated.json()["in_app_enabled"] is True
+    assert client.get("/notifications/preferences").json() == updated.json()

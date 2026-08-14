@@ -9,7 +9,6 @@ durable events so the web client can migrate independently.
 from __future__ import annotations
 
 import json
-import os
 import re
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -21,7 +20,13 @@ from app.assistant.schemas import AssistantConfirmation, AssistantIntent, Assist
 from app.auth.schemas import CurrentUser
 from app.chat.service import create_conversation, get_conversation, save_message
 from app.models import RuntimeAction, RuntimeApproval, RuntimeEvent, RuntimeRun
-from contracts.runtime import RuntimeApprovalDecisionType, RuntimeEventType
+from contracts.runtime import (
+    RuntimeActionStatus,
+    RuntimeApprovalDecisionType,
+    RuntimeApprovalStatus,
+    RuntimeEventType,
+    RuntimeRunStatus,
+)
 
 from . import events as runtime_events
 from .failures import classify_capability_failure
@@ -44,10 +49,24 @@ from .service import (
 
 _runtime = AssistantRuntime()
 
+_LEGACY_GENERATED_NARRATION = re.compile(
+    r"^为推进当前任务，我先.+，再根据真实结果决定下一步。$"
+)
+_LEGACY_GENERATED_NARRATIONS = {
+    "我已核对当前会话中的已知信息，正在整理可以直接回答的结论。",
+    "当前项目范围还没有明确。我先查询可访问项目；若有同名项目，会用 short_id 请你确认目标。",
+    "这个问题需要核对最新公开信息。我先检索相关来源，再根据结果组织可靠结论。",
+    "目标范围已经确定。我先读取项目结构和现有资料，确认后续操作有足够依据。",
+    "我先核对项目结构和现有资料，避免在信息不足时直接开始后续操作。",
+    "起草前需要把目标章节和依据对齐。我会按已确认的范围推进，并将结果写入对应工作区。",
+}
 
-def runtime_v1_enabled() -> bool:
-    """Keep rollout opt-in until deterministic and graph adapters have parity."""
-    return os.getenv("DOCPILOT_ASSISTANT_RUNTIME_V1", "false").lower() == "true"
+
+def _is_legacy_generated_narration(content: str) -> bool:
+    """Hide only the retired template copy; keep natural historical trace text."""
+    return content in _LEGACY_GENERATED_NARRATIONS or bool(
+        _LEGACY_GENERATED_NARRATION.fullmatch(content)
+    )
 
 
 async def stream_runtime_assistant_response(
@@ -144,7 +163,7 @@ async def stream_runtime_assistant_response(
         yield _sse("assistant.end", {"conversation_id": conversation_id, "state": "needs_confirmation"})
         return
 
-    save_message(db, conversation_id, "user", payload.message)
+    save_message(db, conversation_id, "user", payload.message, attachments=payload.attachments)
     creation = create_or_get_runtime_run(
         db,
         user,
@@ -330,12 +349,28 @@ async def _resume_approval(
             message = "已取消这次操作。"
             cancel_runtime_run(db, run.id, message)
         else:
-            execution = resolve_approval(
-                db,
-                user,
-                approval_id=approval.id,
-                decision=RuntimeApprovalDecisionType.APPROVE,
-            )
+            approval_payload = approval.payload_json if isinstance(approval.payload_json, dict) else {}
+            requires_typed_confirmation = bool(approval_payload.get("requires_typed_confirmation"))
+            if requires_typed_confirmation and "confirmation_text" in confirmation.arguments:
+                stored_arguments = approval_payload.get("arguments")
+                edited_arguments = {
+                    **(stored_arguments if isinstance(stored_arguments, dict) else {}),
+                    "confirmation_text": confirmation.arguments.get("confirmation_text"),
+                }
+                execution = resolve_approval(
+                    db,
+                    user,
+                    approval_id=approval.id,
+                    decision=RuntimeApprovalDecisionType.EDIT,
+                    edited_arguments=edited_arguments,
+                )
+            else:
+                execution = resolve_approval(
+                    db,
+                    user,
+                    approval_id=approval.id,
+                    decision=RuntimeApprovalDecisionType.APPROVE,
+                )
             message = execution.result.summary if execution.result is not None else "操作已完成。"
             complete_runtime_run(db, run.id, message)
         save_message(db, conversation_id, "assistant", message)
@@ -360,8 +395,16 @@ async def _resume_approval(
         )
         yield _sse("assistant.end", {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "failed"})
     except RuntimeApprovalResolvedError:
-        safe_error = "该审批已经处理，无法重复执行。"
-        error_code = "approval_already_resolved"
+        if (
+            approval.status == RuntimeApprovalStatus.EXPIRED.value
+            or action.status == RuntimeActionStatus.EXPIRED.value
+            or run.status == RuntimeRunStatus.EXPIRED.value
+        ):
+            safe_error = "审批已过期，未执行该操作。"
+            error_code = "approval_expired"
+        else:
+            safe_error = "该审批已经处理，无法重复执行。"
+            error_code = "approval_already_resolved"
         yield _sse(
             "assistant.tool_failed",
             {
@@ -405,6 +448,10 @@ def _render_runtime_events(
 def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str]:
     payload = event.payload_json or {}
     capability = str(payload.get("capability") or "")
+    action_id = payload.get("action_id") if isinstance(payload.get("action_id"), str) else None
+    turn_id = payload.get("turn_id") if isinstance(payload.get("turn_id"), str) else None
+    tool_call_id = payload.get("tool_call_id") if isinstance(payload.get("tool_call_id"), str) else action_id
+    title = payload.get("title") if isinstance(payload.get("title"), str) else None
     runtime_metadata = {
         "runtime_run_id": event.run_id,
         "runtime_event_id": event.id,
@@ -416,6 +463,46 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
         RuntimeEventType.PLAN_PROPOSED.value,
         RuntimeEventType.PLAN_UPDATED.value,
     }:
+        stage = payload.get("stage")
+        if stage == "model_turn":
+            return [
+                _sse(
+                    "assistant.turn_started",
+                    {
+                        **runtime_metadata,
+                        "turn_id": turn_id,
+                        "step": payload.get("step"),
+                        "state": "thinking",
+                        "phase": payload.get("phase"),
+                        "completed_capabilities": payload.get("completed_capabilities") or [],
+                    },
+                )
+            ]
+        if stage == "turn_finished":
+            return [
+                _sse(
+                    "assistant.turn_finished",
+                    {
+                        **runtime_metadata,
+                        "turn_id": turn_id,
+                        "summary": event.public_summary,
+                        "state": "thinking",
+                    },
+                )
+            ]
+        if stage == "tool_plan":
+            return [
+                _sse(
+                    "assistant.plan_updated",
+                    {
+                        **runtime_metadata,
+                        "turn_id": turn_id,
+                        "summary": event.public_summary,
+                        "items": payload.get("items") or [],
+                        "state": "thinking",
+                    },
+                )
+            ]
         plan_mode = str(payload.get("mode") or "answer")
         assistant_mode = "tool_action" if plan_mode == "tool" else plan_mode
         plan_events = [
@@ -449,28 +536,42 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
         return plan_events
     if event.event_type == RuntimeEventType.CAPABILITY_STARTED.value:
         try:
-            title = get_capability_definition(capability).label_zh if capability else capability
+            resolved_title = title or (get_capability_definition(capability).label_zh if capability else capability)
         except Exception:
-            title = capability
+            resolved_title = title or capability
         return [
             _sse(
                 "assistant.tool_started",
                 {
                     **runtime_metadata,
                     "tool_name": capability,
-                    "title": title,
+                    "tool_call_id": tool_call_id,
+                    "turn_id": turn_id,
+                    "title": resolved_title,
                     "state": "executing_tool",
                 },
             )
         ]
     if event.event_type == RuntimeEventType.CAPABILITY_SUCCEEDED.value:
-        result = {key: value for key, value in payload.items() if key != "capability"}
+        result = {
+            key: value
+            for key, value in payload.items()
+            if key not in {"capability", "action_id", "turn_id", "tool_call_id", "title"}
+        }
         completion_events: list[str] = []
         if is_workflow_capability(capability):
             completion_events.append(
                 _sse(
                     "assistant.workflow_started",
-                    {**runtime_metadata, "tool_name": capability, "result": result, "state": "running_workflow"},
+                    {
+                        **runtime_metadata,
+                        "tool_name": capability,
+                        "tool_call_id": tool_call_id,
+                        "turn_id": turn_id,
+                        "title": title,
+                        "result": result,
+                        "state": "running_workflow",
+                    },
                 )
             )
         completion_events.append(
@@ -479,6 +580,9 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                 {
                     **runtime_metadata,
                     "tool_name": capability,
+                    "tool_call_id": tool_call_id,
+                    "turn_id": turn_id,
+                    "title": title,
                     "result": result,
                     "summary": event.public_summary,
                     "state": "completed",
@@ -493,7 +597,10 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                 {
                     **runtime_metadata,
                     "tool_name": capability or "unknown",
-                    "error_code": payload.get("reason_code"),
+                    "tool_call_id": tool_call_id,
+                    "turn_id": turn_id,
+                    "title": title,
+                    "error_code": payload.get("reason_code") or payload.get("error_code"),
                     "error_message": event.public_summary,
                     "state": "failed",
                 },
@@ -505,6 +612,9 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
             "approval_id": payload.get("approval_id"),
             "conversation_id": conversation_id,
             "tool_name": capability,
+            "tool_call_id": tool_call_id,
+            "turn_id": turn_id,
+            "title": title,
             "arguments": payload.get("arguments") or {},
             "message": payload.get("message") or "该操作需要你的确认。",
             "requires_typed_confirmation": bool(payload.get("requires_typed_confirmation")),
@@ -512,26 +622,84 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
         }
         if isinstance(payload.get("expected_text"), str):
             confirmation["expected_text"] = payload["expected_text"]
-        return [_sse("assistant.confirmation_requested", confirmation)]
+        # Awaiting approval is a durable pause, so the stream boundary must be
+        # replayable too. Rendering the end here avoids a second, ephemeral
+        # assistant.end emitted by the live Harness coroutine.
+        return [
+            _sse("assistant.confirmation_requested", confirmation),
+            _sse(
+                "assistant.end",
+                {
+                    **runtime_metadata,
+                    "conversation_id": conversation_id,
+                    "state": "needs_confirmation",
+                },
+            ),
+        ]
     if event.event_type == RuntimeEventType.APPROVAL_RESOLVED.value:
         status = payload.get("status")
         if status in {"approved", "edited"}:
             return [
                 _sse(
                     "assistant.tool_started",
-                    {**runtime_metadata, "tool_name": capability, "state": "executing_tool"},
+                    {
+                        **runtime_metadata,
+                        "tool_name": capability,
+                        "tool_call_id": tool_call_id,
+                        "turn_id": turn_id,
+                        "title": title,
+                        "state": "executing_tool",
+                    },
                 )
             ]
         return []
+    if event.event_type == RuntimeEventType.REASONING_DELTA.value:
+        # Raw provider thought is never a product-facing SSE payload. Only the
+        # Harness-filtered public narration may enter the visible trace.
+        if payload.get("source") != "harness":
+            return []
+        if _is_legacy_generated_narration(event.public_summary):
+            return []
+        return [
+            _sse(
+                "assistant.reasoning",
+                {
+                    **runtime_metadata,
+                    "turn_id": turn_id,
+                    "content": event.public_summary,
+                    "title": payload.get("title") or event.public_summary,
+                    "source": payload.get("source") or "provider",
+                    "chunk_index": payload.get("chunk_index"),
+                    "state": "streaming",
+                },
+            )
+        ]
+    if event.event_type == RuntimeEventType.REASONING_COMPLETED.value:
+        if payload.get("source") != "harness":
+            return []
+        return [
+            _sse(
+                "assistant.reasoning_completed",
+                {
+                    **runtime_metadata,
+                    "turn_id": turn_id,
+                    "source": payload.get("source") or "provider",
+                    "state": "completed",
+                },
+            )
+        ]
     if event.event_type in {
         RuntimeEventType.MESSAGE_DELTA.value,
         RuntimeEventType.MESSAGE_COMPLETED.value,
     }:
+        if event.event_type == RuntimeEventType.MESSAGE_COMPLETED.value and payload.get("delta_emitted"):
+            return []
         return [
             _sse(
                 "assistant.message",
                 {
                     **runtime_metadata,
+                    "turn_id": turn_id,
                     "content": event.public_summary,
                     "state": "thinking" if event.event_type == RuntimeEventType.MESSAGE_DELTA.value else "completed",
                 },
@@ -548,7 +716,8 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                 {
                     **runtime_metadata,
                     "conversation_id": conversation_id,
-                    "state": "failed" if event.event_type == RuntimeEventType.RUN_FAILED.value else "completed",
+                    "state": payload.get("state")
+                    or ("failed" if event.event_type == RuntimeEventType.RUN_FAILED.value else "completed"),
                 },
             )
         ]

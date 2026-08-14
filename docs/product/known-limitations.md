@@ -5,7 +5,12 @@ This document lists known limitations that must be acknowledged before onboardin
 ## Authentication & Access
 
 - Email verification is enforced at login; unverified users cannot authenticate. Admin can manually verify via `POST /auth/users/{id}/verify`.
-- Verification and password-reset delivery depend on the deployment SMTP configuration. A personal mailbox SMTP connection is suitable for a pilot, but it does not provide a production sending domain, SPF/DKIM/DMARC alignment, or sender reputation.
+- Verification, password-reset, invitation, and review notifications use Resend
+  when `RESEND_API_KEY` is configured, with SMTP retained only as a fallback.
+  Delivery is intentionally best-effort after the durable business action has
+  committed, so a provider outage cannot invalidate a completed registration,
+  invitation, or review decision. Domain reputation and observed delivery
+  metrics still need pilot monitoring.
 - Server-side refresh token storage with per-token revocation.
 - Production login and verification-email resend limits, plus the global
   client-IP API budget, require Redis and fail closed if the limiter cannot
@@ -29,7 +34,12 @@ This document lists known limitations that must be acknowledged before onboardin
 
 - No real-time collaborative editing; users must refresh to see changes from others.
 - Review threads are per-section only; no cross-section or document-level review threads.
-- Review notification emails are sent on approve/reject decisions.
+- Review decisions create durable in-app notifications for verified project
+  collaborators and attempt email delivery to the same recipients. Users can
+  now control in-app/email channels and review, Agent, radar, and material
+  categories from Account > 通知. Provider-level delivery receipts, signed
+  Resend webhook reconciliation, and an operator retry dashboard remain release
+  gated until a public callback and retention policy are configured.
 
 ## Data & Export
 
@@ -44,6 +54,12 @@ This document lists known limitations that must be acknowledged before onboardin
 - The release quality gate now rejects missing, stale, unreviewed, or control-fixture evidence, but its `attestation_ref` is a redacted pointer rather than a cryptographically verified CI signature. A real release still needs retained CI artifacts and an auditable two-person review record.
 - Object storage (MinIO/S3) must be configured for file uploads to persist beyond local disk.
 - Celery Beat schedules attachment-retention cleanup and daily database backup. Backup success is not equivalent to a tested restore.
+- Remote procurement attachments are fetched by a bounded, SSRF-protected server
+  worker only after explicit confirmation. A 401/403, HTML response, oversized
+  artifact, or blocked host is surfaced as a recoverable failure; the worker
+  never rewrites URLs, downloads the notice page as a substitute, or loops.
+  For sources that require a browser session, users can use the local companion
+  to download to a selected local directory and then upload the verified file.
 
 ## Browser & Platform
 

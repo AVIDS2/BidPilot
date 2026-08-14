@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
@@ -118,6 +118,34 @@ describe("AIAssistantPanel", () => {
     });
     expect(screen.getAllByText("create_project").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Acme Bid/).length).toBeGreaterThan(0);
+  });
+
+  it("keeps an approval pause actionable when the SSE closes without assistant.end", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-approval","runtime_run_id":"run-approval","state":"thinking"}',
+            'event: assistant.confirmation_requested\ndata: {"runtime_run_id":"run-approval","approval_id":"approval-1","tool_name":"fetch_url_to_project","arguments":{"url":"https://example.com/tender.doc"},"message":"确认把远程资料加入项目资料包。","state":"needs_confirmation"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Find tender attachments" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Confirm action")).toBeInTheDocument();
+    expect(screen.getByText("fetch_url_to_project")).toBeInTheDocument();
+    expect(
+      screen.queryByText("助手连接已结束，但运行记录未报告终态。已解除待发送队列，请重试或查看运行记录。"),
+    ).not.toBeInTheDocument();
   });
 
   it("submits a prompt once when Enter is pressed", async () => {
@@ -257,8 +285,8 @@ describe("AIAssistantPanel", () => {
     );
   });
 
-  it("opens the created workspace after a governed project action succeeds", async () => {
-    window.history.replaceState({}, "", "/dashboard");
+  it("keeps the conversation open after a governed project action succeeds", async () => {
+    const navigate = vi.fn();
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -274,17 +302,20 @@ describe("AIAssistantPanel", () => {
       }),
     );
 
-    renderPanel();
+    render(
+      <AIAssistantProvider navigate={navigate}>
+        <OpenPanelButton />
+        <AIAssistantPanel />
+      </AIAssistantProvider>,
+    );
     fireEvent.click(screen.getByText("Open assistant"));
     fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
       target: { value: "Create a demo workspace" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    await waitFor(() => {
-      expect(window.location.pathname).toBe("/projects/demo-project-id");
-    });
-    window.history.replaceState({}, "", "/");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("does not render intent trace cards in the default chat flow", async () => {
@@ -375,6 +406,32 @@ describe("AIAssistantPanel", () => {
     });
     expect(screen.getByText("当前共有 2 个项目。")).toBeInTheDocument();
     expect(screen.queryByText("stream interrupted")).not.toBeInTheDocument();
+  });
+
+  it("releases a queued prompt when an SSE response closes without a terminal event", async () => {
+    const { listRuntimeEvents } = await import("@/lib/api");
+    vi.mocked(listRuntimeEvents).mockResolvedValue({ items: [] });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          'event: assistant.start\ndata: {"conversation_id":"c-incomplete","state":"thinking"}\n\n',
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Show my projects" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findByText("助手连接已结束，但运行记录未报告终态。已解除待发送队列，请重试或查看运行记录。"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 
   it("keeps the composer editable while the assistant is responding", async () => {
@@ -681,12 +738,14 @@ describe("AIAssistantPanel", () => {
     expect(
       screen.queryByText("raw detail should be hidden until expanded"),
     ).not.toBeInTheDocument();
-    await expandActivityDetails();
+    const turn = screen.getByRole("button", { name: /Turn 1/ });
+    fireEvent.click(turn);
+    await expandToolDetails("Open page");
     expect(
       screen.getByText("raw detail should be hidden until expanded"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Show Open page details" }),
+      screen.getByRole("button", { name: "Hide Open page details" }),
     ).toBeInTheDocument();
     expect(
       screen
@@ -696,7 +755,7 @@ describe("AIAssistantPanel", () => {
     ).toBeTruthy();
   });
 
-  it("sanitizes raw tool payloads from activity details", async () => {
+  it("keeps raw tool payloads out of the activity timeline", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -727,7 +786,9 @@ describe("AIAssistantPanel", () => {
     await expandActivityDetails();
 
     expect(screen.getByText("Search projects")).toBeInTheDocument();
-    expect(screen.getByText("Returned 1 results")).toBeInTheDocument();
+    expect(screen.queryByText("Returned 1 results")).not.toBeInTheDocument();
+    expect(screen.queryByText("Input")).not.toBeInTheDocument();
+    expect(screen.queryByText("Output")).not.toBeInTheDocument();
     expect(screen.queryByText(/tool_call_id/)).not.toBeInTheDocument();
     expect(screen.queryByText(/content='/)).not.toBeInTheDocument();
   });
@@ -776,6 +837,93 @@ describe("AIAssistantPanel", () => {
     expect(screen.queryByText("list_project_bundles")).not.toBeInTheDocument();
     expect(screen.queryByText("list_deliverables")).not.toBeInTheDocument();
     expect(screen.queryByText("list_sections")).not.toBeInTheDocument();
+  });
+
+  it("makes discovered and imported remote materials visible as durable project work", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-remote","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"discover_remote_documents","tool_call_id":"discover-remote","state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"discover_remote_documents","tool_call_id":"discover-remote","result":{"count":2,"items":[{"filename":"招标文件.pdf","title":"采购文件","url":"https://buyer.example.test/files/rfp.pdf","content_type_hint":"application/pdf"},{"filename":"技术附件.docx","title":"技术附件","url":"https://buyer.example.test/files/appendix.docx","content_type_hint":"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}]},"summary":"发现 2 个附件，尚未下载。","state":"completed"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"fetch_url_to_project","tool_call_id":"import-remote","state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"fetch_url_to_project","tool_call_id":"import-remote","result":{"project_id":"project-1","bundle_id":"bundle-1","bundle_label":"招标附件","document_id":"doc-remote-1","filename":"招标文件.pdf","source_url":"https://buyer.example.test/files/rfp.pdf","parse_status":"pending","ingest_queued":true},"summary":"已加入项目资料包。","state":"completed"}',
+            'event: assistant.message\ndata: {"content":"已完成远程资料入库。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-remote","full_response":"已完成远程资料入库。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "收集招标附件" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("已完成远程资料入库。")).toBeInTheDocument();
+    });
+    await expandActivityDetails();
+
+    const discoveryStep = screen.getByTestId("assistant-activity-step-discover-remote");
+    fireEvent.click(within(discoveryStep).getByRole("button"));
+    expect(await screen.findByText("发现 2 个可入库附件")).toBeInTheDocument();
+    expect(screen.getByText("招标文件.pdf")).toBeInTheDocument();
+    expect(screen.getByText("技术附件.docx")).toBeInTheDocument();
+    expect(screen.getByText("尚未下载")).toBeInTheDocument();
+
+    const importStep = screen.getByTestId("assistant-activity-step-import-remote");
+    fireEvent.click(within(importStep).getByRole("button"));
+    expect(await screen.findByText("已加入项目资料包")).toBeInTheDocument();
+    expect(screen.getByText("资料包：招标附件")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看资料中心" })).toHaveAttribute("href", "/knowledge");
+    expect(screen.getByRole("link", { name: "原始公开来源" })).toHaveAttribute("href", "https://buyer.example.test/files/rfp.pdf");
+    expect(screen.queryByText("doc-remote-1")).not.toBeInTheDocument();
+  });
+
+  it("keeps a large remote artifact visible while its background import is running", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-remote-queued","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"tool_name":"fetch_url_to_project","tool_call_id":"import-remote-queued","state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"tool_name":"fetch_url_to_project","tool_call_id":"import-remote-queued","result":{"status":"queued","runtime_run_id":"remote-import-run-1","project_id":"project-1","bundle_id":"bundle-1","source_url":"https://buyer.example.test/files/tender-software.zip","import_mode":"artifact"},"summary":"已开始后台下载远程资料。完成后会自动写入项目资料包；你可以继续使用当前对话。","state":"completed"}',
+            'event: assistant.message\ndata: {"content":"已开始后台下载，完成后会自动入库。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-remote-queued","full_response":"已开始后台下载，完成后会自动入库。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "下载投标软件附件" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("已开始后台下载，完成后会自动入库。")).toBeInTheDocument();
+    });
+    await expandActivityDetails();
+
+    const importStep = screen.getByTestId("assistant-activity-step-import-remote-queued");
+    fireEvent.click(within(importStep).getByRole("button"));
+    expect(await screen.findByText("后台导入已排队")).toBeInTheDocument();
+    expect(screen.getByText("下载中，完成后自动入库")).toBeInTheDocument();
+    expect(screen.getByText("远程资料下载任务")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "原始公开来源" })).toHaveAttribute(
+      "href",
+      "https://buyer.example.test/files/tender-software.zip",
+    );
   });
 
   it("renders user attachments without leaking backend attachment context", async () => {
@@ -899,7 +1047,7 @@ describe("AIAssistantPanel", () => {
     ).toBeTruthy();
   });
 
-  it("streams assistant text while tool activity is still running", async () => {
+  it("renders assistant text immediately while the active tool trace is running", async () => {
     let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
     const encoder = new TextEncoder();
     vi.stubGlobal(
@@ -936,8 +1084,10 @@ describe("AIAssistantPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Search projects running")).toBeInTheDocument();
-      // Streaming harness interleaves narrative with tools; text must not wait.
+      expect(screen.getByTestId("assistant-activity-timeline")).toHaveAttribute(
+        "data-status",
+        "running",
+      );
       expect(screen.getByText("找到 test 项目。")).toBeInTheDocument();
     });
 

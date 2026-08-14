@@ -9,7 +9,7 @@ from contracts.usage_ledger import release_model_reservation
 from app.access.service import require_execution_run_capability, require_project_capability
 from app.auth.schemas import CurrentUser
 from app.audit.service import record_audit_event
-from app.models import DeliverableSection, ExecutionRun, ProviderConfig, SectionVersion
+from app.models import Deliverable, DeliverableSection, ExecutionRun, ProviderConfig, SectionVersion
 from app.outbox.service import enqueue_workflow_task, request_task_outbox_dispatch
 from app.review.decision_service import apply_review_decision
 from app.runtime.service import create_workflow_bridge_run
@@ -49,6 +49,135 @@ def _provider_type_for_config(db: Session, provider_config_id: str | None) -> st
     if config is None:
         raise HTTPException(status_code=404, detail="Provider config not found")
     return config.provider_type
+
+
+def _request_fingerprint(
+    *,
+    section_key: str,
+    section_id: str | None,
+    provider_config_id: str | None,
+    reasoning_effort: str | None,
+    max_iterations: int | None,
+    review_feedback: str | None = None,
+) -> dict[str, object | None]:
+    """Store the user-visible intent needed to reject key reuse safely."""
+    return {
+        "section_key": section_key,
+        "section_id": section_id,
+        "provider_config_id": provider_config_id,
+        "reasoning_effort": reasoning_effort,
+        "max_iterations": max_iterations,
+        "review_feedback": review_feedback,
+    }
+
+
+def _resolve_draft_section_id(
+    db: Session,
+    *,
+    project_id: str,
+    section_key: str,
+    section_id: str | None,
+) -> str | None:
+    """Resolve one exact draft target without guessing across deliverables.
+
+    Old API/agent callers may still provide only a section key. That remains
+    valid while the key names a single section in the project. Once two
+    deliverables contain the same key, callers must send the concrete section
+    id returned by the outline/sections endpoints.
+    """
+    if section_id:
+        section = db.get(DeliverableSection, section_id)
+        deliverable = db.get(Deliverable, section.deliverable_id) if section else None
+        if section is None or deliverable is None or deliverable.project_id != project_id:
+            raise HTTPException(status_code=404, detail="deliverable_section_not_found")
+        if section.section_key != section_key:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "section_target_mismatch",
+                    "message": "section_id 与 section_key 不匹配。",
+                },
+            )
+        return section.id
+
+    matches = list(
+        db.scalars(
+            select(DeliverableSection)
+            .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
+            .where(
+                Deliverable.project_id == project_id,
+                DeliverableSection.section_key == section_key,
+            )
+            .order_by(DeliverableSection.id.asc())
+            .limit(2)
+        ).all()
+    )
+    if len(matches) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "section_key_ambiguous",
+                "message": "该项目存在多个同名章节，请指定 section_id 后再启动工作流。",
+                "section_key": section_key,
+                "section_ids": [section.id for section in matches],
+            },
+        )
+    return matches[0].id if matches else None
+
+
+def _replay_existing_draft_request(
+    db: Session,
+    *,
+    current_user: CurrentUser,
+    project_id: str,
+    run_type: str,
+    client_request_id: str | None,
+    fingerprint: dict[str, str | None],
+) -> DraftSectionResponse | None:
+    """Return an existing accepted draft request instead of starting it again.
+
+    A request ID is user-scoped and may be replayed after a browser retry.  It
+    must never be silently reused for a different project or section.
+    """
+    if not client_request_id:
+        return None
+
+    existing = db.scalar(
+        select(ExecutionRun)
+        .where(
+            ExecutionRun.requested_by_user_id == current_user.id,
+            ExecutionRun.client_request_id == client_request_id,
+        )
+        .with_for_update()
+    )
+    if existing is None:
+        return None
+
+    stored_input = existing.input_json or {}
+    stored_fingerprint = stored_input.get("request_fingerprint")
+    if (
+        existing.project_id != project_id
+        or existing.run_type != run_type
+        or (
+            isinstance(stored_fingerprint, dict)
+            and stored_fingerprint != fingerprint
+        )
+        or (
+            not isinstance(stored_fingerprint, dict)
+            and stored_input.get("section_key") != fingerprint["section_key"]
+        )
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="client_request_id was already used for a different workflow request",
+        )
+
+    runtime_run_id = stored_input.get("runtime_run_id")
+    return DraftSectionResponse(
+        run_id=existing.id,
+        status=existing.status,
+        runtime_run_id=runtime_run_id if isinstance(runtime_run_id, str) else None,
+    )
 
 
 def _reserve_workflow_capacity(
@@ -96,14 +225,37 @@ def draft_section_command(
     current_user: CurrentUser,
 ) -> DraftSectionResponse:
     provider_config_id = _provider_config_id_for_user(db, current_user, payload.provider_config_id)
-    provider_source = _provider_source(provider_config_id)
-    provider_type = _provider_type_for_config(db, provider_config_id)
     require_project_capability(
         db,
         current_user=current_user,
         project_id=payload.project_id,
         capability="workflow.run",
     )
+    section_id = _resolve_draft_section_id(
+        db,
+        project_id=payload.project_id,
+        section_key=payload.section_key,
+        section_id=payload.section_id,
+    )
+    request_fingerprint = _request_fingerprint(
+        section_key=payload.section_key,
+        section_id=section_id,
+        provider_config_id=provider_config_id,
+        reasoning_effort=payload.reasoning_effort,
+        max_iterations=payload.max_iterations,
+    )
+    replay = _replay_existing_draft_request(
+        db,
+        current_user=current_user,
+        project_id=payload.project_id,
+        run_type="draft_section",
+        client_request_id=payload.client_request_id,
+        fingerprint=request_fingerprint,
+    )
+    if replay is not None:
+        return replay
+    provider_source = _provider_source(provider_config_id)
+    provider_type = _provider_type_for_config(db, provider_config_id)
     check_workflow_quota(db, current_user.id, current_user.org_id, provider_source)
     reservation_key, reservation = _reserve_workflow_capacity(
         db,
@@ -115,7 +267,14 @@ def draft_section_command(
     run = ExecutionRun(
         project_id=payload.project_id,
         run_type="draft_section",
-        input_json={"section_key": payload.section_key},
+        requested_by_user_id=current_user.id,
+        client_request_id=payload.client_request_id,
+        input_json={
+            "section_key": payload.section_key,
+            "section_id": section_id,
+            "max_iterations": payload.max_iterations,
+            "request_fingerprint": request_fingerprint,
+        },
     )
     db.add(run)
     db.flush()
@@ -163,7 +322,11 @@ def draft_section_command(
         kwargs["provider_config_id"] = provider_config_id
     if payload.reasoning_effort:
         kwargs["reasoning_effort"] = payload.reasoning_effort
+    if payload.max_iterations is not None:
+        kwargs["max_iterations"] = payload.max_iterations
     kwargs["runtime_run_id"] = runtime_run.id
+    if section_id:
+        kwargs["deliverable_section_id"] = section_id
     outbox_event = enqueue_workflow_task(
         db,
         org_id=current_user.org_id,
@@ -182,7 +345,7 @@ def draft_section_command(
         event_type="draft.requested",
         actor_type="user",
         actor_id=current_user.id,
-        payload={"run_id": run.id, "section_key": payload.section_key},
+        payload={"run_id": run.id, "section_key": payload.section_key, "section_id": section_id},
     )
     db.commit()
     request_task_outbox_dispatch(outbox_event.id)
@@ -195,14 +358,38 @@ def redraft_section_command(
     current_user: CurrentUser,
 ) -> DraftSectionResponse:
     provider_config_id = _provider_config_id_for_user(db, current_user, payload.provider_config_id)
-    provider_source = _provider_source(provider_config_id)
-    provider_type = _provider_type_for_config(db, provider_config_id)
     require_project_capability(
         db,
         current_user=current_user,
         project_id=payload.project_id,
         capability="workflow.run",
     )
+    section_id = _resolve_draft_section_id(
+        db,
+        project_id=payload.project_id,
+        section_key=payload.section_key,
+        section_id=payload.section_id,
+    )
+    request_fingerprint = _request_fingerprint(
+        section_key=payload.section_key,
+        section_id=section_id,
+        provider_config_id=provider_config_id,
+        reasoning_effort=payload.reasoning_effort,
+        max_iterations=payload.max_iterations,
+        review_feedback=payload.review_feedback,
+    )
+    replay = _replay_existing_draft_request(
+        db,
+        current_user=current_user,
+        project_id=payload.project_id,
+        run_type="redraft_section",
+        client_request_id=payload.client_request_id,
+        fingerprint=request_fingerprint,
+    )
+    if replay is not None:
+        return replay
+    provider_source = _provider_source(provider_config_id)
+    provider_type = _provider_type_for_config(db, provider_config_id)
     check_workflow_quota(db, current_user.id, current_user.org_id, provider_source)
     reservation_key, reservation = _reserve_workflow_capacity(
         db,
@@ -214,7 +401,15 @@ def redraft_section_command(
     run = ExecutionRun(
         project_id=payload.project_id,
         run_type="redraft_section",
-        input_json={"section_key": payload.section_key, "review_feedback": payload.review_feedback},
+        requested_by_user_id=current_user.id,
+        client_request_id=payload.client_request_id,
+        input_json={
+            "section_key": payload.section_key,
+            "section_id": section_id,
+            "review_feedback": payload.review_feedback,
+            "max_iterations": payload.max_iterations,
+            "request_fingerprint": request_fingerprint,
+        },
     )
     db.add(run)
     db.flush()
@@ -264,7 +459,11 @@ def redraft_section_command(
         task_kwargs["provider_config_id"] = provider_config_id
     if payload.reasoning_effort:
         task_kwargs["reasoning_effort"] = payload.reasoning_effort
+    if payload.max_iterations is not None:
+        task_kwargs["max_iterations"] = payload.max_iterations
     task_kwargs["runtime_run_id"] = runtime_run.id
+    if section_id:
+        task_kwargs["deliverable_section_id"] = section_id
     outbox_event = enqueue_workflow_task(
         db,
         org_id=current_user.org_id,
@@ -286,6 +485,7 @@ def redraft_section_command(
         payload={
             "run_id": run.id,
             "section_key": payload.section_key,
+            "section_id": section_id,
             "has_feedback": payload.review_feedback is not None,
         },
     )

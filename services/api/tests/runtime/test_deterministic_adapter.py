@@ -29,8 +29,6 @@ def test_runtime_adapter_persists_safe_read_before_final_message(
     test_db,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_RUNTIME_V1", "true")
-
     response = client.post("/assistant/stream", json={"message": "打开项目页面"})
 
     assert response.status_code == 200
@@ -65,7 +63,6 @@ def test_runtime_adapter_replays_duplicate_client_request_without_second_message
 ) -> None:
     """The deterministic compatibility path keeps the same retry contract as Harness."""
     monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "deterministic")
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_RUNTIME_V1", "true")
     request_id = f"deterministic-retry-{uuid.uuid4().hex}"
     request_body = {"message": "打开项目页面", "client_request_id": request_id}
 
@@ -97,7 +94,6 @@ def test_runtime_adapter_resumes_generic_approval_without_legacy_audit(
     test_db,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_RUNTIME_V1", "true")
     project_name = f"Unified Runtime Project {uuid.uuid4().hex[:8]}"
 
     requested = client.post(
@@ -158,7 +154,6 @@ def test_runtime_adapter_queues_memory_graph_only_after_confirmation(
     from app.assistant import tools
     from app.memory.schemas import MemoryGraphExtractionRead
 
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_RUNTIME_V1", "true")
     project = Project(
         slug=f"runtime-memory-graph-{uuid.uuid4().hex[:8]}",
         name="Runtime Memory Graph Project",

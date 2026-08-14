@@ -15,7 +15,7 @@ import {
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import { BrandMark } from "@/components/brand";
+import bidpilotLogo from "@/assets/bidpilot-logo.svg";
 import { CommandPalette } from "@/components/ai-assistant/CommandPalette";
 import { FloatingAssistant } from "@/components/ai-assistant/FloatingAssistant";
 import { InlineSuggestionBar } from "@/components/ai-assistant/InlineSuggestion";
@@ -88,7 +88,11 @@ function PlatformShellContent() {
     },
   ];
   const teams = [
-    { name: "BidPilot", logo: <BrandMark decorative className="size-5" />, plan: t("app.tagline") },
+    {
+      name: "BidPilot",
+      logo: <img alt="BidPilot" className="size-5 object-contain" src={bidpilotLogo} />,
+      plan: t("app.tagline"),
+    },
   ];
   const adminOnlyUrls = ["/admin/users"];
   const visibleNavGroups = navGroups.map((group) => ({

@@ -9,6 +9,10 @@ import hashlib
 import io
 import logging
 import re
+import csv
+import os
+import shutil
+import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -27,7 +31,8 @@ logger = logging.getLogger(__name__)
 CHUNK_SIZE_CHARS = 1500   # Slightly larger to keep sections together
 MAX_SECTION_CHARS = 3000  # Hard cap for a single section before sub-splitting
 PARSER_NAME = "docpilot-hierarchical"
-PARSER_VERSION = "3.0"
+PARSER_VERSION = "3.1"
+_OCR_TEXT_THRESHOLD = 24
 
 
 @dataclass
@@ -48,6 +53,9 @@ class ParsedDocument:
     normalized_text: str = ""
     chunks: list[ParsedChunk] = field(default_factory=list)
     error_code: str | None = None
+    error_detail: str | None = None
+    retryable: bool = False
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def is_success(self) -> bool:
@@ -89,6 +97,43 @@ class _ContentBlock:
     table_data: dict | None = None
 
 
+@dataclass(frozen=True)
+class _ExtractionOutcome:
+    """Safe parser result used between extraction and durable persistence."""
+
+    text: str
+    error_code: str | None = None
+    retryable: bool = False
+    warnings: tuple[str, ...] = ()
+
+
+class _ExtractedText(str):
+    """String-compatible extraction result with non-secret parser diagnostics.
+
+    Existing adapter callers and test monkeypatches expect ``_extract_text`` to
+    return ``str``.  Keeping this as a ``str`` subclass preserves that boundary
+    while letting the ingestion pipeline persist deterministic failure facts.
+    """
+
+    error_code: str | None
+    retryable: bool
+    warnings: tuple[str, ...]
+
+    def __new__(
+        cls,
+        text: str,
+        *,
+        error_code: str | None = None,
+        retryable: bool = False,
+        warnings: tuple[str, ...] = (),
+    ) -> "_ExtractedText":
+        value = super().__new__(cls, text)
+        value.error_code = error_code
+        value.retryable = retryable
+        value.warnings = warnings
+        return value
+
+
 def _download_from_minio(storage_key: str) -> bytes | None:
     """Download document bytes from MinIO using its durable storage key."""
     try:
@@ -100,32 +145,261 @@ def _download_from_minio(storage_key: str) -> bytes | None:
         return None
 
 
-def _extract_pdf_text(data: bytes) -> str:
-    """Extract text from a PDF file using PyMuPDF."""
+def _parser_error_detail(*, mime_type: str, error_code: str, retryable: bool) -> str:
+    """Return a stable public parse diagnostic without internal exception data."""
+
+    retry_flag = "true" if retryable else "false"
+    return (
+        f"parser={PARSER_NAME}@{PARSER_VERSION}; mime_type={mime_type}; "
+        f"reason={error_code}; retryable={retry_flag}"
+    )
+
+
+def _extract_pdf_outcome(data: bytes) -> _ExtractionOutcome:
+    """Extract PDF text and classify OCR availability truthfully.
+
+    Native PDF text remains authoritative.  OCR is a narrow fallback for a
+    page that contains virtually no selectable text, and it is deliberately
+    visible in the normalized document through its page heading/locator.
+    """
     try:
         import pymupdf
 
         doc = pymupdf.open(stream=data, filetype="pdf")
         pages: list[str] = []
-        for page in doc:
-            pages.append(page.get_text())
+        warnings: list[str] = []
+        terminal_ocr_error: _ExtractionOutcome | None = None
+        for page_number, page in enumerate(doc, start=1):
+            text = page.get_text("text").strip()
+            if _should_ocr_pdf_page(text):
+                ocr = _extract_pdf_page_ocr_outcome(page, page_number)
+                if ocr.text:
+                    text = ocr.text
+                elif ocr.error_code:
+                    terminal_ocr_error = ocr
+                    warnings.append(f"page_{page_number}:{ocr.error_code}")
+            if text:
+                pages.append(f"## Page {page_number}\n\n{text}".strip())
         doc.close()
-        return "\n\n".join(pages)
+        if pages:
+            return _ExtractionOutcome(text="\n\n".join(pages), warnings=tuple(warnings))
+        if terminal_ocr_error is not None:
+            return terminal_ocr_error
+        return _ExtractionOutcome(text="", error_code="no_extractable_text", retryable=False)
     except Exception as exc:
         logger.warning("PDF extraction failed: %s", exc)
-        return ""
+        return _ExtractionOutcome(text="", error_code="pdf_parse_failed", retryable=False)
+
+
+def _extract_pdf_text(data: bytes) -> str:
+    """Compatibility wrapper for callers that only need normalized text."""
+
+    return _extract_pdf_outcome(data).text
 
 
 def _extract_docx_text(data: bytes) -> str:
-    """Extract text from a DOCX file using python-docx."""
+    """Extract DOCX paragraphs and tables while retaining structural anchors."""
     try:
         from docx import Document
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
 
         doc = Document(io.BytesIO(data))
-        return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        lines: list[str] = []
+        table_number = 0
+        for child in doc.element.body.iterchildren():
+            if child.tag.endswith("}p"):
+                paragraph = Paragraph(child, doc)
+                text = paragraph.text.strip()
+                if not text:
+                    continue
+                heading_level = _docx_heading_level(paragraph.style.name if paragraph.style else "")
+                lines.append(f"{'#' * heading_level} {text}" if heading_level else text)
+                continue
+            if not child.tag.endswith("}tbl"):
+                continue
+            table_number += 1
+            table = Table(child, doc)
+            table_lines = _docx_table_to_markdown(table)
+            if table_lines:
+                lines.extend((f"## Table {table_number}", *table_lines))
+        return "\n\n".join(lines)
     except Exception as exc:
         logger.warning("DOCX extraction failed: %s", exc)
         return ""
+
+
+def _extract_xlsx_text(data: bytes) -> str:
+    """Render workbook sheets as bounded Markdown tables for retrieval."""
+    try:
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        lines = ["# Workbook"]
+        for worksheet in workbook.worksheets:
+            rows = [
+                [_table_cell_text(cell) for cell in row]
+                for row in worksheet.iter_rows(values_only=True)
+            ]
+            table = _rows_to_markdown_table(rows)
+            if table:
+                lines.extend((f"## Sheet: {worksheet.title}", table))
+        workbook.close()
+        return "\n\n".join(lines)
+    except Exception as exc:
+        logger.warning("XLSX extraction failed: %s", exc)
+        return ""
+
+
+def _extract_csv_text(data: bytes) -> str:
+    """Parse a CSV with safe encoding/delimiter fallbacks into one table."""
+    decoded = ""
+    for encoding in ("utf-8-sig", "gb18030", "latin-1"):
+        try:
+            decoded = data.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if not decoded.strip():
+        return ""
+    try:
+        sample = decoded[:4096]
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        except csv.Error:
+            dialect = csv.excel
+        rows = [[_table_cell_text(cell) for cell in row] for row in csv.reader(io.StringIO(decoded), dialect)]
+        table = _rows_to_markdown_table(rows)
+        return f"# CSV\n\n## Sheet: CSV\n\n{table}" if table else ""
+    except (csv.Error, ValueError) as exc:
+        logger.warning("CSV extraction failed: %s", exc)
+        return ""
+
+
+def _should_ocr_pdf_page(text: str) -> bool:
+    return (
+        os.getenv("DOCPILOT_OCR_ENABLED", "true").lower() in {"1", "true", "yes"}
+        and len(re.sub(r"\s+", "", text)) < _OCR_TEXT_THRESHOLD
+    )
+
+
+def _extract_pdf_page_ocr_outcome(page, page_number: int) -> _ExtractionOutcome:
+    """Run the local, explicitly installed Tesseract worker dependency.
+
+    There is no silent cloud OCR fallback: a deployment without Tesseract is
+    reported as an unavailable parser capability rather than leaking files to
+    an unconfigured third party or pretending an image was understood.
+    """
+    binary = shutil.which("tesseract")
+    if not binary:
+        logger.info("OCR unavailable for PDF page %s: tesseract is not installed", page_number)
+        return _ExtractionOutcome(text="", error_code="pdf_ocr_unavailable", retryable=False)
+    languages = _available_ocr_languages(binary)
+    if not languages:
+        logger.warning("OCR unavailable for PDF page %s: no configured languages installed", page_number)
+        return _ExtractionOutcome(text="", error_code="pdf_ocr_language_unavailable", retryable=False)
+    try:
+        import pymupdf
+
+        pixmap = page.get_pixmap(matrix=pymupdf.Matrix(2, 2), alpha=False)
+    except Exception as exc:
+        logger.warning("PDF rasterization failed for OCR page %s: %s", page_number, exc)
+        return _ExtractionOutcome(text="", error_code="pdf_ocr_rasterization_failed", retryable=True)
+    try:
+        completed = subprocess.run(
+            [binary, "stdin", "stdout", "-l", languages],
+            input=pixmap.tobytes("png"),
+            capture_output=True,
+            check=False,
+            timeout=45,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.warning("OCR invocation failed for PDF page %s: %s", page_number, type(exc).__name__)
+        return _ExtractionOutcome(text="", error_code="pdf_ocr_timeout", retryable=True)
+    if completed.returncode != 0:
+        logger.warning("OCR failed for PDF page %s: exit=%s", page_number, completed.returncode)
+        return _ExtractionOutcome(text="", error_code="pdf_ocr_failed", retryable=True)
+    text = completed.stdout.decode("utf-8", errors="replace").strip()
+    return _ExtractionOutcome(
+        text=text,
+        error_code=None if text else "no_extractable_text",
+        retryable=False,
+    )
+
+
+def _extract_pdf_page_ocr(page, page_number: int) -> str:
+    """Compatibility wrapper for tests or adapters that only expect text."""
+
+    return _extract_pdf_page_ocr_outcome(page, page_number).text
+
+
+def _available_ocr_languages(binary: str) -> str | None:
+    configured = [value for value in os.getenv("DOCPILOT_OCR_LANGS", "chi_sim+eng").split("+") if value]
+    try:
+        completed = subprocess.run(
+            [binary, "--list-langs"],
+            capture_output=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    available = {
+        line.strip()
+        for line in completed.stdout.decode("utf-8", errors="replace").splitlines()[1:]
+        if line.strip()
+    }
+    selected = [language for language in configured if language in available]
+    return "+".join(selected) if selected else None
+
+
+def _docx_heading_level(style_name: str) -> int:
+    match = re.search(r"heading\s*(\d+)", style_name, flags=re.IGNORECASE)
+    return min(int(match.group(1)), 6) if match else 0
+
+
+def _docx_table_to_markdown(table) -> list[str]:
+    rows = [[_table_cell_text(cell.text) for cell in row.cells] for row in table.rows]
+    table_text = _rows_to_markdown_table(rows)
+    return table_text.splitlines() if table_text else []
+
+
+def _table_cell_text(value: object) -> str:
+    return "" if value is None else str(value).replace("|", "\\|").replace("\n", " ").strip()
+
+
+def _rows_to_markdown_table(rows: list[list[str]]) -> str:
+    meaningful = [row for row in rows if any(cell.strip() for cell in row)]
+    if not meaningful:
+        return ""
+    width = max(len(row) for row in meaningful)
+    normalized = [row + [""] * (width - len(row)) for row in meaningful]
+    headers = [cell or f"Column {index}" for index, cell in enumerate(normalized[0], start=1)]
+    lines = [f"| {' | '.join(headers)} |", f"| {' | '.join(['---'] * width)} |"]
+    lines.extend(f"| {' | '.join(row)} |" for row in normalized[1:])
+    return "\n".join(lines)
+
+
+def _source_locator_from_heading_path(heading_path: list[str]) -> dict[str, object]:
+    """Convert parser-generated structural headings into stable locators."""
+    locator: dict[str, object] = {}
+    for heading in heading_path:
+        page_match = re.fullmatch(r"Page\s+(\d+)", heading, flags=re.IGNORECASE)
+        if page_match:
+            locator["page"] = int(page_match.group(1))
+        sheet_match = re.fullmatch(r"Sheet:\s*(.+)", heading, flags=re.IGNORECASE)
+        if sheet_match:
+            locator["sheet"] = sheet_match.group(1).strip()[:120]
+        table_match = re.fullmatch(r"Table\s+(\d+)", heading, flags=re.IGNORECASE)
+        if table_match:
+            locator["table"] = f"Table {table_match.group(1)}"
+    return locator
+
+
+def _table_locator_from_heading_path(heading_path: list[str]) -> str | None:
+    locator = _source_locator_from_heading_path(heading_path)
+    value = locator.get("table")
+    return value if isinstance(value, str) else None
 
 
 def _extract_text(storage_key: str, mime_type: str) -> str:
@@ -138,26 +412,41 @@ def _extract_text(storage_key: str, mime_type: str) -> str:
 
     if data is not None:
         if mime_type == "application/pdf":
-            return _extract_pdf_text(data)
+            outcome = _extract_pdf_outcome(data)
+            return _ExtractedText(
+                outcome.text,
+                error_code=outcome.error_code,
+                retryable=outcome.retryable,
+                warnings=outcome.warnings,
+            )
         if mime_type in (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/msword",
         ):
-            return _extract_docx_text(data)
+            text = _extract_docx_text(data)
+            return _ExtractedText(text, error_code=None if text else "docx_parse_failed")
+        if mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            text = _extract_xlsx_text(data)
+            return _ExtractedText(text, error_code=None if text else "xlsx_parse_failed")
+        if mime_type == "text/csv":
+            text = _extract_csv_text(data)
+            return _ExtractedText(text, error_code=None if text else "csv_parse_failed")
+        if mime_type not in {"text/plain", "text/markdown"}:
+            return _ExtractedText("", error_code="unsupported_parser_mime", retryable=False)
         # Plain text
         try:
-            return data.decode("utf-8", errors="replace")
+            return _ExtractedText(data.decode("utf-8", errors="replace"))
         except Exception as exc:
             logger.warning("Text decode failed for %s: %s", storage_key, exc)
-            return ""
+            return _ExtractedText("", error_code="text_decode_failed", retryable=False)
 
     # Fallback: try reading as local file path
     try:
         with open(storage_key, encoding="utf-8", errors="replace") as f:
-            return f.read()
+            return _ExtractedText(f.read())
     except Exception as exc:
         logger.warning("Text extraction failed for %s: %s", storage_key, exc)
-        return ""
+        return _ExtractedText("", error_code="storage_unavailable", retryable=True)
 
 
 # ── Heading & table detection helpers ──────────────────────────────────
@@ -285,6 +574,7 @@ def _split_into_chunks(text: str, size: int = CHUNK_SIZE_CHARS) -> list[tuple[st
     current_paras: list[str] = []
     current_len = 0
     current_heading: tuple[list[str], int] = ([], 0)
+    current_source_locator: dict[str, object] = {}
 
     def _flush():
         nonlocal current_paras, current_len
@@ -296,6 +586,7 @@ def _split_into_chunks(text: str, size: int = CHUNK_SIZE_CHARS) -> list[tuple[st
                 "chunk_type": "paragraphs",
                 "heading_path": list(current_heading[0]),
                 "heading_level": current_heading[1],
+                "source_locator": dict(current_source_locator),
             },
         ))
         current_paras = []
@@ -305,6 +596,7 @@ def _split_into_chunks(text: str, size: int = CHUNK_SIZE_CHARS) -> list[tuple[st
         if blk.type == "heading":
             _flush()
             current_heading = (blk.heading_path, blk.heading_level)
+            current_source_locator = _source_locator_from_heading_path(blk.heading_path)
 
         elif blk.type == "table":
             _flush()
@@ -317,6 +609,10 @@ def _split_into_chunks(text: str, size: int = CHUNK_SIZE_CHARS) -> list[tuple[st
                     "heading_level": current_heading[1],
                     "table_headers": td.get("headers", []),
                     "table_row_count": len(td.get("rows", [])),
+                    "source_locator": {
+                        **current_source_locator,
+                        "table": _table_locator_from_heading_path(current_heading[0]),
+                    },
                 },
             ))
 
@@ -337,7 +633,11 @@ def _split_into_chunks(text: str, size: int = CHUNK_SIZE_CHARS) -> list[tuple[st
 # ── Public API ────────────────────────────────────────────────────────
 
 
-def parse_bundle_documents(bundle_id: str) -> ParsedBundleResult:
+def parse_bundle_documents(
+    bundle_id: str,
+    *,
+    source_document_ids: set[str] | frozenset[str] | None = None,
+) -> ParsedBundleResult:
     """Parse pending versions without mutating their durable state.
 
     Persisting a parse result is intentionally a separate transaction.  A
@@ -350,15 +650,20 @@ def parse_bundle_documents(bundle_id: str) -> ParsedBundleResult:
         if bundle is None:
             return ParsedBundleResult()
 
+        statement = select(SourceDocument).where(SourceDocument.bundle_id == bundle_id)
+        if source_document_ids is not None:
+            if not source_document_ids:
+                return ParsedBundleResult()
+            statement = statement.where(SourceDocument.id.in_(source_document_ids))
         documents = list(
             db.scalars(
-                select(SourceDocument)
-                .where(SourceDocument.bundle_id == bundle_id)
-                .order_by(SourceDocument.original_filename.asc(), SourceDocument.id.asc())
+                statement.order_by(SourceDocument.original_filename.asc(), SourceDocument.id.asc())
             ).all()
         )
         result = ParsedBundleResult()
         for doc in documents:
+            if doc.parse_status == DocumentParseStatus.NOT_APPLICABLE.value:
+                continue
             if doc.parse_status == DocumentParseStatus.PARSED.value:
                 continue
             # ``_begin_ingest`` reserves an attempt before this pure parsing
@@ -371,14 +676,28 @@ def parse_bundle_documents(bundle_id: str) -> ParsedBundleResult:
             ):
                 continue
             text = _extract_text(doc.storage_key, doc.mime_type)
+            error_code = getattr(text, "error_code", None)
+            # Adapters that return the legacy raw string shape cannot classify
+            # an empty result. Treat that as transient until the durable retry
+            # budget is exhausted; explicit parser diagnostics remain authoritative.
+            retryable = bool(getattr(text, "retryable", error_code is None))
+            warnings = list(getattr(text, "warnings", ()))
             if not text or not text.strip():
-                logger.info("No text extracted from %s", doc.original_filename)
+                classified_error = error_code or "no_extractable_text"
+                logger.info("No text extracted from %s (%s)", doc.original_filename, classified_error)
                 result.documents.append(
                     ParsedDocument(
                         source_document_id=doc.id,
                         source_checksum=doc.checksum,
                         version_number=doc.version_number,
-                        error_code="no_extractable_text",
+                        error_code=classified_error,
+                        error_detail=_parser_error_detail(
+                            mime_type=doc.mime_type,
+                            error_code=classified_error,
+                            retryable=retryable,
+                        ),
+                        retryable=retryable,
+                        warnings=warnings,
                     )
                 )
                 continue
@@ -406,6 +725,7 @@ def parse_bundle_documents(bundle_id: str) -> ParsedBundleResult:
                         "document_version": doc.version_number,
                     },
                 }
+                meta["locator"].update(extra_meta.get("source_locator") or {})
                 meta.update(extra_meta)
                 chunks.append(ParsedChunk(
                     chunk_index=local_index,
@@ -430,6 +750,7 @@ def parse_bundle_documents(bundle_id: str) -> ParsedBundleResult:
                     version_number=doc.version_number,
                     normalized_text=text,
                     chunks=chunks,
+                    warnings=warnings,
                 )
             )
 
@@ -464,6 +785,14 @@ def store_chunks(bundle_id: str, result: ParsedBundleResult) -> StoredParseResul
             if not document_result.is_success:
                 document.parse_status = DocumentParseStatus.FAILED.value
                 document.parse_error_code = document_result.error_code or "parse_failed"
+                document.parse_error_detail = document_result.error_detail or _parser_error_detail(
+                    mime_type=document.mime_type,
+                    error_code=document.parse_error_code,
+                    retryable=document_result.retryable,
+                )
+                document.parse_retryable = document_result.retryable
+                document.parser_name = PARSER_NAME
+                document.parser_version = PARSER_VERSION
                 document.parsed_at = None
                 document.index_status = DocumentIndexStatus.PENDING.value
                 document.index_error_code = None
@@ -509,6 +838,8 @@ def store_chunks(bundle_id: str, result: ParsedBundleResult) -> StoredParseResul
                 "source_checksum": document_result.source_checksum,
                 "document_version": document_result.version_number,
                 "chunk_count": len(document_result.chunks),
+                "parser": {"name": PARSER_NAME, "version": PARSER_VERSION},
+                "parser_warnings": document_result.warnings,
             }
             asset_layout = {
                 "chunk_count": len(document_result.chunks),
@@ -530,7 +861,11 @@ def store_chunks(bundle_id: str, result: ParsedBundleResult) -> StoredParseResul
                 asset.layout_json = asset_layout
 
             document.parse_status = DocumentParseStatus.PARSED.value
+            document.parser_name = PARSER_NAME
+            document.parser_version = PARSER_VERSION
             document.parse_error_code = None
+            document.parse_error_detail = None
+            document.parse_retryable = True
             document.parsed_at = now
             document.index_status = DocumentIndexStatus.PENDING.value
             document.index_error_code = None

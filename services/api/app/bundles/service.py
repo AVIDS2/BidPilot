@@ -8,6 +8,7 @@ from app.celery_client import celery
 from app.models import Bundle
 from app.usage.schemas import ProviderSource
 from app.usage.service import EMBEDDING_INDEX_STARTED, check_indexing_quota, record_usage_event
+from contracts.document_ingestion import DocumentParseStatus
 
 from .repository import create_bundle, list_bundles_by_project
 from .schemas import BundleCreate, BundleRead
@@ -65,11 +66,39 @@ def reingest_bundle_command(
         raise HTTPException(status_code=409, detail="Bundle processing is already in progress")
     if not bundle.source_documents:
         raise HTTPException(status_code=409, detail="Upload at least one document before processing this bundle")
+    if not any(document.parse_status != DocumentParseStatus.NOT_APPLICABLE.value for document in bundle.source_documents):
+        raise HTTPException(
+            status_code=409,
+            detail="资料包只包含可下载附件，不含可进行文本解析的资料",
+        )
     check_indexing_quota(db, current_user.id, current_user.org_id, ProviderSource.OFFICIAL)
     # Reset status and re-dispatch
     bundle.ingest_status = "queued"
     db.commit()
     db.refresh(bundle)
+    try:
+        celery.send_task("worker.ingest_bundle", args=[bundle.id])
+    except Exception:
+        # The uploaded source remains durable and the normal retry action can
+        # re-dispatch it. Do not leave a bundle in a forever-queued state when
+        # Redis/Celery is unavailable.
+        bundle.ingest_status = "ready_to_ingest"
+        record_audit_event(
+            db,
+            project_id=bundle.project_id,
+            event_type="bundle.ingest_dispatch_failed",
+            actor_type="system",
+            actor_id=current_user.id,
+            payload={"bundle_id": bundle.id, "action": "reingest_bundle"},
+        )
+        db.commit()
+        return BundleRead(
+            id=bundle.id,
+            project_id=bundle.project_id,
+            label=bundle.label,
+            source_type=bundle.source_type,
+            ingest_status=bundle.ingest_status,
+        )
     record_usage_event(
         db,
         user_id=current_user.id,
@@ -79,7 +108,6 @@ def reingest_bundle_command(
         provider_source=ProviderSource.OFFICIAL,
         metadata_json={"bundle_id": bundle.id, "action": "reingest_bundle"},
     )
-    celery.send_task("worker.ingest_bundle", args=[bundle.id])
     record_audit_event(
         db,
         project_id=bundle.project_id,
@@ -114,6 +142,11 @@ def reindex_bundle_command(
         raise HTTPException(status_code=409, detail="Bundle processing is already in progress")
     if not bundle.source_documents:
         raise HTTPException(status_code=409, detail="Upload at least one document before reindexing this bundle")
+    if not any(document.parse_status == DocumentParseStatus.PARSED.value for document in bundle.source_documents):
+        raise HTTPException(
+            status_code=409,
+            detail="This bundle has no parsed document available for reindexing",
+        )
     check_indexing_quota(db, current_user.id, current_user.org_id, ProviderSource.OFFICIAL)
     bundle.ingest_status = "queued"
     record_usage_event(

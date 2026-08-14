@@ -24,7 +24,18 @@
     "login": "登录",
     "signup": "注册",
     "enterPlatform": "进入平台",
-    "navigation": "导航"
+    "navigation": "导航",
+    "inbox": "收件箱",
+    "myWork": "我的工作",
+    "workspace": "工作区",
+    "bidProject": "投标项目",
+    "bidProjects": "投标项目",
+    "radar": "招采雷达",
+    "reviews": "审核",
+    "deliverables": "交付物",
+    "members": "成员",
+    "responseTeam": "响应团队",
+    "aiProviders": "AI 服务商"
   },
   "actions": {
     "save": "保存",
@@ -108,6 +119,17 @@
     "hint": {
       "navigate": "使用方向键导航",
       "select": "按 Enter 选择"
+    }
+  },
+  "workbench": {
+    "surfaces": {
+      "brief": "简介",
+      "requirements": "要求",
+      "evidence": "证据",
+      "response": "响应",
+      "review": "审核",
+      "deliverables": "交付物",
+      "activity": "活动"
     }
   }
 }

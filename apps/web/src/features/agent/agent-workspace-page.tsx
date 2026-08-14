@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AIAssistantPanel } from "@/components/ai-assistant/AIAssistantPanel";
 import { isAssistantBusy, useAIAssistant } from "@/lib/ai-assistant-store";
+import { LinearAgentWorkspace } from "./linear-agent-workspace";
 
 const HANDLED_WAKE_KEY = "bidpilot:handled-agent-wakes";
 
@@ -34,12 +34,17 @@ function wasWakeHandled(wakeKey: string) {
  */
 export function AgentWorkspacePage() {
   const [params] = useSearchParams();
-  const { loadConversation, sendMessage, state } = useAIAssistant();
+  const { dispatch, loadConversation, sendMessage, state } = useAIAssistant();
   const handledWakeRef = useRef<string | null>(null);
+  const projectId = params.get("project_id") || undefined;
+  const conversationId = params.get("conversation");
+  const wake = params.get("wake");
 
   useEffect(() => {
-    const conversationId = params.get("conversation");
-    const wake = params.get("wake");
+    dispatch({ type: "SET_CONTEXT", context: { page: "agent", projectId } });
+  }, [dispatch, projectId]);
+
+  useEffect(() => {
     if (!conversationId) return;
 
     const wakeKey = wake ? `${conversationId}:${wake}` : null;
@@ -71,19 +76,15 @@ export function AgentWorkspacePage() {
     });
   }, [
     loadConversation,
-    params,
     sendMessage,
+    conversationId,
     state.currentConversationId,
     state.messages.length,
     state.status,
+    wake,
   ]);
 
   return (
-    <section
-      className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-background"
-      aria-label="BidPilot Agent"
-    >
-      <AIAssistantPanel variant="workspace" />
-    </section>
+    <LinearAgentWorkspace />
   );
 }

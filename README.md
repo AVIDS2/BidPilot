@@ -91,6 +91,7 @@ drill.
 - [Non-developer demo guide](docs/product/non-developer-demo-guide.md)
 - [Interview golden-path script](docs/product/interview-demo-script.md)
 - [Operations and deployment runbook](docs/ops/deployment-and-runbook.md)
+- [Six-stream product closeout and acceptance](docs/quality/2026-08-14-six-stream-closeout.md)
 
 ## Honest scope
 

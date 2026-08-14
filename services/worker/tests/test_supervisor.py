@@ -37,6 +37,8 @@ def _make_state(**overrides) -> BidPilotState:
         "draft_created": False,
         "review_result": None,
         "review_passed": False,
+        "review_status": "not_started",
+        "review_degradation_code": None,
         "claim_candidates": [],
         "claim_integrity_status": "not_assessed",
         "section_version_id": None,
@@ -116,6 +118,10 @@ class TestRouteAfterReview:
         state = _make_state(review_passed=False, iteration=1, max_iterations=3)
         assert route_after_review(state) == "content_plan"
 
+    def test_degraded_review_persists_for_human_review_without_auto_pass(self):
+        state = _make_state(review_passed=False, review_status="degraded", iteration=1)
+        assert route_after_review(state) == "persist_result"
+
     def test_review_failed_iteration_at_max_goes_to_persist(self):
         state = _make_state(review_passed=False, iteration=3, max_iterations=3)
         assert route_after_review(state) == "persist_result"
@@ -124,6 +130,9 @@ class TestRouteAfterReview:
 class TestRouteAfterPersist:
     def test_review_candidate_goes_to_human_approval_after_persistence(self):
         assert route_after_persist(_make_state(review_passed=True, human_decision=None)) == "human_approval"
+
+    def test_degraded_candidate_goes_to_human_approval_after_persistence(self):
+        assert route_after_persist(_make_state(review_status="degraded", human_decision=None)) == "human_approval"
 
     def test_approved_candidate_finishes_after_persistence(self):
         assert route_after_persist(_make_state(review_passed=True, human_decision="approved")) == "memory_proposals"

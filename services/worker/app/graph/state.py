@@ -107,6 +107,7 @@ class BidPilotState(TypedDict):
     # ── Inputs (set before invocation) ────────────────────────────────
     project_id: str
     section_key: str
+    deliverable_section_id: str | None
     run_id: str
     runtime_run_id: str | None
     provider_config_id: str | None
@@ -153,6 +154,10 @@ class BidPilotState(TypedDict):
     # ── Quality reviewer output ────────────────────────────────────────
     review_result: ReviewResult
     review_passed: bool
+    # "passed" | "failed" | "degraded" | "blocked" | "not_started".
+    # A degraded automatic review is deliberately not an automatic pass.
+    review_status: str
+    review_degradation_code: str | None
     claim_candidates: list[ClaimCandidate]
     claim_integrity_status: str
 

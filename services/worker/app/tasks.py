@@ -2,15 +2,20 @@ import logging
 import os
 from datetime import UTC, datetime
 
+from sqlalchemy import select
+
 from app.celery_app import celery_app
 from app.adapters.provider_errors import ProviderInvocationError
 from app.db import SessionLocal
 from app.execution.ingest import run_ingest, run_reindex
+from app.execution.ingest import bundle_has_retryable_embedding_failure, mark_bundle_index_retrying
 from app.execution.assistant_attachments import purge_expired_assistant_attachments
 from app.execution.memory import index_memory_records, run_compile_bid_wiki
 from app.execution.memory_graph import run_extract_memory_graph
 from app.execution.model_usage import finalize_workflow_model_reservation_failure
 from app.execution.review_resume import resolve_durable_review_resume
+from app.radar.service import poll_due_notice_sources
+from app.webhooks.service import deliver_due_webhook_deliveries
 from app.execution.task_outbox import (
     claim_workflow_task_delivery,
     complete_workflow_task_delivery,
@@ -19,6 +24,12 @@ from app.execution.task_outbox import (
     recover_pending_task_outbox_events,
 )
 from app.models import ExecutionRun
+from app.models import Bundle, RuntimeRun, User
+from app.auth.schemas import CurrentUser
+from app.documents.web_import import download_remote_artifact_to_tempfile
+from app.documents.service import upload_artifact_file_command, upload_document_command
+from app.runtime.events import publish_runtime_event
+from app.documents.import_errors import RemoteImportError
 from app.runtime.events import (
     RuntimeCancellationRequested,
     cancel_runtime_run,
@@ -30,12 +41,33 @@ from app.runtime.events import (
     publish_node_started,
     publish_node_succeeded,
 )
+from contracts.document_ingestion import MAX_SOURCE_DOCUMENT_BYTES, canonical_source_document_mime_type, source_document_is_parseable
+from contracts.runtime import RuntimeEventType
 
 logger = logging.getLogger(__name__)
 
 # Feature flag: product drafting uses the LangGraph graph by default.
 # Set USE_LANGGRAPH=0/false/no only for explicit legacy single-shot drafting.
 _USE_LANGGRAPH = os.getenv("USE_LANGGRAPH", "1").lower() in ("1", "true", "yes")
+_INDEX_RETRY_MAX_ATTEMPTS = 3
+_INDEX_RETRY_BASE_DELAY_SECONDS = 5
+
+
+def _retry_transient_bundle_index(task, bundle_id: str) -> bool:
+    """Schedule a bounded retry only for a durable transient index outcome."""
+    if not bundle_has_retryable_embedding_failure(bundle_id):
+        return False
+    retry_count = int(getattr(task.request, "retries", 0) or 0)
+    if retry_count >= _INDEX_RETRY_MAX_ATTEMPTS:
+        return False
+    mark_bundle_index_retrying(bundle_id)
+    delay = _INDEX_RETRY_BASE_DELAY_SECONDS * (2**retry_count)
+    task.retry(
+        exc=RuntimeError("retryable embedding provider failure"),
+        countdown=delay,
+        max_retries=_INDEX_RETRY_MAX_ATTEMPTS,
+    )
+    return True
 
 
 @celery_app.task(name="worker.ping")
@@ -43,16 +75,156 @@ def ping() -> str:
     return "pong"
 
 
-@celery_app.task(name="worker.ingest_bundle")
-def ingest_bundle(bundle_id: str) -> dict[str, str]:
+@celery_app.task(name="worker.import_remote_document", bind=True)
+def import_remote_document(self, runtime_run_id: str) -> dict[str, object]:
+    """Download one confirmed remote artifact and attach it to its bundle.
+
+    The API returns before this task starts so large or slow public files do
+    not hold an Agent SSE request open.  RuntimeRun is the durable job record;
+    no URL is rewritten or retried with a different protocol here.
+    """
+    db = SessionLocal()
+    try:
+        runtime_run = db.scalar(select(RuntimeRun).where(RuntimeRun.id == runtime_run_id))
+        if runtime_run is None:
+            return {"status": "missing", "runtime_run_id": runtime_run_id}
+        if runtime_run.status in {"succeeded", "failed", "cancelled", "expired"}:
+            return {"status": runtime_run.status, "runtime_run_id": runtime_run_id}
+        user_row = db.get(User, runtime_run.user_id)
+        if user_row is None:
+            fail_runtime_run(runtime_run_id, "导入任务所属用户不存在。", error_code="remote_import_user_missing")
+            return {"status": "failed", "runtime_run_id": runtime_run_id}
+        args = runtime_run.input_json or {}
+        project_id = str(args.get("project_id") or "")
+        bundle_id = str(args.get("bundle_id") or "")
+        url = str(args.get("url") or "")
+        filename = str(args.get("filename") or "").strip() or None
+        if not project_id or not bundle_id or not url:
+            fail_runtime_run(runtime_run_id, "远程导入任务缺少项目、资料包或地址。", error_code="remote_import_input_invalid")
+            return {"status": "failed", "runtime_run_id": runtime_run_id}
+        user = CurrentUser(
+            id=user_row.id,
+            email=user_row.email,
+            display_name=user_row.display_name,
+            role=user_row.role,
+            email_verified=user_row.email_verified,
+            disabled=user_row.disabled,
+            org_id=user_row.org_id,
+            org_slug=user_row.organization.slug if user_row.organization is not None else "",
+        )
+        publish_runtime_event(
+            runtime_run_id,
+            RuntimeEventType.CAPABILITY_STARTED,
+            "正在下载已确认的远程资料。",
+            {"capability": "fetch_url_to_project", "phase": "download"},
+        )
+        downloaded = download_remote_artifact_to_tempfile(url, filename=filename)
+        try:
+            publish_runtime_event(
+                runtime_run_id,
+                RuntimeEventType.CAPABILITY_PROGRESSED,
+                "远程资料下载完成，正在写入项目资料包。",
+                {"capability": "fetch_url_to_project", "phase": "storage", "bytes": downloaded.byte_count},
+            )
+            mime_type = canonical_source_document_mime_type(
+                filename=downloaded.filename,
+                content_type=downloaded.content_type,
+            )
+            if source_document_is_parseable(mime_type or ""):
+                if downloaded.byte_count > MAX_SOURCE_DOCUMENT_BYTES:
+                    raise RemoteImportError(
+                        "remote_too_large",
+                        "可解析的远程资料超过当前 25 MB 上限。请先压缩、拆分，或改为仅归档附件。",
+                        retryable=False,
+                    )
+                with downloaded.file_path.open("rb") as source_file:
+                    doc = upload_document_command(
+                        db,
+                        bundle_id=bundle_id,
+                        filename=downloaded.filename,
+                        content_type=downloaded.content_type,
+                        data=source_file.read(),
+                        current_user=user,
+                        source_url=downloaded.source_url,
+                    )
+            else:
+                doc = upload_artifact_file_command(
+                    db,
+                    bundle_id=bundle_id,
+                    filename=downloaded.filename,
+                    content_type=downloaded.content_type,
+                    file_path=str(downloaded.file_path),
+                    byte_count=downloaded.byte_count,
+                    checksum=downloaded.checksum,
+                    signature=downloaded.signature,
+                    current_user=user,
+                    source_url=downloaded.source_url,
+                )
+        finally:
+            downloaded.cleanup()
+        bundle = db.get(Bundle, bundle_id)
+        result = {
+            "status": "succeeded",
+            "runtime_run_id": runtime_run_id,
+            "project_id": project_id,
+            "bundle_id": bundle_id,
+            "bundle_label": bundle.label if bundle is not None else "项目资料包",
+            "document_id": doc.id,
+            "filename": doc.original_filename,
+            "bytes": downloaded.byte_count,
+            "source_url": downloaded.source_url,
+            "import_mode": "artifact",
+            "parse_status": doc.parse_status,
+            "ingest_queued": doc.ingest_queued,
+            "storage_status": "stored_no_parse" if doc.parse_status == "not_applicable" else "queued_for_ingestion",
+        }
+        publish_runtime_event(
+            runtime_run_id,
+            RuntimeEventType.CAPABILITY_SUCCEEDED,
+            f"远程资料「{doc.original_filename}」已写入项目资料包。",
+            {"capability": "fetch_url_to_project", "document_id": doc.id, "filename": doc.original_filename},
+        )
+        complete_runtime_run(runtime_run_id, result=result)
+        return result
+    except RemoteImportError as exc:
+        fail_runtime_run(runtime_run_id, exc.public_message, error_code=exc.error_code)
+        return {"status": "failed", "runtime_run_id": runtime_run_id, "error_code": exc.error_code}
+    except Exception:
+        logger.exception("Remote document import failed", extra={"runtime_run_id": runtime_run_id})
+        fail_runtime_run(runtime_run_id, "远程资料下载或入库失败，请查看任务详情后重试。", error_code="remote_import_task_failed")
+        return {"status": "failed", "runtime_run_id": runtime_run_id, "error_code": "remote_import_task_failed"}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="worker.ingest_bundle", bind=True)
+def ingest_bundle(self, bundle_id: str) -> dict[str, str]:
     """Ingest a bundle: parse documents, extract chunks, update status."""
-    return run_ingest(bundle_id)
+    result = run_ingest(bundle_id)
+    if _retry_transient_bundle_index(self, bundle_id):
+        return {"bundle_id": bundle_id, "status": "index_retry_scheduled"}
+    return result
 
 
-@celery_app.task(name="worker.reindex_bundle")
-def reindex_bundle(bundle_id: str) -> dict[str, str]:
+@celery_app.task(name="worker.reindex_bundle", bind=True)
+def reindex_bundle(self, bundle_id: str) -> dict[str, str]:
     """Refresh bundle embeddings without reparsing source documents."""
-    return run_reindex(bundle_id)
+    result = run_reindex(bundle_id)
+    if _retry_transient_bundle_index(self, bundle_id):
+        return {"bundle_id": bundle_id, "status": "index_retry_scheduled"}
+    return result
+
+
+@celery_app.task(name="worker.poll_due_notice_sources")
+def poll_due_notice_sources_task() -> dict[str, int]:
+    """Poll configured public tender feeds when their interval is due."""
+    return poll_due_notice_sources()
+
+
+@celery_app.task(name="worker.deliver_due_webhooks")
+def deliver_due_webhooks_task() -> dict[str, int]:
+    """Recover pending outbound business webhook deliveries."""
+    return deliver_due_webhook_deliveries()
 
 
 @celery_app.task(name="worker.compile_bid_wiki")
@@ -180,7 +352,9 @@ def _execute_draft_section(
     review_feedback: str | None = None,
     provider_config_id: str | None = None,
     reasoning_effort: str | None = None,
+    max_iterations: int | None = None,
     runtime_run_id: str | None = None,
+    deliverable_section_id: str | None = None,
 ) -> dict[str, str]:
     """Draft a section: retrieve evidence, call LLM, write section version.
 
@@ -206,8 +380,10 @@ def _execute_draft_section(
                 project_id=project_id,
                 section_key=section_key,
                 run_id=run_id,
+                deliverable_section_id=deliverable_section_id,
                 provider_config_id=provider_config_id,
                 reasoning_effort=reasoning_effort,
+                max_iterations=max_iterations or 3,
                 review_feedback=review_feedback,
                 runtime_run_id=effective_runtime_run_id,
             )
@@ -233,14 +409,6 @@ def _execute_draft_section(
         if is_runtime_cancellation_requested(effective_runtime_run_id):
             return _cancel_workflow(run_id, section_key, effective_runtime_run_id)
 
-        if result.get("__interrupt__"):
-            _set_execution_status(run_id, "awaiting_human")
-            return {
-                "status": "awaiting_human",
-                "run_id": run_id,
-                "section_key": section_key,
-            }
-
         # Normalise the graph state dict into the same return shape the
         # Celery task has always produced so downstream callers keep working.
         if result.get("error"):
@@ -259,6 +427,34 @@ def _execute_draft_section(
                 "run_id": run_id,
                 "section_key": section_key,
                 "error": result["error"],
+            }
+
+        if result.get("__interrupt__"):
+            section_version_id = result.get("section_version_id")
+            if not isinstance(section_version_id, str) or not section_version_id:
+                message = "工作流请求人工确认时未保存可审核的章节版本。"
+                finalize_workflow_model_reservation_failure(
+                    run_id=run_id,
+                    error_code="workflow_interrupt_without_version",
+                )
+                _set_execution_status(run_id, "failed", error=message)
+                fail_runtime_run(
+                    effective_runtime_run_id,
+                    message,
+                    error_code="workflow_interrupt_without_version",
+                )
+                return {
+                    "status": "error",
+                    "run_id": run_id,
+                    "section_key": section_key,
+                    "error": message,
+                }
+            _set_execution_status(run_id, "awaiting_human")
+            return {
+                "status": "awaiting_human",
+                "run_id": run_id,
+                "section_key": section_key,
+                "section_version_id": section_version_id,
             }
 
         if not result.get("persisted"):
@@ -298,6 +494,7 @@ def _execute_draft_section(
             review_feedback=review_feedback,
             provider_config_id=provider_config_id,
             reasoning_effort=reasoning_effort,
+            deliverable_section_id=deliverable_section_id,
         )
     except RuntimeCancellationRequested:
         return _cancel_workflow(run_id, section_key, effective_runtime_run_id)
@@ -338,8 +535,10 @@ def draft_section(
     review_feedback: str | None = None,
     provider_config_id: str | None = None,
     reasoning_effort: str | None = None,
+    max_iterations: int | None = None,
     runtime_run_id: str | None = None,
     outbox_event_id: str | None = None,
+    deliverable_section_id: str | None = None,
 ) -> dict[str, str]:
     """Execute one durable workflow delivery, ignoring active duplicate messages."""
     if not claim_workflow_task_delivery(outbox_event_id):
@@ -353,7 +552,9 @@ def draft_section(
             review_feedback=review_feedback,
             provider_config_id=provider_config_id,
             reasoning_effort=reasoning_effort,
+            max_iterations=max_iterations,
             runtime_run_id=runtime_run_id,
+            deliverable_section_id=deliverable_section_id,
         )
     except ProviderInvocationError as exc:
         _fail_outbox_delivery_safely(outbox_event_id, exc.error_code)
@@ -446,10 +647,6 @@ def _execute_resume_draft(
         if is_runtime_cancellation_requested(runtime_run_id):
             return _cancel_workflow(run_id, "", runtime_run_id)
 
-        if result.get("__interrupt__"):
-            _set_execution_status(run_id, "awaiting_human")
-            return {"status": "awaiting_human", "run_id": run_id}
-
         if result.get("error"):
             finalize_workflow_model_reservation_failure(
                 run_id=run_id,
@@ -465,6 +662,28 @@ def _execute_resume_draft(
                 "status": "error",
                 "run_id": run_id,
                 "error": result["error"],
+            }
+
+        if result.get("__interrupt__"):
+            section_version_id = result.get("section_version_id")
+            if not isinstance(section_version_id, str) or not section_version_id:
+                message = "恢复后的工作流请求人工确认时未保存可审核的章节版本。"
+                finalize_workflow_model_reservation_failure(
+                    run_id=run_id,
+                    error_code="workflow_resume_interrupt_without_version",
+                )
+                _set_execution_status(run_id, "failed", error=message)
+                fail_runtime_run(
+                    runtime_run_id,
+                    message,
+                    error_code="workflow_resume_interrupt_without_version",
+                )
+                return {"status": "error", "run_id": run_id, "error": message}
+            _set_execution_status(run_id, "awaiting_human")
+            return {
+                "status": "awaiting_human",
+                "run_id": run_id,
+                "section_version_id": section_version_id,
             }
 
         if not result.get("persisted"):

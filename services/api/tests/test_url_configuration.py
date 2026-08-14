@@ -1,6 +1,63 @@
 from unittest.mock import patch
 
 
+def test_resend_backend_posts_transactional_html_and_text(monkeypatch):
+    from app.email import service
+
+    captured = {}
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["headers"] = request.headers
+        captured["body"] = request.data.decode("utf-8")
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(service, "RESEND_API_KEY", "re_test_key")
+    monkeypatch.setattr(service, "RESEND_FROM", "BidPilot <updates@updates.rglens.com>")
+    with patch("app.email.service.urlopen", side_effect=fake_urlopen):
+        service.ResendEmailBackend().send(service.EmailMessage(
+            to="user@example.com",
+            subject="Verify",
+            body_text="Plain text",
+            body_html="<p>HTML</p>",
+        ))
+
+    assert captured["url"] == "https://api.resend.com/emails"
+    assert captured["headers"]["Authorization"] == "Bearer re_test_key"
+    assert captured["headers"]["User-agent"] == "BidPilot/1.0 (+https://bidpilot.rglens.com)"
+    assert '"from": "BidPilot <updates@updates.rglens.com>"' in captured["body"]
+    assert '"html": "<p>HTML</p>"' in captured["body"]
+    assert captured["timeout"] == 15
+
+
+def test_resend_is_preferred_over_smtp_when_both_are_configured(monkeypatch):
+    from app.email import service
+
+    monkeypatch.setattr(service, "RESEND_CONFIGURED", True)
+    monkeypatch.setattr(service, "SMTP_CONFIGURED", True)
+    monkeypatch.setattr(service, "_backend", None)
+
+    assert isinstance(service.get_email_backend(), service.ResendEmailBackend)
+
+
+def test_resend_sender_never_inherits_an_smtp_only_sender():
+    from app.email import service
+
+    assert service._resolve_resend_from(None) == service.DEFAULT_RESEND_FROM
+    assert service._resolve_resend_from("") == service.DEFAULT_RESEND_FROM
+    assert service._resolve_resend_from("BidPilot <mail@verified.example>") == "BidPilot <mail@verified.example>"
+
+
 def test_invitation_email_uses_configured_app_url(monkeypatch):
     monkeypatch.setenv("DOCPILOT_APP_URL", "https://bidpilot.rglens.com")
     from app.email import service
@@ -74,3 +131,14 @@ def test_smtp_backend_requires_a_complete_credential_set():
         password="app-password",
         from_address="noreply@example.test",
     ) is True
+
+
+def test_best_effort_email_reports_failure_without_raising():
+    from app.email import service
+
+    assert service.send_email_best_effort(lambda: None, event="test.success") is True
+
+    def fail() -> None:
+        raise RuntimeError("provider unavailable")
+
+    assert service.send_email_best_effort(fail, event="test.failure") is False

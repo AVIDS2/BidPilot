@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
 from app.db import get_db
-from app.email.service import send_invitation_email
+from app.email.service import send_email_best_effort, send_invitation_email
 from app.organizations.service import MEMBERSHIP_MANAGERS, require_organization_role
 
 from .schemas import InvitationCreate, InvitationRead
@@ -29,8 +29,10 @@ def create_invitation(
             allowed_roles=MEMBERSHIP_MANAGERS,
         )
         invitation = create_invitation_command(db, current_user.org_id, payload.email, current_user.id)
-        # Send invitation email (non-blocking)
-        send_invitation_email(payload.email, invitation.token, current_user.org_slug)
+        send_email_best_effort(
+            lambda: send_invitation_email(payload.email, invitation.token, current_user.org_slug),
+            event="invitations.created",
+        )
         return InvitationRead(
             id=invitation.id,
             org_id=invitation.org_id,

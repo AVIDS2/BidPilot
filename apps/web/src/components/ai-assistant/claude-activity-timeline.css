@@ -1,0 +1,807 @@
+.assistant-claude-timeline {
+  --cr-bg: var(--background, #f9f9f7);
+  --cr-paper: var(--background, #ffffff);
+  --cr-text: var(--foreground, #0b0b0b);
+  --cr-text-soft: var(--muted-foreground, #383835);
+  --cr-muted: color-mix(in oklch, var(--muted-foreground, #7b7974) 78%, transparent);
+  --cr-faint: color-mix(in oklch, var(--muted-foreground, #a6a49f) 65%, transparent);
+  --cr-line: color-mix(in oklch, var(--border, #d9d9d5) 74%, transparent);
+  --cr-line-light: color-mix(in oklch, var(--border, #d9d9d5) 52%, transparent);
+  --cr-font: var(--font-sans, system-ui, sans-serif);
+  --cr-serif: Georgia, "Songti SC", SimSun, serif;
+  --cr-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  min-width: 0;
+  color: var(--cr-text);
+  font-family: var(--cr-font);
+}
+
+.assistant-claude-timeline * {
+  box-sizing: border-box;
+}
+
+.assistant-claude-timeline button {
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.assistant-claude-timeline .cr-tool-group {
+  margin: 0;
+  padding: 4px 0;
+}
+
+.assistant-claude-timeline .cr-tool-summary {
+  display: grid;
+  width: 100%;
+  min-height: 28px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 1px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #44433f;
+  font-size: 14px;
+  text-align: left;
+}
+
+.assistant-claude-timeline .cr-tool-summary > span:first-child {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.assistant-claude-timeline .cr-tool-summary > span:first-child > svg {
+  flex: 0 0 auto;
+  color: #aaa8a1;
+}
+
+.assistant-claude-timeline .cr-tool-summary > .cr-group-status {
+  display: flex;
+  min-width: max-content;
+  align-items: center;
+  gap: 6px;
+  color: #a2a09b;
+  font-size: 12px;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+.assistant-claude-timeline .cr-group-status > svg:last-child,
+.assistant-claude-timeline .cr-run-step-button > svg:last-child,
+.assistant-claude-timeline .cr-runtime-summary > svg:last-child {
+  flex: 0 0 auto;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms ease;
+}
+
+.assistant-claude-timeline .cr-tool-summary[aria-expanded="true"] .cr-group-status > svg:last-child,
+.assistant-claude-timeline .cr-task-turn-summary[aria-expanded="true"] .cr-group-status > svg:last-child,
+.assistant-claude-timeline .cr-run-step-button[aria-expanded="true"] > svg:last-child,
+.assistant-claude-timeline .cr-runtime-summary[aria-expanded="true"] > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.assistant-claude-timeline .cr-tool-summary:hover,
+.assistant-claude-timeline .cr-tool-summary[aria-expanded="true"] {
+  color: #262521;
+}
+
+.assistant-claude-timeline .cr-group-status.is-running,
+.assistant-claude-timeline .cr-group-status.is-failed {
+  color: #696761;
+}
+
+/* A completed checkmark already communicates success. Keep the secondary
+   status quiet until the reader intentionally opens or inspects that row. */
+.assistant-claude-timeline[data-status="succeeded"] .cr-tool-summary[aria-expanded="false"] .cr-group-status,
+.assistant-claude-timeline .cr-task-turn.is-succeeded .cr-task-turn-summary[aria-expanded="false"] .cr-group-status {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, visibility 0s linear 120ms;
+}
+
+.assistant-claude-timeline[data-status="succeeded"] .cr-tool-summary:hover .cr-group-status,
+.assistant-claude-timeline[data-status="succeeded"] .cr-tool-summary:focus-visible .cr-group-status,
+.assistant-claude-timeline[data-status="succeeded"] .cr-tool-summary[aria-expanded="true"] .cr-group-status,
+.assistant-claude-timeline .cr-task-turn.is-succeeded .cr-task-turn-summary:hover .cr-group-status,
+.assistant-claude-timeline .cr-task-turn.is-succeeded .cr-task-turn-summary:focus-visible .cr-group-status,
+.assistant-claude-timeline .cr-task-turn.is-succeeded .cr-task-turn-summary[aria-expanded="true"] .cr-group-status {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.assistant-claude-timeline .cr-group-status.is-failed,
+.assistant-claude-timeline .cr-step-status.is-failed,
+.assistant-claude-timeline .cr-node-error {
+  color: var(--destructive, #b5544b);
+}
+
+.assistant-claude-timeline .cr-group-spinner,
+.assistant-claude-timeline .cr-step-symbol-active svg,
+.assistant-claude-timeline .cr-node-spinner {
+  animation: claude-timeline-spin 1s linear infinite;
+}
+
+@keyframes claude-timeline-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes claude-timeline-runtime-line {
+  0%, 100% { opacity: 0.42; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes claude-timeline-runtime-marker {
+  0% { opacity: 0.2; transform: scale(0.72); }
+  55% { opacity: 0.5; transform: scale(1.18); }
+  100% { opacity: 0; transform: scale(1.42); }
+}
+
+@keyframes claude-timeline-task-breathe {
+  0%, 100% {
+    background-position: 100% 0;
+    box-shadow: inset 2px 0 0 rgba(188, 192, 71, 0.18);
+  }
+  50% {
+    background-position: 0 0;
+    box-shadow: inset 2px 0 0 rgba(164, 200, 70, 0.72);
+  }
+}
+
+.assistant-claude-timeline .cr-tool-grid,
+.assistant-claude-timeline .cr-command-grid,
+.assistant-claude-timeline .cr-runtime-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.assistant-claude-timeline .cr-tool-grid.is-open,
+.assistant-claude-timeline .cr-command-grid.is-open,
+.assistant-claude-timeline .cr-runtime-grid.is-open {
+  grid-template-rows: 1fr;
+}
+
+.assistant-claude-timeline .cr-tool-grid-inner,
+.assistant-claude-timeline .cr-command-grid-inner,
+.assistant-claude-timeline .cr-runtime-grid-inner {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 0.16s ease, transform 0.24s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.assistant-claude-timeline .cr-tool-grid.is-open > .cr-tool-grid-inner,
+.assistant-claude-timeline .cr-command-grid.is-open > .cr-command-grid-inner,
+.assistant-claude-timeline .cr-runtime-grid.is-open > .cr-runtime-grid-inner {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.assistant-claude-timeline .cr-run-detail {
+  position: relative;
+  display: grid;
+  gap: 0;
+  margin: 4px 0 7px 9px;
+  padding: 0 0 0 18px;
+}
+
+.assistant-claude-timeline .cr-task-turns {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 7px 9px;
+  padding: 0 0 0 18px;
+}
+
+.assistant-claude-timeline .cr-task-turns::before {
+  position: absolute;
+  top: 7px;
+  bottom: 10px;
+  left: 3px;
+  width: 1px;
+  background: #dfded9;
+  content: "";
+}
+
+.assistant-claude-timeline .cr-task-turn {
+  position: relative;
+  min-width: 0;
+}
+
+.assistant-claude-timeline .cr-task-turn-summary {
+  display: grid;
+  width: 100%;
+  min-height: 28px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 1px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #5e5c57;
+  font-size: 13px;
+  text-align: left;
+}
+
+.assistant-claude-timeline .cr-task-turn-summary::before {
+  position: absolute;
+  z-index: 1;
+  left: -22px;
+  width: 8px;
+  height: 8px;
+  border: 1px solid #aaa8a1;
+  border-radius: 50%;
+  background: var(--cr-bg);
+  content: "";
+}
+
+.assistant-claude-timeline .cr-task-turn.is-running .cr-task-turn-summary::before,
+.assistant-claude-timeline .cr-task-turn.is-pending .cr-task-turn-summary::before {
+  border-color: #a8bb4c;
+  animation: claude-timeline-runtime-marker 1.5s ease-out infinite;
+}
+
+.assistant-claude-timeline .cr-task-turn.is-running .cr-task-turn-summary,
+.assistant-claude-timeline .cr-task-turn.is-pending .cr-task-turn-summary,
+.assistant-claude-timeline[data-status="running"] .cr-tool-summary {
+  /* Active state belongs to the timeline marker, not a fluorescent row fill.
+     The previous gradient made long public summaries look like a green alert. */
+  background: transparent;
+  color: #5e5c57;
+  animation: none;
+}
+
+.assistant-claude-timeline .cr-task-turn.is-failed .cr-task-turn-summary::before {
+  border-color: #b5544b;
+}
+
+.assistant-claude-timeline .cr-task-turn-summary > span:first-child {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.assistant-claude-timeline .cr-task-turn-summary small {
+  min-width: 0;
+  overflow: hidden;
+  color: #97958f;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-claude-timeline .cr-task-turn .cr-run-detail {
+  margin-top: 1px;
+}
+
+.assistant-claude-timeline .cr-run-detail::before {
+  position: absolute;
+  top: 6px;
+  bottom: 10px;
+  left: 3px;
+  width: 1px;
+  background: #dfded9;
+  content: "";
+}
+
+.assistant-claude-timeline .cr-run-step {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  color: #777570;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.assistant-claude-timeline .cr-run-step-row {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+  gap: 9px;
+}
+
+.assistant-claude-timeline .cr-step-symbol {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 17px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-left: -27px;
+  background: var(--cr-bg);
+  color: #a5a39e;
+}
+
+.assistant-claude-timeline .cr-step-symbol.is-done { color: #96948f; }
+.assistant-claude-timeline .cr-step-symbol.is-note { color: #b5544b; }
+
+.assistant-claude-timeline .cr-runtime-marker .cr-node-symbol.is-complete {
+  color: #96948f;
+}
+
+.assistant-claude-timeline .cr-runtime-marker .cr-node-symbol.is-failed {
+  color: #b5544b;
+}
+
+.assistant-claude-timeline .cr-runtime-marker .cr-node-symbol.is-pending {
+  color: #aaa8a1;
+}
+
+.assistant-claude-timeline .cr-run-step-button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 26px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+
+.assistant-claude-timeline .cr-run-step-button > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-claude-timeline .cr-step-icon {
+  flex: 0 0 auto;
+  color: #aaa8a2;
+}
+
+.assistant-claude-timeline .cr-step-status {
+  flex: 0 0 auto;
+  color: #a2a09b;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.assistant-claude-timeline .cr-run-step[data-status="succeeded"] .cr-step-status {
+  display: none;
+}
+
+.assistant-claude-timeline .cr-run-step-button small {
+  min-width: 0;
+  overflow: hidden;
+  color: #8f8d88;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-claude-timeline .cr-run-step-button > svg {
+  flex: 0 0 auto;
+  color: #aaa8a2;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.assistant-claude-timeline .cr-run-step-button:hover,
+.assistant-claude-timeline .cr-run-step.is-expanded {
+  background: rgba(255, 255, 255, 0.45);
+  color: #4b4944;
+}
+
+.assistant-claude-timeline .cr-run-step-button:hover > svg,
+.assistant-claude-timeline .cr-run-step-button[aria-expanded="true"] > svg {
+  opacity: 1;
+}
+
+.assistant-claude-timeline .cr-run-step-expand {
+  position: relative;
+  min-width: 0;
+  margin: 1px 0 6px;
+  padding: 0 0 0 0;
+}
+
+.assistant-claude-timeline .cr-public-summary,
+.assistant-claude-timeline .cr-public-muted,
+.assistant-claude-timeline .cr-node-error {
+  margin: 0 0 7px;
+  overflow-wrap: anywhere;
+  color: #66645f;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.assistant-claude-timeline .cr-public-muted { color: #999791; }
+
+.assistant-claude-timeline .cr-analysis-runtime { margin: 0; }
+
+/* Evidence appears only when the search adapter returned public sources. The
+   compact, bounded list follows the Claude reference without turning a trace
+   step into a permanent card wall. */
+.assistant-claude-timeline .cr-search-evidence {
+  min-width: 0;
+  margin: 2px 0 8px;
+}
+
+.assistant-claude-timeline .cr-search-evidence-header {
+  display: flex;
+  min-width: 0;
+  min-height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px;
+  color: #6e6c67;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.assistant-claude-timeline .cr-search-evidence-header > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-claude-timeline .cr-search-evidence-header svg { flex: 0 0 auto; color: #999790; }
+
+.assistant-claude-timeline .cr-search-evidence-header small {
+  flex: 0 0 auto;
+  color: #96948e;
+  font-size: 11px;
+}
+
+.assistant-claude-timeline .cr-search-source-list {
+  display: grid;
+  max-height: 186px;
+  overflow-y: auto;
+  border: 1px solid color-mix(in oklch, var(--cr-line) 88%, transparent);
+  border-radius: 7px;
+  background: color-mix(in oklch, var(--cr-paper) 78%, transparent);
+  padding: 3px;
+  scrollbar-gutter: stable;
+}
+
+.assistant-claude-timeline .cr-search-source {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 15px minmax(0, 1fr) minmax(72px, auto);
+  align-items: center;
+  column-gap: 7px;
+  border-radius: 4px;
+  padding: 5px 5px;
+  color: #4e4c47;
+  font-size: 12px;
+  line-height: 17px;
+  text-decoration: none;
+}
+
+.assistant-claude-timeline .cr-search-source:hover,
+.assistant-claude-timeline .cr-search-source:focus-visible {
+  background: #efefec;
+  color: #302f2b;
+  outline: 0;
+}
+
+.assistant-claude-timeline .cr-search-source > svg {
+  grid-row: 1;
+  color: #9a9892;
+}
+
+.assistant-claude-timeline .cr-search-source-title {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-claude-timeline .cr-search-source small {
+  min-width: 0;
+  overflow: hidden;
+  color: #908e88;
+  font-size: 11px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-claude-timeline .cr-search-source p {
+  display: -webkit-box;
+  grid-column: 2 / -1;
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: #85837e;
+  font-size: 11px;
+  line-height: 15px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Remote evidence keeps the discovery/import distinction explicit: users can
+   inspect candidate files without mistaking discovery for a saved document. */
+.assistant-claude-timeline .cr-remote-materials,
+.assistant-claude-timeline .cr-remote-import {
+  min-width: 0;
+  margin: 4px 0 9px;
+  border: 1px solid #e2e1dc;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 62%);
+  padding: 10px;
+}
+
+.assistant-claude-timeline .cr-remote-materials > header,
+.assistant-claude-timeline .cr-remote-import > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #52504b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.assistant-claude-timeline .cr-remote-materials > header > span,
+.assistant-claude-timeline .cr-remote-import > header > span,
+.assistant-claude-timeline .cr-remote-import > p,
+.assistant-claude-timeline .cr-remote-import-actions a {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.assistant-claude-timeline .cr-remote-materials header svg,
+.assistant-claude-timeline .cr-remote-import header svg,
+.assistant-claude-timeline .cr-remote-import > p svg { flex: 0 0 auto; color: #97958f; }
+.assistant-claude-timeline .cr-remote-materials > header small,
+.assistant-claude-timeline .cr-remote-import > header small { color: #94918b; font-size: 11px; }
+.assistant-claude-timeline .cr-remote-import > header small.is-ready { color: #3e7a61; }
+.assistant-claude-timeline .cr-remote-import > header small.is-attention { color: #9b6a36; }
+
+.assistant-claude-timeline .cr-remote-materials > p {
+  margin: 4px 0 8px;
+  color: #797771;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.assistant-claude-timeline .cr-remote-material-list { display: grid; gap: 3px; }
+.assistant-claude-timeline .cr-remote-material-list a {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 15px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 7px;
+  border-radius: 4px;
+  padding: 5px;
+  color: #4d4b46;
+  font-size: 12px;
+  line-height: 16px;
+  text-decoration: none;
+}
+
+.assistant-claude-timeline .cr-remote-material-list a:hover,
+.assistant-claude-timeline .cr-remote-material-list a:focus-visible { background: #efefec; color: #302f2b; outline: 0; }
+.assistant-claude-timeline .cr-remote-material-list a > svg { color: #98968f; }
+.assistant-claude-timeline .cr-remote-material-list span { display: grid; min-width: 0; }
+.assistant-claude-timeline .cr-remote-material-list strong,
+.assistant-claude-timeline .cr-remote-import > strong { overflow: hidden; color: #42413c; font-size: 12px; font-weight: 570; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-claude-timeline .cr-remote-material-list small { overflow: hidden; color: #8a8781; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+
+.assistant-claude-timeline .cr-remote-import > strong { display: block; margin-top: 7px; font-size: 13px; }
+.assistant-claude-timeline .cr-remote-import > p { margin: 4px 0 8px; color: #797771; font-size: 11px; }
+.assistant-claude-timeline .cr-remote-import-actions { display: flex; flex-wrap: wrap; gap: 5px; }
+.assistant-claude-timeline .cr-remote-import-actions a {
+  min-height: 25px;
+  border-radius: 4px;
+  padding: 3px 7px;
+  color: #64625c;
+  font-size: 11px;
+  text-decoration: none;
+}
+.assistant-claude-timeline .cr-remote-import-actions a:hover,
+.assistant-claude-timeline .cr-remote-import-actions a:focus-visible { background: #efefec; color: #302f2b; outline: 0; }
+
+.assistant-claude-timeline .cr-runtime-summary {
+  display: grid;
+  width: 100%;
+  min-height: 28px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgb(56, 56, 53);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: left;
+}
+
+.assistant-claude-timeline .cr-runtime-summary > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.assistant-claude-timeline .cr-runtime-summary > span svg { color: #aaa8a1; }
+
+.assistant-claude-timeline .cr-runtime-summary > svg {
+  color: #a2a09b;
+  opacity: 0;
+}
+
+.assistant-claude-timeline .cr-runtime-summary:hover,
+.assistant-claude-timeline .cr-runtime-summary:hover > svg,
+.assistant-claude-timeline .cr-runtime-summary[aria-expanded="true"] > svg {
+  color: #474540;
+  opacity: 1;
+}
+
+.assistant-claude-timeline .cr-runtime-count {
+  color: #96948e;
+  font-size: 12px;
+}
+
+.assistant-claude-timeline .cr-runtime-timeline {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  margin: 5px 0 10px 9px;
+  padding: 0 0 0 25px;
+}
+
+.assistant-claude-timeline .cr-runtime-timeline::before {
+  position: absolute;
+  top: 8px;
+  bottom: 9px;
+  left: 3px;
+  width: 1px;
+  background: #dfded9;
+  content: "";
+}
+
+.assistant-claude-timeline .cr-runtime-node { position: relative; min-width: 0; }
+
+.assistant-claude-timeline .cr-runtime-timeline.is-running::before {
+  animation: claude-timeline-runtime-line 1.6s ease-in-out infinite;
+}
+
+.assistant-claude-timeline .cr-runtime-marker {
+  position: absolute;
+  z-index: 1;
+  top: 2px;
+  left: -25px;
+  display: grid;
+  width: 18px;
+  height: 19px;
+  place-items: center;
+  background: var(--cr-bg);
+  color: #9e9c96;
+}
+
+.assistant-claude-timeline .cr-runtime-node.is-running .cr-runtime-marker::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(108, 105, 150, 0.48);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+  animation: claude-timeline-runtime-marker 1.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.assistant-claude-timeline .cr-runtime-node-body { min-width: 0; }
+
+.assistant-claude-timeline .cr-thought-copy {
+  color: #4f4e49;
+  font-size: 14px;
+  line-height: 1.44;
+}
+
+.assistant-claude-timeline .cr-thought-copy p {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.assistant-claude-timeline .cr-thought-copy p:last-child { margin-bottom: 0; }
+
+.assistant-claude-timeline .cr-thought-copy small {
+  flex: 0 0 auto;
+  color: #96948e;
+  font-size: 12px;
+}
+
+.assistant-claude-timeline .cr-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.assistant-claude-timeline .cr-inline-actions button,
+.assistant-claude-timeline .cr-inline-action {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #777570;
+  font-size: 12px;
+}
+
+.assistant-claude-timeline .cr-inline-actions button:hover,
+.assistant-claude-timeline .cr-inline-action:hover {
+  background: #efefec;
+  color: #302f2b;
+}
+
+@media (max-width: 520px) {
+  .assistant-claude-timeline .cr-tool-summary,
+  .assistant-claude-timeline .cr-run-step,
+  .assistant-claude-timeline .cr-runtime-summary,
+  .assistant-claude-timeline .cr-thought-copy {
+    font-size: 13px;
+  }
+
+  .assistant-claude-timeline .cr-run-step-button small { display: none; }
+  .assistant-claude-timeline .cr-runtime-timeline { margin-left: 5px; padding-left: 23px; }
+  .assistant-claude-timeline .cr-runtime-marker { left: -23px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-claude-timeline .cr-tool-grid,
+  .assistant-claude-timeline .cr-command-grid,
+  .assistant-claude-timeline .cr-runtime-grid {
+    transition: none;
+  }
+
+  .assistant-claude-timeline .cr-group-spinner,
+  .assistant-claude-timeline .cr-step-symbol-active svg,
+  .assistant-claude-timeline .cr-node-spinner,
+  .assistant-claude-timeline .cr-runtime-timeline.is-running::before,
+  .assistant-claude-timeline .cr-runtime-node.is-running .cr-runtime-marker::after {
+    animation: none;
+  }
+
+  .assistant-claude-timeline .cr-task-turn.is-running .cr-task-turn-summary,
+  .assistant-claude-timeline .cr-task-turn.is-pending .cr-task-turn-summary,
+  .assistant-claude-timeline[data-status="running"] .cr-tool-summary {
+    animation: none;
+  }
+}

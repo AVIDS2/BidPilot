@@ -85,7 +85,7 @@ jobs:
           DOCPILOT_ENV: production
           DOCPILOT_LANGGRAPH_CHECKPOINTER: postgres
           DOCPILOT_AGENT_CHECKPOINTER: postgres
-          DOCPILOT_ASSISTANT_ENGINE: operator
+          DOCPILOT_ASSISTANT_ENGINE: harness
           USE_LANGGRAPH: "true"
           DOCPILOT_POSTGRES_DB: ${{ secrets.DOCPILOT_POSTGRES_DB }}
           DOCPILOT_POSTGRES_USER: ${{ secrets.DOCPILOT_POSTGRES_USER }}
@@ -95,4 +95,6 @@ jobs:
           DOCPILOT_SMTP_USER: ${{ secrets.DOCPILOT_SMTP_USER }}
           DOCPILOT_SMTP_PASS: ${{ secrets.DOCPILOT_SMTP_PASS }}
           DOCPILOT_SMTP_FROM: ${{ secrets.DOCPILOT_SMTP_FROM }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DOCPILOT_RESEND_FROM: ${{ secrets.DOCPILOT_RESEND_FROM }}
           DOCPILOT_PROVIDER_DOMESTIC_API_KEY: ${{ secrets.DOCPILOT_PROVIDER_DOMESTIC_API_KEY }}

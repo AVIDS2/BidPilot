@@ -11,6 +11,14 @@ from ._history import record_agent_call
 logger = logging.getLogger(__name__)
 
 
+def _effective_review_status(state: BidPilotState) -> str:
+    """Keep persisted graphs and focused node tests compatible with old state."""
+    status = state.get("review_status")
+    if status and status != "not_started":
+        return status
+    return "passed" if state.get("review_passed") else "failed"
+
+
 def _deterministic_routing(state: BidPilotState) -> str:
     """Choose the next graph node from durable workflow state only."""
     if not state.get("requirements_parsed"):
@@ -23,9 +31,9 @@ def _deterministic_routing(state: BidPilotState) -> str:
         return "content_plan"
     if not state.get("draft_created"):
         return "section_drafter"
-    if not state.get("review_passed") and state.get("review_result") is None:
+    if state.get("review_result") is None:
         return "quality_reviewer"
-    if state.get("review_passed") and state.get("human_decision") is None:
+    if _effective_review_status(state) in {"passed", "degraded"} and state.get("human_decision") is None:
         return "human_approval"
     if state.get("human_decision") == "rejected_with_feedback":
         # Re-plan on human rejection so feedback can reshape the outline.
@@ -54,6 +62,7 @@ def supervisor_node(state: BidPilotState) -> dict:
             f"retrieved={state.get('evidence_retrieved')}, "
             f"draft={state.get('draft_created')}, "
             f"review_passed={state.get('review_passed')}, "
+            f"review_status={state.get('review_status')}, "
             f"human_decision={state.get('human_decision')}"
         ),
         output_summary=f"iteration={current_iteration}, routing=deterministic, target={target}",
@@ -68,10 +77,14 @@ def route_after_review(state: BidPilotState) -> str:
     if state.get("error"):
         return "failed"
     review_passed: bool = state.get("review_passed", False)
+    review_status = _effective_review_status(state)
     iteration: int = state.get("iteration", 0)
     max_iterations: int = state.get("max_iterations", 3)
     if review_passed:
         logger.info("Review passed on iteration %d — persisting review candidate", iteration)
+        return "persist_result"
+    if review_status == "degraded":
+        logger.warning("Review model degraded on iteration %d — persisting for human review", iteration)
         return "persist_result"
     if iteration < max_iterations:
         logger.info(
@@ -86,7 +99,7 @@ def route_after_review(state: BidPilotState) -> str:
 
 def route_after_persist(state: BidPilotState) -> str:
     """Pause only after the immutable review candidate has been committed."""
-    if state.get("review_passed") and state.get("human_decision") is None:
+    if _effective_review_status(state) in {"passed", "degraded"} and state.get("human_decision") is None:
         return "human_approval"
     return "memory_proposals"
 

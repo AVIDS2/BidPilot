@@ -12,11 +12,14 @@ import { useTranslation } from "react-i18next";
 const NODE_LABELS: Record<string, string> = {
   supervisor: "调度规划",
   rfp_parser: "解析资料",
+  memory_context: "加载项目记忆",
   knowledge_retriever: "检索证据",
+  content_plan: "编排响应计划",
   section_drafter: "起草章节",
   quality_reviewer: "质量审核",
   human_approval: "人工确认",
   persist_result: "保存结果",
+  memory_proposals: "知识提案",
   workflow: "工作流",
 };
 

@@ -140,8 +140,40 @@ def test_quality_reviewer_records_governed_model_usage(monkeypatch):
     )
 
     assert result["review_passed"] is True
+    assert result["review_status"] == "passed"
     assert captured["begin"]["workload"] == "workflow_quality_review"
     assert captured["usage"]["reservation_key"] == "review-call"
+
+
+def test_quality_reviewer_provider_failure_requires_human_review(monkeypatch):
+    monkeypatch.setattr(reviewer_module, "resolve_structured_provider", lambda _config_id: (None, "openai"))
+    monkeypatch.setattr(
+        reviewer_module,
+        "invoke_structured_text",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            ProviderInvocationError("provider_response_invalid", "invalid", retryable=True)
+        ),
+    )
+
+    result = reviewer_module.quality_reviewer_node(
+        {
+            "project_id": "project-1",
+            "section_key": "summary",
+            "run_id": "run-1",
+            "provider_config_id": None,
+            "reasoning_effort": None,
+            "iteration": 1,
+            "draft_markdown": "A" * 300,
+            "requirements": [],
+            "evidence_chunks": [{"chunk_id": "chunk-1", "content": "evidence"}],
+        }
+    )
+
+    assert result["review_passed"] is False
+    assert result["review_status"] == "degraded"
+    assert result["review_degradation_code"] == "provider_response_invalid"
+    assert result["error"] is None
+    assert "人工复核" in result["review_result"]["issues"][0]
 
 
 def test_quality_reviewer_reloads_authorized_evidence_instead_of_state_payload(monkeypatch):

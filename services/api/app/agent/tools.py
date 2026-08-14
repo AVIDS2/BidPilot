@@ -449,12 +449,24 @@ def create_tools(
             )
             if bundle.project_id != project.id:
                 return json.dumps({"error": "资料包不属于当前项目"}, ensure_ascii=False)
-            items = list_documents_query(db, bundle_id, user)
+            document_rows = [(bundle.label, bundle.ingest_status, item) for item in list_documents_query(db, bundle_id, user)]
         else:
-            items = []
+            document_rows = []
+            for bundle in list_bundles_query(db, project.id, current_user=user):
+                document_rows.extend(
+                    (bundle.label, bundle.ingest_status, item)
+                    for item in list_documents_query(db, bundle.id, user)
+                )
         result = [
-            {"id": d.id, "filename": d.original_filename, "status": d.parse_status}
-            for d in items
+            {
+                "id": document.id,
+                "filename": document.original_filename,
+                "status": document.parse_status,
+                "index_status": document.index_status,
+                "bundle_label": bundle_label,
+                "bundle_status": bundle_status,
+            }
+            for bundle_label, bundle_status, document in document_rows
         ]
         return json.dumps({"documents": result, "count": len(result)}, ensure_ascii=False)
 

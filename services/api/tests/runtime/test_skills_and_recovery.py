@@ -73,3 +73,31 @@ def test_outline_auto_recovery_can_disable(monkeypatch: pytest.MonkeyPatch) -> N
             user=object(),  # type: ignore[arg-type]
             arguments={"project_id": "not-real"},
         )
+
+
+def test_skill_index_block_lists_metadata_without_bodies() -> None:
+    """Level-1 index exposes name+description, never the full body."""
+    from app.runtime.skills import build_skill_index, build_skill_index_block
+
+    index = build_skill_index()
+    assert any(s.name == "bid-outline-first" for s in index)
+    block = build_skill_index_block()
+    assert "AVAILABLE_SKILLS:" in block
+    # The index must carry the routing description...
+    assert "section_key" in block or "outline" in block
+    # ...but not the full procedural body (Level 2 stays lazy).
+    assert "get_project_outline" not in block
+
+
+def test_select_skill_routes_on_description_and_legacy_zh() -> None:
+    """New-style skills route on description; legacy packs keep zh triggers."""
+    from app.runtime.skills import select_skill_names
+
+    # Legacy Chinese trigger still works for existing packs.
+    assert "bid-outline-first" in select_skill_names("请起草执行摘要全部章节")
+    # English description keyword route also works.
+    assert "bid-outline-first" in select_skill_names("draft a technical response")
+    assert "bid-research" in select_skill_names("研究一下竞品")
+    assert "bid-research" in select_skill_names("research the market")
+    # Unrelated input matches nothing.
+    assert select_skill_names("今天天气怎么样") == []

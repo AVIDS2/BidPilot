@@ -44,6 +44,14 @@ celery_app.conf.update(
 )
 
 celery_app.conf.beat_schedule = {
+    "deliver-business-webhooks-every-30-seconds": {
+        "task": "worker.deliver_due_webhooks",
+        "schedule": 30.0,
+    },
+    "poll-tender-radar-sources-minutely": {
+        "task": "worker.poll_due_notice_sources",
+        "schedule": crontab(minute="*"),
+    },
     "recover-workflow-task-outbox-minutely": {
         "task": "worker.recover_task_outbox_events",
         "schedule": crontab(minute="*"),

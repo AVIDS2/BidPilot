@@ -5,11 +5,44 @@ import pytest
 from tenacity import wait_none
 
 from app.adapters.llm import DraftResult
+from app.adapters import llm as llm_module
 from app.adapters.provider_errors import ProviderInvocationError
 from app.graph.nodes import section_drafter as section_drafter_module
 from app.graph.nodes.section_drafter import section_drafter_node
 from app.graph.nodes.supervisor import route_after_draft
 from app.retrieval.evidence_sets import EvidenceSetItemSnapshot, EvidenceSetSnapshot
+
+
+def test_draft_prompt_forbids_reasoning_transcript():
+    prompt = llm_module._build_prompt("exec-summary", ["evidence"])
+
+    assert llm_module._MAX_DRAFT_OUTPUT_TOKENS == 4_096
+    assert "Output only the final markdown section" in prompt
+    assert "chain-of-thought" in prompt
+
+
+def test_deepseek_v4_draft_disables_thinking(monkeypatch):
+    captured: dict = {}
+
+    monkeypatch.setattr(llm_module, "_api_key", lambda: "test-key")
+    monkeypatch.setattr(llm_module, "_api_url", lambda: "https://api.deepseek.com/v1/chat/completions")
+    monkeypatch.setattr(llm_module, "_api_model", lambda: "deepseek-v4-flash")
+    monkeypatch.setattr(
+        llm_module.httpx,
+        "post",
+        lambda _url, **kwargs: (
+            captured.update(kwargs["json"])
+            or SimpleNamespace(
+                status_code=200,
+                json=lambda: {"choices": [{"message": {"content": "## Draft"}}]},
+            )
+        ),
+    )
+
+    llm_module.draft_section("summary", [], "project-1", reasoning_effort="high")
+
+    assert captured["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in captured
 
 
 def test_section_drafter_increments_draft_iteration(monkeypatch):

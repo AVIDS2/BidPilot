@@ -5,6 +5,7 @@ import {
   isRuntimeEventNewer,
   isRuntimeSequenceNewer,
   isTerminalRuntimeEvent,
+  recoverRuntimeMessageFromEvents,
   runtimeEventToAssistantEvents,
   type RuntimeEventRead,
 } from "./runtime-event-feed";
@@ -55,6 +56,252 @@ describe("runtime event feed", () => {
     expect(isTerminalRuntimeEvent(runtimeEvent({ type: "run.completed" }))).toBe(true);
     expect(isTerminalRuntimeEvent(runtimeEvent({ type: "run.failed" }))).toBe(true);
     expect(isTerminalRuntimeEvent(runtimeEvent({ type: "capability.started" }))).toBe(false);
+  });
+
+  it("replays a durable harness execution plan before the capability starts", () => {
+    const events = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        event_id: "event-plan-1",
+        parent_event_id: "event-turn-1",
+        type: "plan.proposed",
+        public_summary: "执行计划：入库远程资料。",
+        payload: {
+          stage: "tool_plan",
+          turn_id: "turn-1",
+          items: [
+            {
+              id: "call-1",
+              capability: "fetch_url_to_project",
+              title: "入库远程资料",
+              status: "planned",
+            },
+          ],
+        },
+      }),
+      "conversation-1",
+    );
+
+    expect(events).toEqual([
+      {
+        eventType: "assistant.plan_updated",
+        data: {
+          runtime_run_id: "runtime-1",
+          runtime_event_id: "event-plan-1",
+          runtime_parent_event_id: "event-turn-1",
+          runtime_sequence: 2,
+          turn_id: "turn-1",
+          summary: "执行计划：入库远程资料。",
+          items: [
+            {
+              id: "call-1",
+              capability: "fetch_url_to_project",
+              title: "入库远程资料",
+              status: "planned",
+            },
+          ],
+          state: "thinking",
+        },
+      },
+    ]);
+  });
+
+  it("projects a durable approval boundary into one confirmation and one pause", () => {
+    const events = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        event_id: "event-approval-1",
+        parent_event_id: "event-turn-1",
+        type: "approval.requested",
+        public_summary: "创建项目需要你的确认。",
+        payload: {
+          action_id: "action-1",
+          approval_id: "approval-1",
+          capability: "create_project",
+          turn_id: "turn-1",
+          title: "创建项目",
+          arguments: { name: "投标项目" },
+          message: "确认创建项目「投标项目」吗？",
+        },
+      }),
+      "conversation-1",
+    );
+
+    expect(events).toEqual([
+      {
+        eventType: "assistant.confirmation_requested",
+        data: {
+          runtime_run_id: "runtime-1",
+          runtime_event_id: "event-approval-1",
+          runtime_parent_event_id: "event-turn-1",
+          runtime_sequence: 2,
+          conversation_id: "conversation-1",
+          approval_id: "approval-1",
+          tool_name: "create_project",
+          tool_call_id: "action-1",
+          turn_id: "turn-1",
+          title: "创建项目",
+          arguments: { name: "投标项目" },
+          message: "确认创建项目「投标项目」吗？",
+          requires_typed_confirmation: false,
+          state: "needs_confirmation",
+        },
+      },
+      {
+        eventType: "assistant.end",
+        data: {
+          runtime_run_id: "runtime-1",
+          runtime_event_id: "event-approval-1",
+          runtime_parent_event_id: "event-turn-1",
+          runtime_sequence: 2,
+          conversation_id: "conversation-1",
+          state: "needs_confirmation",
+        },
+      },
+    ]);
+  });
+
+  it("does not duplicate a final message after durable deltas were rendered", () => {
+    const delta = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        event_id: "event-message-1",
+        type: "message.delta",
+        public_summary: "项目已创建。",
+        payload: { turn_id: "turn-1" },
+      }),
+      "conversation-1",
+    );
+    const completed = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        event_id: "event-message-2",
+        parent_event_id: "event-turn-1",
+        sequence: 3,
+        type: "message.completed",
+        public_summary: "项目已创建。",
+        payload: { turn_id: "turn-1", delta_emitted: true },
+      }),
+      "conversation-1",
+    );
+
+    expect(delta).toHaveLength(1);
+    expect(delta[0].data.content).toBe("项目已创建。");
+    expect(completed).toEqual([]);
+  });
+
+  it("recovers a completed message even when delta replay was intentionally suppressed", () => {
+    const recovered = recoverRuntimeMessageFromEvents("runtime-1", [
+      runtimeEvent({
+        sequence: 4,
+        type: "message.delta",
+        public_summary: "当前有 ",
+        timestamp: "2026-08-06T01:00:00.000Z",
+      }),
+      runtimeEvent({
+        sequence: 5,
+        type: "message.delta",
+        public_summary: "3 个项目。",
+        timestamp: "2026-08-06T01:00:00.100Z",
+      }),
+      runtimeEvent({
+        sequence: 6,
+        type: "message.completed",
+        public_summary: "当前有 3 个项目。",
+        payload: { delta_emitted: true },
+        timestamp: "2026-08-06T01:00:00.200Z",
+      }),
+    ]);
+
+    expect(recovered).toEqual({
+      runId: "runtime-1",
+      content: "当前有 3 个项目。",
+      timestamp: Date.parse("2026-08-06T01:00:00.200Z"),
+    });
+  });
+
+  it("falls back to concatenated message deltas for an interrupted terminal event", () => {
+    expect(
+      recoverRuntimeMessageFromEvents("runtime-1", [
+        runtimeEvent({ type: "message.delta", public_summary: "回复的" }),
+        runtimeEvent({ type: "message.delta", public_summary: "一部分" }),
+      ]),
+    ).toMatchObject({ runId: "runtime-1", content: "回复的一部分" });
+  });
+
+  it("maps Harness-authored reasoning into chronological assistant events", () => {
+    const delta = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        event_id: "event-reasoning-1",
+        type: "reasoning.delta",
+        public_summary: "先核对项目资料与已上传文件。",
+        payload: { turn_id: "turn-1", source: "harness" },
+      }),
+      "conversation-1",
+    );
+    const completed = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        event_id: "event-reasoning-2",
+        parent_event_id: "event-reasoning-1",
+        sequence: 3,
+        type: "reasoning.completed",
+        public_summary: "",
+        payload: { turn_id: "turn-1", source: "harness" },
+      }),
+      "conversation-1",
+    );
+
+    expect(delta).toEqual([
+      {
+        eventType: "assistant.reasoning",
+        data: {
+          runtime_run_id: "runtime-1",
+          runtime_event_id: "event-reasoning-1",
+          runtime_sequence: 2,
+          turn_id: "turn-1",
+          content: "先核对项目资料与已上传文件。",
+          title: "先核对项目资料与已上传文件。",
+          source: "harness",
+          state: "thinking",
+        },
+      },
+    ]);
+    expect(completed).toEqual([
+      {
+        eventType: "assistant.reasoning_completed",
+        data: {
+          runtime_run_id: "runtime-1",
+          runtime_event_id: "event-reasoning-2",
+          runtime_parent_event_id: "event-reasoning-1",
+          runtime_sequence: 3,
+          turn_id: "turn-1",
+          source: "harness",
+          state: "thinking",
+        },
+      },
+    ]);
+  });
+
+  it("does not replay raw provider thought into the conversation", () => {
+    const events = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        type: "reasoning.delta",
+        public_summary: "The system prompt says to call a tool.",
+        payload: { turn_id: "turn-1", source: "provider" },
+      }),
+      "conversation-1",
+    );
+
+    expect(events).toEqual([]);
+  });
+
+  it("does not replay retired generic Harness narration", () => {
+    const events = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        type: "reasoning.delta",
+        public_summary: "为推进当前任务，我先导出交付物，再根据真实结果决定下一步。",
+        payload: { turn_id: "turn-1", source: "harness" },
+      }),
+      "conversation-1",
+    );
+
+    expect(events).toEqual([]);
   });
 
   it("treats an entity-relation proposal as a workflow without exposing source details", () => {

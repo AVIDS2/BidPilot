@@ -89,6 +89,89 @@ def test_action_key_executes_mutation_once_after_replay(
     assert calls == [{"name": "Only Once"}]
 
 
+def test_runtime_action_events_keep_turn_and_parent_lineage(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    """Replay can rebuild one public action tree without parsing action keys."""
+    run = _runtime_run(test_db, default_org_id, default_user_id, approval_mode="full_access")
+
+    execution = execute_capability(
+        test_db,
+        _user(default_org_id, default_user_id),
+        run_id=run.id,
+        capability_name="create_project",
+        arguments={"name": "Lineage Project"},
+        action_key="lineage-tool-call",
+        parent_event_id="turn-event-1",
+        turn_id="turn-1",
+        executor=lambda _db, _user, arguments: {
+            "id": "lineage-project",
+            "name": arguments["name"],
+            "status": "created",
+        },
+    )
+
+    assert execution.action.parent_event_id == "turn-event-1"
+    assert execution.action.turn_id == "turn-1"
+    action_events = [
+        event
+        for event in list_events_after(test_db, run.id)
+        if event.event_type in {"capability.started", "capability.succeeded"}
+    ]
+    assert [event.event_type for event in action_events] == [
+        "capability.started",
+        "capability.succeeded",
+    ]
+    assert all(event.parent_event_id == "turn-event-1" for event in action_events)
+    assert all(event.payload_json["action_id"] == execution.action.id for event in action_events)
+    assert all(event.payload_json["turn_id"] == "turn-1" for event in action_events)
+
+
+def test_capability_success_keeps_a_result_title_without_breaking_the_trace(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    """A public deliverable title must not collide with event label metadata."""
+    project = Project(
+        org_id=default_org_id,
+        slug=f"event-title-{uuid.uuid4().hex[:8]}",
+        name="Event title project",
+        scenario_package="bidpilot",
+    )
+    test_db.add(project)
+    test_db.commit()
+    test_db.refresh(project)
+    run = _runtime_run(test_db, default_org_id, default_user_id, approval_mode="full_access")
+    run.project_id = project.id
+    test_db.commit()
+
+    execution = execute_capability(
+        test_db,
+        _user(default_org_id, default_user_id),
+        run_id=run.id,
+        capability_name="create_deliverable",
+        arguments={"project_id": project.id, "title": "带标题的交付物"},
+        action_key="deliverable-title-event",
+        executor=lambda _db, _user, _arguments: {
+            "id": "deliverable-title-1",
+            "title": "带标题的交付物",
+            "status": "draft",
+        },
+    )
+
+    succeeded = [
+        event
+        for event in list_events_after(test_db, run.id)
+        if event.event_type == "capability.succeeded"
+    ]
+    assert execution.action.status == RuntimeActionStatus.SUCCEEDED.value
+    assert len(succeeded) == 1
+    assert succeeded[0].payload_json["title"] == "带标题的交付物"
+
+
 def test_project_scoped_runtime_action_writes_correlation_only_audit_event(
     test_db,
     default_org_id: str,

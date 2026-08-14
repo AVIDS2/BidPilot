@@ -18,7 +18,7 @@ from app.audit.router import router as audit_router
 from app.assistant.router import router as assistant_router
 from app.auth.router import router as auth_router
 from app.auth.service import require_admin, require_auth
-from app.core.settings import get_cors_origins
+from app.core.settings import get_cors_origin_regex, get_cors_origins
 from app.bundles.router import router as bundles_router
 from app.deliverables.router import router as deliverables_router
 from app.documents.router import router as documents_router
@@ -40,8 +40,14 @@ from app.billing.router import router as billing_router
 from app.teams.router import router as teams_router
 from app.organizations.router import router as organizations_router
 from app.chat.router import router as chat_router
+from app.changes.router import router as changes_router
+from app.collaboration.router import router as collaboration_router
+from app.content_library.router import router as content_library_router
+from app.opportunities.router import router as opportunities_router
 from app.providers.router import router as providers_router
 from app.response_plans.router import router as response_plans_router
+from app.radar.router import router as radar_router
+from app.webhooks.router import router as webhooks_router
 from app.invitations.router import router as invitations_router
 from app.usage.router import router as usage_router
 from app.notifications.router import router as notifications_router
@@ -125,6 +131,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
+    allow_origin_regex=get_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -162,6 +169,12 @@ app.include_router(invitations_router, dependencies=_protected)
 app.include_router(billing_router)
 app.include_router(notifications_router, dependencies=_protected)
 app.include_router(chat_router, dependencies=_protected)
+app.include_router(opportunities_router, dependencies=_protected)
+app.include_router(radar_router, dependencies=_protected)
+app.include_router(webhooks_router, dependencies=_protected)
+app.include_router(content_library_router, dependencies=_protected)
+app.include_router(changes_router, dependencies=_protected)
+app.include_router(collaboration_router, dependencies=_protected)
 app.include_router(assistant_router, dependencies=_protected)
 app.include_router(usage_router, dependencies=_protected)
 app.include_router(runtime_router, dependencies=_protected)

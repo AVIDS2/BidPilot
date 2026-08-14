@@ -7,14 +7,18 @@ from app.access.service import (
 from app.audit.service import record_audit_event
 from app.auth.schemas import CurrentUser
 from app.drafting.service import queue_resume_draft_run
-from app.email.service import send_review_notification_email
+from app.email.service import send_email_best_effort, send_review_notification_email
 from app.models import (
     Deliverable,
     DeliverableSection,
     ExecutionRun,
+    Notification,
     Project,
+    ProjectMember,
     ReviewComment,
+    User,
 )
+from app.notifications.service import notification_channel_enabled
 from app.outbox.service import request_task_outbox_dispatch
 
 from .decision_service import (
@@ -24,6 +28,32 @@ from .decision_service import (
 )
 from .repository import create_comment, list_comments_by_thread, list_threads_by_section
 from .schemas import ReviewCommentCreate, ReviewCommentRead, ReviewDecisionCreate, ReviewDecisionRead, ReviewThreadRead
+
+
+def _review_notification_recipients(
+    db: Session,
+    *,
+    project_id: str,
+    actor_user_id: str,
+) -> list[User]:
+    """Return collaborators who can act on a review update.
+
+    Project membership is the notification boundary. We deliberately skip the
+    actor, disabled accounts, and unverified addresses so an internal review
+    action cannot create an unsolicited or undeliverable email blast.
+    """
+    return list(
+        db.query(User)
+        .join(ProjectMember, ProjectMember.user_id == User.id)
+        .filter(
+            ProjectMember.project_id == project_id,
+            User.id != actor_user_id,
+            User.disabled.is_(False),
+            User.email_verified.is_(True),
+        )
+        .order_by(User.id)
+        .all()
+    )
 
 
 def submit_review_decision_command(
@@ -68,23 +98,48 @@ def submit_review_decision_command(
                 section_version_id=version.id,
             )
 
+    project = db.get(Project, deliverable.project_id) if decision_applied else None
+    recipients = (
+        _review_notification_recipients(
+            db,
+            project_id=deliverable.project_id,
+            actor_user_id=current_user.id,
+        )
+        if project is not None
+        else []
+    )
+    action_label = {
+        "approved": "已通过",
+        "rejected": "已退回修改",
+        "needs_revision": "需要修订",
+    }.get(decision, decision)
+    for recipient in recipients:
+        if notification_channel_enabled(db, user_id=recipient.id, category="review", channel="in_app"):
+            db.add(
+                Notification(
+                    user_id=recipient.id,
+                    type="review_decision",
+                    title=f"章节审核{action_label}",
+                    body=f"{project.name} - {section.title}",
+                    link=f"/projects/{deliverable.project_id}",
+                )
+            )
+
     db.commit()
     if outbox_event is not None:
         request_task_outbox_dispatch(outbox_event.id)
 
-    # Send notification email for review decision
-    if decision_applied:
-        try:
-            project = db.get(Project, deliverable.project_id)
-            if project:
-                send_review_notification_email(
-                    email="admin@docpilot.local",
+    for recipient in recipients:
+        if notification_channel_enabled(db, user_id=recipient.id, category="review", channel="email"):
+            send_email_best_effort(
+                lambda recipient_email=recipient.email: send_review_notification_email(
+                    email=recipient_email,
                     project_name=project.name,
                     section_title=section.title,
                     action=decision,
-                )
-        except Exception:
-            pass
+                ),
+                event="review.decision_notification",
+            )
 
     return ReviewDecisionRead(
         id=thread.id,

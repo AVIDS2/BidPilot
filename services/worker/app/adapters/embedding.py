@@ -228,7 +228,11 @@ def _request_embeddings(
             url,
             headers={"Authorization": f"Bearer {api_key}"},
             json=_request_payload(input_value, model),
-            timeout=60.0 if expected_count > 1 else 30.0,
+            # Indexing must recover quickly when a gateway is unhealthy.  A
+            # bounded Celery retry handles transient outages; keeping one HTTP
+            # request alive for a minute only makes the whole project appear
+            # stuck to the user.
+            timeout=20.0 if expected_count > 1 else 15.0,
         )
         response.raise_for_status()
         return _results_from_response(

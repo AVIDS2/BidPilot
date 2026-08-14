@@ -76,6 +76,61 @@ def test_structured_call_resolves_base_url_and_profile_headers(monkeypatch):
     assert captured["headers"] == {"api-key": "test-key", "content-type": "application/json"}
 
 
+def test_deepseek_v4_structured_call_enables_thinking_only_for_reasoning_nodes(monkeypatch):
+    captured: dict = {}
+
+    def fake_post(_url, **kwargs):
+        captured.update(kwargs)
+        return _Response({"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr(structured_llm.httpx, "post", fake_post)
+
+    structured_llm.invoke_structured_text(
+        system_prompt="system",
+        user_prompt="user",
+        provider_config={
+            "api_key": "test-key",
+            "api_url": "https://api.deepseek.com/v1/chat/completions",
+            "model": "deepseek-v4-flash",
+        },
+        provider_type="openai",
+        max_output_tokens=100,
+        temperature=0.1,
+        reasoning_effort="medium",
+    )
+
+    assert captured["json"]["thinking"] == {"type": "enabled"}
+    assert captured["json"]["reasoning_effort"] == "high"
+    assert "temperature" not in captured["json"]
+
+
+def test_opencode_go_structured_call_uses_pi_compatible_thinking_payload(monkeypatch):
+    captured: dict = {}
+
+    def fake_post(_url, **kwargs):
+        captured.update(kwargs)
+        return _Response({"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr(structured_llm.httpx, "post", fake_post)
+
+    structured_llm.invoke_structured_text(
+        system_prompt="system",
+        user_prompt="user",
+        provider_config={
+            "api_key": "test-key",
+            "api_url": "https://opencode.ai/zen/go/v1/chat/completions",
+            "model": "deepseek-v4-flash",
+        },
+        provider_type="openai",
+        max_output_tokens=100,
+        temperature=0.1,
+        reasoning_effort="medium",
+    )
+
+    assert captured["json"]["thinking"] == {"type": "enabled"}
+    assert "reasoning_effort" not in captured["json"]
+
+
 def test_anthropic_structured_call_uses_messages_protocol_and_normalizes_usage(monkeypatch):
     captured: dict = {}
 

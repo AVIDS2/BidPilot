@@ -92,6 +92,15 @@ PROVIDER_PROFILES: dict[str, ProviderProfile] = {
         docs_url="https://api-docs.deepseek.com/api/list-models",
         model_discovery="supported",
     ),
+    "opencode-go": ProviderProfile(
+        id="opencode-go",
+        protocol="openai",
+        auth_scheme="bearer",
+        default_base_url="https://opencode.ai/zen/go/v1",
+        default_model="deepseek-v4-flash",
+        docs_url="https://opencode.ai/go",
+        model_discovery="supported",
+    ),
     "deepseek-anthropic": ProviderProfile(
         id="deepseek-anthropic",
         protocol="anthropic",
@@ -219,6 +228,8 @@ def infer_provider_id(protocol: str, api_url: str | None) -> str:
         return "openai"
     if "api.deepseek.com" in value:
         return "deepseek"
+    if "opencode.ai/zen/go" in value:
+        return "opencode-go"
     if "dashscope.aliyuncs.com" in value:
         return "dashscope"
     if "ark.cn-beijing.volces.com" in value:

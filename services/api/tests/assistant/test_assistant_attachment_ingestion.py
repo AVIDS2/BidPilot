@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import subprocess
 import uuid
 
 import pytest
@@ -141,6 +142,30 @@ def test_attachment_upload_response_never_returns_extracted_document_text(
     payload = response.json()
     assert payload["extracted_text"] == ""
     assert "近三年类似项目业绩" not in response.text
+
+
+def test_image_attachment_is_ocr_extracted_before_the_assistant_turn(monkeypatch) -> None:
+    """Images are staged with server-side OCR text; the browser never supplies it."""
+    monkeypatch.setattr("app.assistant.attachments.shutil.which", lambda _name: "tesseract")
+    monkeypatch.setattr(
+        "app.assistant.attachments.subprocess.run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=["tesseract"],
+            returncode=0,
+            stdout="项目名称：示例投标\n技术响应要求：提供实施计划".encode(),
+            stderr=b"",
+        ),
+    )
+
+    extraction = extract_attachment_text(
+        filename="rfp-screenshot.png",
+        content_type="image/png",
+        data=b"not-read-by-the-mocked-ocr",
+        kind="image",
+    )
+
+    assert extraction.extraction_status == "extracted"
+    assert "技术响应要求" in extraction.extracted_text
 
 
 def test_staging_commit_failure_removes_private_object(

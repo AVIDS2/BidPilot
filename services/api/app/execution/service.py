@@ -95,6 +95,8 @@ def retry_failed_run_command(
         raise HTTPException(status_code=400, detail="Only failed or cancelled runs can be retried")
 
     section_key, review_feedback = _retryable_input(source_run)
+    source_max_iterations = (source_run.input_json or {}).get("max_iterations")
+    max_iterations = source_max_iterations if type(source_max_iterations) is int and 1 <= source_max_iterations <= 5 else None
     source_bridge = _workflow_bridge_for_execution_run(
         db,
         execution_run_id=source_run.id,
@@ -160,6 +162,7 @@ def retry_failed_run_command(
         input_json={
             "section_key": section_key,
             **({"review_feedback": review_feedback} if review_feedback else {}),
+            **({"max_iterations": max_iterations} if max_iterations is not None else {}),
             "retry_of_execution_run_id": source_run.id,
         },
     )
@@ -229,6 +232,8 @@ def retry_failed_run_command(
         task_kwargs["provider_config_id"] = provider_config_id
     if reasoning_effort:
         task_kwargs["reasoning_effort"] = reasoning_effort
+    if max_iterations is not None:
+        task_kwargs["max_iterations"] = max_iterations
     outbox_event = enqueue_workflow_task(
         db,
         org_id=current_user.org_id,

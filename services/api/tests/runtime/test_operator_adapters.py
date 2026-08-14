@@ -224,13 +224,20 @@ def test_harness_persists_content_free_prompt_assembly_trace(
     """Prompt traces prove assembly without retaining model-facing text again."""
     sensitive_marker = "test-sensitive-marker"
     llm = _HarnessLLM([_HarnessResponse("已收到。")])
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
     monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
     monkeypatch.setattr("app.runtime.operator_adapter.memory_context_for_agent", lambda *_args, **_kwargs: None)
 
     response = client.post("/assistant/stream", json={"message": sensitive_marker})
 
     assert response.status_code == 200
-    run = test_db.query(RuntimeRun).order_by(RuntimeRun.created_at.desc()).first()
+    events = _sse_events(response.text)
+    runtime_run_id = next(
+        payload["runtime_run_id"]
+        for event, payload in events
+        if event == "assistant.start" and "runtime_run_id" in payload
+    )
+    run = test_db.get(RuntimeRun, runtime_run_id)
     assert run is not None
     trace = (run.input_json or {}).get("context_assembly")
     assert isinstance(trace, dict)
@@ -271,7 +278,12 @@ def test_harness_client_construction_failure_stays_inside_sse_contract(
     event_type, payload = events[-1]
     assert event_type == "assistant.end"
     assert payload["state"] == "failed"
-    run = test_db.query(RuntimeRun).order_by(RuntimeRun.created_at.desc()).first()
+    runtime_run_id = next(
+        payload["runtime_run_id"]
+        for event, payload in events
+        if event == "assistant.start" and "runtime_run_id" in payload
+    )
+    run = test_db.get(RuntimeRun, runtime_run_id)
     assert run is not None
     assert run.status == "failed"
 
@@ -430,6 +442,8 @@ def test_operator_checkpointer_uses_postgres_when_not_explicitly_in_memory(
 ) -> None:
     close_operator_checkpointer()
     database_url = test_db.get_bind().url.render_as_string(hide_password=False)
+    if not database_url.startswith("postgresql"):
+        pytest.skip("PostgresSaver integration requires a PostgreSQL test database")
     monkeypatch.setenv("DOCPILOT_OPERATOR_CHECKPOINTER", "postgres")
     monkeypatch.setenv("DOCPILOT_DATABASE_URL", database_url)
 
@@ -523,13 +537,23 @@ def test_operator_graph_executes_claim_review_queue_through_runtime_boundary(
 
     assert result["final_message"] == "有 0 条 AI 主张等待人工核验，其中 0 条已具备核验条件。"
     events = list_events_after(test_db, run.id)
-    assert events[2].payload_json == {"capability": "list_claim_review_queue"}
-    assert events[3].payload_json == {
+    started = events[2].payload_json
+    succeeded = events[3].payload_json
+    assert started["capability"] == "list_claim_review_queue"
+    assert started["title"] == "查看待核验主张"
+    assert isinstance(started["action_id"], str)
+    assert {key: succeeded[key] for key in (
+        "capability",
+        "count",
+        "ready_to_verify_count",
+        "blocked_by_evidence_count",
+    )} == {
         "capability": "list_claim_review_queue",
         "count": 0,
         "ready_to_verify_count": 0,
         "blocked_by_evidence_count": 0,
     }
+    assert succeeded["action_id"] == started["action_id"]
 
 
 def test_operator_graph_keeps_missing_input_as_a_durable_plan(
@@ -807,8 +831,13 @@ def test_operator_engine_renders_durable_events_for_existing_assistant_client(
     assert run.engine == "streaming_harness"
     assert [event.event_type for event in list_events_after(test_db, run.id)] == [
         "run.started",
+        "plan.updated",
+        "plan.proposed",
         "capability.started",
         "capability.succeeded",
+        "plan.updated",
+        "plan.updated",
+        "message.delta",
         "message.completed",
         "run.completed",
     ]
@@ -867,8 +896,9 @@ def test_operator_engine_persists_and_reuses_structured_missing_input(
     )
 
     assert second.status_code == 200
-    assert "pending_input_json" in str(llm.calls[1][-1].content)
-    assert "create_project" in str(llm.calls[1][-1].content)
+    second_prompt = "\n".join(str(message.content) for message in llm.calls[1])
+    assert "pending_input_json" in second_prompt
+    assert "create_project" in second_prompt
     test_db.expire_all()
     assert test_db.get(ChatTaskState, conversation_id) is None
     assert test_db.query(Project).filter_by(name=project_name).count() == 1
@@ -1050,12 +1080,16 @@ def test_operator_engine_loads_prior_chat_and_authorized_memory_context(
     assert second.status_code == 200
     first_contents = [str(message.content) for message in llm.calls[0]]
     second_contents = [str(message.content) for message in llm.calls[1]]
-    assert "第一轮：采用简洁表达。" not in "\n".join(first_contents[:-1])
-    assert "第一轮：采用简洁表达。" in "\n".join(second_contents)
-    assert "已记录上下文。" in "\n".join(second_contents)
+    first_prompt = "\n".join(first_contents)
+    second_prompt = "\n".join(second_contents)
+    # The current request is deliberately represented once as untrusted input;
+    # it must not be duplicated as fabricated conversation history.
+    assert first_prompt.count("第一轮：采用简洁表达。") == 1
+    assert "第一轮：采用简洁表达。" in second_prompt
+    assert "已记录上下文。" in second_prompt
     assert UNTRUSTED_CONTEXT_SYSTEM_GUARD in first_contents[0]
-    assert "表达偏好" in second_contents[-1]
-    assert "回答要简洁。" in second_contents[-1]
+    assert "表达偏好" in first_prompt
+    assert "回答要简洁。" in first_prompt
 
 
 def test_harness_engine_resumes_approved_action_and_recovers_project_scope(
@@ -1107,7 +1141,10 @@ def test_harness_engine_resumes_approved_action_and_recovers_project_scope(
 
     assert approved.status_code == 200
     approved_events = _sse_events(approved.text)
-    assert "assistant.tool_succeeded" in [event for event, _payload in approved_events]
+    approved_names = [event for event, _payload in approved_events]
+    assert approved_names.count("assistant.tool_succeeded") == 1
+    assert approved_names.count("assistant.message") == 1
+    assert approved_names.count("assistant.end") == 1
     project = test_db.query(Project).filter_by(name=project_name).one()
     conversation = test_db.get(ChatConversation, confirmation["conversation_id"])
     assert conversation is not None

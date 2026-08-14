@@ -5,6 +5,7 @@ tests. This smoke only verifies the API's durable resource and export contract.
 """
 
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
 from app.main import app
 
@@ -24,15 +25,18 @@ def test_full_e2e_flow() -> None:
     assert bundle.json()["ingest_status"] == "awaiting_upload"
 
     # 3. Upload a document to the bundle
-    doc = client.post(
-        "/documents/upload",
-        params={"bundle_id": bundle_id},
-        files={"file": ("rfp.txt", b"The system shall provide SSO authentication.\nThe system shall support role-based access control.", "text/plain")},
-    )
+    with patch("app.documents.service.celery.send_task") as send_task:
+        doc = client.post(
+            "/documents/upload",
+            params={"bundle_id": bundle_id},
+            files={"file": ("rfp.txt", b"The system shall provide SSO authentication.\nThe system shall support role-based access control.", "text/plain")},
+        )
     assert doc.status_code == 201
+    assert doc.json()["ingest_queued"] is True
+    send_task.assert_called_once_with("worker.ingest_bundle", args=[bundle_id])
     bundles_after_upload = client.get(f"/bundles?project_id={project_id}")
     assert bundles_after_upload.status_code == 200
-    assert next(item for item in bundles_after_upload.json() if item["id"] == bundle_id)["ingest_status"] == "ready_to_ingest"
+    assert next(item for item in bundles_after_upload.json() if item["id"] == bundle_id)["ingest_status"] == "queued"
 
     # 4. Create deliverable
     dlv = client.post("/deliverables", json={"project_id": project_id, "type": "proposal", "title": "Technical Proposal"})
@@ -59,12 +63,23 @@ def test_full_e2e_flow() -> None:
     assert updated_req.json()["status"] == "confirmed"
 
     # 8. Request draft
-    draft = client.post("/drafting/sections", json={"project_id": project_id, "section_key": "exec-summary"})
-    assert draft.status_code == 202
+    draft = client.post(
+        "/drafting/sections",
+        json={"project_id": project_id, "section_key": "exec-summary", "section_id": section_id},
+    )
+    assert draft.status_code == 202, draft.text
     run_id = draft.json()["run_id"]
 
     # 9. Request redraft with review feedback
-    redraft = client.post("/drafting/sections/redraft", json={"project_id": project_id, "section_key": "exec-summary", "review_feedback": "Add more detail on SSO integration"})
+    redraft = client.post(
+        "/drafting/sections/redraft",
+        json={
+            "project_id": project_id,
+            "section_key": "exec-summary",
+            "section_id": section_id,
+            "review_feedback": "Add more detail on SSO integration",
+        },
+    )
     assert redraft.status_code == 202
 
     # 10. Check execution runs

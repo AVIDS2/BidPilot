@@ -8,10 +8,13 @@ const turnstileSiteKey = process.env.E2E_TURNSTILE_SITE_KEY ?? "";
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  // The app has several sizeable lazy-loaded workspaces. Serial browser
+  // execution avoids treating Vite's cold transform of concurrent pages as a
+  // product rendering failure, while keeping every assertion browser-real.
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
   reporter: process.env.CI ? "list" : [["list"], ["html", { open: "never" }]],
   use: {
     baseURL,

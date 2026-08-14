@@ -4,7 +4,13 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.entitlements.service import resolve_org_entitlements
-from app.email.service import send_password_reset_email, send_email_verification_email, send_account_deletion_confirmation_email
+from app.email.service import (
+    is_external_email_delivery_configured,
+    send_account_deletion_confirmation_email,
+    send_email_best_effort,
+    send_email_verification_email,
+    send_password_reset_email,
+)
 from app.models import User
 from app.security.client_identity import get_client_identity_fingerprint
 from app.security.redis_rate_limiter import RateLimitExceeded, RateLimiterUnavailable
@@ -27,8 +33,11 @@ def register(payload: UserRegister, request: Request, db: Session = Depends(get_
         user = register_user_command(db, payload)
         # Send verification email (async-safe: logs to console if SMTP not configured)
         token = create_email_verification_token(db, user.id)
-        send_email_verification_email(payload.email, token)
-        return user
+        verification_email_accepted = send_email_best_effort(
+            lambda: send_email_verification_email(payload.email, token),
+            event="auth.registration_verification",
+        ) and is_external_email_delivery_configured()
+        return user.model_copy(update={"verification_email_accepted": verification_email_accepted})
     except RateLimiterUnavailable:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -249,7 +258,10 @@ def request_password_reset(payload: PasswordResetRequest, request: Request, db: 
         verify_turnstile_or_raise(payload.turnstile_token, request)
         token = create_password_reset_token(db, payload.email)
         if token is not None:
-            send_password_reset_email(payload.email, token)
+            send_email_best_effort(
+                lambda: send_password_reset_email(payload.email, token),
+                event="auth.password_reset",
+            )
         return {"message": "If an account exists for that email, a reset link has been sent."}
     except RateLimiterUnavailable:
         raise HTTPException(
@@ -330,7 +342,10 @@ def resend_verification(
         return {"message": "If the account exists and is unverified, a verification email has been sent."}
 
     token = create_email_verification_token(db, target_user_id)
-    send_email_verification_email(target_email, token)
+    send_email_best_effort(
+        lambda: send_email_verification_email(target_email, token),
+        event="auth.resend_verification",
+    )
     return {"message": "If the account exists and is unverified, a verification email has been sent."}
 
 
@@ -372,7 +387,10 @@ def delete_current_user(
         email = delete_user_account_command(db, orm_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    send_account_deletion_confirmation_email(email)
+    send_email_best_effort(
+        lambda: send_account_deletion_confirmation_email(email),
+        event="auth.account_deletion_confirmation",
+    )
     return {"message": "Account deleted successfully."}
 
 

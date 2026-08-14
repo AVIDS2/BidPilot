@@ -22,6 +22,16 @@ export interface TranscriptTurn {
 
 export type AssistantTranscriptPart =
   | { id: string; kind: "narrative"; text: string; timestamp: number }
+  | {
+      id: string;
+      kind: "reasoning";
+      text: string;
+      source: "provider" | "harness";
+      turnId?: string;
+      title?: string;
+      completed: boolean;
+      timestamp: number;
+    }
   | { id: string; kind: "turn"; turnId: string; timestamp: number };
 
 /**
@@ -82,6 +92,90 @@ export function appendNarrativePart(
     text,
     timestamp: now,
   });
+  return next;
+}
+
+/**
+ * Keep provider-visible reasoning as its own chronological transcript block.
+ * It is never merged into the final answer or a tool payload.
+ */
+export function appendReasoningPart(
+  parts: AssistantTranscriptPart[] | undefined,
+  text: string,
+  options: {
+    source?: "provider" | "harness";
+    turnId?: string;
+    title?: string;
+    now?: number;
+  } = {},
+): AssistantTranscriptPart[] {
+  if (!text) return parts ? [...parts] : [];
+  const next = parts ? [...parts] : [];
+  const source = options.source ?? "provider";
+  const normalizedText = normalizeTranscriptText(text);
+  const normalizedTitle = normalizeTranscriptText(options.title ?? "");
+  // Runtime event replay can overlap with the live SSE stream after a
+  // reconnect. Public narration is emitted as a complete, titled event, so
+  // an identical event must be a no-op rather than a second visual step.
+  if (
+    options.title &&
+    next.some(
+      (part) =>
+        part.kind === "reasoning" &&
+        part.source === source &&
+        part.turnId === options.turnId &&
+        normalizeTranscriptText(part.title ?? "") === normalizedTitle &&
+        normalizeTranscriptText(part.text) === normalizedText,
+    )
+  ) {
+    return next;
+  }
+  const last = next[next.length - 1];
+  if (
+    last?.kind === "reasoning" &&
+    last.source === source &&
+    last.turnId === options.turnId &&
+    !last.completed
+  ) {
+    next[next.length - 1] = {
+      ...last,
+      text: last.text + text,
+      title: last.title ?? options.title,
+    };
+    return next;
+  }
+  const now = options.now ?? Date.now();
+  next.push({
+    id: `reasoning-${now}-${next.length}`,
+    kind: "reasoning",
+    text,
+    source,
+    turnId: options.turnId,
+    title: options.title,
+    completed: false,
+    timestamp: now,
+  });
+  return next;
+}
+
+function normalizeTranscriptText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** Mark the latest visible reasoning block for this model turn as complete. */
+export function completeReasoningPart(
+  parts: AssistantTranscriptPart[] | undefined,
+  turnId?: string,
+): AssistantTranscriptPart[] {
+  if (!parts?.length) return [];
+  const next = [...parts];
+  for (let index = next.length - 1; index >= 0; index -= 1) {
+    const part = next[index];
+    if (part.kind !== "reasoning") continue;
+    if (turnId && part.turnId && part.turnId !== turnId) continue;
+    next[index] = { ...part, completed: true };
+    break;
+  }
   return next;
 }
 

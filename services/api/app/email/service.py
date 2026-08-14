@@ -1,14 +1,18 @@
-"""Email sending adapter.
+"""Transactional email adapter.
 
-Supports two backends:
-- SMTP: configured via DOCPILOT_SMTP_* environment variables.
-- Console: prints email content to stdout (default when SMTP is not configured).
-
-All email functions accept the same parameters regardless of backend.
+Backends are selected in order: Resend HTTP API, SMTP, then a local console
+fallback. The same templates are used for registration, password reset and
+operational notifications, so delivery configuration lives in one place.
 """
 
-import os
 import logging
+import json
+import os
+from collections.abc import Callable
+from html import escape
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 from dataclasses import dataclass
 from email.header import Header
 from email.mime.text import MIMEText
@@ -29,6 +33,25 @@ SMTP_PASS = os.environ.get("DOCPILOT_SMTP_PASS", "")
 SMTP_FROM = os.environ.get("DOCPILOT_SMTP_FROM", "")
 SMTP_FROM_NAME = os.environ.get("DOCPILOT_SMTP_FROM_NAME", "BidPilot")
 SMTP_USE_TLS = os.environ.get("DOCPILOT_SMTP_TLS", "true").lower() == "true"
+RESEND_API_KEY = os.environ.get("DOCPILOT_RESEND_API_KEY", "") or os.environ.get("RESEND_API_KEY", "")
+DEFAULT_RESEND_FROM = "BidPilot <notifications@updates.rglens.com>"
+
+
+def _resolve_resend_from(explicit_sender: str | None) -> str:
+    """Return only a Resend-specific sender, never an SMTP fallback.
+
+    SMTP credentials are often kept around during a mail-provider migration.
+    Reusing their sender for Resend can silently select an unverified domain,
+    leaving newly registered users unable to receive a verification link.
+    """
+    return (explicit_sender or "").strip() or DEFAULT_RESEND_FROM
+
+
+# A verified Resend sender makes an API-key-only local or production setup
+# usable. SMTP's sender is intentionally not a fallback: it may belong to a
+# different provider and domain-verification policy.
+RESEND_FROM = _resolve_resend_from(os.environ.get("DOCPILOT_RESEND_FROM"))
+RESEND_API_URL = os.environ.get("DOCPILOT_RESEND_API_URL", "https://api.resend.com/emails")
 
 
 def _smtp_is_configured(*, host: str, user: str, password: str, from_address: str) -> bool:
@@ -41,6 +64,7 @@ SMTP_CONFIGURED = _smtp_is_configured(
     password=SMTP_PASS,
     from_address=SMTP_FROM,
 )
+RESEND_CONFIGURED = bool(RESEND_API_KEY and RESEND_FROM)
 PRODUCT_NAME = "BidPilot"
 BRAND_ACCENT = "#8bd84f"
 
@@ -107,6 +131,44 @@ class SmtpEmailBackend:
         logger.info("Email sent to %s: %s", message.to, message.subject)
 
 
+class ResendEmailBackend:
+    """Send transactional email through Resend's HTTPS API without an SDK."""
+
+    def send(self, message: EmailMessage) -> None:
+        payload = {
+            "from": RESEND_FROM,
+            "to": [message.to],
+            "subject": message.subject,
+            "text": message.body_text,
+        }
+        if message.body_html:
+            payload["html"] = message.body_html
+
+        request = Request(
+            RESEND_API_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+                # Resend's edge layer rejects urllib's default anonymous
+                # signature (403/1010), so identify this server explicitly.
+                "User-Agent": "BidPilot/1.0 (+https://bidpilot.rglens.com)",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=15) as response:
+                if not 200 <= response.status < 300:
+                    raise RuntimeError(f"Resend returned HTTP {response.status}")
+        except HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")[:500]
+            raise RuntimeError(f"Resend rejected transactional email ({error.code}): {detail}") from error
+        except URLError as error:
+            raise RuntimeError(f"Resend request failed: {error.reason}") from error
+
+        logger.info("Transactional email accepted by Resend for %s: %s", message.to, message.subject)
+
+
 # --- Public API ---
 
 _backend: EmailBackend | None = None
@@ -115,13 +177,43 @@ _backend: EmailBackend | None = None
 def get_email_backend() -> EmailBackend:
     global _backend
     if _backend is None:
-        _backend = SmtpEmailBackend() if SMTP_CONFIGURED else ConsoleEmailBackend()
+        if RESEND_CONFIGURED:
+            _backend = ResendEmailBackend()
+        elif SMTP_CONFIGURED:
+            _backend = SmtpEmailBackend()
+        else:
+            _backend = ConsoleEmailBackend()
     return _backend
 
 
 def send_email(message: EmailMessage) -> None:
     """Send an email using the configured backend."""
     get_email_backend().send(message)
+
+
+def send_email_best_effort(callback: Callable[[], None], *, event: str) -> bool:
+    """Run an external delivery without invalidating an already-committed action.
+
+    Transactional email is a notification channel, not business truth. Callers
+    persist the token, invitation, or review decision first, then use this
+    helper so a provider outage is observable in logs without turning a
+    successful user action into a misleading 5xx response.
+    """
+    try:
+        callback()
+    except Exception:
+        logger.exception("Transactional email delivery failed for %s", event)
+        return False
+    return True
+
+
+def is_external_email_delivery_configured() -> bool:
+    """Whether an email hand-off can leave this process.
+
+    The console backend is useful in development but must not be presented to
+    an end user as a successfully delivered verification email.
+    """
+    return RESEND_CONFIGURED or SMTP_CONFIGURED
 
 
 # --- Template helpers ---
@@ -136,9 +228,15 @@ def _get_from_addresses() -> tuple[str, str]:
     return address, address
 
 
+def _app_link(path: str, **query: str) -> str:
+    base_url = get_app_url().rstrip("/")
+    query_string = urlencode(query)
+    return f"{base_url}{path}?{query_string}" if query_string else f"{base_url}{path}"
+
+
 def send_password_reset_email(email: str, token: str) -> None:
     """Send a password reset email with a link containing the token."""
-    reset_url = f"{get_app_url()}/reset-password?token={token}"
+    reset_url = _app_link("/reset-password", token=token)
     send_email(EmailMessage(
         to=email,
         subject=f"{PRODUCT_NAME} — Password Reset",
@@ -162,7 +260,7 @@ def send_password_reset_email(email: str, token: str) -> None:
 
 def send_email_verification_email(email: str, token: str) -> None:
     """Send an email verification link."""
-    verify_url = f"{get_app_url()}/verify-email?token={token}"
+    verify_url = _app_link("/verify-email", token=token)
     send_email(EmailMessage(
         to=email,
         subject=f"{PRODUCT_NAME} — Verify Your Email",
@@ -185,25 +283,27 @@ def send_email_verification_email(email: str, token: str) -> None:
 def send_review_notification_email(email: str, project_name: str, section_title: str, action: str) -> None:
     """Send a review action notification (approved/rejected/needs-revision)."""
     action_label = {
-        "approved": "approved",
-        "rejected": "rejected",
-        "needs_revision": "marked for revision",
+        "approved": "已通过",
+        "rejected": "已退回修改",
+        "needs_revision": "需要修订",
     }.get(action, action)
+    project_name_html = escape(project_name)
+    section_title_html = escape(section_title)
 
     send_email(EmailMessage(
         to=email,
-        subject=f"{PRODUCT_NAME} — Section \"{section_title}\" {action_label}",
+        subject=f"{PRODUCT_NAME} - 章节“{section_title}”{action_label}",
         body_text=(
-            f"Section \"{section_title}\" in project \"{project_name}\" has been {action_label}.\n\n"
-            f"View the project at {get_app_url()}/projects\n"
+            f"项目“{project_name}”中的章节“{section_title}”{action_label}。\n\n"
+            f"查看项目：{_app_link('/projects')}\n"
         ),
         body_html=(
-            f"<h2>Review Update</h2>"
-            f"<p>Section <strong>\"{section_title}\"</strong> in project "
-            f"<strong>\"{project_name}\"</strong> has been <strong>{action_label}</strong>.</p>"
-            f'<p><a href="{get_app_url()}/projects" style="display:inline-block;padding:10px 20px;'
+            f"<h2>审核更新</h2>"
+            f"<p>项目 <strong>“{project_name_html}”</strong> 中的章节 "
+            f"<strong>“{section_title_html}”</strong><strong>{escape(action_label)}</strong>。</p>"
+            f'<p><a href="{_app_link("/projects")}" style="display:inline-block;padding:10px 20px;'
             f'background:{BRAND_ACCENT};color:#061006;border-radius:6px;text-decoration:none;font-weight:700;">'
-            f"View Project</a></p>"
+            f"查看项目</a></p>"
         ),
     ))
 
@@ -227,7 +327,8 @@ def send_account_deletion_confirmation_email(email: str) -> None:
 
 def send_invitation_email(email: str, token: str, org_slug: str) -> None:
     """Send an invitation email with a registration link including the token."""
-    link = f"{get_app_url()}/register?invitation={token}"
+    link = _app_link("/register", invitation=token)
+    org_slug_html = escape(org_slug)
     send_email(EmailMessage(
         to=email,
         subject=f"{PRODUCT_NAME} — You've been invited to join {org_slug}",
@@ -238,7 +339,7 @@ def send_invitation_email(email: str, token: str, org_slug: str) -> None:
         ),
         body_html=(
             f"<h2>You've been invited!</h2>"
-            f"<p>You've been invited to join the <strong>{org_slug}</strong> organization on {PRODUCT_NAME}.</p>"
+            f"<p>You've been invited to join the <strong>{org_slug_html}</strong> organization on {PRODUCT_NAME}.</p>"
             f"<p><a href=\"{link}\">Click here to register and join</a></p>"
             f"<p>This invitation expires in 7 days.</p>"
         ),

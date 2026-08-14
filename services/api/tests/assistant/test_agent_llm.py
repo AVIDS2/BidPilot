@@ -5,7 +5,12 @@ from langchain_openai import ChatOpenAI
 
 import pytest
 
-from app.agent.llm import AgentModelConfigurationError, get_agent_llm, resolve_agent_model
+from app.agent.llm import (
+    AgentModelConfigurationError,
+    DeepSeekChatOpenAI,
+    get_agent_llm,
+    resolve_agent_model,
+)
 
 
 def test_agent_llm_uses_openai_compatible_provider() -> None:
@@ -58,7 +63,7 @@ def test_resolve_agent_model_requires_an_explicit_platform_model() -> None:
         resolve_agent_model(environment={})
 
 
-def test_resolve_agent_model_uses_configured_deepseek_values_without_guessing() -> None:
+def test_resolve_agent_model_uses_configured_deepseek_values() -> None:
     resolved = resolve_agent_model(
         environment={
             "DEEPSEEK_API_KEY": "test-key",
@@ -71,3 +76,68 @@ def test_resolve_agent_model_uses_configured_deepseek_values_without_guessing() 
     assert resolved.provider_id == "deepseek"
     assert resolved.base_url == "https://gateway.example.test/v1"
     assert resolved.model == "deepseek-v4-flash"
+
+
+def test_resolve_agent_model_uses_the_supported_deepseek_default() -> None:
+    resolved = resolve_agent_model(environment={"DEEPSEEK_API_KEY": "test-key"})
+
+    assert resolved.provider_type == "openai"
+    assert resolved.provider_id == "deepseek"
+    assert resolved.base_url == "https://api.deepseek.com/v1"
+    assert resolved.model == "deepseek-v4-flash"
+
+
+def test_resolve_agent_model_prefers_opencode_go_when_its_platform_key_is_configured() -> None:
+    resolved = resolve_agent_model(
+        environment={
+            "OPENCODE_API_KEY": "test-opencode-key",
+            "DEEPSEEK_API_KEY": "test-deepseek-key",
+        }
+    )
+
+    assert resolved.provider_type == "openai"
+    assert resolved.provider_id == "opencode-go"
+    assert resolved.base_url == "https://opencode.ai/zen/go/v1"
+    assert resolved.model == "deepseek-v4-flash"
+
+
+def test_resolve_agent_model_uses_opencode_defaults_for_explicit_assistant_profile() -> None:
+    resolved = resolve_agent_model(
+        environment={
+            "DOCPILOT_ASSISTANT_API_KEY": "platform-key",
+            "DOCPILOT_ASSISTANT_PROVIDER_ID": "opencode-go",
+        }
+    )
+
+    assert resolved.provider_id == "opencode-go"
+    assert resolved.base_url == "https://opencode.ai/zen/go/v1"
+    assert resolved.model == "deepseek-v4-flash"
+
+
+def test_deepseek_client_preserves_visible_reasoning_content() -> None:
+    from langchain_core.messages import AIMessageChunk
+
+    llm = DeepSeekChatOpenAI(
+        api_key="test-key",
+        base_url="https://api.deepseek.com/v1",
+        model="deepseek-v4-flash",
+    )
+
+    result = llm._convert_chunk_to_generation_chunk(
+        {
+            "choices": [
+                {
+                    "delta": {
+                        "role": "assistant",
+                        "content": "",
+                        "reasoning_content": "先读取项目上下文。",
+                    }
+                }
+            ]
+        },
+        AIMessageChunk,
+        None,
+    )
+
+    assert result is not None
+    assert result.message.additional_kwargs["reasoning_content"] == "先读取项目上下文。"

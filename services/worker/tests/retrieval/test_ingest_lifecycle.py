@@ -76,6 +76,43 @@ def test_run_ingest_surfaces_unconfigured_embedding_as_partial_failure(monkeypat
     assert chunk.retrieval_text
 
 
+def test_transient_embedding_failure_remains_processing_until_celery_retries(monkeypatch) -> None:
+    bundle_id, source_document_id = _create_pending_bundle()
+    profile = RetrievalProfile(
+        provider="openrouter",
+        model="qwen/qwen3-embedding-8b",
+        dimensions=1536,
+        normalizer_version="bidpilot-lexical-v1",
+    )
+    monkeypatch.setattr(parser, "_extract_text", lambda _key, _mime: "# RFP\n投标方必须提供部署方案。")
+    monkeypatch.setattr(ingest, "get_embedding_profile", lambda: profile)
+    monkeypatch.setattr(
+        ingest,
+        "generate_embeddings_batch",
+        lambda texts: [
+            EmbeddingResult(
+                status=EmbeddingOutcomeStatus.TRANSIENT_FAILURE,
+                model=profile.model,
+                profile_id=profile.identifier,
+                error_code="provider_timeout",
+            )
+            for _ in texts
+        ],
+    )
+    monkeypatch.setattr(ingest, "_extract_and_store_requirements", lambda *_args, **_kwargs: 0)
+
+    result = ingest.run_ingest(bundle_id)
+
+    assert result["status"] == "partial_failure"
+    assert ingest.bundle_has_retryable_embedding_failure(bundle_id) is True
+    ingest.mark_bundle_index_retrying(bundle_id)
+    bundle, document, chunk = _read_lifecycle_state(bundle_id, source_document_id)
+    assert bundle.ingest_status == "indexing"
+    assert document.index_status == "indexing"
+    assert document.index_error_code == "embedding_retry_scheduled"
+    assert chunk.embedding_status == "transient_failure"
+
+
 def test_run_ingest_marks_document_indexed_after_successful_embedding(monkeypatch) -> None:
     bundle_id, source_document_id = _create_pending_bundle()
     profile = RetrievalProfile(

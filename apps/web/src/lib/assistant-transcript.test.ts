@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AssistantExecutionItem } from "@/lib/ai-assistant-store";
 import {
   appendNarrativePart,
+  appendReasoningPart,
   buildTranscriptTurns,
   ensureTurnPart,
   narrativeTextFromParts,
@@ -76,6 +77,17 @@ describe("interleaved transcript parts", () => {
   it("is idempotent for the same turn id", () => {
     let parts = ensureTurnPart(undefined, "turn-1");
     parts = ensureTurnPart(parts, "turn-1");
+    expect(parts).toHaveLength(1);
+  });
+
+  it("does not duplicate a replayed titled public narration", () => {
+    const options = {
+      source: "harness" as const,
+      turnId: "turn-1",
+      title: "先确认项目范围，再读取大纲。",
+    };
+    let parts = appendReasoningPart(undefined, options.title, options);
+    parts = appendReasoningPart(parts, options.title, options);
     expect(parts).toHaveLength(1);
   });
 });

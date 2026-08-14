@@ -18,18 +18,27 @@ const VerifyEmailPromptPage = lazy(() => import("./features/auth/verify-email-pr
 const VerifyEmailPage = lazy(() => import("./features/auth/verify-email-page").then(({ VerifyEmailPage }) => ({ default: VerifyEmailPage })));
 const PricingPage = lazy(() => import("./features/pricing/pricing-page").then(({ PricingPage }) => ({ default: PricingPage })));
 const DocsPage = lazy(() => import("./features/docs/docs-page").then(({ DocsPage }) => ({ default: DocsPage })));
-const DashboardPage = lazy(() => import("./features/dashboard/dashboard-page").then(({ DashboardPage }) => ({ default: DashboardPage })));
 const AgentWorkspacePage = lazy(() => import("./features/agent/agent-workspace-page").then(({ AgentWorkspacePage }) => ({ default: AgentWorkspacePage })));
-const RunCenterPage = lazy(() => import("./features/runs/run-center-page").then(({ RunCenterPage }) => ({ default: RunCenterPage })));
-const KnowledgePortfolioPage = lazy(() => import("./features/knowledge/knowledge-portfolio-page").then(({ KnowledgePortfolioPage }) => ({ default: KnowledgePortfolioPage })));
-const ProjectListPage = lazy(() => import("./features/projects/project-list-page").then(({ ProjectListPage }) => ({ default: ProjectListPage })));
-const ProjectDetailPage = lazy(() => import("./features/projects/project-detail-page").then(({ ProjectDetailPage }) => ({ default: ProjectDetailPage })));
-const AccountPage = lazy(() => import("./features/account/account-page").then(({ AccountPage }) => ({ default: AccountPage })));
-const UserManagementPage = lazy(() => import("./features/admin/user-management-page").then(({ UserManagementPage }) => ({ default: UserManagementPage })));
-const TeamManagementPage = lazy(() => import("./features/admin/team-management-page").then(({ TeamManagementPage }) => ({ default: TeamManagementPage })));
-const InvitationManagementPage = lazy(() => import("./features/admin/invitation-management-page").then(({ InvitationManagementPage }) => ({ default: InvitationManagementPage })));
-const ProviderSettingsPage = lazy(() => import("./features/settings/provider-settings-page").then(({ ProviderSettingsPage }) => ({ default: ProviderSettingsPage })));
+const AccountPageV2 = lazy(() => import("@/features/workbench-v2/account-page-v2").then(({ AccountPageV2 }) => ({ default: AccountPageV2 })));
+const ProviderSettingsPageV2 = lazy(() => import("@/features/workbench-v2/provider-settings-page-v2").then(({ ProviderSettingsPageV2 }) => ({ default: ProviderSettingsPageV2 })));
+const WebhookSettingsPageV2 = lazy(() => import("@/features/workbench-v2/webhook-settings-page-v2").then(({ WebhookSettingsPageV2 }) => ({ default: WebhookSettingsPageV2 })));
+const UserManagementPageV2 = lazy(() => import("@/features/workbench-v2/administration-detail-pages-v2").then(({ UserManagementPageV2 }) => ({ default: UserManagementPageV2 })));
+const TeamManagementPageV2 = lazy(() => import("@/features/workbench-v2/administration-detail-pages-v2").then(({ TeamManagementPageV2 }) => ({ default: TeamManagementPageV2 })));
+const InvitationManagementPageV2 = lazy(() => import("@/features/workbench-v2/administration-detail-pages-v2").then(({ InvitationManagementPageV2 }) => ({ default: InvitationManagementPageV2 })));
 const PlatformShell = lazy(() => import("@/components/platform-shell").then(({ PlatformShell }) => ({ default: PlatformShell })));
+const WorkbenchV2Layout = lazy(() => import("@/features/workbench-v2/workbench-v2-layout").then(({ WorkbenchV2Layout }) => ({ default: WorkbenchV2Layout })));
+const BidProjectsPageV2 = lazy(() => import("@/features/workbench-v2/bid-projects-page-v2").then(({ BidProjectsPageV2 }) => ({ default: BidProjectsPageV2 })));
+const ProjectWorkspacePageV2 = lazy(() => import("@/features/workbench-v2/project-workspace-page-v2").then(({ ProjectWorkspacePageV2 }) => ({ default: ProjectWorkspacePageV2 })));
+const RadarPageV2 = lazy(() => import("@/features/workbench-v2/radar-page-v2").then(({ RadarPageV2 }) => ({ default: RadarPageV2 })));
+const InboxPageV2 = lazy(() => import("@/features/workbench-v2/workbench-v2-data-pages").then(({ InboxPageV2 }) => ({ default: InboxPageV2 })));
+const DashboardPageV2 = lazy(() => import("@/features/workbench-v2/workbench-v2-data-pages").then(({ DashboardPageV2 }) => ({ default: DashboardPageV2 })));
+const MyWorkPageV2 = lazy(() => import("@/features/workbench-v2/workbench-v2-data-pages").then(({ MyWorkPageV2 }) => ({ default: MyWorkPageV2 })));
+const RunsPageV2 = lazy(() => import("@/features/workbench-v2/workbench-v2-data-pages").then(({ RunsPageV2 }) => ({ default: RunsPageV2 })));
+const KnowledgePageV2 = lazy(() => import("@/features/workbench-v2/workbench-v2-data-pages").then(({ KnowledgePageV2 }) => ({ default: KnowledgePageV2 })));
+const DeliverablesPageV2 = lazy(() => import("@/features/workbench-v2/workbench-v2-operations-pages").then(({ DeliverablesPageV2 }) => ({ default: DeliverablesPageV2 })));
+const ReviewsPageV2 = lazy(() => import("@/features/workbench-v2/workbench-v2-operations-pages").then(({ ReviewsPageV2 }) => ({ default: ReviewsPageV2 })));
+const MembersPageV2 = lazy(() => import("@/features/workbench-v2/workbench-v2-operations-pages").then(({ MembersPageV2 }) => ({ default: MembersPageV2 })));
+const AdministrationPageV2 = lazy(() => import("@/features/workbench-v2/workbench-v2-operations-pages").then(({ AdministrationPageV2 }) => ({ default: AdministrationPageV2 })));
 
 function RouteLoadingFallback() {
   return (
@@ -47,14 +56,13 @@ function RootRedirect() {
   return <LandingPage />;
 }
 
-// PublicLayout - Nav only on public pages (landing, auth, pricing, docs)
 function PublicLayout() {
-  return (
-    <div className="dark min-h-[100dvh] overflow-x-hidden bg-background text-foreground">
-      <Nav />
-      <Outlet />
-    </div>
-  );
+  return <div className="dark min-h-[100dvh] overflow-x-hidden bg-background text-foreground"><Nav /><Outlet /></div>;
+}
+
+function MarketingOrPlatformLayout() {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <PlatformShell /> : <PublicLayout />;
 }
 
 // AppLayout - Sidebar navigation for platform pages
@@ -65,19 +73,12 @@ function AppLayout() {
     return <Navigate to="/login" replace />;
   }
 
-  return <PlatformShell />;
-}
-
-function MarketingOrPlatformLayout() {
-  const { isAuthenticated } = useAuth();
-
-  return isAuthenticated ? <PlatformShell /> : <PublicLayout />;
+  return <WorkbenchV2Layout />;
 }
 
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public pages - Nav navigation */}
       <Route element={<PublicLayout />}>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
@@ -87,7 +88,6 @@ function AppRoutes() {
         <Route path="/verify-email-prompt" element={<VerifyEmailPromptPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
       </Route>
-
       <Route element={<MarketingOrPlatformLayout />}>
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/docs" element={<DocsPage />} />
@@ -95,17 +95,25 @@ function AppRoutes() {
 
       {/* Platform pages - Sidebar navigation */}
       <Route element={<AppLayout />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPageV2 />} />
+        <Route path="/inbox" element={<InboxPageV2 />} />
+        <Route path="/my-work" element={<MyWorkPageV2 />} />
+        <Route path="/runs" element={<RunsPageV2 />} />
+        <Route path="/knowledge" element={<KnowledgePageV2 />} />
+        <Route path="/radar" element={<RadarPageV2 />} />
+        <Route path="/projects" element={<BidProjectsPageV2 />} />
+        <Route path="/projects/:id" element={<ProjectWorkspacePageV2 />} />
+        <Route path="/reviews" element={<ReviewsPageV2 />} />
+        <Route path="/deliverables" element={<DeliverablesPageV2 />} />
+        <Route path="/members" element={<MembersPageV2 />} />
+        <Route path="/administration" element={<AdministrationPageV2 />} />
+        <Route path="/account" element={<AccountPageV2 />} />
+        <Route path="/admin/users" element={<UserManagementPageV2 />} />
+        <Route path="/admin/teams" element={<TeamManagementPageV2 />} />
+        <Route path="/admin/invitations" element={<InvitationManagementPageV2 />} />
+        <Route path="/settings/providers" element={<ProviderSettingsPageV2 />} />
+        <Route path="/settings/webhooks" element={<WebhookSettingsPageV2 />} />
         <Route path="/agent" element={<AgentWorkspacePage />} />
-        <Route path="/runs" element={<RunCenterPage />} />
-        <Route path="/knowledge" element={<KnowledgePortfolioPage />} />
-        <Route path="/projects" element={<ProjectListPage />} />
-        <Route path="/projects/:id" element={<ProjectDetailPage />} />
-        <Route path="/account" element={<AccountPage />} />
-        <Route path="/admin/users" element={<UserManagementPage />} />
-        <Route path="/admin/teams" element={<TeamManagementPage />} />
-        <Route path="/admin/invitations" element={<InvitationManagementPage />} />
-        <Route path="/settings/providers" element={<ProviderSettingsPage />} />
       </Route>
     </Routes>
   );

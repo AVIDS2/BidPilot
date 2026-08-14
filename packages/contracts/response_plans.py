@@ -94,19 +94,33 @@ def _find_or_create_section(
     *,
     project_id: str,
     section_key: str,
+    deliverable_section_id: str | None = None,
 ) -> DeliverableSection:
-    section = db.scalar(
-        select(DeliverableSection)
-        .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
-        .where(
-            Deliverable.project_id == project_id,
-            DeliverableSection.section_key == section_key,
-        )
-        .order_by(Deliverable.id.asc(), DeliverableSection.sort_order.asc())
-        .limit(1)
-    )
-    if section is not None:
+    if deliverable_section_id:
+        section = db.get(DeliverableSection, deliverable_section_id)
+        deliverable = db.get(Deliverable, section.deliverable_id) if section else None
+        if section is None or deliverable is None or deliverable.project_id != project_id:
+            raise ResponsePlanScopeError("response_plan_deliverable_section_scope_invalid")
+        if section.section_key != section_key:
+            raise ResponsePlanScopeError("response_plan_deliverable_section_key_mismatch")
         return section
+
+    matches = list(
+        db.scalars(
+            select(DeliverableSection)
+            .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
+            .where(
+                Deliverable.project_id == project_id,
+                DeliverableSection.section_key == section_key,
+            )
+            .order_by(Deliverable.id.asc(), DeliverableSection.sort_order.asc())
+            .limit(2)
+        ).all()
+    )
+    if len(matches) > 1:
+        raise ResponsePlanScopeError("response_plan_section_ambiguous")
+    if matches:
+        return matches[0]
 
     deliverable = db.scalar(
         select(Deliverable)
@@ -338,10 +352,16 @@ def ensure_response_plan_section(
     *,
     project_id: str,
     section_key: str,
+    deliverable_section_id: str | None = None,
 ) -> ResponsePlanSectionSnapshot:
     """Resolve the immutable structural plan revision for a draft section."""
     _require_project(db, project_id)
-    section = _find_or_create_section(db, project_id=project_id, section_key=section_key)
+    section = _find_or_create_section(
+        db,
+        project_id=project_id,
+        section_key=section_key,
+        deliverable_section_id=deliverable_section_id,
+    )
     deliverable = db.get(Deliverable, section.deliverable_id)
     if deliverable is None or deliverable.project_id != project_id:
         raise ResponsePlanScopeError("response_plan_deliverable_scope_invalid")

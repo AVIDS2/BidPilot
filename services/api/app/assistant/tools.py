@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -39,7 +38,12 @@ from app.models import Deliverable, DeliverableSection, Project, ReviewThread, S
 from app.projects.schemas import ProjectCreate
 from app.projects.demo import create_demo_project_command
 from app.projects.service import create_project_command, delete_project_command_for_user
-from app.readiness.service import generate_readiness_pack_command, get_readiness_summary_query, select_readiness_gaps
+from app.readiness.service import (
+    READINESS_GAP_KINDS,
+    generate_readiness_pack_command,
+    get_readiness_summary_query,
+    select_readiness_gaps,
+)
 from app.review.schemas import ReviewDecisionCreate
 from app.review.decision_service import canonical_review_decision
 from app.review.service import submit_review_decision_command
@@ -137,6 +141,8 @@ def execute_tool(
         return semantic_search_tool(db, user, arguments)
     if tool_name == "web_search":
         return web_search_tool(db, user, arguments)
+    if tool_name == "discover_remote_documents":
+        return discover_remote_documents_tool(db, user, arguments)
     if tool_name == "fetch_url_to_project":
         return fetch_url_to_project_tool(db, user, arguments)
     if tool_name == "upload_document":
@@ -260,10 +266,10 @@ def list_project_bundles(db: Session, user: CurrentUser, arguments: dict) -> Ass
 def list_sections(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     project = _get_project_for_user(db, user, arguments["project_id"])
     rows = (
-        db.query(DeliverableSection)
+        db.query(DeliverableSection, Deliverable)
         .join(Deliverable, DeliverableSection.deliverable_id == Deliverable.id)
         .filter(Deliverable.project_id == project.id)
-        .order_by(DeliverableSection.section_key.asc())
+        .order_by(Deliverable.title.asc(), DeliverableSection.sort_order.asc(), DeliverableSection.id.asc())
         .all()
     )
     from sqlalchemy import func, select
@@ -271,7 +277,7 @@ def list_sections(db: Session, user: CurrentUser, arguments: dict) -> AssistantT
     from app.models import SectionVersion
 
     items: list[dict] = []
-    for row in rows:
+    for row, deliverable in rows:
         version_count = db.scalar(
             select(func.count())
             .select_from(SectionVersion)
@@ -287,6 +293,7 @@ def list_sections(db: Session, user: CurrentUser, arguments: dict) -> AssistantT
             {
                 "id": row.id,
                 "deliverable_id": row.deliverable_id,
+                "deliverable_title": deliverable.title,
                 "section_key": row.section_key,
                 "title": row.title,
                 "status": row.status,
@@ -347,12 +354,19 @@ def get_project_outline(db: Session, user: CurrentUser, arguments: dict) -> Assi
         template = get_sections_for_scenario(scenario_key)
     except Exception:
         template = []
-    existing = {item["section_key"]: item for item in result.result.get("items", [])}
+    existing_by_key: dict[str, list[dict]] = {}
+    for item in result.result.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        section_key = str(item.get("section_key") or "").strip()
+        if section_key:
+            existing_by_key.setdefault(section_key, []).append(item)
     ordered: list[dict] = []
     for sec in template:
         key = sec["section_key"]
-        if key in existing:
-            ordered.append({**existing[key], "in_template": True})
+        matched = existing_by_key.pop(key, [])
+        if matched:
+            ordered.extend({**item, "in_template": True} for item in matched)
         else:
             ordered.append(
                 {
@@ -369,10 +383,8 @@ def get_project_outline(db: Session, user: CurrentUser, arguments: dict) -> Assi
                 }
             )
     # Append any extra sections not in the scenario template.
-    template_keys = {sec["section_key"] for sec in template}
-    for key, item in existing.items():
-        if key not in template_keys:
-            ordered.append({**item, "in_template": False})
+    for items in existing_by_key.values():
+        ordered.extend({**item, "in_template": False} for item in items)
 
     drafted = sum(1 for item in ordered if item["has_content"])
     approved = sum(1 for item in ordered if item["status"] == "approved")
@@ -480,20 +492,35 @@ def _find_or_create_section_for_write(
     *,
     project: Project,
     section_key: str,
+    deliverable_section_id: str | None = None,
     title: str | None = None,
 ) -> DeliverableSection:
     """Mirror worker outline-first section creation for lightweight writes."""
     from sqlalchemy import func, select
 
-    section = db.scalar(
-        select(DeliverableSection)
-        .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
-        .where(
-            Deliverable.project_id == project.id,
-            DeliverableSection.section_key == section_key,
+    if deliverable_section_id:
+        section = db.get(DeliverableSection, deliverable_section_id)
+        deliverable = db.get(Deliverable, section.deliverable_id) if section else None
+        if section is None or deliverable is None or deliverable.project_id != project.id:
+            raise ValueError("deliverable_section_not_found")
+        if section.section_key != section_key:
+            raise ValueError("section_target_mismatch")
+    else:
+        matches = list(
+            db.scalars(
+                select(DeliverableSection)
+                .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
+                .where(
+                    Deliverable.project_id == project.id,
+                    DeliverableSection.section_key == section_key,
+                )
+                .order_by(DeliverableSection.id.asc())
+                .limit(2)
+            ).all()
         )
-        .limit(1)
-    )
+        if len(matches) > 1:
+            raise ValueError("section_key_ambiguous: 请指定 section_id")
+        section = matches[0] if matches else None
     if section is not None:
         if title and title.strip() and section.title != title.strip():
             section.title = title.strip()
@@ -568,6 +595,7 @@ def write_section_tool(db: Session, user: CurrentUser, arguments: dict) -> Assis
         db,
         project=project,
         section_key=section_key,
+        deliverable_section_id=str(arguments.get("section_id") or "").strip() or None,
         title=str(arguments.get("title") or "").strip() or None,
     )
     latest = db.scalar(
@@ -706,6 +734,7 @@ def run_section_campaign_tool(db: Session, user: CurrentUser, arguments: dict) -
         waves_run += 1
         for item in wave:
             section_key = str(item.get("section_key") or "").strip()
+            section_id = str(item.get("id") or "").strip() or None
             title = str(item.get("title") or section_key).strip() or section_key
             if not section_key:
                 continue
@@ -730,6 +759,7 @@ def run_section_campaign_tool(db: Session, user: CurrentUser, arguments: dict) -
                         {
                             "project_id": project_id,
                             "section_key": section_key,
+                            "section_id": section_id,
                             "title": title,
                             "content_markdown": skeleton,
                         },
@@ -739,6 +769,7 @@ def run_section_campaign_tool(db: Session, user: CurrentUser, arguments: dict) -
                     draft_args: dict[str, Any] = {
                         "project_id": project_id,
                         "section_key": section_key,
+                        "section_id": section_id,
                     }
                     if arguments.get("provider_config_id"):
                         draft_args["provider_config_id"] = arguments.get("provider_config_id")
@@ -833,6 +864,7 @@ def start_draft_section(db: Session, user: CurrentUser, arguments: dict) -> Assi
         DraftSectionRequest(
             project_id=arguments["project_id"],
             section_key=arguments["section_key"],
+            section_id=str(arguments.get("section_id") or "").strip() or None,
             provider_config_id=arguments.get("provider_config_id"),
             reasoning_effort=arguments.get("reasoning_effort"),
             parent_runtime_run_id=arguments.get("parent_runtime_run_id"),
@@ -1008,6 +1040,7 @@ def start_redraft_section(db: Session, user: CurrentUser, arguments: dict) -> As
         RedraftSectionRequest(
             project_id=arguments["project_id"],
             section_key=arguments["section_key"],
+            section_id=str(arguments.get("section_id") or "").strip() or None,
             review_feedback=arguments.get("review_feedback"),
             provider_config_id=arguments.get("provider_config_id"),
             reasoning_effort=arguments.get("reasoning_effort"),
@@ -1103,13 +1136,27 @@ def list_documents_tool(db: Session, user: CurrentUser, arguments: dict) -> Assi
         )
         if bundle.project_id != project.id:
             raise ValueError("Bundle does not belong to this project")
-        items = list_documents_query(db, bundle_id, user)
+        document_rows = [(bundle.label, bundle.ingest_status, item) for item in list_documents_query(db, bundle_id, user)]
     else:
-        items = []
+        document_rows = []
+        for bundle in list_bundles_query(db, project.id, current_user=user):
+            document_rows.extend(
+                (bundle.label, bundle.ingest_status, item)
+                for item in list_documents_query(db, bundle.id, user)
+            )
     return AssistantToolResult(
         tool_name="list_documents",
-        result={"items": [item.model_dump() for item in items]},
-        summary=f"找到 {len(items)} 个文档。",
+        result={
+            "items": [
+                {
+                    **item.model_dump(),
+                    "bundle_label": bundle_label,
+                    "bundle_status": bundle_status,
+                }
+                for bundle_label, bundle_status, item in document_rows
+            ]
+        },
+        summary=f"找到 {len(document_rows)} 个文档。",
     )
 
 
@@ -1258,7 +1305,7 @@ def get_readiness_summary_tool(db: Session, user: CurrentUser, arguments: dict) 
 
 def list_readiness_gaps_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     project = _get_project_for_user(db, user, arguments["project_id"])
-    kind = str(arguments.get("kind") or "all")
+    kind = _normalize_readiness_gap_kind(arguments.get("kind"))
     summary = get_readiness_summary_query(db, project.id, current_user=user)
     items = select_readiness_gaps(summary, kind=kind)[:20]
     return AssistantToolResult(
@@ -1306,6 +1353,30 @@ def _readiness_gap_to_result(item) -> dict:
         "owner_user_id": item.owner_user_id,
         "source_locator_json": item.source_locator_json,
     }
+
+
+def _normalize_readiness_gap_kind(value: object) -> str:
+    """Accept common model/user phrasing without turning a read into a failed run."""
+    raw = str(value or "all").strip().casefold().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "requirements": "mandatory",
+        "requirement": "mandatory",
+        "requirement_gap": "mandatory",
+        "requirement_gaps": "mandatory",
+        "mandatory_gaps": "mandatory",
+        "evidence_gap": "evidence",
+        "evidence_gaps": "evidence",
+        "风险": "high_risk",
+        "高风险": "high_risk",
+        "强制项": "mandatory",
+        "需求": "mandatory",
+        "证据": "evidence",
+        "矛盾": "contradictions",
+        "逾期": "overdue",
+        "未覆盖": "uncovered",
+    }
+    normalized = aliases.get(raw, raw)
+    return normalized if normalized in READINESS_GAP_KINDS else "all"
 
 
 def _readiness_gap_label(kind: str) -> str:
@@ -1536,6 +1607,47 @@ def web_search_tool(db: Session, user: CurrentUser, arguments: dict) -> Assistan
     )
 
 
+def discover_remote_documents_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """Find direct tender-file links on one public page without persisting it."""
+    from app.documents.web_import import discover_remote_documents
+
+    url = str(arguments.get("url") or "").strip()
+    if not url:
+        raise ValueError("url is required")
+    project_id = str(arguments.get("project_id") or "").strip()
+    if project_id:
+        require_project_capability(
+            db,
+            current_user=user,
+            project_id=project_id,
+            capability="project.read",
+        )
+    try:
+        max_results = int(arguments.get("max_results") or 10)
+    except (TypeError, ValueError):
+        max_results = 10
+    candidates = discover_remote_documents(url, max_results=max_results)
+    items = [
+        {
+            "url": candidate.url,
+            "filename": candidate.filename,
+            "title": candidate.title,
+            "content_type_hint": candidate.content_type_hint,
+        }
+        for candidate in candidates
+    ]
+    return AssistantToolResult(
+        tool_name="discover_remote_documents",
+        result={"url": url, "count": len(items), "items": items},
+        summary=(
+            f"在公开页面发现 {len(items)} 个可能的直接资料附件；"
+            "未下载、未写入项目。确认具体文件后再入库。"
+            if items
+            else "该页面没有发现可识别的直接资料附件；未下载、未写入项目。"
+        ),
+    )
+
+
 def _resolve_upload_bundle(db: Session, user: CurrentUser, project_id: str, bundle_id: str | None) -> str:
     from app.bundles.service import list_bundles_query
     from app.models import Bundle
@@ -1572,27 +1684,27 @@ def _resolve_upload_bundle(db: Session, user: CurrentUser, project_id: str, bund
 
 
 def fetch_url_to_project_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
-    """Download a remote URL into a project bundle as a source document."""
-    from urllib.parse import urlparse
-
-    import httpx
+    """Persist one chosen remote artifact or explicitly requested web evidence."""
+    import hashlib
 
     from app.documents.service import upload_document_command
+    from app.documents.web_import import download_web_source
+    from app.models import Bundle
 
     project_id = str(arguments.get("project_id") or "").strip()
     url = str(arguments.get("url") or "").strip()
+    import_mode = str(arguments.get("import_mode") or "artifact").strip().lower()
     if not project_id or not url:
         raise ValueError("project_id and url are required")
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("url must be an http(s) URL")
-
+    if import_mode not in {"artifact", "web_evidence"}:
+        raise ValueError("import_mode must be artifact or web_evidence")
     require_project_capability(
         db,
         current_user=user,
         project_id=project_id,
         capability="bundles.write",
     )
+    parent_runtime_run_id = str(arguments.get("parent_runtime_run_id") or "").strip() or None
     bundle_id = _resolve_upload_bundle(
         db,
         user,
@@ -1600,50 +1712,127 @@ def fetch_url_to_project_tool(db: Session, user: CurrentUser, arguments: dict) -
         str(arguments.get("bundle_id") or "").strip() or None,
     )
 
-    resp = httpx.get(
+    # Artifact downloads can be hundreds of megabytes.  When the request came
+    # from the governed Agent runtime, persist a child run and return
+    # immediately; the worker owns the slow network and storage operation.
+    # Direct service calls without a parent run retain the synchronous path for
+    # API compatibility and small administrative imports.
+    if import_mode == "artifact" and parent_runtime_run_id:
+        from app.celery_client import celery
+        from app.runtime.events import RuntimeEventDraft, publish_event
+        from app.runtime.repository import get_visible_runtime_run
+        from app.runtime.service import create_or_get_runtime_run, fail_runtime_run
+        from contracts.runtime import RuntimeEventType
+
+        parent = get_visible_runtime_run(db, parent_runtime_run_id, user)
+        if parent.user_id != user.id and user.role != "admin":
+            raise ValueError("远程导入任务只能挂到当前用户的 Agent 运行上")
+
+        idempotency_key = (
+            "remote-import:"
+            f"{parent_runtime_run_id}:{project_id}:{bundle_id}:"
+            f"{hashlib.sha256(url.encode('utf-8')).hexdigest()}"
+        )
+        creation = create_or_get_runtime_run(
+            db,
+            user,
+            kind="remote_import",
+            engine="remote_import_worker",
+            project_id=project_id,
+            conversation_id=parent.conversation_id,
+            parent_run_id=parent_runtime_run_id,
+            idempotency_key=idempotency_key,
+            input_json={
+                "project_id": project_id,
+                "bundle_id": bundle_id,
+                "url": url,
+                "filename": str(arguments.get("filename") or "").strip() or None,
+                "import_mode": import_mode,
+            },
+        )
+        child = creation.run
+        if child.status in {"succeeded", "failed", "cancelled", "expired"}:
+            if child.status == "succeeded" and isinstance(child.result_json, dict):
+                return AssistantToolResult(
+                    tool_name="fetch_url_to_project",
+                    result={**child.result_json, "status": child.status, "runtime_run_id": child.id},
+                    summary="远程资料已完成入库；已复用此前相同地址的导入结果。",
+                )
+            raise ValueError(child.error_message or "该远程资料导入任务已结束，请重新发起。")
+        if creation.created:
+            try:
+                publish_event(
+                    db,
+                    parent.id,
+                    RuntimeEventDraft(
+                        type=RuntimeEventType.WORKFLOW_LINKED,
+                        public_summary="已创建远程资料后台导入任务。",
+                        payload={
+                            "workflow_runtime_run_id": child.id,
+                            "remote_import_runtime_run_id": child.id,
+                            "source_url": url,
+                        },
+                    ),
+                )
+                celery.send_task("worker.import_remote_document", args=[child.id])
+            except Exception as exc:  # noqa: BLE001
+                fail_runtime_run(db, child.id, "后台导入任务未能排队，请稍后重试。", error_code="remote_import_queue_failed")
+                raise RuntimeError("后台导入任务未能排队，请稍后重试。") from exc
+        return AssistantToolResult(
+            tool_name="fetch_url_to_project",
+            result={
+                "status": "queued",
+                "runtime_run_id": child.id,
+                "project_id": project_id,
+                "bundle_id": bundle_id,
+                "source_url": url,
+                "import_mode": import_mode,
+            },
+            summary="已开始后台下载远程资料。完成后会自动写入项目资料包；你可以继续使用当前对话。",
+        )
+
+    downloaded = download_web_source(
         url,
-        timeout=30.0,
-        follow_redirects=True,
-        headers={"User-Agent": "BidPilotAgent/1.0 (+https://bidpilot.rglens.com)"},
+        filename=str(arguments.get("filename") or "").strip() or None,
+        import_mode=import_mode,
     )
-    resp.raise_for_status()
-    data = resp.content
-    if len(data) > 15 * 1024 * 1024:
-        raise ValueError("Remote file too large (max 15MB)")
-    content_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
-    filename = str(arguments.get("filename") or "").strip()
-    if not filename:
-        filename = Path(parsed.path).name or "downloaded-resource"
-        if "." not in filename:
-            if "html" in content_type:
-                filename += ".html"
-            elif "pdf" in content_type:
-                filename += ".pdf"
-            elif "json" in content_type:
-                filename += ".json"
-            else:
-                filename += ".bin"
 
     doc = upload_document_command(
         db,
         bundle_id=bundle_id,
-        filename=filename[:200],
-        content_type=content_type or "application/octet-stream",
-        data=data,
+        filename=downloaded.filename,
+        content_type=downloaded.content_type,
+        data=downloaded.data,
         current_user=user,
+        source_url=downloaded.source_url,
     )
+    bundle = db.get(Bundle, bundle_id)
+    ingest_queued = doc.ingest_queued
+    stored_as_artifact = doc.parse_status == "not_applicable"
     return AssistantToolResult(
         tool_name="fetch_url_to_project",
         result={
             "project_id": project_id,
             "bundle_id": bundle_id,
+            "bundle_label": bundle.label if bundle is not None else "项目资料包",
             "document_id": doc.id,
             "filename": doc.original_filename,
-            "bytes": len(data),
-            "source_url": url,
+            "bytes": len(downloaded.data),
+            "source_url": downloaded.source_url,
+            "import_mode": import_mode,
             "parse_status": doc.parse_status,
+            "ingest_queued": ingest_queued,
+            "storage_status": "stored_no_parse" if stored_as_artifact else "queued_for_ingestion",
         },
-        summary=f"已从 URL 下载「{doc.original_filename}」到项目资料包（{len(data)} 字节）。",
+        summary=(
+            f"已将「{doc.original_filename}」作为{('网页研究证据' if import_mode == 'web_evidence' else '远程资料文件')}"
+            f"加入项目资料包；"
+            + (
+                "该资料已归档，可下载使用；当前格式不参与文本解析。"
+                if stored_as_artifact
+                else ("已投递解析。" if ingest_queued else "解析任务暂未投递，可在资料中心重试。")
+            )
+        ),
     )
 
 

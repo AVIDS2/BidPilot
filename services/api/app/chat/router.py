@@ -11,13 +11,25 @@ from app.auth.service import require_auth
 from app.db import get_db
 from app.models import ChatMessage as ChatMessageModel
 
-from .schemas import ChatConversationRead, ChatConversationUpdate, ChatHistoryRead, ChatMessage, ChatRequest
+from .schemas import (
+    ChatConversationForkRead,
+    ChatConversationForkRequest,
+    ChatConversationRead,
+    ChatConversationUpdate,
+    ChatMessageAttachmentRead,
+    ChatHistoryRead,
+    ChatMessage,
+    ChatMessageRead,
+    ChatRequest,
+)
 from .service import (
+    fork_conversation_from_checkpoint,
     get_conversation,
     get_conversation_messages,
     list_conversations,
     rename_conversation,
     resolve_conversation_project_context,
+    set_conversation_pinned,
     stream_chat_response,
 )
 
@@ -114,6 +126,7 @@ def list_chat_conversations(
             id=c.id,
             project_id=c.project_id,
             title=_conversation_title(db, c.id, c.title),
+            is_pinned=c.is_pinned,
             created_at=c.created_at.isoformat() if c.created_at else None,
         )
         for c in conversations
@@ -139,7 +152,95 @@ def get_chat_history(
 
     messages = get_conversation_messages(db, conversation_id)
     return ChatHistoryRead(
-        items=[ChatMessage(role=m.role, content=m.content) for m in messages],
+        items=[
+            ChatMessageRead(
+                id=m.id,
+                role=m.role,
+                content=m.content,
+                created_at=m.created_at.isoformat() if m.created_at else None,
+                runtime_run_id=m.runtime_run_id,
+                attachments=[
+                    ChatMessageAttachmentRead(
+                        id=attachment.id,
+                        assistant_attachment_id=attachment.assistant_attachment_id,
+                        document_id=attachment.document_id,
+                        name=attachment.name,
+                        kind=attachment.kind,
+                        mime_type=attachment.mime_type,
+                        size=attachment.size,
+                        extraction_status=attachment.extraction_status,
+                        extraction_error=attachment.extraction_error,
+                    )
+                    for attachment in m.attachments
+                ],
+            )
+            for m in messages
+        ],
+        total=len(messages),
+    )
+
+
+@router.post("/conversations/{conversation_id}/fork", response_model=ChatConversationForkRead)
+def fork_chat_conversation(
+    conversation_id: str,
+    payload: ChatConversationForkRequest,
+    user: CurrentUser = Depends(require_auth),
+    db: Session = Depends(get_db),
+):
+    """Branch a conversation before a user checkpoint without replaying it."""
+    conversation = get_conversation(db, conversation_id, user.id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    resolve_conversation_project_context(
+        db,
+        user,
+        conversation_id=conversation_id,
+        requested_project_id=None,
+    )
+    try:
+        branch, messages = fork_conversation_from_checkpoint(
+            db,
+            conversation_id=conversation_id,
+            user_id=user.id,
+            checkpoint_message_id=payload.checkpoint_message_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return ChatConversationForkRead(
+        conversation=ChatConversationRead(
+            id=branch.id,
+            project_id=branch.project_id,
+            title=branch.title,
+            is_pinned=branch.is_pinned,
+            created_at=branch.created_at.isoformat() if branch.created_at else None,
+        ),
+        items=[
+            ChatMessageRead(
+                id=m.id,
+                role=m.role,
+                content=m.content,
+                created_at=m.created_at.isoformat() if m.created_at else None,
+                runtime_run_id=m.runtime_run_id,
+                attachments=[
+                    ChatMessageAttachmentRead(
+                        id=attachment.id,
+                        assistant_attachment_id=attachment.assistant_attachment_id,
+                        document_id=attachment.document_id,
+                        name=attachment.name,
+                        kind=attachment.kind,
+                        mime_type=attachment.mime_type,
+                        size=attachment.size,
+                        extraction_status=attachment.extraction_status,
+                        extraction_error=attachment.extraction_error,
+                    )
+                    for attachment in m.attachments
+                ],
+            )
+            for m in messages
+        ],
         total=len(messages),
     )
 
@@ -159,7 +260,18 @@ def update_chat_conversation(
             conversation_id=conversation_id,
             requested_project_id=None,
         )
-        conversation = rename_conversation(db, conversation_id, user.id, payload.title)
+        conversation = None
+        if payload.title is not None:
+            conversation = rename_conversation(db, conversation_id, user.id, payload.title)
+        if payload.is_pinned is not None:
+            conversation = set_conversation_pinned(
+                db,
+                conversation_id,
+                user.id,
+                payload.is_pinned,
+            )
+        if payload.title is None and payload.is_pinned is None:
+            raise ValueError("Conversation update requires a title or pinned state")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -170,6 +282,7 @@ def update_chat_conversation(
         id=conversation.id,
         project_id=conversation.project_id,
         title=conversation.title,
+        is_pinned=conversation.is_pinned,
         created_at=conversation.created_at.isoformat() if conversation.created_at else None,
     )
 

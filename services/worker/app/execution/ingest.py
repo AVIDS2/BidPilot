@@ -36,6 +36,52 @@ from sqlalchemy.exc import IntegrityError
 logger = logging.getLogger(__name__)
 
 
+def bundle_has_retryable_embedding_failure(bundle_id: str) -> bool:
+    """Return whether a bundle only needs another bounded provider attempt.
+
+    Parsing has already completed by this point.  The only automatic retry we
+    allow is a transient embedding-provider failure; malformed documents,
+    quota exhaustion, and rejected provider requests stay visible for an
+    explicit user action instead of being retried blindly.
+    """
+    db = SessionLocal()
+    try:
+        return db.scalar(
+            select(KnowledgeChunk.id)
+            .join(SourceDocument, SourceDocument.id == KnowledgeChunk.source_document_id)
+            .where(SourceDocument.bundle_id == bundle_id)
+            .where(KnowledgeChunk.embedding_status == EmbeddingOutcomeStatus.TRANSIENT_FAILURE.value)
+            .limit(1)
+        ) is not None
+    finally:
+        db.close()
+
+
+def mark_bundle_index_retrying(bundle_id: str) -> None:
+    """Keep a transient outage in the processing state while Celery backs off."""
+    db = SessionLocal()
+    try:
+        bundle = db.get(Bundle, bundle_id)
+        if bundle is None:
+            return
+        bundle.ingest_status = BundleIngestStatus.INDEXING.value
+        for document in bundle.source_documents:
+            if document.parse_status != DocumentParseStatus.PARSED.value:
+                continue
+            has_transient_chunk = db.scalar(
+                select(KnowledgeChunk.id)
+                .where(KnowledgeChunk.source_document_id == document.id)
+                .where(KnowledgeChunk.embedding_status == EmbeddingOutcomeStatus.TRANSIENT_FAILURE.value)
+                .limit(1)
+            ) is not None
+            if has_transient_chunk:
+                document.index_status = DocumentIndexStatus.INDEXING.value
+                document.index_error_code = "embedding_retry_scheduled"
+        db.commit()
+    finally:
+        db.close()
+
+
 def _embed_and_update_chunks(bundle_id: str) -> int:
     """Index only pending, failed, or profile-stale chunks without losing a good vector."""
     db = SessionLocal()
@@ -172,10 +218,14 @@ def _embed_and_update_chunks(bundle_id: str) -> int:
 
 def run_ingest(bundle_id: str) -> dict[str, str]:
     """Execute the full ingest pipeline for a bundle."""
-    if not _begin_ingest(bundle_id):
+    reserved_document_ids = _begin_ingest(bundle_id)
+    if reserved_document_ids is None:
         return {"bundle_id": bundle_id, "status": "not_found"}
     try:
-        parsed = parse_bundle_documents(bundle_id)
+        parsed = parse_bundle_documents(
+            bundle_id,
+            source_document_ids=reserved_document_ids,
+        )
         stored = store_chunks(bundle_id, parsed)
         embedded_count = _embed_and_update_chunks(bundle_id)
         req_count = _extract_and_store_requirements(
@@ -217,28 +267,40 @@ def run_reindex(bundle_id: str) -> dict[str, str]:
     }
 
 
-def _begin_ingest(bundle_id: str) -> bool:
-    """Mark retryable documents as parsing before the pure parser runs."""
+def _begin_ingest(bundle_id: str) -> set[str] | None:
+    """Reserve the exact retryable documents that this Worker attempt may parse."""
     db = SessionLocal()
     try:
         bundle = db.get(Bundle, bundle_id)
         if bundle is None:
-            return False
+            return None
         bundle.ingest_status = BundleIngestStatus.RUNNING.value
+        reserved_document_ids: set[str] = set()
         for document in bundle.source_documents:
+            if document.parse_status == DocumentParseStatus.NOT_APPLICABLE.value:
+                continue
             if document.parse_status == DocumentParseStatus.PARSED.value:
+                continue
+            if document.parse_status == DocumentParseStatus.FAILED.value and not document.parse_retryable:
                 continue
             if document.parse_attempt_count >= MAX_DOCUMENT_PARSE_ATTEMPTS:
                 # Preserve the parser's final classified cause when available;
                 # a crash after reserving the last attempt gets a stable code.
                 document.parse_status = DocumentParseStatus.FAILED.value
                 document.parse_error_code = document.parse_error_code or "parse_retry_exhausted"
+                document.parse_error_detail = document.parse_error_detail or (
+                    "Parser retry budget exhausted; upload a corrected source document or retry after fixing the parser dependency."
+                )
+                document.parse_retryable = False
                 continue
             document.parse_status = DocumentParseStatus.PARSING.value
             document.parse_error_code = None
+            document.parse_error_detail = None
+            document.parse_retryable = True
             document.parse_attempt_count += 1
+            reserved_document_ids.add(document.id)
         db.commit()
-        return True
+        return reserved_document_ids
     finally:
         db.close()
 
@@ -300,6 +362,8 @@ def _synchronize_document_index_state(bundle_id: str) -> str:
         has_problem = False
 
         for document in documents:
+            if document.parse_status == DocumentParseStatus.NOT_APPLICABLE.value:
+                continue
             if document.parse_status != DocumentParseStatus.PARSED.value:
                 has_problem = True
                 continue
@@ -353,6 +417,8 @@ def _mark_ingest_failed(bundle_id: str, error_code: str) -> None:
             if document.parse_status == DocumentParseStatus.PARSING.value:
                 document.parse_status = DocumentParseStatus.FAILED.value
                 document.parse_error_code = error_code
+                document.parse_error_detail = f"Worker ingestion failed with {error_code}; retryable=true"
+                document.parse_retryable = True
         db.commit()
     finally:
         db.close()

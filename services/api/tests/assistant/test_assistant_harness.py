@@ -61,22 +61,20 @@ def test_create_project_requires_confirmation(client, test_db, default_user_id: 
     assert confirmation_events[0]["approval_id"]
     assert test_db.query(Project).filter(Project.name == project_name).first() is None
 
-    from app.models import AssistantActionAudit, AssistantApproval
+    from app.models import RuntimeAction, RuntimeApproval, RuntimeRun
 
-    audit = (
-        test_db.query(AssistantActionAudit)
-        .filter_by(tool_name="create_project", status="pending_approval")
-        .order_by(AssistantActionAudit.created_at.desc())
-        .first()
-    )
-    assert audit is not None
-    assert audit.conversation_id == confirmation_events[0]["conversation_id"]
-    assert audit.risk_level == "low_risk_write"
-    assert audit.arguments_json["name"] == project_name
+    runtime_run = test_db.get(RuntimeRun, confirmation_events[0]["runtime_run_id"])
+    assert runtime_run is not None
+    assert runtime_run.status == "awaiting_approval"
+    action = test_db.query(RuntimeAction).filter_by(run_id=runtime_run.id).one()
+    assert action.capability_name == "create_project"
+    assert action.status == "awaiting_approval"
+    assert action.risk_level == "low_risk_write"
+    assert action.arguments_json["name"] == project_name
 
-    approval = test_db.get(AssistantApproval, confirmation_events[0]["approval_id"])
+    approval = test_db.get(RuntimeApproval, confirmation_events[0]["approval_id"])
     assert approval is not None
-    assert approval.action_audit_id == audit.id
+    assert approval.action_id == action.id
     assert approval.status == "pending"
     assert approval.payload_json["arguments"]["name"] == project_name
 
@@ -139,7 +137,8 @@ def test_create_project_missing_name_accepts_named_followup(client, test_db, def
     )
     assert first_response.status_code == 200
     first_events = _events(first_response.text)
-    conversation_id = [payload for event, payload in first_events if event == "assistant.start"][0]["conversation_id"]
+    start = [payload for event, payload in first_events if event == "assistant.start"][0]
+    conversation_id = start["conversation_id"]
 
     second_response = client.post(
         "/assistant/stream",
@@ -164,7 +163,8 @@ def test_create_project_can_be_confirmed_by_text_followup(client, test_db, defau
     )
     assert first_response.status_code == 200
     first_events = _events(first_response.text)
-    conversation_id = [payload for event, payload in first_events if event == "assistant.start"][0]["conversation_id"]
+    start = next(payload for event, payload in first_events if event == "assistant.start")
+    conversation_id = start["conversation_id"]
     assert [payload for event, payload in first_events if event == "assistant.confirmation_requested"]
 
     second_response = client.post(
@@ -191,7 +191,8 @@ def test_pending_confirmation_can_be_cancelled_by_text_followup(client, test_db,
     )
     assert first_response.status_code == 200
     first_events = _events(first_response.text)
-    conversation_id = [payload for event, payload in first_events if event == "assistant.start"][0]["conversation_id"]
+    start = next(payload for event, payload in first_events if event == "assistant.start")
+    conversation_id = start["conversation_id"]
 
     second_response = client.post(
         "/assistant/stream",
@@ -207,26 +208,16 @@ def test_pending_confirmation_can_be_cancelled_by_text_followup(client, test_db,
     assert messages == ["已取消这次操作。"]
     assert test_db.query(Project).filter(Project.name == project_name).first() is None
 
-    from app.models import AssistantActionAudit, AssistantApproval
+    from app.models import RuntimeAction, RuntimeApproval, RuntimeRun
 
-    audit = (
-        test_db.query(AssistantActionAudit)
-        .filter_by(tool_name="create_project")
-        .order_by(AssistantActionAudit.created_at.desc())
-        .first()
-    )
-    assert audit is not None
-    assert audit.status == "cancelled"
-    assert audit.completed_at is not None
-
-    approval = (
-        test_db.query(AssistantApproval)
-        .filter_by(action_audit_id=audit.id)
-        .order_by(AssistantApproval.created_at.desc())
-        .first()
-    )
+    runtime_run = test_db.get(RuntimeRun, start["runtime_run_id"])
+    assert runtime_run is not None
+    assert runtime_run.status == "cancelled"
+    action = test_db.query(RuntimeAction).filter_by(run_id=runtime_run.id).one()
+    assert action.status == "denied"
+    approval = test_db.query(RuntimeApproval).filter_by(action_id=action.id).one()
     assert approval is not None
-    assert approval.status == "cancelled"
+    assert approval.status == "rejected"
     assert approval.resolved_at is not None
 
 
@@ -241,9 +232,9 @@ def test_expired_pending_confirmation_does_not_execute(client, test_db, default_
     conversation_id = [payload for event, payload in first_events if event == "assistant.start"][0]["conversation_id"]
     confirmation = [payload for event, payload in first_events if event == "assistant.confirmation_requested"][0]
 
-    from app.models import AssistantActionAudit, AssistantApproval
+    from app.models import RuntimeAction, RuntimeApproval, RuntimeRun
 
-    approval = test_db.get(AssistantApproval, confirmation["approval_id"])
+    approval = test_db.get(RuntimeApproval, confirmation["approval_id"])
     assert approval is not None
     approval.expires_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)
     test_db.commit()
@@ -253,6 +244,11 @@ def test_expired_pending_confirmation_does_not_execute(client, test_db, default_
         json={
             "message": "确认",
             "conversation_id": conversation_id,
+            "confirmation": {
+                "approved": True,
+                "tool_name": "create_project",
+                "approval_id": confirmation["approval_id"],
+            },
         },
     )
 
@@ -265,26 +261,39 @@ def test_expired_pending_confirmation_does_not_execute(client, test_db, default_
 
     test_db.refresh(approval)
     assert approval.status == "expired"
-    audit = test_db.get(AssistantActionAudit, approval.action_audit_id)
-    assert audit is not None
-    assert audit.status == "expired"
-    assert audit.completed_at is not None
+    action = test_db.get(RuntimeAction, approval.action_id)
+    assert action is not None
+    assert action.status == "expired"
+    runtime_run = test_db.get(RuntimeRun, action.run_id)
+    assert runtime_run is not None
+    assert runtime_run.status == "expired"
 
 
 def test_confirmed_create_project_executes_tool(client, test_db, default_user_id: str) -> None:
     project_name = f"Agent Project {uuid.uuid4().hex[:6]}"
 
+    requested = client.post(
+        "/assistant/stream",
+        json={
+            "message": f"创建项目，名字叫 {project_name}",
+        },
+    )
+    assert requested.status_code == 200
+    requested_events = _events(requested.text)
+    confirmation = next(
+        payload for event, payload in requested_events if event == "assistant.confirmation_requested"
+    )
+
     response = client.post(
         "/assistant/stream",
         json={
             "message": "确认创建项目",
+            "conversation_id": confirmation["conversation_id"],
             "confirmation": {
                 "approved": True,
                 "tool_name": "create_project",
-                "arguments": {
-                    "name": project_name,
-                    "scenario_package": "bidpilot",
-                },
+                "arguments": confirmation["arguments"],
+                "approval_id": confirmation["approval_id"],
             },
         },
     )
@@ -299,18 +308,18 @@ def test_confirmed_create_project_executes_tool(client, test_db, default_user_id
     assert project is not None
     assert project.scenario_package == "bidpilot"
 
-    from app.models import AssistantActionAudit
+    from app.models import RuntimeAction, RuntimeApproval, RuntimeRun
 
-    audit = (
-        test_db.query(AssistantActionAudit)
-        .filter_by(tool_name="create_project", status="succeeded")
-        .order_by(AssistantActionAudit.created_at.desc())
-        .first()
-    )
-    assert audit is not None
-    assert audit.arguments_json["name"] == project_name
-    assert audit.result_summary == f"项目「{project_name}」已创建。"
-    assert audit.completed_at is not None
+    runtime_run = test_db.get(RuntimeRun, confirmation["runtime_run_id"])
+    assert runtime_run is not None
+    assert runtime_run.status == "succeeded"
+    action = test_db.query(RuntimeAction).filter_by(run_id=runtime_run.id).one()
+    assert action.status == "succeeded"
+    assert action.arguments_json["name"] == project_name
+    assert action.public_summary == f"项目「{project_name}」已创建。"
+    approval = test_db.get(RuntimeApproval, confirmation["approval_id"])
+    assert approval is not None
+    assert approval.status == "approved"
 
 
 def test_failed_confirmed_tool_records_failed_audit(
@@ -329,17 +338,32 @@ def test_failed_confirmed_tool_records_failed_audit(
     test_db.commit()
     test_db.refresh(project)
 
+    requested = client.post(
+        "/assistant/stream",
+        json={
+            "message": "删除项目",
+            "project_id": project.id,
+        },
+    )
+    assert requested.status_code == 200
+    requested_events = _events(requested.text)
+    confirmation = next(
+        payload for event, payload in requested_events if event == "assistant.confirmation_requested"
+    )
+
     response = client.post(
         "/assistant/stream",
         json={
-            "message": "确认删除项目",
+            "message": "确认执行",
+            "conversation_id": confirmation["conversation_id"],
             "confirmation": {
                 "approved": True,
                 "tool_name": "delete_project",
                 "arguments": {
-                    "project_id": project.id,
+                    **confirmation["arguments"],
                     "confirmation_text": "错误名称",
                 },
+                "approval_id": confirmation["approval_id"],
             },
         },
     )
@@ -351,18 +375,19 @@ def test_failed_confirmed_tool_records_failed_audit(
     assert "完整项目名称" in failed[0]["error_message"]
     assert test_db.get(Project, project.id) is not None
 
-    from app.models import AssistantActionAudit
+    from app.models import RuntimeAction, RuntimeApproval, RuntimeRun
 
-    audit = (
-        test_db.query(AssistantActionAudit)
-        .filter_by(tool_name="delete_project", status="failed")
-        .order_by(AssistantActionAudit.created_at.desc())
-        .first()
-    )
-    assert audit is not None
-    assert audit.risk_level == "destructive"
-    assert audit.arguments_json["confirmation_text"] == "错误名称"
-    assert "完整项目名称" in (audit.error_message or "")
+    runtime_run = test_db.get(RuntimeRun, confirmation["runtime_run_id"])
+    assert runtime_run is not None
+    assert runtime_run.status == "failed"
+    action = test_db.query(RuntimeAction).filter_by(run_id=runtime_run.id).one()
+    assert action.status == "failed"
+    assert action.risk_level == "destructive"
+    assert action.arguments_json["confirmation_text"] == "错误名称"
+    assert "完整项目名称" in (action.error_message or "")
+    approval = test_db.get(RuntimeApproval, confirmation["approval_id"])
+    assert approval is not None
+    assert approval.status == "edited"
 
 
 def test_tool_failure_redacts_sse_and_saved_message(
@@ -375,7 +400,7 @@ def test_tool_failure_redacts_sse_and_saved_message(
     def fail_with_secret(*_args, **_kwargs):
         raise ValueError("provider failed api_key=sk-live-secret-value")
 
-    monkeypatch.setattr("app.assistant.service.execute_tool", fail_with_secret)
+    monkeypatch.setattr("app.assistant.tools.execute_tool", fail_with_secret)
 
     response = client.post(
         "/assistant/stream",
@@ -399,15 +424,13 @@ def test_tool_failure_redacts_sse_and_saved_message(
     assert assistant_messages
     assert "sk-live-secret-value" not in assistant_messages[-1]
 
-    from app.models import AssistantActionAudit
+    from app.models import RuntimeAction, RuntimeRun
 
-    audit = (
-        test_db.query(AssistantActionAudit)
-        .filter_by(conversation_id=conversation_id, tool_name="open_page", status="failed")
-        .one()
-    )
-    assert "sk-live-secret-value" not in (audit.error_message or "")
-    assert "***redacted***" in (audit.error_message or "")
+    runtime_run = test_db.query(RuntimeRun).filter_by(conversation_id=conversation_id).one()
+    action = test_db.query(RuntimeAction).filter_by(run_id=runtime_run.id, capability_name="open_page").one()
+    assert action.status == "failed"
+    assert "sk-live-secret-value" not in (action.error_message or "")
+    assert "***redacted***" in (action.error_message or "")
 
 
 def test_open_page_executes_without_confirmation(client, default_user_id: str) -> None:
@@ -545,7 +568,7 @@ def test_readiness_summary_streams_as_a_safe_read(
         event for event, _payload in events
     ].index("assistant.message")
     messages = [payload["content"] for event, payload in events if event == "assistant.message"]
-    assert messages == ["项目「Assistant Readiness Project」当前就绪度为 0.0 分，有 1 个强制项缺口和 1 个证据缺口。"]
+    assert messages == ["当前投标准备度为 0.0 分。"]
 
 
 def test_claim_review_queue_streams_only_safe_progress_counts(
@@ -643,11 +666,9 @@ def test_claim_review_queue_streams_only_safe_progress_counts(
     succeeded = [payload for event, payload in events if event == "assistant.tool_succeeded"]
     assert succeeded[0]["tool_name"] == "list_claim_review_queue"
     assert succeeded[0]["result"] == {
-        "project_id": project.id,
         "count": 2,
         "ready_to_verify_count": 1,
         "blocked_by_evidence_count": 1,
-        "truncated": False,
     }
     assert secret_claim_text not in response.text
 

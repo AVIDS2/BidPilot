@@ -47,22 +47,34 @@ def _find_or_create_section(
     db,
     project_id: str,
     section_key: str,
+    deliverable_section_id: str | None = None,
 ) -> DeliverableSection:
     """Find existing DeliverableSection or create one under the project's deliverable.
 
     If no Deliverable exists for the project yet, creates one automatically.
     """
-    section = db.scalar(
+    if deliverable_section_id:
+        section = db.get(DeliverableSection, deliverable_section_id)
+        deliverable = db.get(Deliverable, section.deliverable_id) if section else None
+        if section is None or deliverable is None or deliverable.project_id != project_id:
+            raise ResponsePlanScopeError("response_plan_deliverable_section_scope_invalid")
+        if section.section_key != section_key:
+            raise ResponsePlanScopeError("response_plan_deliverable_section_key_mismatch")
+        return section
+
+    matching_sections = list(db.scalars(
         select(DeliverableSection)
         .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
         .where(
             Deliverable.project_id == project_id,
             DeliverableSection.section_key == section_key,
         )
-        .limit(1)
-    )
-    if section is not None:
-        return section
+        .limit(2)
+    ).all())
+    if len(matching_sections) > 1:
+        raise ResponsePlanScopeError("response_plan_section_ambiguous")
+    if matching_sections:
+        return matching_sections[0]
 
     # Find or create deliverable for this project
     deliverable = db.scalar(
@@ -113,6 +125,7 @@ def _find_existing_version_for_run(
     *,
     project_id: str,
     section_key: str,
+    deliverable_section_id: str | None,
     run_id: str,
     iteration: int,
 ) -> SectionVersion | None:
@@ -123,7 +136,11 @@ def _find_existing_version_for_run(
         .join(Deliverable, Deliverable.id == DeliverableSection.deliverable_id)
         .where(
             Deliverable.project_id == project_id,
-            DeliverableSection.section_key == section_key,
+            (
+                DeliverableSection.id == deliverable_section_id
+                if deliverable_section_id
+                else DeliverableSection.section_key == section_key
+            ),
             SectionVersion.generation_run_id == run_id,
             SectionVersion.generation_iteration == iteration,
         )
@@ -448,6 +465,7 @@ def persist_result_node(state: BidPilotState) -> dict:
     start = time.monotonic()
     project_id: str = state["project_id"]
     section_key: str = state["section_key"]
+    deliverable_section_id = state.get("deliverable_section_id")
     run_id: str = state["run_id"]
     draft_markdown: str = state.get("draft_markdown", "")
     draft_model_used: str = state.get("draft_model_used", "")
@@ -458,6 +476,11 @@ def persist_result_node(state: BidPilotState) -> dict:
     response_plan_state_update: dict = {}
     claim_candidates = state.get("claim_candidates", [])
     claim_integrity_status = str(state.get("claim_integrity_status") or "not_assessed")
+    review_status = str(
+        state.get("review_status")
+        or ("passed" if state.get("review_passed") else "failed")
+    )
+    review_degradation_code = state.get("review_degradation_code")
     iteration: int = state.get("iteration", 0)
 
     db = SessionLocal()
@@ -485,11 +508,12 @@ def persist_result_node(state: BidPilotState) -> dict:
             "response_plan_version": response_plan_binding.response_plan_version,
         }
         human_decision = state.get("human_decision")
-        requires_human_review = bool(state.get("review_passed")) and human_decision is None
+        requires_human_review = review_status in {"passed", "degraded"} and human_decision is None
         existing_version = _find_existing_version_for_run(
             db,
             project_id=project_id,
             section_key=section_key,
+            deliverable_section_id=deliverable_section_id,
             run_id=run_id,
             iteration=iteration,
         )
@@ -501,7 +525,12 @@ def persist_result_node(state: BidPilotState) -> dict:
                     ).all()
                 )
             )
-            section = _find_or_create_section(db, project_id, section_key)
+            section = _find_or_create_section(
+                db,
+                project_id,
+                section_key,
+                deliverable_section_id=deliverable_section_id,
+            )
             if section.id != response_plan_binding.deliverable_section_id:
                 raise ResponsePlanScopeError("response_plan_binding_deliverable_section_mismatch")
             if (
@@ -542,6 +571,8 @@ def persist_result_node(state: BidPilotState) -> dict:
                         "section_version_id": existing_version.id,
                         "iterations": iteration,
                         "section_status": section.status,
+                        "review_status": review_status,
+                        "review_degradation_code": review_degradation_code,
                         "awaiting_human": True,
                     }
                 db.commit()
@@ -568,6 +599,8 @@ def persist_result_node(state: BidPilotState) -> dict:
                         "section_version_id": existing_version.id,
                         "iterations": iteration,
                         "section_status": section.status,
+                        "review_status": review_status,
+                        "review_degradation_code": review_degradation_code,
                         "human_decision": human_decision,
                     }
                 db.commit()
@@ -593,11 +626,18 @@ def persist_result_node(state: BidPilotState) -> dict:
                 "persisted": True,
                 "claim_count": claim_count,
                 "claim_integrity_status": claim_integrity_status,
+                "review_status": review_status,
+                "review_degradation_code": review_degradation_code,
                 "agent_history": history,
             }
 
         # 1. Find or create the deliverable section
-        section = _find_or_create_section(db, project_id, section_key)
+        section = _find_or_create_section(
+            db,
+            project_id,
+            section_key,
+            deliverable_section_id=deliverable_section_id,
+        )
         if section.id != response_plan_binding.deliverable_section_id:
             raise ResponsePlanScopeError("response_plan_binding_deliverable_section_mismatch")
 
@@ -759,6 +799,7 @@ def persist_result_node(state: BidPilotState) -> dict:
                 f"section_version_id={section_version_id}, "
                 f"version_number={next_ver}, persisted=True, claims={persisted_claim_count}, "
                 f"integrity={claim_integrity_status}"
+                f", review_status={review_status}"
             ),
             duration_ms=duration_ms,
             success=True,

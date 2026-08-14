@@ -54,7 +54,15 @@ def test_deepseek_anthropic_model_discovery_uses_deepseek_model_api() -> None:
 
     assert request is not None
     assert request.url == "https://api.deepseek.com/models"
-    assert request.headers == {"Authorization": "Bearer test-key"}
+
+
+def test_opencode_go_profile_resolves_its_openai_compatible_endpoints() -> None:
+    request = resolve_provider_chat_request("openai", "opencode-go", None, "test-key")
+
+    assert request.url == "https://opencode.ai/zen/go/v1/chat/completions"
+    assert request.headers["Authorization"] == "Bearer test-key"
+    assert request.headers["content-type"] == "application/json"
+    assert infer_provider_id("openai", "https://opencode.ai/zen/go/v1") == "opencode-go"
 
 
 def test_infer_provider_profile_preserves_unknown_gateway_protocol() -> None:

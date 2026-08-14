@@ -22,6 +22,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -336,6 +337,33 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class NotificationPreference(Base):
+    """Per-user channel and category choices for non-critical notifications.
+
+    Business records, approvals and audit events are never conditional on this
+    table. It only decides whether a user receives an in-app or email notice.
+    Missing rows intentionally mean the conservative product default: all
+    categories and both channels are enabled.
+    """
+
+    __tablename__ = "notification_preference"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    in_app_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    email_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    review_updates: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    agent_updates: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    radar_updates: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    material_updates: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
 # ── Project & Documents ──────────────────────────────────────────────────────
 
 
@@ -357,6 +385,247 @@ class Project(Base):
         cascade="all, delete-orphan",
     )
     bundles: Mapped[list["Bundle"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+
+
+# ── Tender Radar ────────────────────────────────────────────────────────────
+
+
+class NoticeSource(Base):
+    """One organization-owned source of tender notices.
+
+    ``rss`` and ``json_feed`` are polled by the worker. ``webhook`` sources
+    are populated by a signed inbound integration endpoint. The source never
+    stores a private-network URL: fetching is delegated to the guarded public
+    HTTP importer.
+    """
+
+    __tablename__ = "notice_source"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    endpoint_url: Mapped[str | None] = mapped_column(String(2048))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    polling_interval_minutes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=60, server_default="60"
+    )
+    last_polled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_error_code: Mapped[str | None] = mapped_column(String(100))
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    items: Mapped[list["NoticeItem"]] = relationship(
+        back_populates="source", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('rss', 'json_feed', 'webhook')", name="ck_notice_source_kind"),
+        CheckConstraint("polling_interval_minutes BETWEEN 5 AND 1440", name="ck_notice_source_interval"),
+        Index("ix_notice_source_org_active", "org_id", "is_active"),
+    )
+
+
+class NoticeSubscription(Base):
+    """Saved organization search intent used to explain recommendation matches."""
+
+    __tablename__ = "notice_subscription"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    keywords_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    regions_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    categories_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    budget_min: Mapped[float | None] = mapped_column(Float)
+    budget_max: Mapped[float | None] = mapped_column(Float)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    matches: Mapped[list["NoticeMatch"]] = relationship(
+        back_populates="subscription", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "budget_min IS NULL OR budget_max IS NULL OR budget_min <= budget_max",
+            name="ck_notice_subscription_budget_range",
+        ),
+        Index("ix_notice_subscription_org_active", "org_id", "is_active"),
+    )
+
+
+class NoticeItem(Base):
+    """One normalized opportunity, deduplicated inside its original source."""
+
+    __tablename__ = "notice_item"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False
+    )
+    source_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("notice_source.id", ondelete="CASCADE"), nullable=False
+    )
+    external_id: Mapped[str] = mapped_column(String(500), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    buyer_name: Mapped[str | None] = mapped_column(String(255))
+    notice_type: Mapped[str] = mapped_column(String(40), nullable=False, default="other")
+    region: Mapped[str | None] = mapped_column(String(120))
+    category: Mapped[str | None] = mapped_column(String(120))
+    budget_amount: Mapped[float | None] = mapped_column(Float)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime)
+    source_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text)
+    source_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="new", server_default="new")
+    saved_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL")
+    )
+    converted_project_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("project.id", ondelete="SET NULL"), unique=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    source: Mapped["NoticeSource"] = relationship(back_populates="items")
+    matches: Mapped[list["NoticeMatch"]] = relationship(
+        back_populates="notice", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "notice_type IN ('intent', 'tender', 'prequalification', 'rfi', 'other')",
+            name="ck_notice_item_type",
+        ),
+        CheckConstraint(
+            "status IN ('new', 'saved', 'ignored', 'converted')",
+            name="ck_notice_item_status",
+        ),
+        UniqueConstraint("source_id", "external_id", name="uq_notice_item_source_external"),
+        Index("ix_notice_item_org_status_created", "org_id", "status", "created_at"),
+        Index("ix_notice_item_org_deadline", "org_id", "deadline_at"),
+    )
+
+
+class NoticeMatch(Base):
+    """A durable recommendation and its human-readable matching reasons."""
+
+    __tablename__ = "notice_match"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    notice_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("notice_item.id", ondelete="CASCADE"), nullable=False
+    )
+    subscription_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("notice_subscription.id", ondelete="CASCADE"), nullable=False
+    )
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    reasons_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    notice: Mapped["NoticeItem"] = relationship(back_populates="matches")
+    subscription: Mapped["NoticeSubscription"] = relationship(back_populates="matches")
+
+    __table_args__ = (
+        CheckConstraint("score BETWEEN 0 AND 100", name="ck_notice_match_score"),
+        UniqueConstraint("notice_id", "subscription_id", name="uq_notice_match_notice_subscription"),
+        Index("ix_notice_match_subscription_score", "subscription_id", "score"),
+    )
+
+
+# ── Business Webhooks ───────────────────────────────────────────────────────
+
+
+class WebhookEndpoint(Base):
+    """One organization-owned outbound webhook destination.
+
+    The signing secret is encrypted at rest. It is only returned once when an
+    endpoint is created or rotated, while all deliveries retain their own
+    durable retry state.
+    """
+
+    __tablename__ = "webhook_endpoint"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    signing_secret_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    events_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    deliveries: Mapped[list["WebhookDelivery"]] = relationship(
+        back_populates="endpoint", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_webhook_endpoint_org_active", "org_id", "is_active"),
+    )
+
+
+class WebhookDelivery(Base):
+    """An immutable outbound event intent with at-least-once delivery state."""
+
+    __tablename__ = "webhook_delivery"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    endpoint_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("webhook_endpoint.id", ondelete="CASCADE"), nullable=False
+    )
+    org_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending", server_default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5, server_default="5")
+    available_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_http_status: Mapped[int | None] = mapped_column(Integer)
+    last_error_code: Mapped[str | None] = mapped_column(String(100))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    endpoint: Mapped["WebhookEndpoint"] = relationship(back_populates="deliveries")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'delivering', 'delivered', 'failed')",
+            name="ck_webhook_delivery_status",
+        ),
+        CheckConstraint("attempt_count >= 0", name="ck_webhook_delivery_attempt_count"),
+        CheckConstraint("max_attempts BETWEEN 1 AND 10", name="ck_webhook_delivery_max_attempts"),
+        Index("ix_webhook_delivery_due", "status", "available_at"),
+        Index("ix_webhook_delivery_endpoint_created", "endpoint_id", "created_at"),
+        Index("ix_webhook_delivery_org_created", "org_id", "created_at"),
+    )
 
 
 class ProjectMember(Base):
@@ -409,6 +678,9 @@ class SourceDocument(Base):
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    # Remote provenance is durable business data. It is empty for local uploads
+    # and records the final imported URL for bounded Agent/web imports.
+    source_url: Mapped[str | None] = mapped_column(String(2048))
     page_count: Mapped[int | None] = mapped_column(Integer)
     parse_status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
     parse_attempt_count: Mapped[int] = mapped_column(
@@ -426,7 +698,19 @@ class SourceDocument(Base):
         nullable=True,
         index=True,
     )
+    # Parser diagnostics are durable operational truth.  They allow users and
+    # support tooling to distinguish a corrupt upload from a transient worker
+    # failure without exposing an internal exception or storage path.
+    parser_name: Mapped[str | None] = mapped_column(String(100))
+    parser_version: Mapped[str | None] = mapped_column(String(50))
     parse_error_code: Mapped[str | None] = mapped_column(String(100))
+    parse_error_detail: Mapped[str | None] = mapped_column(Text)
+    parse_retryable: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+    )
     parsed_at: Mapped[datetime | None] = mapped_column(DateTime)
     index_status: Mapped[str] = mapped_column(
         String(30),
@@ -512,6 +796,322 @@ class ParsedAsset(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     source_document: Mapped["SourceDocument"] = relationship(back_populates="parsed_assets")
+
+
+class OpportunityAssessment(Base):
+    """Project-scoped Go/No-Go scorecard and its current governed outcome."""
+
+    __tablename__ = "opportunity_assessment"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("project.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", server_default="draft")
+    decision: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="pending", server_default="pending", index=True
+    )
+    scorecard_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    risk_summary_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    rationale: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), index=True
+    )
+    decided_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), index=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    lock_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    decisions: Mapped[list["OpportunityAssessmentDecision"]] = relationship(
+        back_populates="assessment",
+        cascade="all, delete-orphan",
+    )
+
+    __mapper_args__ = {"version_id_col": lock_version}
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'ready', 'decided', 'archived')",
+            name="ck_opportunity_assessment_status",
+        ),
+        CheckConstraint(
+            "decision IN ('pending', 'go', 'no_go', 'conditional_go')",
+            name="ck_opportunity_assessment_decision",
+        ),
+        Index("ix_opportunity_assessment_project_decision", "project_id", "decision"),
+    )
+
+
+class OpportunityAssessmentDecision(Base):
+    """Immutable decision history; the assessment row only stores its latest state."""
+
+    __tablename__ = "opportunity_assessment_decision"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    assessment_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("opportunity_assessment.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    decision: Mapped[str] = mapped_column(String(30), nullable=False)
+    rationale: Mapped[str | None] = mapped_column(Text)
+    scorecard_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    risk_summary_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    decided_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    assessment: Mapped["OpportunityAssessment"] = relationship(back_populates="decisions")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "assessment_id", "sequence", name="uq_opportunity_assessment_decision_sequence"
+        ),
+        CheckConstraint(
+            "decision IN ('go', 'no_go', 'conditional_go')",
+            name="ck_opportunity_assessment_decision_value",
+        ),
+    )
+
+
+class ContentLibraryEntry(Base):
+    """Organization-owned reusable content. Draft model output is never auto-published."""
+
+    __tablename__ = "content_library_entry"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(50), nullable=False, default="answer")
+    category: Mapped[str | None] = mapped_column(String(100), index=True)
+    tags_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="draft", server_default="draft", index=True
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="draft", server_default="draft", index=True
+    )
+    owner_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), index=True
+    )
+    effective_from: Mapped[datetime | None] = mapped_column(DateTime)
+    effective_until: Mapped[datetime | None] = mapped_column(DateTime)
+    supersedes_entry_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("content_library_entry.id", ondelete="SET NULL"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    versions: Mapped[list["ContentLibraryVersion"]] = relationship(
+        back_populates="entry", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle_status IN ('draft', 'published', 'archived')",
+            name="ck_content_library_entry_lifecycle",
+        ),
+        CheckConstraint(
+            "review_status IN ('draft', 'approved', 'rejected')",
+            name="ck_content_library_entry_review",
+        ),
+        Index("ix_content_library_entry_org_lifecycle", "org_id", "lifecycle_status"),
+    )
+
+
+class ContentLibraryVersion(Base):
+    """Immutable revision of a reusable answer, case study, template, or attachment note."""
+
+    __tablename__ = "content_library_version"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    entry_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("content_library_entry.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_json: Mapped[dict | None] = mapped_column(JSON)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    entry: Mapped["ContentLibraryEntry"] = relationship(back_populates="versions")
+
+    __table_args__ = (
+        UniqueConstraint("entry_id", "version_number", name="uq_content_library_version_number"),
+        UniqueConstraint("entry_id", "content_hash", name="uq_content_library_version_hash"),
+    )
+
+
+class ContentLibraryUsage(Base):
+    """A durable reference from a Bid Project to the exact library version it reused."""
+
+    __tablename__ = "content_library_usage"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    entry_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("content_library_entry.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    content_version_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("content_library_version.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("project.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    deliverable_section_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("deliverable_section.id", ondelete="SET NULL"), index=True
+    )
+    usage_purpose: Mapped[str] = mapped_column(String(50), nullable=False, default="reference")
+    used_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "content_version_id",
+            "project_id",
+            "deliverable_section_id",
+            "usage_purpose",
+            name="uq_content_library_usage_target",
+        ),
+        Index("ix_content_library_usage_project_created", "project_id", "created_at"),
+    )
+
+
+class DocumentChangeSet(Base):
+    """One deterministic comparison between an immutable document and its replacement."""
+
+    __tablename__ = "document_change_set"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("project.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    previous_document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("source_document.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    replacement_document_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("source_document.id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="pending_parse", server_default="pending_parse", index=True
+    )
+    summary_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), index=True
+    )
+    reviewed_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL"), index=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    impacts: Mapped[list["DocumentChangeImpact"]] = relationship(
+        back_populates="change_set", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_parse', 'analyzed', 'accepted', 'dismissed')",
+            name="ck_document_change_set_status",
+        ),
+        UniqueConstraint(
+            "project_id", "replacement_document_id", name="uq_document_change_set_project_replacement"
+        ),
+    )
+
+
+class DocumentChangeImpact(Base):
+    """One reviewable project fact caused by a source document replacement."""
+
+    __tablename__ = "document_change_impact"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    change_set_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("document_change_set.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    impact_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    requirement_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("requirement_item.id", ondelete="SET NULL"), index=True
+    )
+    deliverable_section_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("deliverable_section.id", ondelete="SET NULL"), index=True
+    )
+    impact_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    severity: Mapped[str] = mapped_column(String(30), nullable=False, default="medium")
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="open", server_default="open", index=True
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    locator_json: Mapped[dict | None] = mapped_column(JSON)
+    acknowledged_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL")
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime)
+    resolved_by_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("user.id", ondelete="SET NULL")
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    change_set: Mapped["DocumentChangeSet"] = relationship(back_populates="impacts")
+
+    __table_args__ = (
+        UniqueConstraint("change_set_id", "impact_key", name="uq_document_change_impact_key"),
+        CheckConstraint(
+            "status IN ('open', 'acknowledged', 'resolved', 'dismissed')",
+            name="ck_document_change_impact_status",
+        ),
+        CheckConstraint(
+            "severity IN ('low', 'medium', 'high', 'critical')",
+            name="ck_document_change_impact_severity",
+        ),
+    )
 
 
 class KnowledgeChunk(Base):
@@ -1363,6 +1963,15 @@ class ExecutionRun(Base):
         String(36),
         ForeignKey("execution_run.id", ondelete="SET NULL"),
     )
+    # Browser and API retries must resolve to the same durable workflow run.
+    # It is nullable for historical rows and worker-created recovery attempts.
+    requested_by_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    client_request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     run_type: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="queued")
@@ -1373,6 +1982,12 @@ class ExecutionRun(Base):
 
     __table_args__ = (
         UniqueConstraint("parent_execution_run_id", "attempt_number", name="uq_execution_run_parent_attempt"),
+        UniqueConstraint(
+            "requested_by_user_id",
+            "client_request_id",
+            name="uq_execution_run_user_client_request",
+        ),
+        Index("ix_execution_run_request_id", "requested_by_user_id", "client_request_id"),
     )
 
 
@@ -1739,7 +2354,7 @@ class RuntimeEvent(Base):
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     public_summary: Mapped[str] = mapped_column(Text, nullable=False)
     payload_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    schema_version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.1")
+    schema_version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.2")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     __table_args__ = (
@@ -1757,6 +2372,11 @@ class RuntimeAction(Base):
         ForeignKey("runtime_run.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # The action belongs to one durable model-turn event.  This is intentionally
+    # separate from the opaque action key so replay can rebuild a public event
+    # tree without parsing implementation identifiers.
+    parent_event_id: Mapped[str | None] = mapped_column(String(36))
+    turn_id: Mapped[str | None] = mapped_column(String(64))
     action_key: Mapped[str] = mapped_column(String(255), nullable=False)
     capability_name: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")
@@ -2092,11 +2712,24 @@ class ChatConversation(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id"), nullable=False)
     project_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("project.id"))
+    source_conversation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("chat_conversation.id", ondelete="SET NULL"),
+    )
+    checkpoint_message_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("chat_message.id", ondelete="SET NULL"),
+    )
     title: Mapped[str | None] = mapped_column(String(255))
+    is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    messages: Mapped[list["ChatMessage"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        foreign_keys="ChatMessage.conversation_id",
+    )
     task_state: Mapped["ChatTaskState | None"] = relationship(back_populates="conversation", cascade="all, delete-orphan")
 
 
@@ -2105,11 +2738,63 @@ class ChatMessage(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     conversation_id: Mapped[str] = mapped_column(String(36), ForeignKey("chat_conversation.id"), nullable=False)
+    runtime_run_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("runtime_run.id", ondelete="SET NULL"),
+        index=True,
+    )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    conversation: Mapped["ChatConversation"] = relationship(back_populates="messages")
+    conversation: Mapped["ChatConversation"] = relationship(
+        back_populates="messages",
+        foreign_keys=[conversation_id],
+    )
+    attachments: Mapped[list["ChatMessageAttachment"]] = relationship(
+        back_populates="message",
+        cascade="all, delete-orphan",
+        order_by="ChatMessageAttachment.created_at",
+    )
+
+
+class ChatMessageAttachment(Base):
+    """Immutable attachment snapshot belonging to one chat message.
+
+    AssistantAttachment remains a short-lived upload/ingestion record.  A
+    conversation needs its own durable snapshot so history and later turns do
+    not depend on the browser's staged-attachment list or a temporary object.
+    """
+
+    __tablename__ = "chat_message_attachment"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    chat_message_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("chat_message.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assistant_attachment_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("assistant_attachment.id", ondelete="SET NULL"),
+        index=True,
+    )
+    document_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("source_document.id", ondelete="SET NULL"),
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(500), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="file")
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False, default="application/octet-stream")
+    size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    extraction_status: Mapped[str] = mapped_column(String(30), nullable=False, default="empty")
+    extracted_text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    extraction_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    message: Mapped["ChatMessage"] = relationship(back_populates="attachments")
 
 
 class ChatTaskState(Base):

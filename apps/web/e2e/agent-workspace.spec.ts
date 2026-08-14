@@ -15,7 +15,7 @@ async function prepareAuthenticatedAgent(page: Page) {
         id: "visual-user",
         email: "visual@example.com",
         display_name: "Visual User",
-        role: "member",
+        role: "admin",
         plan: "free",
         email_verified: true,
         org_id: "visual-org",
@@ -49,14 +49,15 @@ test("keeps the Agent composer inside the conversation pane at every viewport", 
   await prepareAuthenticatedAgent(page);
   await page.goto("/agent");
 
-  const conversationPane = page.getByTestId("assistant-conversation-pane");
-  const composer = page.getByTestId("assistant-composer");
+  const conversationPane = page.getByTestId("agent-conversation-pane");
+  const composer = page.getByTestId("linear-agent-composer");
   const textarea = page.getByRole("textbox", { name: "Ask me anything..." });
   const sendButton = page.getByRole("button", { name: "Send" });
   await expect(conversationPane).toBeVisible();
   await expect(composer).toBeVisible();
   await expect(textarea).toBeVisible();
   await expect(sendButton).toBeVisible();
+  await expect(page.getByText("收集招标附件", { exact: true })).toBeVisible();
 
   const [paneBox, composerBox, textareaBox, sendBox] = await Promise.all([
     conversationPane.boundingBox(),
@@ -87,12 +88,23 @@ test("keeps the Agent composer inside the conversation pane at every viewport", 
     fullPage: true,
   });
 
-  if (testInfo.project.name === "mobile-chromium") {
-    await expect(page.getByTestId("assistant-history-rail")).toBeHidden();
-    await page.getByTestId("assistant-history-toggle").click();
-    await expect(page.getByTestId("assistant-history-drawer")).toBeVisible();
-  } else {
-    await expect(page.getByTestId("assistant-history-rail")).toBeVisible();
+  // The full-page Agent workspace keeps a single conversation canvas on both
+  // layouts. The footer history control is intentionally desktop-only.
+  if (testInfo.project.name === "chromium") {
+    await expect(page.getByRole("button", { name: "Chat history" })).toBeVisible();
+
+    // The desktop account menu is part of the shared workbench shell. Keep
+    // its admin settings routes visible and on the light menu surface.
+    await page.getByRole("button", { name: "打开账户菜单" }).click();
+    await expect(page.getByText("账户与个性化", { exact: true })).toBeVisible();
+    await expect(page.getByText("组织设置", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("集成、模型与 Webhook", { exact: true }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath("agent-workspace-account-menu.png"),
+      fullPage: true,
+    });
   }
 
   await page.screenshot({

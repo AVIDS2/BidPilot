@@ -6,6 +6,7 @@ Thin wrapper around minio-py for document storage.
 import io
 import logging
 import os
+from os import PathLike
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,20 @@ def upload_bytes(project_id: str, object_name: str, data: bytes, content_type: s
         length=len(data),
         content_type=content_type,
     )
+    return f"{bucket}/{object_name}"
+
+
+def upload_file(
+    project_id: str,
+    object_name: str,
+    file_path: str | PathLike[str],
+    content_type: str = "application/octet-stream",
+) -> str:
+    """Upload a local file without loading it into process memory."""
+    client = _get_client()
+    bucket = _bucket_name(project_id)
+    _ensure_bucket(client, bucket)
+    client.fput_object(bucket, object_name, str(file_path), content_type=content_type)
     return f"{bucket}/{object_name}"
 
 

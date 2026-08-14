@@ -17,6 +17,12 @@ test-results/
 tmp/
 output/
 packages/contracts/*.egg-info/
+services/api/*.egg-info/
+.tmp/
+artifacts/
+opendesign/
+temple/
+apps/web/public/marketing/
 
 # Local Vite overrides
 apps/web/.env.local

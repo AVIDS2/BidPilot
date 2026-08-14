@@ -20,6 +20,8 @@ from app.adapters.llm import (
     _api_key as openai_api_key,
     _api_model as openai_api_model,
     _api_url as openai_api_url,
+    _deepseek_reasoning_effort,
+    _supports_deepseek_thinking,
     _supports_reasoning_effort,
 )
 from app.adapters.provider_errors import ProviderInvocationError, provider_error_for_status
@@ -46,6 +48,10 @@ class StructuredModelResult:
     model_used: str
     provider_type: str
     usage: ProviderUsageMeasurement | None
+
+
+def _is_opencode_go_gateway(url: str) -> bool:
+    return "opencode.ai/zen/go" in url.lower()
 
 
 def resolve_structured_provider(
@@ -136,11 +142,21 @@ def _invoke_openai_compatible(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": temperature,
         "max_tokens": max_output_tokens,
     }
-    if reasoning_effort in _OPENAI_REASONING_EFFORT and _supports_reasoning_effort(request.url, model):
-        payload["reasoning_effort"] = _OPENAI_REASONING_EFFORT[reasoning_effort]
+    if _supports_deepseek_thinking(request.url, model):
+        # DeepSeek V4 has thinking on by default. Structured workflow nodes
+        # activate it only when their caller explicitly requested reasoning.
+        payload["thinking"] = {"type": "enabled" if reasoning_effort else "disabled"}
+        # Pi sends OpenCode Go's DeepSeek models `thinking` only. The
+        # gateway is OpenAI-compatible but does not need the DeepSeek
+        # official-endpoint compatibility alias for reasoning effort.
+        if reasoning_effort in _OPENAI_REASONING_EFFORT and not _is_opencode_go_gateway(request.url):
+            payload["reasoning_effort"] = _deepseek_reasoning_effort(reasoning_effort)
+    else:
+        payload["temperature"] = temperature
+        if reasoning_effort in _OPENAI_REASONING_EFFORT and _supports_reasoning_effort(request.url, model):
+            payload["reasoning_effort"] = _OPENAI_REASONING_EFFORT[reasoning_effort]
     try:
         response = httpx.post(
             request.url,

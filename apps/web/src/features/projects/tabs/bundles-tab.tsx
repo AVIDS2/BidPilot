@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import {
   createBundle,
   listDocuments,
+  reingestBundle,
   uploadDocument,
   getDocumentDownloadUrl,
   type BundleRead,
@@ -76,16 +77,18 @@ function DragDropUpload({
             setUploadItems((current) =>
               current.map((item, i) => (i === index ? { ...item, progress } : item)),
             );
-          }),
+          }, undefined, true),
         ),
       );
 
       let successCount = 0;
+      let hasParseableDocument = false;
       setUploadItems((current) =>
         current.map((item, index) => {
           const result = results[index];
           if (result.status === "fulfilled") {
             successCount += 1;
+            hasParseableDocument ||= result.value.parse_status !== "not_applicable";
             return { ...item, progress: 100, status: "done" };
           }
           return {
@@ -97,6 +100,13 @@ function DragDropUpload({
       );
 
       if (successCount > 0) {
+        if (hasParseableDocument) {
+          try {
+            await reingestBundle(bundleId);
+          } catch {
+            toast.error(t("bundles.ingestFailed", { defaultValue: "Files uploaded, but automatic parsing could not start." }));
+          }
+        }
         toast.success(t("bundles.uploadedMany", { count: successCount, defaultValue: `Uploaded ${successCount} file(s)` }));
         onUploadComplete(bundleId);
       }
@@ -117,7 +127,7 @@ function DragDropUpload({
       setIsDragging(false);
       if (e.dataTransfer.files?.length) handleUploadFiles(e.dataTransfer.files);
     },
-    [disabled, handleUploadFiles],
+    [handleUploadFiles],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {

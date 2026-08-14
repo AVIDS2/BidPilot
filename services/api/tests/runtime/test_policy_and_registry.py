@@ -277,6 +277,90 @@ def test_web_search_and_upload_formatters_keep_safe_fields() -> None:
     assert "secret" not in upload.payload
 
 
+def test_list_documents_formatter_exposes_readiness_without_document_content() -> None:
+    result = format_public_result(
+        "list_documents",
+        {
+            "items": [
+                {
+                    "id": "doc-indexed",
+                    "original_filename": "招标文件.pdf",
+                    "parse_status": "parsed",
+                    "index_status": "indexed",
+                    "bundle_label": "招标资料",
+                    "bundle_status": "indexed",
+                    "body_markdown": "must-not-leak",
+                },
+                {
+                    "id": "doc-archive",
+                    "original_filename": "投标工具.zip",
+                    "parse_status": "not_applicable",
+                    "index_status": "not_applicable",
+                    "bundle_label": "招标资料",
+                    "bundle_status": "stored",
+                    "storage_key": "must-not-leak",
+                },
+            ]
+        },
+    )
+
+    assert result.summary == "找到 2 个文档：1 个已完成解析并建立检索索引；1 个为仅归档附件、不可语义检索。"
+    assert result.payload["indexed_count"] == 1
+    assert result.payload["archived_count"] == 1
+    assert result.payload["documents"] == [
+        {
+            "id": "doc-indexed",
+            "original_filename": "招标文件.pdf",
+            "parse_status": "parsed",
+            "index_status": "indexed",
+            "bundle_label": "招标资料",
+            "bundle_status": "indexed",
+        },
+        {
+            "id": "doc-archive",
+            "original_filename": "投标工具.zip",
+            "parse_status": "not_applicable",
+            "index_status": "not_applicable",
+            "bundle_label": "招标资料",
+            "bundle_status": "stored",
+        },
+    ]
+
+
+def test_readiness_gaps_formatter_exposes_actionable_fields_without_source_locator() -> None:
+    result = format_public_result(
+        "list_readiness_gaps",
+        {
+            "kind": "evidence",
+            "items": [
+                {
+                    "id": "req-1",
+                    "requirement_text": "提供团队资质证明",
+                    "risk_level": "high",
+                    "coverage_status": "uncovered",
+                    "evidence_status": "missing",
+                    "source_locator_json": {"page": 8, "must_not": "leak"},
+                }
+            ],
+        },
+    )
+
+    assert result.summary == "找到 1 个待处理缺口。"
+    assert result.payload == {
+        "count": 1,
+        "kind": "evidence",
+        "gaps": [
+            {
+                "id": "req-1",
+                "requirement_text": "提供团队资质证明",
+                "risk_level": "high",
+                "coverage_status": "uncovered",
+                "evidence_status": "missing",
+            }
+        ],
+    }
+
+
 def test_write_section_formatter_exposes_safe_section_identifiers() -> None:
     result = format_public_result(
         "write_section",

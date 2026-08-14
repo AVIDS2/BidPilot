@@ -23,7 +23,7 @@ import {
 import { useAuth } from "@/lib/auth"
 import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { ChevronsUpDownIcon, BadgeCheckIcon, LogOutIcon } from "lucide-react"
+import { BadgeCheckIcon, Building2Icon, ChevronsUpDownIcon, CpuIcon, LogOutIcon } from "lucide-react"
 
 export function NavUser({
   user,
@@ -35,7 +35,7 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
-  const { logout } = useAuth()
+  const { logout, user: authUser } = useAuth()
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -72,7 +72,7 @@ export function NavUser({
               </AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-              <span className="truncate font-medium text-white text-xs">{user.name}</span>
+              <span className="truncate font-medium text-foreground text-xs">{user.name}</span>
               <span className="truncate text-xs" style={{ color: "var(--text-tertiary)" }}>{user.email}</span>
             </div>
             <ChevronsUpDownIcon className="ml-auto size-3.5 group-data-[collapsible=icon]:hidden" style={{ color: "var(--text-quaternary)" }} />
@@ -103,7 +103,7 @@ export function NavUser({
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium text-white">{user.name}</span>
+                    <span className="truncate font-medium text-foreground">{user.name}</span>
                     <span className="truncate text-xs" style={{ color: "var(--text-tertiary)" }}>{user.email}</span>
                   </div>
                 </div>
@@ -113,17 +113,35 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={() => navigate("/account")}
-                className="text-muted-foreground focus:text-white focus:bg-[rgba(163,163,163,0.08)]"
+                className="text-muted-foreground focus:bg-accent focus:text-accent-foreground"
               >
                 <BadgeCheckIcon className="size-4" />
                 {t("user.account")}
               </DropdownMenuItem>
+              {authUser?.role === "admin" ? (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => navigate("/administration")}
+                    className="text-muted-foreground focus:bg-accent focus:text-accent-foreground"
+                  >
+                    <Building2Icon className="size-4" />
+                    组织设置
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => navigate("/settings/providers")}
+                    className="text-muted-foreground focus:bg-accent focus:text-accent-foreground"
+                  >
+                    <CpuIcon className="size-4" />
+                    集成与模型
+                  </DropdownMenuItem>
+                </>
+              ) : null}
             </DropdownMenuGroup>
             <DropdownMenuSeparator style={{ background: "var(--border)" }} />
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onClick={handleLogout}
-                className="text-muted-foreground focus:text-red-400 focus:bg-[rgba(239,68,68,0.08)]"
+                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
               >
                 <LogOutIcon className="size-4" />
                 {t("user.logOut")}

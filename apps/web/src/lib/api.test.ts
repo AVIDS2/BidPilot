@@ -18,7 +18,7 @@ describe("api client", () => {
 
     await expect(deleteChatConversation("conversation-1")).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/chat/conversations/conversation-1",
+      expect.stringMatching(/\/chat\/conversations\/conversation-1$/),
       expect.objectContaining({ method: "DELETE" }),
     );
   });

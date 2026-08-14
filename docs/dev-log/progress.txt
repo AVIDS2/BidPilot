@@ -1,5 +1,39 @@
 # BidPilot Development Memory
 
+## P0-A1 worktree commit plan (2026-07-27)
+
+The dirty worktree was audited without staging, committing, deleting, or
+deploying. `docs/development/worktree-commit-plan.md` defines explicit commit
+boundaries for schema, harness, LangGraph, knowledge, governance, ops, docs,
+and web changes. Generated `.codegraph/daemon.pid` state and the Claude plugin
+cache are excluded from product commits. Actual commit execution remains an
+approval-gated release operation.
+
+## P0-E4 local public-demo hygiene guard (2026-07-27)
+
+The fixed synthetic demo pack is now regression-tested for its manifest/hash
+contract plus high-confidence provider-token patterns and obvious email/mobile
+identifier patterns. This is a repository guard only; public deployment still
+requires an authenticated, role/permission/quota/failure-state walkthrough and
+a no-private-data review before it can satisfy P0-E4.
+
+## P0-D6 local rehearsal command parity (2026-07-27)
+
+`scripts/release_rehearsal.py` now uses `uv run --locked --no-sync` for API,
+Worker, and quality-gate commands, matching the CI dependency discipline. Its
+dry-run plan and script tests passed locally. It also anchors child commands at
+the repository root, so a caller may invoke the script from another directory
+without resolving nested `services/api` paths. Relative evidence-file paths are
+anchored there as well, preventing a caller directory from hiding a passed
+artifact behind an earlier failed one. This proves the local procedure, not the
+required staging-to-production rehearsal.
+
+The complete local source rehearsal then passed against the dedicated test
+database: migrations, API checks and 760 tests, Worker checks and 161 tests,
+frontend typecheck, 116 frontend tests, and production build. Its redacted
+local evidence artifact is intentionally kept under ignored `tmp/`, not in the
+repository.
+
 ## Agent UI and runtime rule (2026-07-25)
 
 The product must not treat Agent UI as a generic chat widget. It is the visual
@@ -51,3 +85,1342 @@ are defined.
 Before further Agent UI or runtime changes, read this file and present the
 event contract, fixture coverage, and acceptance criteria. Do not deploy
 unverified visual changes merely to iterate in production.
+
+## Backend Runtime P0 Baseline (2026-07-26)
+
+- Public assistant requests use one governed `StreamingHarness` path. The old
+  LangGraph operator is not a public fallback; LangGraph remains the durable
+  worker workflow runtime for bid pipelines.
+- Each browser turn carries `client_request_id`. Retry replay is backed by a
+  user-scoped idempotency key and a unique durable `RuntimeRun`.
+- Missing tool fields persist a `needs_input` task state; approvals persist
+  `RuntimeApproval`; workflow launches create linked bridge runs.
+- Runtime event contract is schema `1.1` with event lineage and monotonic
+  sequence. UI must consume this trace, not construct optimistic fake states.
+- Provider/model construction and in-loop failures must produce redacted,
+  durable SSE terminal events. Never surface raw gateway responses to users.
+- Current regression baseline: 191 assistant/runtime/chat/OpenAPI tests pass
+  in the isolated Docker test database. Re-run this suite before deployment.
+
+## Backend-first Production and Interview Master Spec (2026-07-27)
+
+- Added `docs/plans/2026-07-27-bidpilot-production-interview-master-spec.md`
+  as the canonical execution baseline for BidPilot.
+- The product is explicitly a governed, evidence-backed Web bid-response
+  workspace: PostgreSQL is business truth; `StreamingHarness` owns
+  interactive product operations; Worker + LangGraph owns durable bid
+  workflows; frontend is a consumer of API/SSE contracts.
+- The roadmap now separates P0 release proof (baseline, golden bid flow,
+  harness/workflow reliability, context/evals/ops, interview materials) from
+  P1 team collaboration/content-library/go-no-go work and P2 scale features.
+- Research inputs are recorded in the Spec: OpenBidKit is a desktop/local
+  AGPL reference, while mature RFP products validate content library,
+  SME collaboration, approval, and permission requirements. Do not copy
+  OpenBidKit implementation or reintroduce ungoverned local-agent semantics.
+- Priority is now explicit and sequential: only minimal reproducible blockers
+  first, then the AI bid core flow, then the Harness that operates that flow,
+  then eval/demo proof. Invitations, visual polish, graph work, pricing, and
+  unrelated ops are frozen until that critical path is complete.
+
+## P0 Migration and Runtime Blocker Closure (2026-07-27)
+
+- Production fallback deployment now runs Alembic before replacing API, Worker,
+  and Web containers, preventing code/schema skew such as a missing
+  `assistant_action_audit` table.
+- The readiness gate now requires both a platform model key and an explicit
+  model name, and accepts `harness` as the canonical engine while preserving
+  legacy aliases. Gateway-specific model errors remain redacted for users.
+- Legacy databases that received ORM-created tables before their Alembic
+  version advanced can now be adopted safely by the affected historical
+  migrations. They create missing fields/tables/indexes, adopt complete
+  existing structures, and reject partial grouped ledgers rather than stamping
+  past an unknown schema.
+- The assistant composer has a synchronous in-flight guard in addition to the
+  backend idempotency key, closing the double-click window that could create two
+  distinct browser request IDs.
+- Evidence: the local Docker database is at `b0c1d2e3f4a5`; API and Worker are
+  healthy; `assistant_action_audit` exists; an isolated PostgreSQL database
+  migrated from zero to head; 55 targeted backend tests and the web TypeScript
+  check passed. No public deployment was performed.
+
+## P0 Candidate Review and LangGraph Resume Closure (2026-07-27)
+
+- A quality-passed LangGraph draft is now persisted first as an immutable
+  `SectionVersion` review candidate. The section and its deliverable move to
+  `in_review`; export remains pinned to the prior `approved_version_id` until
+  a human explicitly approves the candidate.
+- Each candidate has a durable `ReviewThread`, linked by `section_version_id`.
+  A review decision reuses that thread, writes an audit event, and cannot
+  silently approve or export a different/latest version.
+- A final candidate decision is immutable: a repeated identical request is a
+  no-op (no second notification or outbox event), while an opposite decision
+  fails with `409 review_decision_already_finalized`.
+- Approving or rejecting a workflow-created candidate writes exactly one
+  sequenced `worker.resume_draft` outbox intent after the decision transaction
+  commits. Rejecting preserves an earlier approved snapshot; the resumed graph
+  may create a new candidate in the same execution run.
+- `SectionVersion.generation_iteration` plus
+  `uq_section_version_run_iteration` provides idempotency per
+  `(section, execution run, iteration)`: retrying a pause does not duplicate a
+  candidate, while a post-rejection revision remains a distinct immutable
+  version. The migration repairs legacy duplicate run versions by assigning
+  stable iterations before adding the constraint.
+- LangGraph's approval interrupt now includes `section_version_id` in its
+  durable runtime event; the API SSE schema documents the same review target.
+- `PostgresSaver` checkpoint tables are now initialized as an explicit one-shot
+  Compose dependency and in the fallback deployment path after Alembic. Worker
+  tests invoke the same initializer against the isolated `*_test` database;
+  runtime code never lazily creates checkpoint tables during a user request.
+- Verification in isolated PostgreSQL: migration downgrade/upgrade through
+  `b2c3d4e5f6a7` succeeded; Worker graph/task/outbox regressions: `38 passed`;
+  API review/drafting/bridge regressions: `12 passed`; API runtime contracts:
+  `91 passed`; targeted Ruff checks, `bash -n deploy.sh`, and
+  `docker compose -f compose.yml config --quiet` all passed. No public
+  deployment was performed.
+
+## P0-B1/B2 Source Material and Ingestion Closure (2026-07-27)
+
+- `sample-data/bidpilot-demo/manifest.json` is now the fixed synthetic
+  RFP/capability/case-study baseline. It declares dataset identity, safe-use
+  notice, per-file SHA-256, material role, expected anchors, and the stable
+  locator contract. The built-in demo now reads those same tracked files, so
+  the product demo and regression fixture cannot silently drift apart.
+- API document upload now validates a bounded PDF/DOCX/TXT/Markdown contract,
+  normalizes browser MIME hints, sanitizes filenames, exposes version lineage,
+  and accepts both the existing query `bundle_id` and standard multipart form
+  `bundle_id`. A replacement is allowed only within its own bundle. Each
+  predecessor has at most one direct successor, with a row lock plus database
+  uniqueness constraint returning `409` for a conflicting replacement.
+- `SourceDocument` now has durable version, parse, and index state fields;
+  `KnowledgeChunk.chunk_key` makes replay of an immutable document-version
+  idempotent. The worker persists parsed text, locators, chunks, and the
+  `parsed` marker in one transaction. Empty extraction creates an explicit
+  retryable parse failure instead of a false success.
+- Indexing is now a visible lifecycle: an unavailable embedding provider leaves
+  sparse retrieval text and surfaces `partial_failure`; a successful embedding
+  produces `parsed + indexed` on the document and `ingested` on the bundle.
+  Reindexing remains embedding-only and rejects concurrent/empty bundles.
+- New migration `c3d4e5f6a7b8` successfully downgraded and re-upgraded on the
+  isolated PostgreSQL `*_test` database. Post-migration API regression: `8
+  passed`; Worker ingestion/indexing/task regression: `19 passed`; targeted
+  Ruff checks passed. The Docker API image now explicitly includes the tracked
+  demo material pack. No public deployment was performed.
+
+## P0-B3 Requirement / Compliance Read Model Closure (2026-07-27)
+
+- Requirement extraction is now source-aware and deterministic at ingestion.
+  Each extracted row records the immutable source-document id, checksum,
+  document version, chunk locator and a SHA-256 extraction key. Replaying the
+  same document version is idempotent and cannot overwrite a human-edited
+  requirement.
+- Durable requirement creation has one owner: ingestion. The LangGraph RFP
+  parser may still use the governed model path for workflow planning, but only
+  resolves model findings to existing source-backed rows; it no longer creates
+  source-less `open` ledger entries.
+- Every manual or extracted requirement now has a `BidRequirementProfile`.
+  It begins as `untriaged`, `uncovered`, and `missing`; bulk ownership
+  assignment transitions `untriaged -> assigned` and unassignment reverses
+  that narrow lifecycle transition without changing evidence coverage.
+- Migration `d5e6f7a8b9c0` adds the provenance key, normalizes legacy
+  `draft`/`open` requirements, creates baseline profiles for existing rows,
+  and adds a unique `(project_id, extraction_key)` index. It successfully
+  downgraded and re-upgraded on the isolated PostgreSQL `*_test` database.
+- Verification: API requirement-ledger regression `12 passed`; Worker
+  extraction/ingestion/LangGraph/adapter regression `32 passed`; targeted Ruff
+  checks passed. No public deployment was performed.
+
+## P0-B4 EvidenceSet / Citation Boundary Closure (2026-07-27)
+
+- Retrieval candidates are now converted into a durable, run-scoped
+  `EvidenceSet` before any drafting provider receives source content. Each
+  `EvidenceSetItem` snapshots the exact document id/version/checksum, chunk,
+  validated locator, selected quote, ranking signals and selection reason.
+- Candidate validation rejects cross-project chunks, forged source ids,
+  superseded document versions, locator/chunk mismatches, invalid text anchors
+  and stale document metadata. Empty valid evidence is explicit
+  `missing_evidence`; partial results retain degraded/rejected reasons.
+- The LangGraph drafter, quality reviewer and final persistence node reload the
+  evidence set from PostgreSQL rather than trusting mutable graph state. A set
+  is additionally bound to the active `ExecutionRun`; an invalidated set stops
+  drafting/review and cannot be persisted as a section version.
+- `SectionVersion` now points to the `EvidenceSet`, and each resulting
+  `Evidence` points to its immutable `EvidenceSetItem`, giving a trace from a
+  generated claim back to the exact authorized source snapshot.
+- Migration `e6f7a8b9c0d1` was upgraded, downgraded and re-upgraded on the
+  isolated PostgreSQL `*_test` database. Verification: targeted Ruff passed;
+  Worker retrieval/graph/claim regressions `66 passed`; API
+  evidence/retrieval/drafting/OpenAPI regressions `31 passed`. No public
+  deployment was performed.
+
+## P0-B5 Versioned Response Plan / Section Mapping Closure (2026-07-27)
+
+- Added immutable `ResponsePlan`, `ResponsePlanSection`,
+  `ResponsePlanRequirement`, and `ResponsePlanEvidenceBinding` records. A
+  response-plan revision snapshots the deliverable outline plus exact
+  requirement text, owner, priority, verification state and lock version;
+  changed source data supersedes the active plan instead of mutating history.
+- The Worker now persists one plan/evidence/content-plan binding per
+  `(ExecutionRun, generation_iteration)`. Content planning reads the durable
+  requirement mapping, and drafting, review and final persistence rehydrate
+  that same binding rather than trusting mutable LangGraph state.
+- `SectionVersion` now records both the plan section and the plan/evidence
+  binding. Persistence rejects missing, cross-run, cross-project, stale
+  iteration, or mismatched bindings; there is no production compatibility
+  fallback for a graph that skipped planning.
+- Added project-scoped read-only API endpoints for plan history and detail:
+  `/response-plans` and `/response-plans/{id}`. They expose snapshot
+  assignments and per-attempt evidence/content-plan metadata under
+  `project.read` authorization.
+- Migration `fb0c1d2e3f4` was upgraded, downgraded and re-upgraded on the
+  isolated PostgreSQL `*_test` database; it also fixed a duplicate Alembic
+  revision ID before it could reach a deployment. Verification: Worker
+  evidence/plan/drafting/review/persistence regressions `42 passed`; API
+  response-plan/requirements/OpenAPI regressions `14 passed`; targeted Ruff
+  and `git diff --check` passed. No public deployment was performed.
+
+## P0-C1/C2/C3 Assistant Runtime Reliability Closure (2026-07-27)
+
+- Browser-originated assistant turns now use one user-scoped idempotency key:
+  a duplicate `client_request_id` replays the durable `RuntimeRun` trace
+  instead of creating another chat message, model call, or capability action.
+- The public Harness performs a bounded, result-driven capability loop. A
+  single turn can read project context, inspect documents and requirements,
+  resolve the outline, and bridge into a drafting workflow without exposing
+  internal tool payloads to users.
+- Missing business input, approval pauses, typed destructive confirmation,
+  cancellation, and approval expiry are now durable lifecycle states. A
+  cancellation first records `cancel_requested`, closes at a model/tool safe
+  boundary, and closes pending approvals before they can later execute.
+- Replay reconciles a disconnected assistant run before rendering: a pending
+  cancellation becomes a terminal cancellation, while an expired approval
+  becomes an `expired` run with an approval resolution, user-facing message,
+  and terminal event.
+- The assistant stop control now calls the durable runtime cancellation API
+  once a Run ID exists instead of only aborting the browser stream; direct
+  browser abort remains the pre-Run fallback.
+- Verification: runtime/assistant focused regression `79 passed`; targeted
+  Ruff passed; web TypeScript check and production Vite build passed. No
+  public deployment was performed.
+
+## P0-C4 Workflow Bridge / Durable Wake Closure (2026-07-27)
+
+- A parent Assistant `RuntimeRun` now exposes its one-to-many
+  `workflow_bridge` children through the runtime read API. Each child remains
+  linked to exactly one `ExecutionRun` and carries its own durable event
+  sequence for independent replay.
+- Removed the API process-local background-task dictionary. The next Harness
+  turn consumes the Worker-created, durable `agent_task` notification for the
+  same conversation and reloads the terminal workflow status/summary from
+  `RuntimeRun` and `RuntimeEvent`.
+- Worker terminal state, terminal runtime event, and wake notification now
+  commit in one database transaction. Retrying an already-terminal worker job
+  cannot emit duplicate completion events or wake notifications.
+- Verification: API workflow bridge/Harness/action regressions `34 passed`;
+  Worker runtime-event regression `5 passed`; targeted Ruff passed. No public
+  deployment was performed.
+
+## P0-C5 LangGraph State / HITL Correctness Closure (2026-07-27)
+
+- The drafting graph starts from stable identifiers and durable boundaries:
+  `ExecutionRun`, EvidenceSet and response-plan bindings remain the source of
+  truth, while PostgresSaver only persists LangGraph execution state for the
+  same `thread_id = ExecutionRun.id`.
+- A quality-passed draft is persisted as one immutable `SectionVersion` and
+  gets one reusable `ReviewThread` before the graph interrupts. Replays reuse
+  the `(section, run, generation_iteration)` candidate rather than writing a
+  second version.
+- API review commands now bind every `worker.resume_draft` Outbox record to
+  its committed `ReviewThread` and candidate version. Before issuing
+  `Command(resume=...)`, the Worker reloads and validates that relation,
+  deriving approved/rejected feedback from PostgreSQL instead of trusting a
+  stale broker payload.
+- Unknown human decisions no longer default to approval in either the Worker
+  resume entry point or the LangGraph approval node.
+- Verification: Worker graph/state/supervisor/persistence/HITL regressions
+  `30 passed`; API review/drafting regressions `8 passed`; API bridge/Harness
+  regressions `34 passed`; targeted Ruff passed. No public deployment was
+  performed.
+
+## P0-C6 Failure Governance Closure (2026-07-27)
+
+- Added one public failure classifier for governed capability failures. Runtime
+  actions, Harness tool cards, legacy compatibility adapters, and operator
+  graph failures now persist stable product error codes/messages instead of
+  database, HTTP, provider, or secret-bearing exception text.
+- Provider failures are classified into model incompatibility, unsupported
+  structured output, authentication, rate-limit, availability, and generic
+  request failures. The existing Worker drafting adapter remains bounded to
+  three exponential-backoff attempts; the Harness now stops after three
+  consecutive tool failures and leaves one durable terminal Run outcome.
+- Source-document parsing now has a durable three-attempt budget. The final
+  reserved attempt is processed correctly, terminal failed versions stop being
+  retried, and a replacement upload remains a separate document version with
+  its own retry budget. Attachment parser exceptions also return a fixed
+  user-safe failure rather than raw exception text.
+- Added migration `fd2e3f4a5b6c` for `SourceDocument.parse_attempt_count` and
+  upgraded the dedicated local `docpilot_test` database only. Verification:
+  API failure/runtime/attachment/migration regressions `66 passed`; Worker
+  ingestion/drafting/task regressions `21 passed`; targeted Ruff passed. No
+  public deployment was performed.
+
+## P0-D1 Prompt Assembly / Compaction Closure (2026-07-27)
+
+- Added one pure `runtime.prompt_assembly` boundary for public Harness turns.
+  It enforces the Spec order: policy, server authorization, selected procedural
+  skill, unresolved task/approval state, compact conversation recap and recent
+  turns, staged attachments, scoped evidence/memory, worker wakes, then the
+  current user request.
+- Conversation retrieval is now bounded to a chronological recent source
+  window. Older turns get a deterministic compact recap; when even that source
+  window is exceeded, the model receives an explicit omission marker rather
+  than a silent truncation. No LLM-generated summary is treated as business
+  truth.
+- User messages, attachment text/metadata, pending arguments, retrieved
+  memory and worker notifications remain in one `UNTRUSTED_CONTEXT_JSON`
+  packet. System messages contain only policy, server-owned authorization and
+  minimal task continuity facts. Attachment body no longer consumes the user
+  request budget by being concatenated into it.
+- Each RuntimeRun now persists a content-free `context_assembly` trace in its
+  input metadata: ordered segments, character budgets, truncation flags,
+  selected skills, conversation counts and memory version. It does not retain
+  duplicated user, attachment or memory text.
+- While validating the change, restored stable user-facing messages for known
+  approval-expired and typed-delete-confirmation outcomes. Secret-bearing
+  failures remain redacted and never serialize the original exception payload.
+- Verification on the dedicated local `docpilot_test` database: prompt/Harness
+  focused regression `45 passed`; runtime/chat/Harness regression `156
+  passed`; full Assistant suite plus Alembic-head check `72 passed`; targeted
+  Ruff passed. No public deployment was performed.
+
+## P0-D2 Memory Authorization / Evidence Lifecycle Closure (2026-07-27)
+
+- Moved the project role/capability matrix into `packages/contracts` so API and
+  Worker apply the same memory-read policy instead of maintaining divergent
+  copies.
+- Memory retrieval now batch-validates source-backed citations at read time.
+  It preserves immutable, superseded document versions as auditable history,
+  but excludes missing, unparsed, cross-project, or otherwise unaddressable
+  evidence.
+- A memory record with no remaining valid citation is omitted from the agent
+  context. The context pack records `invalid_memory_evidence` as a bounded
+  degradation reason and incorporates the surviving citations into its version
+  hash, so evidence changes invalidate stale prompt context deterministically.
+- The Worker memory node rechecks the current `ProjectMember` capability before
+  loading private or shared memory for a durable RuntimeRun. Revoked or absent
+  membership degrades to an empty memory context rather than retaining access
+  from the original invocation.
+- Verification on the dedicated local `docpilot_test` database: API memory,
+  memory-tool and operator-adapter regression `68 passed`; Worker memory and
+  response-plan regression `11 passed`; targeted Ruff passed. No public
+  deployment was performed.
+
+## P0-D3 Evaluation Baseline Closure (2026-07-27)
+
+- Added one development-only baseline entry point which runs BidBench,
+  RetrievalBench, MemoryBench and AssistantBench together. It emits four
+  report pairs plus one aggregate receipt containing Git commit, dataset
+  fingerprint, report SHA-256, capture mode and fixed-case counts.
+- The current version covers 63 fixed checks: 44 requirement-ledger records,
+  4 retrieval queries, 4 governed-memory cases and 11 deterministic Assistant
+  router/policy cases. The receipt rejects incomplete evaluator sets and fewer
+  than 20 fixed cases.
+- Every generated artifact is explicitly labelled as a `control_fixture` and
+  `release_eligible: false`. It makes no provider call and cannot be confused
+  with reviewed regression/hidden evidence or a model-quality claim.
+- The developer command is `scripts/run_development_baseline.py`; it writes
+  all reports below one caller-selected output root and uses the current Git
+  revision unless an evaluator explicitly supplies one.
+- Verification: new baseline tests and CLI smoke passed; full evaluation and
+  BidBench regression `88 passed`; targeted Ruff passed. No public deployment
+  was performed.
+
+## P0-D4 Security Regression Closure (2026-07-27)
+
+- Revalidated the five production safety invariants across the API and Worker:
+  tenant/project isolation, prompt-injection trust boundaries, secret-safe
+  failures, idempotent Runtime replays, and approved-content-only exports.
+- Hardened multi-section campaign results so a failed section keeps only its
+  stable public error code. Raw provider, storage, database, or credential
+  exception text is no longer retained in the campaign result, Runtime event,
+  or model-facing result payload. The Runtime formatter also whitelists
+  campaign failure fields as a second boundary.
+- Added a Harness cross-organization export denial regression and campaign
+  failure regressions that inject a bearer-like secret into an exception and
+  assert it cannot leave the bounded result contract.
+- Verification on the dedicated local `docpilot_test` database: API security,
+  project-access, prompt-boundary, export, Harness/runtime, campaign, and
+  memory regressions `111 passed`; Worker untrusted-context, memory-graph,
+  and response-plan regressions `9 passed`; targeted Ruff passed. No public
+  deployment was performed.
+
+## P0-D5 Runtime Observability / Safe Diagnostics Closure (2026-07-27)
+
+- Added one administrator-only Runtime diagnostics read model at
+  `GET /ops/runtime-runs/{run_id}/diagnostics`. It correlates a durable run
+  tree with Runtime events/actions/approvals, Execution runs, worker outbox
+  tasks, model token usage, retrieval counters, audit records and generated
+  deliverable versions.
+- The diagnostics view uses opaque user/org/request references and fixed
+  product summaries. It deliberately excludes prompts, attachment text, tool
+  arguments/results, model output, provider credentials and raw exception
+  payloads. A provider cost is never invented: missing provider cost data is
+  reported as `provider_cost_not_reported`.
+- Create-project actions that begin before a project exists are now correlated
+  back to their newly created project only after an organization-bound database
+  lookup. This keeps audit and deliverable joins tenant-safe while preserving a
+  trace for global Harness turns.
+- Worker retrieval events now forward only bounded numeric observability
+  counters: candidate, fused candidate, reranked candidate, evidence-hit and
+  latency counts. They do not forward queries, chunks or document content.
+- The operator runbook now documents alert codes, safe diagnostics boundaries
+  and an incident triage path. The diagnostics endpoint is also listed in the
+  SLO monitoring surface.
+- Verification on the dedicated local `docpilot_test` database: diagnostics,
+  action, event and Ops regression `23 passed`; Worker graph retrieval
+  regression `6 passed`; complete API `runtime + ops` regression `117 passed`;
+  API/Worker targeted Ruff and Python compilation passed. No public deployment
+  was performed.
+
+## P0-B6 Review / Approval / Export Golden Path Closure (2026-07-27)
+
+- Locked the export regression onto the real review command rather than
+  mutating `DeliverableSection` approval fields directly in the test fixture.
+  A candidate SectionVersion must pass `/review/decisions` before the export
+  command can build its immutable snapshot.
+- Added an end-to-end regression for the critical non-regression rule: when a
+  later candidate is rejected, the prior approved version remains selected,
+  the existing export snapshot is reused, and the rejected body cannot appear
+  in the downloaded DOCX.
+- The same test verifies the durable audit narrative across the real path:
+  `review.approved`, `deliverable.approved`, `review.rejected`, and
+  `deliverable.exported`. Existing access regressions keep export capability
+  checks at the project boundary.
+- Verification on the dedicated local `docpilot_test` database: focused
+  review/export regression `9 passed`; complete API review/export regression
+  `14 passed`; targeted Ruff and Python compilation passed. No public
+  deployment was performed.
+
+## P0-A5/A6 Runtime Inventory / Configuration Consistency Closure (2026-07-27)
+
+- The only public Assistant execution entry remains `POST /assistant/stream`.
+  `POST /assistant/attachments` is its companion upload boundary; Runtime
+  routes only replay, approve, cancel, or inspect already-created durable
+  runs and do not create a second Assistant execution path.
+- New turns use the Streaming Harness. Historical `operator` and
+  `streaming_harness` configuration values are parser-level aliases that
+  resolve to `harness`; they no longer select separate business logic.
+- The legacy LangGraph operator planner remains isolated solely to complete or
+  resume historical `langgraph_operator` runs. The legacy ReAct graph has no
+  remaining production import and is retained only for bounded compatibility
+  coverage. Both are explicitly scheduled for removal by `2026-09-30` unless
+  a documented migration dependency remains.
+- Production configuration guidance, readiness checks, environment examples,
+  and the runtime architecture inventory now consistently require
+  `DOCPILOT_ASSISTANT_ENGINE=harness`. No public environment or deployment was
+  changed in this closure.
+- Verification on the dedicated local `docpilot_test` database: focused
+  runtime/OpenAPI/checkpoint/readiness regression `43 passed`; complete
+  runtime + Assistant + OpenAPI/checkpoint/readiness regression `198 passed`;
+  targeted Ruff and Python compilation passed. No public deployment was
+  performed.
+
+## P0-A2/A3 Migration Health / Reproducible Test Environment Closure (2026-07-28)
+
+- Added `scripts/verify_migration_health.py`. It upgrades the dedicated local
+  test database and a generated, local-only scratch `_test` database from
+  empty state, verifies the current Alembic head and every ORM model table,
+  then removes only that generated scratch database. It rejects remote hosts
+  and non-generated scratch names before it can mutate anything.
+- Added the migration-health command to CI and to the local environment
+  baseline. The local Docker checks now cover PostgreSQL migration health,
+  Redis availability, and MinIO liveness without using a production database.
+- Fixed a real suite-isolation defect: runtime workflow tests could leave
+  durable `notification` rows for the shared development user, causing the
+  notifications empty-state test to depend on execution order. The autouse
+  notification fixture clears only that table before and after each API test.
+- Updated two frontend test doubles so they follow the configured API base URL
+  instead of asserting a machine-specific host and provide the current
+  `isAssistantBusy` store export. No frontend product behavior was changed.
+- Verification: migration-health script passed for the existing and fresh
+  local databases; API `758 passed`; Worker `161 passed`; web typecheck
+  passed; web Vitest `116 passed`; targeted Ruff passed; Redis returned
+  `PONG`; MinIO liveness returned `200`. No public deployment was performed.
+- Non-blocking frontend cleanup remains outside this closure: React test logs
+  still report forwarded animation props and the isolated shell test may log
+  a refused local notification poll. Neither changes test results, but both
+  should be addressed during the planned frontend reconstruction.
+
+## P0-A4 CI Hard Gates Closure (2026-07-28)
+
+- Added the missing API `mypy` development dependency and a real frontend
+  ESLint flat configuration plus `lint` script. CI now executes both checks
+  directly; it no longer masks failures with `|| true`.
+- CI installs the full UV workspace once with `uv sync --all-packages --locked`
+  and executes each service with `--no-sync`, so the Worker job cannot evict
+  API migration dependencies from the shared virtual environment. The frontend
+  job explicitly installs `pnpm@10.0.0`, enables the pnpm cache, and uses a
+  frozen lockfile.
+- Resolved the API application's 224 type-checking failures through boundary
+  typing, result normalization and literal-safe state handling rather than
+  globally weakening type checking. `mypy app/ --ignore-missing-imports` is
+  now clean across 211 source files.
+- Corrected a real frontend hook-order defect in `MessageBubble`: assistant
+  render hooks now execute before the user-message early return, so a message
+  role change cannot violate React's Rules of Hooks.
+- Verification on the dedicated local `docpilot_test` database: API Ruff and
+  mypy passed; API `758 passed`; Worker Ruff and Worker `161 passed`;
+  migration health passed at `fd2e3f4a5b6c` with `65/65` model tables; web
+  lint passed with `0` errors, TypeScript check passed, web Vitest `116
+  passed`, and the production web build passed. No public deployment was
+  performed.
+- Residual non-blocking frontend work: ESLint reports 8
+  `react-hooks/exhaustive-deps` warnings, and test rendering still logs
+  forwarded animation props plus an isolated local notification-poll refusal.
+  These warnings do not bypass CI errors and should be addressed during the
+  planned frontend reconstruction.
+
+## P0-E1/E2/E3 Interview Evidence Documentation Closure (2026-07-28)
+
+- Replaced the one-line repository README with a BidPilot product entry that
+  explains the governed Assistant, Worker/LangGraph workflow, PostgreSQL
+  business-truth boundary, synthetic demo pack, hard verification gates and
+  the limits of the current pilot claim.
+- Rewrote the non-developer demo guide around the current product lifecycle:
+  project creation, private attachment staging, evidence/requirement review,
+  workflow-bridged drafting, versioned review, approved-only export and safe
+  diagnostics. It avoids stale UI-tab instructions and explicitly excludes
+  real tender material and secrets.
+- Added a timed interview golden-path script that shows the public Harness
+  versus LangGraph boundary, durable run lineage, HITL/version/export rules,
+  deterministic evaluation limits, and one real migration-drift incident
+  (`assistant_action_audit`) with root cause, fix and regression evidence.
+- Documentation links and referenced source/migration paths were checked; no
+  credential-shaped provider prefixes were introduced. Deployment rehearsal
+  and public-demo hygiene remain separate pending work and were not claimed as
+  complete.
+
+## P0-D6 / P0-E4 Local Evidence Preparation (2026-07-27)
+
+- Hardened `scripts/release_rehearsal.py` so every child command runs from the
+  repository root and every relative evidence artifact is anchored there. This
+  prevents an operator starting the script from `services/api` from resolving
+  `--directory services/api` twice or retaining evidence under a service-local
+  temporary directory.
+- The rehearsal now uses the same locked, no-sync UV execution mode as CI for
+  API, Worker, and quality-gate commands. A complete local source rehearsal
+  against the dedicated `_test` database passed all eight gates: API `761
+  passed`, Worker `161 passed`, web Vitest `116 passed`, and a production web
+  build.
+- Added a regression guard over the synthetic public demo pack. It checks each
+  tracked fixture for high-confidence credential formats, email addresses, and
+  Chinese mobile numbers in addition to its existing hash and expected-anchor
+  checks. The guard is a repository safeguard, not a claim that a deployed
+  environment has been publicly audited.
+- The local evidence artifact is intentionally ignored and records only safe
+  release metadata. The duplicate service-local artifact produced before the
+  path fix was removed. No Git commit, public deployment, staging promotion,
+  backup/restore drill, or three-run production rehearsal was performed.
+- Remaining approval-gated work: P0-A1 scoped commits, P0-D6 staging-to-public
+  rehearsal with backup/rollback evidence, and P0-E4 role/quota/failure-state
+  walk-through in the deployed pilot.
+
+## Backend Runtime / P1-A Regression Closure (2026-08-04)
+
+- Fixed the last Runtime assistant approval edge cases: cancellation tests now
+  assert the durable `RuntimeRun`/`RuntimeAction`/`RuntimeApproval` chain, and a
+  confirmation submitted after expiry consistently returns the public
+  `approval_expired` result instead of the misleading already-resolved error.
+- Typed destructive confirmation is now carried through the Runtime `EDIT`
+  decision path, so the confirmation text collected by the assistant cannot be
+  silently discarded before the capability executor validates it.
+- Added bounded SQLite retrieval fallbacks for dense, lexical and trigram
+  contract tests while keeping PostgreSQL/pgvector as the production path and
+  preserving project/profile scope isolation.
+- Verified the dedicated local test databases: focused assistant/retrieval
+  regression `25 passed`; complete API suite `772 passed, 3 skipped`; complete
+  Worker suite `172 passed`. API/Worker Ruff, `uv lock --check`, Compose config
+  validation and `git diff --check` all passed.
+- The platform model contract remains server-side DeepSeek Chat Completions
+  (`deepseek-v4-flash`) with OpenRouter `qwen/qwen3-embedding-8b` for vectors.
+  P1-A uses local Tesseract OCR; PP-OCRv5 Mobile remains an evaluated optional
+  Worker profile with an explicitly mounted model cache. No provider key was
+  written to the repository, test output or runtime events. No public deploy
+  was performed in this closure.
+
+## Workbench V2 Business-Surface Migration (2026-08-05)
+
+- Started the real React migration of the Linear-reference workbench rather
+  than serving the static prototype. The new application shell preserves a
+  resizable, persisted workspace rail and routes real API-backed screens for
+  inbox, work queue, bid projects, project workspace, knowledge and runs.
+- Added real V2 routes for deliverables, reviews, members and administration.
+  They query existing platform data for deliverables/sections, review threads,
+  requirements, organization members, teams, invitations, entitlements and
+  provider configuration. Member invitations use the existing API mutation;
+  no mock records or fabricated operational states were added.
+- The Agent page remains intentionally separate: its Claude-style runtime
+  migration is still pending and must consume live SSE/trace events rather
+  than borrow the static demonstration timeline. Account and detailed provider
+  management also remain on their legacy implementation pending a dedicated
+  visual migration.
+- Focused ESLint passed without warnings and the web production build passed.
+  No commit, push, deployment or public environment change was made.
+
+## Workbench V2 Edge-Surface Migration (2026-08-05)
+
+- Replaced the legacy account page with a React workbench settings surface that
+  keeps the existing profile, password, billing portal, entitlement and sign-out
+  actions. The presentation is line/row based and does not replace any backend
+  behavior with local state.
+- Replaced the legacy provider card/dialog surface with a workbench split view:
+  saved provider configurations form a compact list and the selected
+  configuration has an editable details pane. Existing create/update/delete,
+  encrypted-key rotation, active-configuration selection, connection testing and
+  backend model discovery remain the only execution paths. Keys are never shown
+  after submission and are not stored in browser persistence.
+- The Claude-runtime Agent screen is still intentionally outside this migration;
+  it needs its own exact source-driven trace/SSE implementation rather than a
+  visual approximation. No commit, push, deployment or public environment
+  change was made.
+
+## Workbench V2 Detailed Administration Migration (2026-08-05)
+
+- Migrated `/admin/users`, `/admin/teams`, and `/admin/invitations` into the
+  React Workbench V2 shell. These routes no longer render the legacy shadcn
+  administration surfaces when entered directly or from the V2 workspace.
+- Preserved the existing API-bound behavior: platform admins can page through
+  users and update roles/status; organization admins can create, rename and
+  delete response teams plus add/remove members; organization owners/admins can
+  invite/revoke users, change workspace roles, transfer billing ownership and
+  remove members. The views use compact line tables and a list/detail split,
+  with no mock records or new persistence.
+- Focused ESLint, `git diff --check`, and the production web build passed. The
+  existing large `AIAssistantPanel` output chunk remains a separate known build
+  warning. No commit, push, deployment or public environment change was made.
+
+## Workbench V2 Shared Split Consolidation (2026-08-05)
+
+- Consolidated the real React workbench list/detail surfaces behind one
+  keyboard-accessible, pointer-resizable split primitive. Inbox, My work,
+  Knowledge, Runs, Reviews, Deliverables, provider settings, response-team
+  management, and Account now use the same source-derived divider and scroll
+  boundaries instead of each carrying a fixed-width sidebar implementation.
+- The default split remains proportional to the Linear source. A fixed pixel
+  width is written only after a person resizes it and is stored as a browser
+  preference; it is not business state and does not alter any API-backed
+  behavior.
+- Account kept its profile, password, billing/usage, entitlement, and sign-out
+  mutations while moving from the former centered settings page into the
+  workbench split surface. Provider and team pages retain their existing
+  encrypted-key, connection-test, model-discovery, member, invitation, and
+  permission flows.
+- `pnpm --filter @docpilot/web build` and the focused authenticated workspace
+  shell test passed. Visual screenshot comparison remains intentionally
+  outstanding because the desktop browser must not be driven in this session;
+  no commit, push, deployment, or public environment change was made.
+
+## Workbench V2 Project Brief Source Migration (2026-08-05)
+
+- Replaced the project workspace's four metric tiles with the Linear-reference
+  Brief structure: a restrained summary followed by line-height-led, source-like
+  project asset and execution-status copy. The values are derived only from the
+  existing project, readiness, bundle, deliverable, evidence, and run queries;
+  deadline, owner, and other unavailable project facts are not fabricated.
+- Removed the corresponding metric-tile CSS and narrow-screen tile rules. The
+  existing project sub-navigation, ruled lists, split boundaries, and API-backed
+  project actions remain unchanged.
+- Production web build and whitespace validation passed. Browser visual
+  comparison remains pending because this session must not drive the desktop
+  browser. No commit, push, deployment, or public environment change was made.
+
+## Workbench V2 Shared Shell Source Alignment (2026-08-05)
+
+- Kept `workbench-v2` as React routes and aligned its common shell with the
+  local BidPilot Linear source: `244px` initial workspace column, `46px`
+  header, Inter variable font, low-contrast hover states and source-sized
+  workspace mark/nav spacing.
+- Split views remain proportional before a user drags them; the keyboard
+  accessibility fallback now reports the same `330px` initial width as the
+  source split layout, and the separator disables touch scrolling while being
+  dragged.
+- No static reference page was routed, and no Agent/Claude Runtime CSS was
+  imported into the ordinary workbench. Build and route-level regression remain
+  required before deployment.
+
+## Workbench V2 Real-Data Display Refinement (2026-08-05)
+
+- Continued the React migration on the API-backed operations surfaces without
+  altering backend data or the separate Agent Runtime. Deliverable, review,
+  evidence, invitation, membership, plan, and provider enum values now render
+  as product language such as `未导出`、`待核验`、`工作区所有者` and
+  `OpenAI 兼容`; the original values remain the source for status tone and
+  behavior.
+- Kept the Linear-reference line-table layout: no synthetic overview cards,
+  mock status rows, or local replacement state were introduced. The shared
+  split preference remains versioned so obsolete fixed-width browser values do
+  not override the source-derived proportional initial layout.
+- Pending: migrate the remaining account/admin display labels and perform the
+  source-level visual acceptance pass once a non-crashing browser verification
+  route is available. No commit, push, deployment, or public environment change
+  was made.
+
+## Workbench V2 Source Baseline Correction (2026-08-05)
+
+- Replaced approximate LCH shell tokens with the exact source palette and reset
+  the new workbench preference key to the source `252px` sidebar baseline.
+- Added the source's intermediate icon-only navigation density at `1050px`,
+  plus short, low-contrast interaction transitions and visible keyboard focus.
+- This is a shared React shell change only. It does not alter Agent Runtime,
+  backend APIs, static prototype routes, or user business data.
+
+## Workbench V2 Response-Team Navigation Migration (2026-08-05)
+
+- Restored the source navigation hierarchy in the real React shell: `Response
+  team` now contains a real organization row followed by an indented set of
+  collaboration links, instead of flattening Reviews, Deliverables, Members,
+  and Administration into a generic navigation group.
+- The team row uses the authenticated organization's slug and collapses cleanly
+  in the intermediate icon-only layout. This is navigation structure and
+  density only; no Agent runtime, API contract, or mock business data was
+  added.
+
+## Agent Conversation Controls And Replay Verification (2026-08-06)
+
+- Fixed the `/agent` conversation route so starting a new conversation removes
+  the old query parameter, while selecting a history row writes its ID into the
+  URL for reload-safe replay.
+- Added durable conversation pin state, rename/delete controls, pinned-first
+  history ordering, and a guarded delete flow that invalidates an in-flight
+  history restore before deleting the current conversation.
+- Applied migration `a16b7c8d9e0` to local and test databases and kept Alembic at
+  one head. Browser QA verified a real project-search Agent turn, nested tool
+  trace replay after refresh, conversation switching, rename, pin, and delete.
+
+## Agent Trace Replay De-duplication (2026-08-07)
+
+- A harness-authored public narration names its associated tool turn exactly
+  once. The thread no longer renders the same text as both a reasoning block
+  and the child turn title.
+- Added idempotency for titled public reasoning events, covering overlap between
+  live SSE delivery and durable runtime-event replay after reconnects.
+- Fixed the reasoning heading's browser-default centered button text. Long
+  trace labels now retain a full-width, left-aligned layout.
+- Updated the Agent workspace E2E selector contract for the current full-page
+  workspace. Component tests passed (11 tests), and Chromium desktop/mobile
+  E2E passed (2 tests). `pnpm --filter @docpilot/web build` also passed.
+
+## Agent Trace Quiet Completion And Locale Handoff (2026-08-07)
+
+- Completed trace rows now use their left-side status glyph as the resting
+  state. The redundant right-side completion label and chevron remain available
+  only while the row is hovered, focused, or expanded; failures stay explicit.
+- Tool summaries no longer repeat a completed status when the row already has a
+  success glyph. Static trace chrome (tool, node, turn, and status labels) is
+  localized through the existing Chinese and English locale files.
+- The client now sends the selected UI locale with a new assistant request and
+  the streaming harness uses it for newly generated public action titles and
+  final responses. Persisted historical narration remains unchanged as an audit
+  record rather than being machine-translated on replay.
+
+## Response-Team Workbench Surface Pass (2026-08-07)
+
+- Reviews, Deliverables, Members, and Administration now keep their page header
+  fixed and scroll only their data surface. Project selection remains in the
+  resizable left pane for the two list-detail routes.
+- Replaced the response-team page actions and member invitation field with the
+  installed shadcn `Button` and `Input` primitives. Removed legacy purple focus
+  colors from the workbench's account, provider, and administrative controls in
+  favor of the shared neutral Linear-derived focus treatment.
+
+## Bid Operations Dashboard And Dense Split Lists (2026-08-07)
+
+- Restored `/dashboard` as the workbench's operational overview instead of
+  routing it to the exception inbox. The dashboard derives project health,
+  readiness coverage, risk counts, and a seven-day execution trend from the
+  existing Projects, Readiness, and Runtime APIs; it does not invent metrics
+  when requirements have not yet been extracted.
+- Kept the inbox implementation at `/inbox` for direct access, while the main
+  sidebar now names the primary surface "Dashboard" / "仪表盘".
+- Reworked operations split lists so rows no longer stretch to fill the pane:
+  they are compact 54px continuous list rows and the default list-detail split
+  is bounded to 252–330px on large screens. The workbench keeps Inter Variable
+  with a Windows-safe Chinese fallback.
+- Added responsive dashboard behavior for metric wrapping, chart sizing, and
+  horizontally scrollable dense project rows. Verified with web build, lint
+  (only pre-existing warnings), and the existing desktop/mobile Agent E2E.
+
+## Provider Settings Center (2026-08-07)
+
+- Rebuilt `/settings/providers` from a nested resizable list/detail surface into
+  a settings-center layout: stable settings navigation on the left, a compact
+  saved-configuration switcher, and one bounded form column.
+- Replaced raw provider inputs, selects, switches, and actions with the
+  installed shadcn primitives while preserving provider creation, update,
+  deletion, secure key replacement, connection testing, and model discovery.
+- Added a narrow-screen mode that turns the settings navigation into a compact
+  horizontal strip and stacks the form fields before they can overflow.
+
+## Bid Operations Information Architecture Pass (2026-08-07)
+
+- Fixed the workbench account menu crash: Base UI `GroupLabel` is now rendered
+  inside `Menu.Group`, so opening the user menu no longer throws a missing
+  `MenuGroupRootContext` error.
+- Replaced the shared resizable project-picker pattern on Deliverables and
+  Reviews with project-scoped operations pages. Each now presents its current
+  project context and actionable counts before the relevant response-file,
+  review-thread, and evidence queues.
+- Reworked Runs into execution-health monitoring with global status filters,
+  summary metrics, a scan-friendly run queue, and an in-page trace inspector.
+- Reworked Knowledge into an asset operations page with portfolio scope,
+  compilation/proposal coverage, and a full-width evidence-backed shared-memory
+  list. These surfaces use minimal data separators rather than treating empty
+  layout regions as table cells.
+
+## Workbench Product-System Consolidation (2026-08-07)
+
+- Added the durable `opendesign/design-systems/bidpilot-workbench` design-system
+  source, derived from the Linear implementation reference and an authenticated
+  Resend product review. It defines the workbench token set, page taxonomy,
+  container policy, control behavior, and border discipline for future screens.
+- Scoped shadcn tokens inside the workbench so controls no longer inherit the
+  global dark marketing theme. The loading fallback is also explicitly light to
+  avoid a black flash while an application route is resolving.
+- Converted Inbox, My Work, Members, Administration, and Account from mixed
+  full-page or list-detail surfaces to page-header, local navigation/tab, and
+  local-scroll workboards. Inbox is now an attention queue rather than an
+  unbounded developer-style event inbox.
+- Removed the account menu's Base UI group wrappers to eliminate the
+  `MenuGroupRootContext` runtime error; the menu now renders a stable flat
+  action list.
+- Added route-owned scroll boundaries and neutral typography overrides so page
+  data scrolls locally while the sidebar and utility bar stay fixed.
+- Fresh Edge regression confirmed route/path/heading alignment for Reviews,
+  Deliverables, Members, Administration, Knowledge, Runs, and Bid Projects.
+
+## Agent MCP Evidence, Bounded I/O, And Queue Recovery (2026-08-07)
+
+- The Agent timeline now treats a Tavily MCP search as a durable `web_search`
+  capability event. Its replay payload contains only public title, http(s) URL,
+  domain, and snippet fields, and the Claude-reference-style bounded source
+  list is rendered from those real results rather than placeholder rows.
+- External search and URL-to-project imports no longer run on the ASGI event
+  loop. They use an isolated database session in a worker thread, preserving
+  SSE/cancellation responsiveness. URL imports stream with a five-second
+  connect timeout, eight-second read timeout, 25-second total deadline, and a
+  15 MB cap; a remote endpoint cannot leave a run permanently "running".
+- Optional MCP discovery and calls now have a bounded timeout. Unavailable MCP
+  servers finish the trace as a specific extension failure instead of silently
+  blocking a turn.
+- Replaced the Agent composer’s horizontal spinner string with a bounded,
+  vertical pending queue. Queued messages can be edited, cancelled, or moved
+  to the front and retain their attachments. The thinking dots no longer render
+  alongside a live task trace. Active trace rows retain only a small timeline
+  marker animation, not the former green gradient block.
+- `docs/product/2026-08-07-bidpilot-operating-workbench-plan.md` records the
+  product decision: Agent is an entry point, while Materials, Requirements,
+  Planning, Sections, Reviews, and Deliverables are the human-operable tender
+  lifecycle surfaces. Existing read-only routes must be replaced by those work
+  surfaces rather than extended as additional list/detail pages.
+- Focused timeline tests passed. Backend runtime tests require an explicit
+  dedicated `DOCPILOT_TEST_DATABASE_URL` ending in `_test`; the guard was not
+  bypassed in the local development environment. Python compile checks and the
+  web build/lint remain required before release.
+
+## Tenant Frontend Product Blueprint (2026-08-07)
+
+- Defined the customer-facing product boundary as two separate tenant surfaces:
+  the bid workspace for response work and the organization settings center for
+  tenant administration. BidPilot internal operations are deferred to a later,
+  separately authorized design.
+- Added `docs/product/2026-08-07-bidpilot-tenant-frontend-blueprint.md` with
+  a backend-grounded navigation model, project-workspace tabs, page actions,
+  state rules, route migration, shadcn/ui component mapping, known API gaps,
+  and P0-P2 delivery sequence. The Agent remains a cross-platform natural
+  language entry point while traces remain contextual diagnostics instead of a
+  customer navigation destination.
+- Added a discovery-first `招采雷达` page to the tenant blueprint. It is an
+  actionable public-notice radar with subscriptions, source provenance,
+  saving/ignoring, and conversion into a governed opportunity, rather than a
+  generic tender-news feed. The plan explicitly identifies the new source,
+  subscription, notice, match, snapshot, and conversion domains required for
+  an honest implementation.
+- Extended the tenant blueprint with the full human-operable production loop:
+  discovery through go/no-go, ingestion, compliance, planning, drafting,
+  review, delivery/submission receipt, and reuse. It records the P0
+  production cut, missing domain/API work, and reliability constraints rather
+  than treating the information architecture as a claim of product readiness.
+- Added a scoped Agent memory design: durable session trajectory, current
+  project business context, user-private long-term preferences,
+  project-shared facts, and approved organization knowledge. The product
+  design includes a default-on personal-memory switch, selective retrieval,
+  candidate add/update/delete/no-op resolution, evidence and approval rules,
+  and user-facing review/forget controls.
+
+## Tenant Workbench P0 Implementation (2026-08-07)
+
+- Started the customer-workbench implementation without changing the Agent
+  surface. The shared navigation now keeps `Dashboard`, `My work`, `Bid
+  projects`, `Knowledge`, and `Agent` as the customer-facing entry points;
+  raw runtime routes remain deep links instead of first-level navigation.
+- Rebuilt the project entry as an opportunity list with a shadcn Dialog-based
+  creation flow, removing the runtime-attention side rail. Project workspaces
+  now use local horizontal tabs for Overview, Materials, Requirements,
+  Response plan, Sections, Review, and Deliverables.
+- Added the real `/response-plans` client contract and connected the project
+  response-plan tab to persisted plan sections, requirement bindings, evidence
+  bindings, and unmapped requirements. It no longer presents execution runs as
+  a business plan.
+- Reframed `My work` around verifiable readiness gaps, requirement conflicts,
+  approvals, and recoverable exceptions that open the relevant project. The
+  dashboard visualisation now shows project requirement coverage rather than
+  agent-run volume.
+- `pnpm --filter @docpilot/web build` passes. Browser smoke verification reaches
+  the protected `/projects` route and correctly redirects to `/login`; an
+  authenticated visual pass is still required before accepting the revised
+  desktop and mobile layouts.
+
+## Tenant Workbench: Materials And Account (2026-08-07)
+
+- Replaced the customer Knowledge page's project-memory-only view with a real
+  Materials Center. It uses the existing project/bundle/document APIs to list
+  files across the workspace, filter by project and parsing state, create a
+  governed upload bundle, upload supported source files, and surface the
+  server-owned parse/index state and retryability.
+- Added a shadcn Sheet-based document inspector. PDFs and images are fetched
+  through the authenticated document endpoint and previewed only when selected;
+  unsupported formats retain a real download action instead of a fabricated
+  canvas. Shared knowledge is now a separate object view, not an agent trace.
+- Expanded the client document contract with the parser diagnostics already
+  returned by the API, plus an authenticated blob helper for the inspector.
+- Rebuilt the account page as horizontal user-facing sections for Profile,
+  Security, and Organization & Usage, using shadcn Field, Tabs, Progress,
+  Badge, Button, and Empty components. The planned personal-memory setting is
+  explicitly informational until a server-owned enablement and forget API
+  exists; no UI-only switch was introduced.
+- Consulted the local Claude Code CLI for the Materials and Account information
+  architecture. Its recommendations were checked against the existing APIs:
+  file rows as the material work unit, an on-demand inspector rather than a
+  persistent split pane, source/parse state as business status, and no agent
+  trace in either customer page.
+- `pnpm --filter @docpilot/web build` passes after both changes. Login-gated
+  browser visual verification remains pending an authenticated local session.
+- Made the global Deliverables surface actionable without turning it into a
+  workflow log: users can now create a persisted technical, commercial, full
+  bid, or proposal deliverable through a shadcn Dialog for the selected project.
+  The next step remains project-local chapter composition, review, and export.
+
+## Governed Web Source Import (2026-08-07)
+
+- Diagnosed the Agent's stuck `fetch_url_to_project` path: it created a durable
+  source document but left the bundle at `ready_to_ingest`, without dispatching
+  the existing Celery ingestion task. The Agent could therefore report a web
+  download while parsing and indexing never started.
+- Added a bounded public-web import adapter. It permits one public HTTP(S)
+  source per action, rejects local/private network targets, follows at most five
+  redirects, enforces a 25-second / 15 MB limit, and converts HTML main content
+  to Markdown with Trafilatura before passing it into the normal immutable
+  source-document pipeline. It is intentionally not a recursive crawler.
+- Imported sources now persist their final `source_url`; the Agent queues the
+  normal ingestion job after storage. If Celery dispatch is unavailable, the
+  document remains durable and the bundle returns to `ready_to_ingest` for a
+  visible retry instead of being left as a false running task. Search/MCP stays
+  responsible for discovering sources; this platform capability owns governed
+  retrieval and provenance.
+- Verification: the API container and Worker were rebuilt, the local API and
+  isolated `docpilot_test` databases were migrated to `01a2b3c4d5e6`, and the
+  bounded HTML import executed successfully inside the API container.
+  Focused API regression for web import, runtime registry formatting, and
+  document-version ingestion: `23 passed`.
+
+## Tenant Workbench: Dashboard Reconstruction (2026-08-07)
+
+- Replaced the dashboard's generic readiness chart and raw failed-run feed
+  with an action-oriented customer workspace. The page now uses a compact
+  fact strip, a clickable opportunity-to-delivery response path, real
+  project/requirement facts, business approvals, and a shadcn Table for
+  project progression.
+- Failed runtime records are no longer presented as customer work. The
+  dashboard surfaces only durable business gaps and approval decisions; raw
+  diagnostic traces remain contextual/deep-link evidence.
+- The dashboard's "new opportunity" action now carries an explicit router
+  state into the existing project Dialog, so it opens a real creation flow
+  instead of behaving as a decorative button.
+- Verified with `pnpm --filter @docpilot/web build`, ESLint (existing unrelated
+  warnings only), and `git diff --check`. Automated browser access correctly
+  redirected an unauthenticated profile from `/dashboard` to `/login`; an
+  authenticated visual pass remains required.
+
+## Tenant Workbench: Supabase-Style Dashboard Layout (2026-08-07)
+
+- Replaced the narrow, card-heavy dashboard composition with a 1600px-wide
+  operational canvas inspired by the supplied Supabase DOM structure: an
+  unframed project fact list on the left, one bounded response map on the
+  right, a single actionable response-path strip, and unframed project and
+  attention sections below.
+- The response map is an existing React Flow integration, not a decorative
+  chart. Its five clickable nodes are populated only from real project,
+  readiness, requirement coverage, approval, and completion query results;
+  they open the relevant customer work areas.
+- Verification: `pnpm --filter @docpilot/web build` succeeds and `pnpm
+  --filter @docpilot/web lint` completes with the repository's existing six
+  unrelated warnings and no errors. An authenticated desktop/mobile visual
+  pass remains required because the local automated browser has no session.
+
+## Tenant Dashboard: Project List Refinement (2026-08-07)
+
+- Replaced the dashboard-only shadcn Table with a single shadcn Card that
+  contains full-row project selections. The list has no row dividers: grouping
+  comes from the outer rounded frame, consistent row spacing, status markers,
+  and hover state. The field-oriented Table remains available only where it is
+  appropriate for the Materials Center.
+- Confirmed the shadcn `Item` component through the official CLI, but did not
+  install it because its dependency resolution would overwrite the existing
+  Separator component. Reused the project’s existing official shadcn Card
+  instead, with no unrelated component overwrite.
+- Verification: `pnpm --filter @docpilot/web build` passes; ESLint reports no
+  errors and only the pre-existing six unrelated warnings.
+
+## Tenant Dashboard: Static Card Treatment (2026-08-07)
+
+- Removed the custom `card-micro-tilt` behavior from the shared Card source.
+  Cards no longer use perspective, hover translation, or hover shadows.
+- Restyled the dashboard project list as a static grouped selection: one 1px
+  outer border, 10px radius, no inner dividers or shadow, and a very light
+  full-row hover fill.
+- Verification: `pnpm --filter @docpilot/web build` passes. ESLint has no
+  errors and reports only the repository's six existing unrelated warnings.
+
+## Tenant Dashboard: Portfolio Readiness Chart (2026-08-07)
+
+- Removed the non-actionable React Flow response map and the duplicate workflow
+  navigation rail from the dashboard. The map was neither an editable model nor
+  a decision-support chart.
+- Added a shadcn `ChartContainer` / Recharts bar chart for actual per-project
+  readiness. It reads the existing readiness summary, displays average readiness
+  and explicit gaps, and provides chart tooltips with each project's score and
+  blocker count. Projects with no extracted requirements are explicitly shown
+  as unassessed rather than fabricated as zero-valued history.
+- A Resend-style time series is intentionally deferred: current project records
+  and readiness summaries have no durable daily stage-event history. A real
+  trend requires that backend data, not client-side synthetic points.
+- Verification: `pnpm --filter @docpilot/web build` passes; ESLint reports no
+  errors and only the repository's six existing unrelated warnings.
+
+## Tenant Workbench: Chinese Typography and Dashboard Hierarchy (2026-08-07)
+
+- Added `@fontsource-variable/noto-sans-sc` (OFL-1.1) and made Noto Sans SC
+  Variable the workbench's Chinese-first UI font, with PingFang and Microsoft
+  YaHei UI fallbacks. The package uses unicode-range WOFF2 subsets and
+  `font-display: swap`.
+- Reduced the dashboard to four primary facts and removed decorative micro
+  labels. Raised the readable baseline for dashboard copy, project rows, and
+  attention items; the hierarchy is now page title, section title, business
+  value, and supporting context instead of multiple near-identical gray sizes.
+- Verification: `pnpm --filter @docpilot/web build` passes; ESLint reports no
+  errors and only the repository's six existing unrelated warnings.
+
+## Tenant Workbench: Directory Page Alignment (2026-08-07)
+
+- Rebuilt the Bid Projects, Knowledge Assets, and My Work directory surfaces
+  around the dashboard's controlled 1600px operational canvas. Headers, local
+  tabs, filters, and records now align to the same content bounds instead of
+  mixing full-width header strips with a narrow table below.
+- Moved the My Work and Knowledge Assets tabs inside the content canvas,
+  removed their English eyebrow labels, and turned the tabs into compact local
+  segmented controls. This avoids using page-wide lines as layout structure.
+- Replaced bare line-based project, knowledge, and work-item listings with
+  static 1px, 10px-radius directory groups: no shadow or elevation, no inner
+  separators, and only a shallow full-row hover state. Typography now uses a
+  30px page title, 16px section title, 24px primary metric, and 12-14px
+  supporting text.
+- Verification: `pnpm --filter @docpilot/web build` passes. ESLint has no
+  errors and reports only the repository's six existing unrelated warnings.
+## Backend capability and frontend surface audit (2026-08-07)
+- Added docs/product/2026-08-07-bidpilot-backend-capability-frontend-surface-audit.md.
+- Audited API routers, contract models, worker tasks, runtime capabilities, and mounted Web routes. The document separates tenant workspace, tenant administration, and internal operations, and maps P0/P1/P2 product surfaces.
+- No frontend behavior was changed in this audit.
+
+## Runtime visibility and durable remote materials (2026-08-08)
+
+- Added a project-level “响应工作流” surface backed by execution runs and runtime events. The UI exposes seven business stages and keeps historical runs without event streams visible as unavailable history instead of silently dropping them.
+- Added a shared settings navigation for account, organization, provider/model, and member surfaces. These pages now use the same Supabase-inspired operational canvas and Chinese-first typography.
+- Replaced the legacy platform/workbench brand mark with the supplied BidPilot SVG and separated the collapsed-sidebar logo/toggle geometry.
+- Added text-document preview in the knowledge Sheet and provenance links when the API returns a remote source URL.
+- Separated research from durable import in the assistant runtime: one-page attachment discovery is read-only; only explicit artifact fetch enters a project bundle and the existing parse/index pipeline; HTML pages require explicit `web_evidence` mode.
+- Verification: project workspace Playwright tests pass on desktop and mobile (2/2); Agent workspace tests pass on desktop and mobile (2/2); `pnpm --dir apps/web build` and lint pass, with only six pre-existing Hook warnings; affected Python modules pass `py_compile`. Database-backed import tests remain blocked until a PostgreSQL URL ending in `_test` is configured.
+
+## Settings shell visual verification (2026-08-08)
+
+- Added an administrator-route Playwright smoke test for Account, Organization,
+  and Provider/Model settings. It loads genuine workbench routes with API-shaped
+  account, entitlement, organization, and provider data and saves desktop and
+  mobile screenshots for review.
+- Added desktop coverage for the shared workbench account menu. The test checks
+  the Account, Organization Settings, and Integrations & Models actions after
+  opening the menu, so the menu cannot regress to the prior black active state
+  or hide the administrator routes.
+- Verification: `pnpm --dir apps/web build` succeeds; lint has no errors and
+  the same six existing Hook warnings; both Agent workspace and settings
+  workspace Playwright suites pass in Chromium and mobile Chromium (4/4).
+- The project-workspace visual suite now also asserts that the document detail
+  Sheet has a white surface and captures the parsed-material preview in both
+  viewports. The project suite passes in Chromium and mobile Chromium (2/2).
+
+## Leho workspace demo data and local service refresh (2026-08-08)
+
+- `leho@bidpilot.local` was moved from the shared `Default Organization`
+  (which contained 3,803 active development/test memberships) into a dedicated
+  personal workspace, `Leho 的 BidPilot 工作区`. Existing memberships and
+  projects in the shared organization were preserved rather than deleted.
+- Added the idempotent `scripts/seed_workspace_demo.py` command. It creates
+  three demo projects with distinct readiness states, source documents and
+  evidence, an awaiting-approval LangGraph run, and nine explicitly labelled
+  local radar notices with a 14-day activity trend.
+- Advanced the local database to Alembic head `03c4d5e6f7a8` so the radar and
+  webhook schema is present, then rebuilt the API and worker images. The prior
+  API container was serving an old image and returned 404 for `/radar/overview`.
+- Verification: authenticated API calls return the isolated workspace, 3
+  projects, 9 radar notices, and 2 runtime runs (one awaiting approval).
+  Playwright browser smoke checks show the populated radar page at desktop and
+  mobile widths, including the 14-day chart and live radar treatment.
+
+## Agent approval pause and worker recovery (2026-08-08)
+
+- Removed the Agent welcome view's fixed vertical offset. The empty state now
+  uses normal document flow with responsive top padding, preventing the whole
+  assistant surface from appearing artificially shifted down.
+- Treated `assistant.confirmation_requested` as a deliberate terminal pause
+  for the current SSE request. A connection that closes while a durable run is
+  awaiting approval no longer renders the misleading "stream incomplete"
+  failure banner or clears the actionable confirmation state.
+- Repaired the worker image's shared API-domain imports used by scheduled radar
+  polling and webhook delivery. The worker now includes the API app package,
+  exposes the FastAPI-compatible database dependency, and has the direct
+  runtime dependencies required by those domain modules.
+- Verification: `AIAssistantPanel` approval-pause regression test passes
+  (30/30); `npm run build` succeeds; the worker import regression test passes;
+  rebuilt `docpilot-worker` reaches Celery ready state with radar and webhook
+  tasks registered; Agent workspace screenshots were reviewed at desktop and
+  mobile widths.
+
+## Resend transactional delivery hardening (2026-08-08)
+
+- Confirmed the running API selects `ResendEmailBackend` with the verified
+  `BidPilot <notifications@updates.rglens.com>` sender; SMTP is no longer a
+  required local dependency when Resend is configured.
+- Made registration verification, resend verification, password reset,
+  invitation creation, and account deletion confirmation best-effort after
+  their durable business state commits. Provider failure is logged without
+  returning a false 5xx for a successful user action.
+- Replaced the review email's fake `admin@docpilot.local` recipient with real,
+  verified project collaborators. Each review decision now creates a durable
+  inbox/SSE notification and then attempts email delivery to that same set.
+- Production readiness accepts either a complete SMTP configuration or a valid
+  Resend key; release workflow and deployment documentation pass both Resend
+  secrets through the readiness contract.
+- Verification: email, auth, invitation, review, and production-readiness test
+  suites pass (68 tests); API image was rebuilt and is healthy with Resend
+  selected at runtime.
+
+## Remote tender attachment import recovery (2026-08-09)
+
+- Moved large confirmed remote attachments out of the synchronous assistant
+  request. Artifact imports now create a durable child runtime run, queue a
+  Worker task, and remain visible as an in-progress import in the Agent
+  timeline instead of making the conversation appear stalled.
+- Added direct HTTP streaming to a temporary file with SSRF, redirect, content,
+  byte-count, checksum, and time-limit checks. Non-parseable artifacts are
+  uploaded to object storage from disk; they do not pass through an in-memory
+  response buffer and are not treated as HTML web-page imports.
+- The downloader accepts artifacts up to 512 MB with a 15-minute background
+  deadline. The Shenzhen software ZIP that triggered the report is
+  292,311,407 bytes, so it now fits the explicit artifact path. Parseable
+  documents retain the existing parse/index pipeline and its smaller memory
+  bound.
+- Made the live browser acceptance spec respect `E2E_API_URL`, removing a
+  hard-coded API base that prevented isolated-port execution.
+- Verification: targeted API runtime/import tests (31), Worker task tests
+  (11), full frontend tests (34 files / 138 tests), live golden-chain browser
+  test (project creation, upload/index, Agent, drafting, approval, DOCX
+  download), and three radar/directory/project-workspace browser suites all
+  pass. A real redirected public ZIP stream/download/cleanup smoke test also
+  passed inside the Worker container.
+
+## Pi Agent Harness source study (2026-08-10)
+
+- Cloned the official Pi source into `temple/pi` at commit
+  `936aff00918de1187f085f123c2812d8f2d67745` and wrote a source-traceable
+  Chinese study in `docs/learning/2026-08-10-pi-agent-harness-source-study.md`.
+- Confirmed the current runnable core is the `agentLoop` plus `Agent` state
+  wrapper: tool validation/hooks, streaming events, cancellation, steering /
+  follow-up queues, JSONL session trees, and context compaction are implemented.
+- Recorded two important boundaries to prevent later architecture folklore:
+  Pi's default `bash` runs with the launching process's permissions (or a
+  replaceable executor such as SSH), while plan mode and subagents are extension
+  examples rather than defaults. The checked-in Harness V2 API remains mostly
+  `HarnessNotImplemented`, including restore and prompt execution.
+
+## Pi-style Harness Agent implementation and acceptance (2026-08-10)
+
+- Added a domain-neutral `HarnessLoop` with explicit model/tool protocols,
+  ordered lifecycle events, validation, sequential calls, cancellation,
+  steering/follow-up input, plan-policy observations, pause/resume cursors,
+  bounded loops, and safe provider failures. The core does not import or name
+  BidPilot capabilities.
+- Added the governed BidPilot adapter and production `CoreStreamingHarness`.
+  Normal assistant turns now run through the generic core; durable RuntimeAction
+  preflight, approvals, MCP calls, usage limits, SSE projection, and PostgreSQL
+  events remain on the product boundary. A failed confirmed remote import ends
+  the turn with the original error; it does not mutate URLs or retry itself.
+- Added a minimal local companion for explicit local HTTP(S) artifact download:
+  hostname allowlist, redirect refusal, content/size checks, atomic output,
+  checksum receipt, and no arbitrary shell. The returned local artifact still
+  uses the existing user-visible upload/parse path.
+- Added a reproducible 19-case harness scorecard with AgentEvals-aligned
+  strict/unordered/subset/superset trajectory matching and LangGraph graph
+  trajectory checks. The score is a deterministic engineering-contract score,
+  not a claim about subjective model quality or arbitrary third-party sites.
+- Fixed acceptance regressions found during the full runtime run: duplicate
+  plan publication, stale `needs_input` after successful action, usage-limit
+  masking, explicit SSE terminal event for approval pauses, and ambiguous
+  `section_key` drafting calls. The smoke flow now passes the stable section ID.
+- The final expanded regression also found and fixed the linked-workflow query
+  used by one assistant run with multiple LangGraph children: SQLAlchemy
+  `in_()` now receives one collection, so the workflow timeline can be listed
+  instead of raising a `TypeError`.
+
+## ReAct status correction and harness regression closure (2026-08-10)
+
+- Wrote `docs/architecture/2026-08-10-react-harness-prompt-status.md` after
+  rereading the local Agent engineering guide and Pi's actual loop/system
+  prompt source. It distinguishes the implemented ReAct core, governed tool
+  boundary, prompt assembly and trace from missing product work: active-run
+  steering/follow-up, Pi-style durable session recovery, plan mode /
+  plan-and-execute, and loop-engineer recovery policy.
+- Corrected the implementation plan so a generic `HarnessPlanPolicy` protocol
+  and a test-only steering queue are no longer presented as a finished
+  product-level planning or live-interruption feature.
+- Fixed a real success-trace regression: a deliverable result may legitimately
+  contain `title`; action trace publishing now preserves that result without
+  adding colliding capability-label data. Added a regression test for it.
+- Restored the campaign safety contract: one `run_section_campaign` mutation
+  per model turn; the worker owns its internal waves. Also retained explicit
+  honesty when an image has no usable OCR text.
+- Verification: targeted harness/runtime regressions `62 passed`; full API
+  suite `875 passed`; live DeepSeek V4 + 1536-dimension embedding harness
+  evaluation passed at
+  `services/api/artifacts/evaluations/live-harness/live-harness-eval-ec43ddf435.md`.
+
+## Core business closeout and documented model compatibility (2026-08-12)
+
+- Rechecked DeepSeek V4 behavior through Context7/official API documentation
+  instead of inferring provider parameters. Structured reasoning calls now use
+  the documented `thinking` plus `reasoning_effort` shape; ordinary section
+  drafting disables thinking and explicitly requests final Markdown only.
+- Removed the unsafe quality-review fallback: an unavailable or invalid model
+  review produces a durable `degraded` review state and mandatory human
+  verification, never an automatic pass. The React Flow workbench projects
+  that state rather than hiding it.
+- Re-ran the real API/Worker golden path: 10/10 steps passed, including
+  role-aware material ingestion, parse/index, LangGraph drafting, rejection
+  and redraft, approval, approved-only DOCX export, and a controlled failed
+  execution retry. Artifact:
+  `artifacts/evaluations/bidpilot-golden-20260812/golden-path-closeout-20260812-164447.json`.
+- Ran a fresh isolated browser registration and real manual product flow:
+  create project, upload/index material, ask the current-project Agent,
+  create deliverable/section, draft, approve and download DOCX. Both passed.
+- Regression totals: API `877 passed`, Worker `186 passed`, Web `139 tests in
+  34 files`, production web build passed, and browser suite `28 passed` with
+  `24` deliberately environment-gated cases skipped. Full closeout and
+  remaining non-blocking risks are documented in
+  `docs/quality/2026-08-12-bidpilot-core-closeout.md`.
+
+## Competitor research and local artifact companion packaging (2026-08-14)
+
+- Added a source-linked Chinese research and implementation baseline for
+  iFlytek Intelligent Procurement and BidPilot's supplier-side B2B positioning:
+  `docs/research/2026-08-14-iflytek-intelligent-procurement-bidpilot-positioning-and-plan.md`.
+  It records that the publicly disclosed 97% metric is a case-specific
+  objective-evaluation accuracy figure, not a general delivery-rate claim.
+- Tightened the `bid-research` skill contract: web search locates a notice;
+  direct attachment discovery is read-only; a confirmed artifact import never
+  retries by mutating the URL or silently substitutes the HTML notice page.
+- Packaged the user-owned local downloader as the installable
+  `bidpilot-local-companion` command. It accepts one confirmed HTTP(S)
+  artifact, a user-selected directory, optional host allowlist, bounded size,
+  atomic output and a checksum receipt. It never accepts arbitrary shell.
+  Temporary-file request IDs are now validated to prevent path traversal.
+- Verification: package build/install and CLI help passed; a mocked streaming
+  artifact smoke test passed; Python compilation and diff checks passed. The
+  database-backed import and role/exception pre-production suite is not claimed
+  as rerun: this workspace currently has no configured dedicated `_test`
+  PostgreSQL URL and Docker is unavailable, so it was not pointed at an
+  unknown application database.
+
+## OpenCode Go provider profile from Pi source (2026-08-14)
+
+- Read the checked-in Pi provider implementation rather than guessing the
+  gateway shape. Pi registers `opencode-go` with `OPENCODE_API_KEY` and its
+  OpenAI Chat Completions-compatible route; BidPilot keeps the existing Python
+  FastAPI/LangGraph adapter boundary and does not embed a second Node agent
+  runtime in the cloud product.
+- Added the explicit `opencode-go` provider profile and shared default:
+  `https://opencode.ai/zen/go/v1`, model `deepseek-v4-flash`. API assistant,
+  Harness, normal chat, and Worker configuration now prefer `OPENCODE_*` when
+  it is the selected platform profile. An explicit assistant profile with
+  `DOCPILOT_ASSISTANT_PROVIDER_ID=opencode-go` gets the same profile defaults.
+- Preserved Pi's OpenCode Go DeepSeek V4 compatibility rule: reasoning turns
+  send the stable native `thinking` switch but do not combine it with
+  `reasoning_effort`. Provider credentials remain deployment secrets and were
+  not written to tracked files or documentation.
+- Verified a live model listing, ordinary completion, tool-call completion,
+  and a real `get_agent_llm().bind_tools()` Harness-client probe using a
+  temporary process credential. Regression checks: API provider/readiness
+  subset `68 passed`, Worker adapter subset `33 passed`, Compose config,
+  Python compilation, and diff checks passed.
+
+## OpenCode runtime and product-chain closeout (2026-08-14)
+
+- Corrected the Worker provider selection regression that blocked real
+  LangGraph drafting: a selected OpenCode profile now takes precedence over
+  legacy `LLM_*` configuration, and blank Compose values fall back to the
+  documented OpenCode endpoint/model instead of creating an invalid request.
+  OpenCode DeepSeek structured calls retain Pi-compatible `thinking` but omit
+  the DeepSeek-direct-only `reasoning_effort` parameter.
+- Re-ran the isolated live golden path using a temporary OpenCode credential:
+  all 10 steps passed, covering material ingestion, parsing/indexing,
+  durable LangGraph human review, rejection/redraft, approval, DOCX export,
+  and retry. Evidence:
+  `artifacts/evaluations/bidpilot-golden-20260814/opencode-go-golden-final.json`.
+- Ran an actual HTTP Harness conversation with tool calls and trace capture
+  (`27` events, `2` successful tools), then a browser-native Agent run:
+  natural-language project creation produced a visible plan, approval pause,
+  confirmed tool execution, and final success message. Browser evidence is
+  under `output/playwright/closure-agent-run.png`.
+- Final regressions: API `887 passed`, Worker `190 passed`, Web `139 passed`.
+  Production web build also passed. Test output still contains non-failing
+  happy-dom/React `act` and local notification preflight warnings; real
+  browser console checks found no errors. No provider secret was persisted.
+
+## Six-stream closeout continuation (2026-08-14)
+
+- Added durable per-user notification preferences and applied channel/category
+  gating to review in-app and email notifications. Added Account > 通知 controls
+  and API tests; isolated API notification/review subset is `8 passed`.
+- Connected the existing collaboration board API to the project overview so
+  members, unassigned requirements, overdue requirements, pending reviews and
+  active workflows are visible rather than API-only.
+- Added the six-stream acceptance report with explicit production gates and the
+  remote-download security boundary. Local seed data for
+  `leho@bidpilot.local` remains idempotent and includes three demo projects and
+  nine radar notices.
+- Verification after the continuation: web build passed; web lint has 0 errors
+  and 5 pre-existing hook warnings; test database migration is at
+  `04d5e6f7a8b9` head. No production deployment or external provider callback was
+  claimed.
+- Final serial regression evidence: API `889 passed` (25 non-failing SQLAlchemy
+  cleanup warnings), Worker `190 passed`, Web `34 files / 139 tests passed`.
+  Compose config validated and a Chromium smoke check against Vite on `5175`
+  rendered the landing page with zero console errors. The production build still
+  reports the `AIAssistantPanel` chunk at about 561 KB, tracked as a non-blocking
+  follow-up for code splitting.

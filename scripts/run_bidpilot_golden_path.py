@@ -968,7 +968,12 @@ def _run(args: argparse.Namespace, evidence: GoldenPathEvidence) -> None:
                     client.json(
                         "POST",
                         "/documents/upload",
-                        params={"bundle_id": bundle_id},
+                        # A bundle is an atomic intake unit from the user's
+                        # point of view.  Upload every selected file first,
+                        # then queue exactly one ingest job below.  Letting
+                        # the first file queue immediately races the next
+                        # upload and makes multi-file bundles fail with 409.
+                        params={"bundle_id": bundle_id, "defer_ingest": "true"},
                         files={"file": (material.path.name, material.path.read_bytes(), material.mime_type)},
                     )
                 )

@@ -55,16 +55,18 @@ describe("WorkflowCanvas", () => {
     render(<WorkflowCanvas nodes={nodes} currentNode="knowledge_retriever" />);
 
     expect(screen.getByTestId("workflow-canvas")).toBeTruthy();
-    expect(screen.getByTestId("workflow-node-count").textContent).toBe("7");
-    expect(screen.getByTestId("workflow-edge-count").textContent).toBe("6");
+    expect(screen.getByTestId("workflow-node-count").textContent).toBe("10");
+    expect(screen.getByTestId("workflow-edge-count").textContent).toBe("11");
     expect(screen.getByText("调度规划")).toBeTruthy();
     expect(screen.getByTestId("workflow-node-knowledge_retriever").textContent).toContain("检索证据");
     expect(screen.getByTestId("workflow-node-supervisor").getAttribute("data-status")).toBe("completed");
     expect(screen.getByTestId("workflow-node-supervisor").getAttribute("data-status-label")).toBe("已完成");
     expect(screen.getByTestId("workflow-node-knowledge_retriever").getAttribute("data-status")).toBe("running");
     expect(screen.getByTestId("workflow-node-knowledge_retriever").getAttribute("data-status-label")).toBe("运行中");
-    expect(screen.getByTestId("workflow-edge-rfp_parser-knowledge_retriever").getAttribute("data-animated")).toBe("true");
-    expect(screen.getByTestId("workflow-edge-rfp_parser-knowledge_retriever").getAttribute("data-class-name")).toContain(
+    expect(screen.getByTestId("workflow-node-content_plan").textContent).toContain("编排响应计划");
+    expect(screen.getByTestId("workflow-node-memory_proposals").textContent).toContain("知识提案");
+    expect(screen.getByTestId("workflow-edge-memory_context-knowledge_retriever").getAttribute("data-animated")).toBe("true");
+    expect(screen.getByTestId("workflow-edge-memory_context-knowledge_retriever").getAttribute("data-class-name")).toContain(
       "workflow-edge-active",
     );
   });

@@ -13,11 +13,15 @@ from app.models import (
     Deliverable,
     DeliverableSection,
     ExecutionRun,
+    Notification,
+    NotificationPreference,
     Project,
+    ProjectMember,
     ReviewComment,
     ReviewThread,
     SectionVersion,
     TaskOutboxEvent,
+    User,
 )
 
 
@@ -39,6 +43,21 @@ def _admin_user() -> CurrentUser:
     )
 
 
+def _add_project_reviewer(test_db, *, project_id: str, uid: str) -> User:
+    reviewer = User(
+        id=f"reviewer-{uid}",
+        org_id="00000000-0000-0000-0000-000000000001",
+        email=f"reviewer-{uid}@docpilot.local",
+        display_name="Review Collaborator",
+        password_hash="...",
+        email_verified=True,
+    )
+    test_db.add(reviewer)
+    test_db.flush()
+    test_db.add(ProjectMember(project_id=project_id, user_id=reviewer.id, role="reviewer"))
+    return reviewer
+
+
 def test_approve_sends_notification(test_db):
     uid = _unique_id()
     pid = f"p-notify-{uid}"
@@ -48,6 +67,7 @@ def test_approve_sends_notification(test_db):
     p = Project(id=pid, slug=f"nt-{uid}", name="Notify Test", org_id="00000000-0000-0000-0000-000000000001", scenario_package="bidpilot")
     test_db.add(p)
     test_db.flush()
+    reviewer = _add_project_reviewer(test_db, project_id=pid, uid=uid)
     d = Deliverable(id=did, project_id=pid, type="proposal", title="Test Del")
     test_db.add(d)
     test_db.flush()
@@ -75,9 +95,11 @@ def test_approve_sends_notification(test_db):
     mock_send.assert_called_once()
     call_kwargs = mock_send.call_args.kwargs
     assert call_kwargs["action"] == "approved"
+    assert call_kwargs["email"] == reviewer.email
+    notification = test_db.query(Notification).filter_by(user_id=reviewer.id, type="review_decision").one()
+    assert notification.title == "章节审核已通过"
 
-    # Cleanup: service commits internally, so tear down the created rows
-    # Order: review_comments -> review_threads -> audit_events -> section -> deliverable -> project
+    # Cleanup: service commits internally, so tear down the created rows.
     test_db.query(ReviewComment).filter(
         ReviewComment.review_thread_id.in_(
             test_db.query(ReviewThread.id).filter(ReviewThread.deliverable_section_id == sid)
@@ -85,6 +107,9 @@ def test_approve_sends_notification(test_db):
     ).delete(synchronize_session=False)
     test_db.query(ReviewThread).filter(ReviewThread.deliverable_section_id == sid).delete(synchronize_session=False)
     test_db.query(AuditEvent).filter(AuditEvent.project_id == pid).delete(synchronize_session=False)
+    test_db.query(Notification).filter_by(user_id=reviewer.id, type="review_decision").delete(synchronize_session=False)
+    test_db.query(ProjectMember).filter_by(project_id=pid, user_id=reviewer.id).delete(synchronize_session=False)
+    test_db.delete(reviewer)
     test_db.delete(s)
     test_db.delete(d)
     test_db.delete(p)
@@ -100,6 +125,7 @@ def test_reject_sends_notification(test_db):
     p = Project(id=pid, slug=f"nt-{uid}", name="Notify Test 2", org_id="00000000-0000-0000-0000-000000000001", scenario_package="bidpilot")
     test_db.add(p)
     test_db.flush()
+    reviewer = _add_project_reviewer(test_db, project_id=pid, uid=uid)
     d = Deliverable(id=did, project_id=pid, type="proposal", title="Test Del 2")
     test_db.add(d)
     test_db.flush()
@@ -120,10 +146,15 @@ def test_reject_sends_notification(test_db):
         decision="rejected",
         comment="Needs work",
     )
-    with patch("app.review.service.send_review_notification_email") as mock_send:
-        submit_review_decision_command(test_db, payload, _admin_user())
+    with patch(
+        "app.review.service.send_review_notification_email",
+        side_effect=RuntimeError("Resend unavailable"),
+    ) as mock_send:
+        result = submit_review_decision_command(test_db, payload, _admin_user())
 
+    assert result.decision == "rejected"
     mock_send.assert_called_once()
+    assert test_db.query(Notification).filter_by(user_id=reviewer.id, type="review_decision").count() == 1
 
     # Cleanup
     test_db.query(ReviewComment).filter(
@@ -133,9 +164,53 @@ def test_reject_sends_notification(test_db):
     ).delete(synchronize_session=False)
     test_db.query(ReviewThread).filter(ReviewThread.deliverable_section_id == sid).delete(synchronize_session=False)
     test_db.query(AuditEvent).filter(AuditEvent.project_id == pid).delete(synchronize_session=False)
+    test_db.query(Notification).filter_by(user_id=reviewer.id, type="review_decision").delete(synchronize_session=False)
+    test_db.query(ProjectMember).filter_by(project_id=pid, user_id=reviewer.id).delete(synchronize_session=False)
+    test_db.delete(reviewer)
     test_db.delete(s)
     test_db.delete(d)
     test_db.delete(p)
+    test_db.commit()
+
+
+def test_review_notification_respects_channel_preferences(test_db):
+    uid = _unique_id()
+    project_id = f"p-notify-preference-{uid}"
+    deliverable_id = f"d-notify-preference-{uid}"
+    section_id = f"s-notify-preference-{uid}"
+    project = Project(id=project_id, slug=f"np-{uid}", name="Notify Preference", org_id="00000000-0000-0000-0000-000000000001", scenario_package="bidpilot")
+    test_db.add(project)
+    test_db.flush()
+    reviewer = _add_project_reviewer(test_db, project_id=project_id, uid=uid)
+    test_db.add(NotificationPreference(user_id=reviewer.id, email_enabled=False, review_updates=False))
+    deliverable = Deliverable(id=deliverable_id, project_id=project_id, type="proposal", title="Preference Proposal")
+    test_db.add(deliverable)
+    test_db.flush()
+    section = DeliverableSection(id=section_id, deliverable_id=deliverable_id, section_key="intro", title="Intro")
+    test_db.add(section)
+    test_db.flush()
+    version = SectionVersion(deliverable_section_id=section_id, version_number=1, content_markdown="Candidate.")
+    test_db.add(version)
+    test_db.commit()
+
+    with patch("app.review.service.send_review_notification_email") as send_email:
+        submit_review_decision_command(
+            test_db,
+            ReviewDecisionCreate(section_id=section_id, section_version_id=version.id, decision="approved"),
+            _admin_user(),
+        )
+
+    assert test_db.query(Notification).filter_by(user_id=reviewer.id).count() == 0
+    send_email.assert_not_called()
+
+    test_db.query(NotificationPreference).filter_by(user_id=reviewer.id).delete(synchronize_session=False)
+    test_db.query(ReviewThread).filter_by(deliverable_section_id=section_id).delete(synchronize_session=False)
+    test_db.query(AuditEvent).filter_by(project_id=project_id).delete(synchronize_session=False)
+    test_db.query(ProjectMember).filter_by(project_id=project_id, user_id=reviewer.id).delete(synchronize_session=False)
+    test_db.delete(reviewer)
+    test_db.delete(section)
+    test_db.delete(deliverable)
+    test_db.delete(project)
     test_db.commit()
 
 

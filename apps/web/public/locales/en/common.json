@@ -24,7 +24,18 @@
     "login": "Login",
     "signup": "Sign Up",
     "enterPlatform": "Enter Platform",
-    "navigation": "Navigation"
+    "navigation": "Navigation",
+    "inbox": "Inbox",
+    "myWork": "My work",
+    "workspace": "Workspace",
+    "bidProject": "Bid project",
+    "bidProjects": "Bid projects",
+    "radar": "Tender radar",
+    "reviews": "Reviews",
+    "deliverables": "Deliverables",
+    "members": "Members",
+    "responseTeam": "Response team",
+    "aiProviders": "AI providers"
   },
   "actions": {
     "save": "Save",
@@ -108,6 +119,17 @@
     "hint": {
       "navigate": "Navigate with arrow keys",
       "select": "Select with Enter"
+    }
+  },
+  "workbench": {
+    "surfaces": {
+      "brief": "Brief",
+      "requirements": "Requirements",
+      "evidence": "Evidence",
+      "response": "Response",
+      "review": "Review",
+      "deliverables": "Deliverables",
+      "activity": "Activity"
     }
   }
 }

@@ -2,10 +2,18 @@
 
 import os
 import tempfile
+import io
 
 import pytest
 
-from app.adapters.parser import _extract_text, _split_into_chunks
+from app.adapters.parser import (
+    _extract_csv_text,
+    _extract_docx_text,
+    _extract_text,
+    _extract_xlsx_text,
+    _split_into_chunks,
+)
+from app.adapters import parser as parser_adapter
 from app.adapters import embedding as embedding_adapter
 from app.adapters import llm as llm_adapter
 from app.adapters import anthropic_llm as anthropic_llm_adapter
@@ -56,6 +64,12 @@ _CHAT_ENV_NAMES = (
     "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
     "DOCPILOT_PROVIDER_DOMESTIC_BASE_URL",
     "DOCPILOT_LLM_MODEL_PRIMARY",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "OPENCODE_API_KEY",
+    "OPENCODE_BASE_URL",
+    "OPENCODE_MODEL",
     "ALIYUN_API_KEY",
     "DASHSCOPE_API_KEY",
 )
@@ -122,6 +136,65 @@ class TestParserChunking:
             assert "Hello world" in result
         finally:
             os.unlink(path)
+
+    def test_docx_tables_are_preserved_as_retrievable_markdown(self) -> None:
+        from docx import Document
+
+        document = Document()
+        document.add_heading("能力矩阵", level=1)
+        table = document.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "能力"
+        table.cell(0, 1).text = "证据"
+        table.cell(1, 0).text = "交付"
+        table.cell(1, 1).text = "案例 A"
+        output = io.BytesIO()
+        document.save(output)
+
+        text = _extract_docx_text(output.getvalue())
+        assert "## Table 1" in text
+        assert "| 能力 | 证据 |" in text
+        assert "| 交付 | 案例 A |" in text
+
+    def test_xlsx_and_csv_are_normalized_to_sheet_tables(self) -> None:
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "资质"
+        sheet.append(["名称", "状态"])
+        sheet.append(["ISO", "有效"])
+        output = io.BytesIO()
+        workbook.save(output)
+
+        xlsx_text = _extract_xlsx_text(output.getvalue())
+        csv_text = _extract_csv_text("名称,状态\nISO,有效\n".encode("utf-8"))
+        assert "## Sheet: 资质" in xlsx_text
+        assert "| 名称 | 状态 |" in xlsx_text
+        assert "## Sheet: CSV" in csv_text
+        assert "| ISO | 有效 |" in csv_text
+
+    def test_page_and_sheet_headings_become_unified_locators(self) -> None:
+        chunks = _split_into_chunks("## Page 3\n\n扫描页内容")
+        assert chunks[0][1]["source_locator"] == {"page": 3}
+
+    def test_scanned_pdf_without_ocr_is_a_non_retryable_parse_failure(self, monkeypatch) -> None:
+        monkeypatch.setattr(parser_adapter, "_download_from_minio", lambda _key: b"%PDF-scan")
+        monkeypatch.setattr(
+            parser_adapter,
+            "_extract_pdf_outcome",
+            lambda _data: parser_adapter._ExtractionOutcome(
+                text="",
+                error_code="pdf_ocr_unavailable",
+                retryable=False,
+            ),
+        )
+
+        result = _extract_text("private/scanned.pdf", "application/pdf")
+
+        assert isinstance(result, str)
+        assert result == ""
+        assert result.error_code == "pdf_ocr_unavailable"
+        assert result.retryable is False
 
 
 class TestEmbeddingAdapter:
@@ -336,6 +409,43 @@ class TestLLMAdapter:
         assert llm_adapter._api_url() == "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
         assert llm_adapter._api_model() == "qwen3.5-flash"
 
+    def test_deepseek_llm_env_uses_chat_completions_and_supported_default(self, monkeypatch) -> None:
+        _clear_chat_env(monkeypatch)
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
+
+        assert llm_adapter._api_key() == "test-deepseek-key"
+        assert llm_adapter._api_url() == "https://api.deepseek.com/v1/chat/completions"
+        assert llm_adapter._api_model() == "deepseek-v4-flash"
+
+    def test_opencode_go_llm_env_is_preferred_over_legacy_deepseek(self, monkeypatch) -> None:
+        _clear_chat_env(monkeypatch)
+        monkeypatch.setenv("OPENCODE_API_KEY", "test-opencode-key")
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
+
+        assert llm_adapter._api_key() == "test-opencode-key"
+        assert llm_adapter._api_url() == "https://opencode.ai/zen/go/v1/chat/completions"
+        assert llm_adapter._api_model() == "deepseek-v4-flash"
+
+    def test_opencode_go_is_not_redirected_by_legacy_endpoint_variables(self, monkeypatch) -> None:
+        _clear_chat_env(monkeypatch)
+        monkeypatch.setenv("OPENCODE_API_KEY", "test-opencode-key")
+        monkeypatch.setenv("LLM_API_KEY", "legacy-key")
+        monkeypatch.setenv("LLM_API_URL", "https://legacy.example.test/v1/chat/completions")
+        monkeypatch.setenv("LLM_MODEL", "legacy-model")
+
+        assert llm_adapter._api_key() == "test-opencode-key"
+        assert llm_adapter._api_url() == "https://opencode.ai/zen/go/v1/chat/completions"
+        assert llm_adapter._api_model() == "deepseek-v4-flash"
+
+    def test_opencode_go_uses_defaults_when_compose_injects_blank_overrides(self, monkeypatch) -> None:
+        _clear_chat_env(monkeypatch)
+        monkeypatch.setenv("OPENCODE_API_KEY", "test-opencode-key")
+        monkeypatch.setenv("OPENCODE_BASE_URL", "")
+        monkeypatch.setenv("OPENCODE_MODEL", "")
+
+        assert llm_adapter._api_url() == "https://opencode.ai/zen/go/v1/chat/completions"
+        assert llm_adapter._api_model() == "deepseek-v4-flash"
+
     def test_timeout_raises_a_retryable_provider_error(self, monkeypatch) -> None:
         _clear_chat_env(monkeypatch)
         monkeypatch.setenv("LLM_API_KEY", "test-provider-key")
@@ -350,6 +460,40 @@ class TestLLMAdapter:
 
         assert error.value.error_code == "provider_timeout"
         assert error.value.retryable is True
+
+    def test_truncated_reasoning_response_is_not_blindly_retried(self, monkeypatch) -> None:
+        _clear_chat_env(monkeypatch)
+        monkeypatch.setenv("LLM_API_KEY", "test-provider-key")
+        captured: dict[str, object] = {}
+
+        class Response:
+            status_code = 200
+
+            def json(self) -> dict[str, object]:
+                return {
+                    "choices": [
+                        {
+                            "finish_reason": "length",
+                            "message": {
+                                "content": "",
+                                "reasoning_content": "internal reasoning only",
+                            },
+                        }
+                    ]
+                }
+
+        def post(*_args, **kwargs):
+            captured.update(kwargs["json"])
+            return Response()
+
+        monkeypatch.setattr(llm_adapter.httpx, "post", post)
+
+        with pytest.raises(ProviderInvocationError) as error:
+            draft_section("technical-approach", ["evidence"], "project-1")
+
+        assert error.value.error_code == "provider_response_truncated"
+        assert error.value.retryable is False
+        assert captured["max_tokens"] == llm_adapter._MAX_DRAFT_OUTPUT_TOKENS
 
     def test_production_missing_provider_never_returns_stub(self, monkeypatch) -> None:
         _clear_chat_env(monkeypatch)

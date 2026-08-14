@@ -124,6 +124,14 @@ def test_validate_environment_accepts_production_ready_shape() -> None:
     assert result.ok is True
     assert result.errors == []
 
+    for name in production_readiness.SMTP_PRODUCTION_VARIABLES:
+        env.pop(name)
+    env["RESEND_API_KEY"] = "re_production_fixture_key"
+    env["DOCPILOT_RESEND_FROM"] = "BidPilot <notifications@updates.rglens.com>"
+    resend_result = production_readiness.validate_environment(env, target="production")
+    assert resend_result.ok is True
+    assert resend_result.errors == []
+
     env["DOCPILOT_ALLOW_STUB_LLM"] = "true"
     stub_enabled = production_readiness.validate_environment(env, target="production")
     assert stub_enabled.ok is False
@@ -175,7 +183,7 @@ def test_validate_environment_rejects_legacy_assistant_engine_aliases() -> None:
         assert "DOCPILOT_ASSISTANT_ENGINE must be harness for production" in result.errors
 
 
-def test_validate_environment_requires_a_complete_platform_assistant_model() -> None:
+def test_validate_environment_accepts_the_supported_deepseek_default_model() -> None:
     env = {
         "DOCPILOT_DATABASE_URL": "postgresql+psycopg://docpilot:secret@db.internal:5432/docpilot",
         "DOCPILOT_REDIS_URL": "redis://:long-random-redis-password@redis.internal:6379/0",
@@ -207,12 +215,41 @@ def test_validate_environment_requires_a_complete_platform_assistant_model() -> 
     }
 
     env["DOCPILOT_SECRETS_KEY"] = base64.urlsafe_b64encode(b"0" * 32).decode()
-    result = production_readiness.validate_environment(env, target="production")
+    assert production_readiness.validate_environment(env, target="production").ok is True
 
-    assert result.ok is False
-    assert "a complete platform assistant model configuration (API key and model name) is required" in result.errors
 
-    env["DEEPSEEK_MODEL"] = "configured-model"
+def test_validate_environment_accepts_the_supported_opencode_go_default_model() -> None:
+    env = {
+        "DOCPILOT_DATABASE_URL": "postgresql+psycopg://docpilot:secret@db.internal:5432/docpilot",
+        "DOCPILOT_REDIS_URL": "redis://:long-random-redis-password@redis.internal:6379/0",
+        "DOCPILOT_MINIO_ENDPOINT": "s3.internal.example.com",
+        "DOCPILOT_MINIO_ACCESS_KEY": "prod-access-key",
+        "DOCPILOT_MINIO_SECRET_KEY": "prod-storage-secret",
+        "DOCPILOT_JWT_SECRET": "prod-secret-value-with-more-than-thirty-two-bytes",
+        "DOCPILOT_AUTH_REQUIRED": "true",
+        "DOCPILOT_SECRETS_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
+        "OPENCODE_API_KEY": "prod-provider-key",
+        "DOCPILOT_APP_URL": "https://bidpilot.rglens.com",
+        "DOCPILOT_CORS_ORIGINS": "https://bidpilot.rglens.com",
+        "DOCPILOT_LANGGRAPH_CHECKPOINTER": "postgres",
+        "DOCPILOT_AGENT_CHECKPOINTER": "postgres",
+        "DOCPILOT_ENV": "production",
+        "DOCPILOT_ASSISTANT_ENGINE": "harness",
+        "USE_LANGGRAPH": "true",
+        "DOCPILOT_POSTGRES_DB": "bidpilot",
+        "DOCPILOT_POSTGRES_USER": "bidpilot",
+        "DOCPILOT_POSTGRES_PASSWORD": "long-random-postgres-password",
+        "DOCPILOT_REDIS_PASSWORD": "long-random-redis-password",
+        "DOCPILOT_RATE_LIMIT": "1000/minute",
+        "DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING": "100000",
+        "DOCPILOT_TRUSTED_PROXY_CIDRS": "172.20.0.1/32",
+        "DOCPILOT_SMTP_HOST": "smtp.qq.com",
+        "DOCPILOT_SMTP_USER": "mailer@example.com",
+        "DOCPILOT_SMTP_PASS": "smtp-app-password",
+        "DOCPILOT_SMTP_FROM": "noreply@rglens.com",
+    }
+
+    env["DOCPILOT_SECRETS_KEY"] = base64.urlsafe_b64encode(b"0" * 32).decode()
     assert production_readiness.validate_environment(env, target="production").ok is True
 
 
@@ -387,6 +424,8 @@ def test_release_workflow_injects_the_full_production_readiness_contract() -> No
         "DOCPILOT_SMTP_USER",
         "DOCPILOT_SMTP_PASS",
         "DOCPILOT_SMTP_FROM",
+        "RESEND_API_KEY",
+        "DOCPILOT_RESEND_FROM",
     )
 
     for name in required_variables:

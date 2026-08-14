@@ -15,9 +15,23 @@ from sqlalchemy.orm import Session
 
 from app.access.service import require_project_capability
 from app.auth.schemas import CurrentUser
-from app.models import ChatConversation, ChatMessage as ChatMessageModel, Project, ProviderConfig
+from app.models import (
+    AssistantAttachment,
+    ChatConversation,
+    ChatMessage as ChatMessageModel,
+    ChatMessageAttachment,
+    Project,
+    ProviderConfig,
+    RuntimeRun,
+)
 from app.providers.endpoints import resolve_provider_chat_request
 from app.security.secrets import decrypt_secret
+from contracts.chat_config import (
+    DEEPSEEK_CHAT_COMPLETIONS_BASE_URL,
+    DEEPSEEK_V4_FLASH_MODEL,
+    OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL,
+    OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL,
+)
 from contracts.untrusted_context import build_untrusted_context_packet, with_untrusted_context_guard
 
 logger = logging.getLogger(__name__)
@@ -49,6 +63,24 @@ class PlatformChatProvider:
 
 def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
     """Resolve the platform-owned chat provider from server env."""
+    api_key = os.getenv("OPENCODE_API_KEY")
+    if api_key:
+        return PlatformChatProvider(
+            api_key=api_key,
+            base_url=os.getenv("OPENCODE_BASE_URL", OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL),
+            model=os.getenv("OPENCODE_MODEL", OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL),
+            provider_id="opencode-go",
+        )
+
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if api_key:
+        return PlatformChatProvider(
+            api_key=api_key,
+            base_url=os.getenv("DEEPSEEK_BASE_URL", DEEPSEEK_CHAT_COMPLETIONS_BASE_URL),
+            model=os.getenv("DEEPSEEK_MODEL", DEEPSEEK_V4_FLASH_MODEL),
+            provider_id="deepseek",
+        )
+
     api_key = (
         os.getenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY")
         or os.getenv("ALIYUN_API_KEY")
@@ -58,14 +90,7 @@ def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
         base_url = os.getenv("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", _PLATFORM_CHAT_BASE_URL)
         model = os.getenv("DOCPILOT_LLM_MODEL_PRIMARY", _PLATFORM_CHAT_MODEL)
         return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model, provider_id="dashscope")
-
-    api_key = os.getenv("DEEPSEEK_API_KEY")
-    if not api_key:
-        return None
-
-    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model, provider_id="deepseek")
+    return None
 
 
 def _resolve_provider_config(
@@ -299,6 +324,9 @@ def save_message(
     conversation_id: str,
     role: str,
     content: str,
+    *,
+    attachments: list[object] | None = None,
+    runtime_run_id: str | None = None,
 ) -> ChatMessageModel:
     """Persist a chat message."""
     conversation = db.get(ChatConversation, conversation_id)
@@ -311,12 +339,45 @@ def save_message(
     if conversation is not None:
         conversation.updated_at = datetime.now(UTC)
 
+    if role == "assistant" and runtime_run_id is None:
+        runtime_run_id = db.query(RuntimeRun.id).filter(
+            RuntimeRun.conversation_id == conversation_id,
+        ).order_by(RuntimeRun.created_at.desc()).limit(1).scalar()
+
     msg = ChatMessageModel(
         conversation_id=conversation_id,
+        runtime_run_id=runtime_run_id,
         role=role,
         content=content,
     )
     db.add(msg)
+    if attachments:
+        attachment_ids = [getattr(attachment, "id", None) for attachment in attachments]
+        records = {
+            record.id: record
+            for record in db.query(AssistantAttachment)
+            .filter(AssistantAttachment.id.in_([attachment_id for attachment_id in attachment_ids if attachment_id]))
+            .all()
+        }
+        for attachment in attachments:
+            attachment_id = getattr(attachment, "id", None)
+            record = records.get(attachment_id)
+            if record is None:
+                continue
+            db.add(
+                ChatMessageAttachment(
+                    chat_message_id=msg.id,
+                    assistant_attachment_id=record.id,
+                    document_id=record.document_id,
+                    name=record.original_filename,
+                    kind=record.kind,
+                    mime_type=record.mime_type,
+                    size=record.size,
+                    extraction_status=record.extraction_status,
+                    extracted_text=record.extracted_text,
+                    extraction_error=record.extraction_error,
+                )
+            )
     db.commit()
     db.refresh(msg)
 
@@ -324,6 +385,67 @@ def save_message(
         _maybe_refresh_conversation_title(db, conversation_id)
 
     return msg
+
+
+def fork_conversation_from_checkpoint(
+    db: Session,
+    *,
+    conversation_id: str,
+    user_id: str,
+    checkpoint_message_id: str,
+) -> tuple[ChatConversation, list[ChatMessageModel]]:
+    """Create a durable branch immediately before one of the user's messages."""
+    source = get_conversation(db, conversation_id, user_id)
+    if source is None:
+        raise LookupError("Conversation not found")
+
+    source_messages = get_conversation_messages(db, source.id)
+    checkpoint_index = next(
+        (index for index, message in enumerate(source_messages) if message.id == checkpoint_message_id),
+        None,
+    )
+    if checkpoint_index is None:
+        raise ValueError("Checkpoint message does not belong to this conversation")
+
+    checkpoint = source_messages[checkpoint_index]
+    if checkpoint.role != "user":
+        raise ValueError("Only a user message can be used as a checkpoint")
+
+    branch = ChatConversation(
+        user_id=source.user_id,
+        project_id=source.project_id,
+        source_conversation_id=source.id,
+        checkpoint_message_id=checkpoint.id,
+    )
+    db.add(branch)
+    db.flush()
+    for message in source_messages[:checkpoint_index]:
+        branch_message = ChatMessageModel(
+                conversation_id=branch.id,
+                runtime_run_id=message.runtime_run_id,
+                role=message.role,
+                content=message.content,
+            )
+        db.add(branch_message)
+        db.flush()
+        for attachment in message.attachments:
+            db.add(
+                ChatMessageAttachment(
+                    chat_message_id=branch_message.id,
+                    assistant_attachment_id=attachment.assistant_attachment_id,
+                    document_id=attachment.document_id,
+                    name=attachment.name,
+                    kind=attachment.kind,
+                    mime_type=attachment.mime_type,
+                    size=attachment.size,
+                    extraction_status=attachment.extraction_status,
+                    extracted_text=attachment.extracted_text,
+                    extraction_error=attachment.extraction_error,
+                )
+            )
+    db.commit()
+    db.refresh(branch)
+    return branch, get_conversation_messages(db, branch.id)
 
 
 def get_conversation(
@@ -419,7 +541,11 @@ def list_conversations(
             (ChatConversation.project_id == project_id)
             | (ChatConversation.project_id.is_(None))
         )
-    return query.order_by(ChatConversation.updated_at.desc(), ChatConversation.created_at.desc()).all()
+    return query.order_by(
+        ChatConversation.is_pinned.desc(),
+        ChatConversation.updated_at.desc(),
+        ChatConversation.created_at.desc(),
+    ).all()
 
 
 def rename_conversation(
@@ -438,6 +564,23 @@ def rename_conversation(
         raise ValueError("Conversation title cannot be empty")
 
     conversation.title = normalized_title
+    conversation.updated_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(conversation)
+    return conversation
+
+
+def set_conversation_pinned(
+    db: Session,
+    conversation_id: str,
+    user_id: str,
+    is_pinned: bool,
+) -> ChatConversation | None:
+    """Persist the user's pinned state for a conversation."""
+    conversation = get_conversation(db, conversation_id, user_id)
+    if conversation is None:
+        return None
+    conversation.is_pinned = is_pinned
     conversation.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(conversation)
@@ -485,7 +628,7 @@ async def stream_chat_response(
         conversation_id = conversation.id
 
     # Save user message
-    save_message(db, conversation_id, "user", message)
+    user_message = save_message(db, conversation_id, "user", message)
 
     # Build context
     project_context = ""
@@ -500,7 +643,14 @@ async def stream_chat_response(
     )
 
     # Emit start event
-    yield _sse("start", {"conversation_id": conversation_id, "timestamp": timestamp})
+    yield _sse(
+        "start",
+        {
+            "conversation_id": conversation_id,
+            "user_message_id": user_message.id,
+            "timestamp": timestamp,
+        },
+    )
 
     # Call LLM with streaming - Priority: DeepSeek (platform free) > User provider config
     full_response = ""

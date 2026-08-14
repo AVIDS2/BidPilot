@@ -7,7 +7,7 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string, turnstileToken?: string | null) => Promise<void>;
-  register: (email: string, displayName: string, password: string, invitationToken?: string, orgName?: string, orgSlug?: string, turnstileToken?: string | null) => Promise<void>;
+  register: (email: string, displayName: string, password: string, invitationToken?: string, orgName?: string, orgSlug?: string, turnstileToken?: string | null) => Promise<CurrentUser>;
   logout: () => void;
   setUser: (user: CurrentUser) => void;
 }
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     orgSlug?: string,
     turnstileToken?: string | null,
   ) => {
-    await registerUser({
+    return registerUser({
       email,
       display_name: displayName,
       password,
@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       org_slug: orgSlug || null,
       turnstile_token: turnstileToken || null,
     });
-    // Don't auto-login — user must verify email first
+    // Don't auto-login — user must verify email first.
   }, []);
 
   const logout = useCallback(() => {

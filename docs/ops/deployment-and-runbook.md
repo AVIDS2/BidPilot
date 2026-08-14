@@ -99,8 +99,11 @@ Required secret-backed values:
 - `DOCPILOT_MINIO_ACCESS_KEY`
 - `DOCPILOT_MINIO_SECRET_KEY`
 - `DOCPILOT_JWT_SECRET`
-- `DOCPILOT_SMTP_HOST`, `DOCPILOT_SMTP_USER`, `DOCPILOT_SMTP_PASS`, and `DOCPILOT_SMTP_FROM`
-- one workflow LLM provider API key such as `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `DOCPILOT_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY`, or `LLM_API_KEY`
+- one transactional email provider:
+  `RESEND_API_KEY` (preferred) with optional `DOCPILOT_RESEND_FROM`, or the
+  complete SMTP set `DOCPILOT_SMTP_HOST`, `DOCPILOT_SMTP_USER`,
+  `DOCPILOT_SMTP_PASS`, and `DOCPILOT_SMTP_FROM`
+- one workflow LLM provider API key such as `OPENCODE_API_KEY` (recommended platform profile: OpenCode Go Chat Completions at `https://opencode.ai/zen/go/v1`, model `deepseek-v4-flash`), `DEEPSEEK_API_KEY`, `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `DOCPILOT_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY`, or `LLM_API_KEY`. Set either the dedicated `DOCPILOT_ASSISTANT_*` profile or the selected provider variables, not conflicting values from several providers.
 - `OPENROUTER_API_KEY` for official embeddings, with `OPENROUTER_EMBEDDING_MODEL=qwen/qwen3-embedding-8b` and `OPENROUTER_EMBEDDING_DIMENSIONS=1536`
 - `DOCPILOT_ENV=production`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres`

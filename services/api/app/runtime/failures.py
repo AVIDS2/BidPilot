@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError, OperationalError
 
+from app.documents.import_errors import RemoteImportError
+
 
 @dataclass(frozen=True)
 class PublicRuntimeFailure:
@@ -21,6 +23,8 @@ class PublicRuntimeFailure:
 
 def classify_capability_failure(exc: BaseException) -> PublicRuntimeFailure:
     """Return a stable public failure without serializing exception text."""
+    if isinstance(exc, RemoteImportError):
+        return PublicRuntimeFailure(exc.error_code, exc.public_message)
     if isinstance(exc, HTTPException):
         if exc.status_code in {401, 403}:
             return PublicRuntimeFailure(

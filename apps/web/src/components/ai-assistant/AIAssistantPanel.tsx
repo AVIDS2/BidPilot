@@ -20,6 +20,7 @@ import {
   MessageSquareIcon,
   ChevronDownIcon,
   PencilIcon,
+  ArrowUpIcon,
   FileIcon,
   FileTextIcon,
   FolderOpenIcon,
@@ -35,6 +36,7 @@ import {
   listProviderConfigs,
   listBundles,
   renameChatConversation,
+  reingestBundle,
   uploadAssistantAttachment,
   uploadDocument,
   type AssistantAttachmentUploadResponse,
@@ -67,12 +69,25 @@ import {
   ChatContainerScrollAnchor,
 } from "@/components/ui/chat-container";
 import { Message, MessageContent } from "@/components/ui/message";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { ScrollButton } from "@/components/ui/scroll-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AgentMark } from "@/components/brand";
 import FadeContent from "@/components/FadeContent";
 import { AssistantConfirmationCard } from "./assistant-confirmation-card";
-import { AssistantActivityTimeline } from "./assistant-activity-timeline";
+import { ClaudeActivityTimeline } from "./claude-activity-timeline";
 
 /* ─── Date grouping helpers ─── */
 
@@ -104,9 +119,18 @@ function groupConversations(conversations: ChatConversationRead[]) {
   return groups;
 }
 
-type ComposerAttachmentKind = "file" | "image";
+export type ComposerAttachmentKind = "file" | "image";
+export interface AttachmentPreviewSelection {
+  name: string;
+  kind: ComposerAttachmentKind;
+  size: number;
+  file?: File;
+  previewUrl?: string;
+}
 type ComposerAttachmentStatus = "ready" | "uploading" | "uploaded" | "failed";
 type ConfigMenu = "model" | "reasoning" | "approval" | null;
+
+const EMPTY_TRANSCRIPT_PARTS: NonNullable<ChatMessage["transcriptParts"]> = [];
 
 interface ComposerAttachment {
   id: string;
@@ -130,6 +154,7 @@ interface QueuedPrompt {
   providerConfigId: string | null;
   reasoningEffort: AssistantReasoningEffort;
   approvalMode: AssistantApprovalMode;
+  composerAttachments: ComposerAttachment[];
 }
 
 const REASONING_OPTIONS: AssistantReasoningEffort[] = [
@@ -355,7 +380,9 @@ function AttachmentPreviewCard({
   status,
   previewUrl,
   file,
+  error,
   onRemove,
+  onPreview,
 }: {
   name: string;
   kind: ComposerAttachmentKind | ChatMessageAttachment["kind"];
@@ -363,12 +390,16 @@ function AttachmentPreviewCard({
   status?: ComposerAttachmentStatus | ChatMessageAttachment["status"];
   previewUrl?: string;
   file?: File;
+  error?: string;
   onRemove?: () => void;
+  onPreview?: (selection: AttachmentPreviewSelection) => void;
 }) {
   const { t } = useTranslation("ai-assistant");
   const isImage = kind === "image";
+  const [previewOpen, setPreviewOpen] = useState(false);
   const objectUrl = useObjectUrl(file, isImage && !previewUrl);
   const imageUrl = previewUrl ?? objectUrl;
+  const fileUrl = useObjectUrl(file, previewOpen && !isImage);
   const { label, tone } = getAttachmentPreviewTone(name, kind);
   const statusLabel = status
     ? t(`attachments.status.${status}`, { defaultValue: status })
@@ -383,8 +414,24 @@ function AttachmentPreviewCard({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={() => {
+        if (onPreview) {
+          onPreview({ name, kind, size, file, previewUrl: imageUrl });
+          return;
+        }
+        setPreviewOpen(true);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          if (onPreview) onPreview({ name, kind, size, file, previewUrl: imageUrl });
+          else setPreviewOpen(true);
+        }
+      }}
       className={cn(
-        "group relative flex h-16 max-w-[13.5rem] shrink-0 items-center gap-2 overflow-hidden rounded-2xl border px-2.5 text-xs shadow-[0_14px_40px_oklch(0_0_0/0.12)] backdrop-blur-xl transition hover:-translate-y-px",
+        "group relative flex h-16 max-w-[13.5rem] shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-2xl border px-2.5 text-xs shadow-[0_14px_40px_oklch(0_0_0/0.12)] backdrop-blur-xl transition hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         isImage ? "w-20 justify-center p-1.5" : "w-[min(13.5rem,72vw)]",
       )}
       style={{
@@ -426,7 +473,11 @@ function AttachmentPreviewCard({
               <span className="h-0.5 w-0.5 rounded-full bg-current opacity-60" />
               <span>{formatFileSize(size)}</span>
             </div>
-            {statusLabel && status !== "ready" && (
+            {error ? (
+              <div className="mt-0.5 truncate text-[10px] text-destructive" title={error}>
+                {error}
+              </div>
+            ) : statusLabel && status !== "ready" && (
               <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
                 {statusLabel}
               </div>
@@ -443,11 +494,52 @@ function AttachmentPreviewCard({
         <button
           type="button"
           aria-label={`Remove ${name}`}
-          onClick={onRemove}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove();
+          }}
           className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-background/95 text-muted-foreground shadow-sm transition hover:bg-foreground hover:text-background"
         >
           <XIcon className="h-3 w-3" />
         </button>
+      )}
+      {isImage ? (
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent
+            className="max-w-[min(92vw,900px)] border-0 bg-black/90 p-2"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <DialogTitle className="sr-only">{name}</DialogTitle>
+            <DialogDescription className="sr-only">Image preview</DialogDescription>
+            {imageUrl ? (
+              <img src={imageUrl} alt={name} className="max-h-[82vh] w-full object-contain" />
+            ) : (
+              <div className="flex min-h-48 items-center justify-center text-sm text-white/70">{name}</div>
+            )}
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <SheetHeader>
+              <SheetTitle className="truncate pr-8">{name}</SheetTitle>
+              <SheetDescription>{formatFileSize(size)} · {statusLabel ?? label}</SheetDescription>
+            </SheetHeader>
+            <div className="min-h-0 flex-1 overflow-auto px-4 pb-6">
+              {fileUrl && /\.pdf$/i.test(name) ? (
+                <iframe title={name} src={fileUrl} className="h-[70vh] w-full rounded-md border" />
+              ) : (
+                <div className="rounded-md border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
+                  {statusLabel ?? "文件已预解析并在发送前暂存。"}
+                </div>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
       )}
     </div>
   );
@@ -467,6 +559,38 @@ function MessageBubble({
   isStreaming?: boolean;
 }) {
   const isUser = msg.role === "user";
+  // Keep hook order identical for user and assistant messages. A stable empty
+  // value also prevents transcript-derived memo dependencies from churning.
+  const parts = msg.transcriptParts ?? EMPTY_TRANSCRIPT_PARTS;
+  const hasTurnParts = parts.some((part) => part.kind === "turn");
+  const hasNarrativePart = parts.some((part) => part.kind === "narrative" && part.text);
+  const turnIds = useMemo(
+    () =>
+      new Set(
+        parts.filter((part) => part.kind === "turn").map((part) => part.turnId),
+      ),
+    [parts],
+  );
+  const toolsByTurn = useMemo(() => {
+    const map = new Map<string, AssistantExecutionItem[]>();
+    for (const item of activityItems) {
+      if (!item.turnId) continue;
+      const list = map.get(item.turnId) ?? [];
+      list.push(item);
+      map.set(item.turnId, list);
+    }
+    return map;
+  }, [activityItems]);
+  // Events without turn_id (durable CAPABILITY_*) must still render.
+  const orphanTools = useMemo(
+    () =>
+      activityItems.filter((item) => {
+        if (!item.turnId) return true;
+        return !turnIds.has(item.turnId);
+      }),
+    [activityItems, turnIds],
+  );
+
   if (isUser) {
     const hasAttachments = Boolean(
       msg.attachments && msg.attachments.length > 0,
@@ -513,37 +637,6 @@ function MessageBubble({
     );
   }
 
-  // Interleave only when harness turn slots exist. Legacy streams without
-  // turn_id keep tools-on-top so completed cards still precede the summary.
-  const parts = msg.transcriptParts ?? [];
-  const hasTurnParts = parts.some((part) => part.kind === "turn");
-  const turnIds = useMemo(
-    () =>
-      new Set(
-        parts.filter((part) => part.kind === "turn").map((part) => part.turnId),
-      ),
-    [parts],
-  );
-  const toolsByTurn = useMemo(() => {
-    const map = new Map<string, AssistantExecutionItem[]>();
-    for (const item of activityItems) {
-      if (!item.turnId) continue;
-      const list = map.get(item.turnId) ?? [];
-      list.push(item);
-      map.set(item.turnId, list);
-    }
-    return map;
-  }, [activityItems]);
-  // Events without turn_id (durable CAPABILITY_*) must still render.
-  const orphanTools = useMemo(
-    () =>
-      activityItems.filter((item) => {
-        if (!item.turnId) return true;
-        return !turnIds.has(item.turnId);
-      }),
-    [activityItems, turnIds],
-  );
-
   const renderNarrative = (text: string, key: string) =>
     text ? (
       <MessageContent
@@ -586,10 +679,13 @@ function MessageBubble({
               if (part.kind === "narrative") {
                 return renderNarrative(part.text, part.id);
               }
+              if (part.kind === "reasoning") {
+                return renderNarrative(part.text, part.id);
+              }
               const items = toolsByTurn.get(part.turnId) ?? [];
               if (items.length === 0) return null;
               return (
-                <AssistantActivityTimeline
+                <ClaudeActivityTimeline
                   key={part.id}
                   items={items}
                   onCancelWorkflow={onCancelWorkflow}
@@ -598,21 +694,23 @@ function MessageBubble({
               );
             })}
             {orphanTools.length > 0 && (
-              <AssistantActivityTimeline
+              <ClaudeActivityTimeline
                 items={orphanTools}
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
               />
             )}
+            {msg.content && !hasNarrativePart && renderNarrative(msg.content, `${msg.id}-durable`)}
             {!msg.content &&
               parts.every((part) => part.kind !== "narrative") &&
+              activityItems.length === 0 &&
               isStreaming &&
               thinkingDots}
           </>
         ) : (
           <>
             {activityItems.length > 0 && (
-              <AssistantActivityTimeline
+              <ClaudeActivityTimeline
                 items={activityItems}
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
@@ -912,8 +1010,10 @@ function HistorySidebar({
 
 export function AIAssistantPanel({
   variant = "panel",
+  onPreviewAttachment,
 }: {
-  variant?: "panel" | "workspace";
+  variant?: "panel" | "workspace" | "linear-agent";
+  onPreviewAttachment?: (selection: AttachmentPreviewSelection) => void;
 }) {
   const {
     state,
@@ -933,6 +1033,7 @@ export function AIAssistantPanel({
   } = useAIAssistant();
   const { t } = useTranslation("ai-assistant");
   const isWorkspace = variant === "workspace";
+  const isLinearAgent = variant === "linear-agent";
   const [input, setInput] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   useEffect(() => {
@@ -967,14 +1068,20 @@ export function AIAssistantPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const linearComposerRef = useRef<HTMLDivElement>(null);
   const queueDrainingRef = useRef(false);
   const isBusy = isAssistantBusy(state.status);
   const isStreaming = state.isStreaming;
   const isUploadingAttachments = attachments.some(
     (attachment) => attachment.status === "uploading",
   );
+  const hasFailedAttachments = attachments.some(
+    (attachment) => attachment.status === "failed",
+  );
   const canSend =
-    Boolean(input.trim() || attachments.length > 0) && !isUploadingAttachments;
+    Boolean(input.trim() || attachments.length > 0) &&
+    !isUploadingAttachments &&
+    !hasFailedAttachments;
   const selectedProvider = useMemo(
     () =>
       providerConfigs.find(
@@ -1025,13 +1132,15 @@ export function AIAssistantPanel({
 
   useEffect(() => {
     resizeComposer();
-  }, [input, resizeComposer]);
+  }, [attachments.length, input, resizeComposer]);
 
   useEffect(() => {
-    if (!state.isOpen || state.mode !== "panel") return;
+    const shouldLoadProviderConfigs =
+      isLinearAgent || (state.isOpen && state.mode === "panel");
+    if (!shouldLoadProviderConfigs) return;
     const timeoutId = window.setTimeout(focusComposer, 150);
     return () => window.clearTimeout(timeoutId);
-  }, [focusComposer, state.isOpen, state.mode]);
+  }, [focusComposer, isLinearAgent, state.isOpen, state.mode]);
 
   useEffect(() => {
     if (!state.isOpen || state.mode !== "panel") return;
@@ -1056,6 +1165,7 @@ export function AIAssistantPanel({
       cancelled = true;
     };
   }, [
+    isLinearAgent,
     setSelectedProviderConfig,
     state.isOpen,
     state.mode,
@@ -1071,6 +1181,17 @@ export function AIAssistantPanel({
   }, [state.isOpen]);
 
   useEffect(() => {
+    if (!isLinearAgent || (!attachmentMenuOpen && !configMenuOpen)) return;
+    const closeMenusFromOutside = (event: PointerEvent) => {
+      if (linearComposerRef.current?.contains(event.target as Node)) return;
+      setAttachmentMenuOpen(false);
+      setConfigMenuOpen(null);
+    };
+    document.addEventListener("pointerdown", closeMenusFromOutside);
+    return () => document.removeEventListener("pointerdown", closeMenusFromOutside);
+  }, [attachmentMenuOpen, configMenuOpen, isLinearAgent]);
+
+  useEffect(() => {
     if (editingConversationId) {
       setTimeout(() => {
         renameInputRef.current?.focus();
@@ -1084,12 +1205,16 @@ export function AIAssistantPanel({
       let bundlePromise: Promise<BundleRead> | null = projectId
         ? ensureAssistantUploadBundle(projectId)
         : null;
+      let targetBundle: BundleRead | null = null;
+      let uploadedProjectDocuments = 0;
       for (const record of records) {
+        let assistantAttachmentId: string | undefined;
         try {
           const assistantAttachment = await uploadAssistantAttachment(
             record.file,
             record.kind,
           );
+          assistantAttachmentId = assistantAttachment.id;
           setAttachments((current) =>
             current.map((attachment) =>
               attachment.id === record.id
@@ -1127,12 +1252,15 @@ export function AIAssistantPanel({
 
         try {
           const bundle = await bundlePromise;
+          targetBundle = bundle;
           const document = await uploadDocument(
             bundle.id,
             record.file,
             undefined,
-            record.assistantAttachmentId,
+            assistantAttachmentId,
+            true,
           );
+          uploadedProjectDocuments += 1;
           setAttachments((current) =>
             current.map((attachment) =>
               attachment.id === record.id
@@ -1147,6 +1275,20 @@ export function AIAssistantPanel({
           setAttachments((current) =>
             current.map((attachment) =>
               attachment.id === record.id
+                ? { ...attachment, error: attachment.error ?? message }
+                : attachment,
+            ),
+          );
+        }
+      }
+      if (targetBundle && uploadedProjectDocuments > 0) {
+        try {
+          await reingestBundle(targetBundle.id);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Attachment parsing could not start";
+          setAttachments((current) =>
+            current.map((attachment) =>
+              attachment.documentId
                 ? { ...attachment, error: attachment.error ?? message }
                 : attachment,
             ),
@@ -1200,10 +1342,11 @@ export function AIAssistantPanel({
       return current.trim() ? `${current.trim()}\n${prompt}` : prompt;
     });
     focusComposer();
-  }, [t]);
+  }, [focusComposer, t]);
 
   const handleSend = useCallback(() => {
     const trimmedInput = input.trim();
+    if (attachments.some((attachment) => attachment.status !== "uploaded")) return;
     const outgoing = buildOutgoingPrompt(trimmedInput, attachments);
     if (!outgoing.trim() || isUploadingAttachments) return;
     const displayContent = buildDisplayContent(trimmedInput, attachments, t);
@@ -1218,6 +1361,7 @@ export function AIAssistantPanel({
       providerConfigId: state.selectedProviderConfigId,
       reasoningEffort: state.reasoningEffort,
       approvalMode: state.approvalMode,
+      composerAttachments: attachments,
     };
 
     setInput("");
@@ -1234,6 +1378,7 @@ export function AIAssistantPanel({
       requestAttachments,
       providerConfigId: state.selectedProviderConfigId,
       reasoningEffort: state.reasoningEffort,
+      approvalMode: state.approvalMode,
     });
   }, [
     attachments,
@@ -1242,9 +1387,39 @@ export function AIAssistantPanel({
     isUploadingAttachments,
     sendMessage,
     state.reasoningEffort,
+    state.approvalMode,
     state.selectedProviderConfigId,
     t,
   ]);
+
+  const handleEditQueuedPrompt = useCallback((id: string) => {
+    setQueuedPrompts((current) => {
+      const queued = current.find((item) => item.id === id);
+      if (!queued) return current;
+      setInput(queued.prompt);
+      setAttachments(queued.composerAttachments);
+      requestAnimationFrame(() => {
+        resizeComposer();
+        inputRef.current?.focus();
+      });
+      return current.filter((item) => item.id !== id);
+    });
+  }, [resizeComposer]);
+
+  const handleCancelQueuedPrompt = useCallback((id: string) => {
+    setQueuedPrompts((current) => current.filter((item) => item.id !== id));
+  }, []);
+
+  const handlePrioritizeQueuedPrompt = useCallback((id: string) => {
+    setQueuedPrompts((current) => {
+      const index = current.findIndex((item) => item.id === id);
+      if (index <= 0) return current;
+      const next = [...current];
+      const [queued] = next.splice(index, 1);
+      next.unshift(queued);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (
@@ -1283,6 +1458,7 @@ export function AIAssistantPanel({
             providerConfigId: state.selectedProviderConfigId,
             reasoningEffort: state.reasoningEffort,
             approvalMode: state.approvalMode,
+            composerAttachments: [],
           },
         ]);
         return;
@@ -1375,7 +1551,198 @@ export function AIAssistantPanel({
     ],
   );
 
-  if (!isWorkspace && (!state.isOpen || state.mode !== "panel")) return null;
+  if (!isWorkspace && !isLinearAgent && (!state.isOpen || state.mode !== "panel")) return null;
+
+  if (isLinearAgent) {
+    const toggleAttachmentMenu = () => {
+      setConfigMenuOpen(null);
+      setAttachmentMenuOpen((value) => !value);
+    };
+    const toggleConfigMenu = (menu: Exclude<ConfigMenu, null>) => {
+      setAttachmentMenuOpen(false);
+      setConfigMenuOpen((value) => (value === menu ? null : menu));
+    };
+
+    return (
+      <div className="bp-linear-agent-composer" data-testid="linear-agent-composer" ref={linearComposerRef}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="sr-only"
+          onChange={(event) => handleAttachmentInputChange(event, "file")}
+        />
+        <input
+          ref={imageInputRef}
+          type="file"
+          multiple
+          accept="image/*"
+          className="sr-only"
+          onChange={(event) => handleAttachmentInputChange(event, "image")}
+        />
+        {attachments.length > 0 && (
+          <div className="bp-linear-agent-attachments" aria-label="Attachments">
+            {attachments.map((attachment) => (
+              <AttachmentPreviewCard
+                key={attachment.id}
+                name={attachment.file.name}
+                kind={attachment.kind}
+                size={attachment.file.size}
+                status={attachment.status}
+                file={attachment.file}
+                error={attachment.error}
+                onPreview={isLinearAgent ? onPreviewAttachment : undefined}
+                onRemove={() => handleRemoveAttachment(attachment.id)}
+              />
+            ))}
+          </div>
+        )}
+        {queuedPrompts.length > 0 && (
+          <section className="bp-linear-agent-queue" aria-label="待发送队列">
+            <header>
+              <span>待发送</span>
+              <small>{queuedPrompts.length}</small>
+            </header>
+            <ol>
+              {queuedPrompts.map((queued, index) => (
+                <li key={queued.id}>
+                  <span className="bp-linear-agent-queue-order" aria-hidden="true">{index + 1}</span>
+                  <button
+                    type="button"
+                    className="bp-linear-agent-queue-copy"
+                    onClick={() => handleEditQueuedPrompt(queued.id)}
+                    title="编辑待发送消息"
+                  >
+                    {queued.displayContent}
+                  </button>
+                  <div className="bp-linear-agent-queue-actions">
+                    {index > 0 && (
+                      <button type="button" onClick={() => handlePrioritizeQueuedPrompt(queued.id)} title="移到队列最前" aria-label="移到队列最前">
+                        <ArrowUpIcon size={14} />
+                      </button>
+                    )}
+                    <button type="button" onClick={() => handleEditQueuedPrompt(queued.id)} title="编辑待发送消息" aria-label="编辑待发送消息">
+                      <PencilIcon size={13} />
+                    </button>
+                    <button type="button" onClick={() => handleCancelQueuedPrompt(queued.id)} title="取消待发送消息" aria-label="取消待发送消息">
+                      <XIcon size={14} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        <textarea
+          ref={inputRef}
+          value={input}
+          rows={1}
+          aria-label={t("inputPlaceholder")}
+          placeholder={t("inputPlaceholder", { defaultValue: "Ask BidPilot..." })}
+          onChange={(event) => {
+            setInput(event.target.value);
+            requestAnimationFrame(resizeComposer);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey) return;
+            event.preventDefault();
+            if (isStreaming) stopAssistantResponse();
+            else handleSend();
+          }}
+          className="bp-linear-agent-textarea"
+        />
+        <div className="bp-linear-agent-composer-footer">
+          <div className="bp-linear-agent-composer-left">
+            <div className="bp-linear-agent-menu-anchor">
+              <button
+                type="button"
+                className="bp-linear-agent-icon-button"
+                aria-label={t("attachments.add", { defaultValue: "Add attachment" })}
+                aria-expanded={attachmentMenuOpen}
+                onClick={toggleAttachmentMenu}
+              >
+                <PlusIcon size={18} />
+              </button>
+              <div className={`bp-linear-agent-popover bp-linear-agent-attachment-menu${attachmentMenuOpen ? " is-open" : ""}`} role="menu" aria-hidden={!attachmentMenuOpen}>
+                <div className="bp-linear-agent-popover-inner">
+                  <button type="button" role="menuitem" onClick={() => fileInputRef.current?.click()}>
+                    <FileIcon size={15} /> {t("attachments.uploadFile", { defaultValue: "Upload file" })}
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => imageInputRef.current?.click()}>
+                    <ImageIcon size={15} /> {t("attachments.uploadImage", { defaultValue: "Upload image" })}
+                  </button>
+                  <button type="button" role="menuitem" onClick={handleAddFromProject}>
+                    <FolderOpenIcon size={15} /> {t("attachments.addFromProject", { defaultValue: "Add from project" })}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <span className="bp-linear-agent-keyhint"><CornerDownLeftIcon size={13} /> {isBusy ? "Enter to queue" : "Enter to send"}</span>
+          </div>
+          <div className="bp-linear-agent-composer-right">
+            <div className="bp-linear-agent-menu-anchor">
+              <button type="button" className="bp-linear-agent-text-control" onClick={() => toggleConfigMenu("model")}>
+                <span>{modelLabel}</span><ChevronDownIcon size={13} />
+              </button>
+              <div className={`bp-linear-agent-popover bp-linear-agent-config-menu${configMenuOpen === "model" ? " is-open" : ""}`} role="menu" aria-hidden={configMenuOpen !== "model"}>
+                <div className="bp-linear-agent-popover-inner">
+                  <span className="bp-linear-agent-menu-label">{t("model.menuTitle", { defaultValue: "Model" })}</span>
+                  <button type="button" role="menuitemradio" aria-checked={!state.selectedProviderConfigId} onClick={() => { setSelectedProviderConfig(null); setConfigMenuOpen(null); }}>
+                    <span>{t("model.platformDefault", { defaultValue: "Platform default" })}</span>{!state.selectedProviderConfigId && <span>✓</span>}
+                  </button>
+                  {providerConfigs.map((provider) => (
+                    <button key={provider.id} type="button" role="menuitemradio" aria-checked={state.selectedProviderConfigId === provider.id} onClick={() => { setSelectedProviderConfig(provider.id); setConfigMenuOpen(null); }}>
+                      <span>{provider.label} · {provider.model}</span>{state.selectedProviderConfigId === provider.id && <span>✓</span>}
+                    </button>
+                  ))}
+                  {providerConfigs.length === 0 && <span className="bp-linear-agent-empty-menu">{t("model.empty", { defaultValue: "No custom providers yet" })}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="bp-linear-agent-menu-anchor">
+              <button type="button" className="bp-linear-agent-text-control" onClick={() => toggleConfigMenu("reasoning")}>
+                <span>{reasoningLabel}</span><ChevronDownIcon size={13} />
+              </button>
+              <div className={`bp-linear-agent-popover bp-linear-agent-config-menu${configMenuOpen === "reasoning" ? " is-open" : ""}`} role="menu" aria-hidden={configMenuOpen !== "reasoning"}>
+                <div className="bp-linear-agent-popover-inner">
+                  <span className="bp-linear-agent-menu-label">{t("reasoning.menuTitle", { defaultValue: "Reasoning" })}</span>
+                  {REASONING_OPTIONS.map((effort) => (
+                    <button key={effort} type="button" role="menuitemradio" aria-checked={state.reasoningEffort === effort} onClick={() => { setReasoningEffort(effort); setConfigMenuOpen(null); }}>
+                      <span>{t(`reasoning.options.${effort}`, { defaultValue: effort })}</span>{state.reasoningEffort === effort && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="bp-linear-agent-menu-anchor bp-linear-agent-approval-anchor">
+              <button type="button" className="bp-linear-agent-text-control" title={approvalHint} onClick={() => toggleConfigMenu("approval")}>
+                <span>{approvalLabel}</span><ChevronDownIcon size={13} />
+              </button>
+              <div className={`bp-linear-agent-popover bp-linear-agent-config-menu${configMenuOpen === "approval" ? " is-open" : ""}`} role="menu" aria-hidden={configMenuOpen !== "approval"}>
+                <div className="bp-linear-agent-popover-inner">
+                  <span className="bp-linear-agent-menu-label">{t("approval.menuTitle", { defaultValue: "Approval" })}</span>
+                  {APPROVAL_MODES.map((mode) => (
+                    <button key={mode} type="button" role="menuitemradio" aria-checked={state.approvalMode === mode} onClick={() => { setApprovalMode(mode); setConfigMenuOpen(null); }}>
+                      <span>{t(`approval.options.${mode}`, { defaultValue: mode })}</span>{state.approvalMode === mode && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="bp-linear-agent-send"
+              onClick={isStreaming ? stopAssistantResponse : handleSend}
+              disabled={isStreaming ? false : !canSend}
+              aria-label={isStreaming ? t("actions.stopGenerating") : t("actions.send")}
+            >
+              {isStreaming ? <SquareIcon size={12} fill="currentColor" /> : isUploadingAttachments ? <Loader2Icon size={16} className="animate-spin" /> : <SendIcon size={16} />}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1396,6 +1763,7 @@ export function AIAssistantPanel({
     >
       {/* Compact chat header — no page marketing chrome */}
       <div
+        data-testid="assistant-panel-header"
         className={cn(
           "flex shrink-0 items-center justify-between gap-2 border-b px-3",
           isWorkspace ? "h-12" : "min-h-14 px-3.5",
@@ -1495,13 +1863,17 @@ export function AIAssistantPanel({
       </div>
 
       {state.sessionError && (
-        <div className="shrink-0 px-4 py-2 text-xs border-b border-border bg-destructive/10 text-destructive">
+        <div
+          data-testid="assistant-panel-error"
+          className="shrink-0 px-4 py-2 text-xs border-b border-border bg-destructive/10 text-destructive"
+        >
           {state.sessionError}
         </div>
       )}
 
       {/* The conversation pane owns both scrolling messages and the composer. */}
       <div
+        data-testid="assistant-panel-body"
         className={cn(
           "relative flex min-h-0 flex-1 overflow-hidden",
           isWorkspace ? "flex-row" : "flex-col",
@@ -1654,7 +2026,7 @@ export function AIAssistantPanel({
                       );
                     })}
                     {unassignedExecutionItems.length > 0 && (
-                      <AssistantActivityTimeline
+                      <ClaudeActivityTimeline
                         items={unassignedExecutionItems}
                         onCancelWorkflow={cancelWorkflow}
                         onConfigureProvider={openProviderSettings}
@@ -1726,6 +2098,7 @@ export function AIAssistantPanel({
                         size={attachment.file.size}
                         status={attachment.status}
                         file={attachment.file}
+                        error={attachment.error}
                         onRemove={() => handleRemoveAttachment(attachment.id)}
                       />
                     ))}

@@ -45,6 +45,7 @@ vi.mock("@/hooks/use-ai-assistant-hotkeys", () => ({
 
 vi.mock("@/lib/ai-assistant-store", () => ({
   AIAssistantProvider: ({ children }: { children: unknown }) => children,
+  isAssistantBusy: () => false,
   useAIAssistant: () => ({
     state: { isOpen: false, mode: "panel" },
     toggle: () => undefined,

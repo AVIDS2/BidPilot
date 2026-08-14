@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from math import sqrt
 from typing import Literal
 
 from sqlalchemy import case, func, literal_column, or_, select
 from sqlalchemy.orm import Session
 
 from .models import KnowledgeChunk
+from .retrieval import normalize_retrieval_text
 
 
 _TEXT_CONFIG = literal_column("'simple'::regconfig")
@@ -39,6 +41,101 @@ def supports_postgresql_retrieval(db: Session) -> bool:
     return db.get_bind().dialect.name == "postgresql"
 
 
+def _local_candidate_limit(top_k: int) -> int:
+    """Bound the SQLite compatibility scan used by tests and local demos."""
+    return max(_limit(top_k) * 8, 64)
+
+
+def _search_local_dense_candidates(
+    db: Session,
+    *,
+    project_id: str,
+    profile_id: str,
+    query_embedding: list[float],
+    top_k: int,
+) -> list[RankedKnowledgeChunk]:
+    """Run a small, deterministic cosine scan for non-PostgreSQL test DBs."""
+    query_norm = sqrt(sum(value * value for value in query_embedding))
+    if not query_norm:
+        return []
+
+    statement = (
+        select(KnowledgeChunk)
+        .where(
+            KnowledgeChunk.project_id == project_id,
+            KnowledgeChunk.embedding_profile == profile_id,
+            KnowledgeChunk.embedding.isnot(None),
+        )
+        .order_by(KnowledgeChunk.id.asc())
+        .limit(_local_candidate_limit(top_k))
+    )
+    ranked: list[RankedKnowledgeChunk] = []
+    for chunk in db.scalars(statement).all():
+        raw_embedding = chunk.embedding
+        if raw_embedding is None:
+            continue
+        try:
+            embedding = [float(value) for value in raw_embedding]
+        except (TypeError, ValueError):
+            continue
+        if len(embedding) != len(query_embedding):
+            continue
+        embedding_norm = sqrt(sum(value * value for value in embedding))
+        if not embedding_norm:
+            continue
+        score = sum(left * right for left, right in zip(embedding, query_embedding)) / (
+            embedding_norm * query_norm
+        )
+        ranked.append(_record(chunk, score=score, method="dense"))
+    return sorted(ranked, key=lambda candidate: (-candidate.score, candidate.chunk_id))[: _limit(top_k)]
+
+
+def _search_local_lexical_candidates(
+    db: Session,
+    *,
+    project_id: str,
+    raw_query: str,
+    normalized_query: str,
+    top_k: int,
+    method: Literal["fts", "trigram"],
+) -> list[RankedKnowledgeChunk]:
+    """Use bounded phrase/token matching when PostgreSQL extensions are absent.
+
+    This adapter is intentionally only a local/test fallback. Production keeps
+    using PostgreSQL FTS and pg_trgm, while local runs still exercise project
+    scoping, ranking fusion, and citation construction instead of failing on
+    PostgreSQL-only SQL expressions.
+    """
+    terms = tuple(
+        dict.fromkeys(
+            term.casefold()
+            for term in (raw_query.strip(), normalized_query.strip(), *normalized_query.split())
+            if term.strip()
+        )
+    )
+    if not terms:
+        return []
+
+    statement = (
+        select(KnowledgeChunk)
+        .where(KnowledgeChunk.project_id == project_id)
+        .order_by(KnowledgeChunk.id.asc())
+        .limit(_local_candidate_limit(top_k))
+    )
+    ranked: list[RankedKnowledgeChunk] = []
+    raw_phrase = raw_query.strip().casefold()
+    for chunk in db.scalars(statement).all():
+        content = (chunk.content or "").casefold()
+        retrieval_text = (chunk.retrieval_text or normalize_retrieval_text(chunk.content or "")).casefold()
+        matched_terms = sum(term in content or term in retrieval_text for term in terms)
+        if not matched_terms:
+            continue
+        phrase_hit = bool(raw_phrase and (raw_phrase in content or raw_phrase in retrieval_text))
+        score = matched_terms / len(terms) + (1.0 if phrase_hit else 0.0)
+        ranked.append(_record(chunk, score=score, method=method))
+    return sorted(ranked, key=lambda candidate: (-candidate.score, candidate.chunk_id))[: _limit(top_k)]
+
+
 def _record(chunk: KnowledgeChunk, *, score: float, method: Literal["dense", "fts", "trigram"]) -> RankedKnowledgeChunk:
     return RankedKnowledgeChunk(
         chunk_id=chunk.id,
@@ -63,6 +160,14 @@ def search_dense_candidates(
     """Run exact, profile-safe cosine search within one project scope."""
     if not query_embedding:
         return []
+    if not supports_postgresql_retrieval(db):
+        return _search_local_dense_candidates(
+            db,
+            project_id=project_id,
+            profile_id=profile_id,
+            query_embedding=query_embedding,
+            top_k=top_k,
+        )
     distance = KnowledgeChunk.embedding.cosine_distance(query_embedding)
     stmt = (
         select(KnowledgeChunk, distance.label("distance"))
@@ -146,6 +251,15 @@ def search_fts_candidates(
     """Retrieve lexical candidates through the indexed normalized search text."""
     if not normalized_query.strip():
         return []
+    if not supports_postgresql_retrieval(db):
+        return _search_local_lexical_candidates(
+            db,
+            project_id=project_id,
+            raw_query=normalized_query,
+            normalized_query=normalized_query,
+            top_k=top_k,
+            method="fts",
+        )
     search_vector = func.to_tsvector(_TEXT_CONFIG, KnowledgeChunk.retrieval_text)
     search_query = func.websearch_to_tsquery(_TEXT_CONFIG, normalized_query)
     strict_results = _run_fts_query(
@@ -249,6 +363,15 @@ def search_trigram_candidates(
     terms = _trigram_terms(raw_query)
     if not terms:
         return []
+    if not supports_postgresql_retrieval(db):
+        return _search_local_lexical_candidates(
+            db,
+            project_id=project_id,
+            raw_query=raw_query,
+            normalized_query=normalize_retrieval_text(raw_query),
+            top_k=top_k,
+            method="trigram",
+        )
 
     # Score = sum of per-term phrase hits + best single-term similarity.
     # This recovers Chinese section-key expansions where the full bilingual

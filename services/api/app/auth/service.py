@@ -33,7 +33,6 @@ from app.models import (
 from app.organizations.service import (
     create_personal_organization_command,
     create_organization_membership_command,
-    has_active_org_owner,
 )
 from app.security.redis_rate_limiter import create_rate_limiter
 from app.usage.service import get_user_plan
@@ -209,19 +208,6 @@ def update_subscription_command(
     else:
         db.flush()
     return sub
-
-
-DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001"
-
-
-def _get_or_create_default_org(db: Session) -> Organization:
-    """Return the default organization, creating it if it doesn't exist."""
-    org = db.query(Organization).filter_by(slug="default").first()
-    if org is None:
-        org = Organization(id=DEFAULT_ORG_ID, slug="default", name="Default Organization")
-        db.add(org)
-        db.flush()
-    return org
 
 
 def register_user_command(db: Session, payload: UserRegister) -> CurrentUser:
@@ -706,8 +692,14 @@ def bootstrap_admin_command(
     """
     existing = get_user_by_email(db, email)
     if existing is None:
-        org = _get_or_create_default_org(db)
+        # Platform operators need a workspace boundary as well. Reusing the
+        # historical global default org makes every bootstrap admin a member of
+        # one shared tenant, corrupts seat counts, and eventually blocks the
+        # bootstrap path itself.
+        user_id = str(uuid.uuid4())
+        org = create_personal_organization_command(db, user_id=user_id, commit=False)
         user = User(
+            id=user_id,
             email=email,
             display_name=display_name,
             password_hash=_hash_password(password),
@@ -721,7 +713,16 @@ def bootstrap_admin_command(
             db,
             org_id=org.id,
             user_id=user.id,
-            role="owner" if not has_active_org_owner(db, org.id) else "admin",
+            role="owner",
+            commit=False,
+        )
+        from app.entitlements.service import upsert_organization_subscription_command
+
+        upsert_organization_subscription_command(
+            db,
+            org_id=org.id,
+            billing_owner_user_id=user.id,
+            plan="professional",
             commit=False,
         )
         sub = Subscription(user_id=user.id, plan="professional")

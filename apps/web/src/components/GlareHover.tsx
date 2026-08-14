@@ -24,10 +24,29 @@ export default function GlareHover({
   style,
   width,
   height,
-  ...props
+  background,
+  borderRadius,
+  borderColor,
+  glareColor: _glareColor,
+  glareOpacity: _glareOpacity,
+  glareSize: _glareSize,
+  transitionDuration: _transitionDuration,
+  playOnce: _playOnce,
+  ...htmlProps
 }: GlareHoverProps) {
   return (
-    <div className={cn(className)} style={{ width, height, ...style }} {...props}>
+    <div
+      className={cn(className)}
+      style={{
+        width,
+        height,
+        background,
+        borderRadius,
+        borderColor,
+        ...style,
+      }}
+      {...htmlProps}
+    >
       {children}
     </div>
   );

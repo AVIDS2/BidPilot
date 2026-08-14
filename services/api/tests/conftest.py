@@ -32,6 +32,27 @@ os.environ["DOCPILOT_SECRETS_KEY"] = "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD
 
 # Keep assistant endpoint deterministic in tests. Production defaults to the
 # governed Harness, but tests must never call external model providers.
+for _provider_env_name in (
+    "LLM_API_KEY",
+    "LLM_API_URL",
+    "LLM_MODEL",
+    "OPENCODE_API_KEY",
+    "OPENCODE_BASE_URL",
+    "OPENCODE_MODEL",
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_MODEL",
+    "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
+    "DOCPILOT_PROVIDER_DOMESTIC_BASE_URL",
+    "DOCPILOT_LLM_MODEL_PRIMARY",
+    "ALIYUN_API_KEY",
+    "DASHSCOPE_API_KEY",
+    "DOCPILOT_PROVIDER_OPENAI_API_KEY",
+    "DOCPILOT_PROVIDER_OPENAI_BASE_URL",
+    "OPENAI_API_KEY",
+):
+    os.environ.pop(_provider_env_name, None)
+
 os.environ["DOCPILOT_ASSISTANT_ENGINE"] = "deterministic"
 os.environ["DOCPILOT_ASSISTANT_API_KEY"] = "test-assistant-key"
 os.environ["DOCPILOT_ASSISTANT_PROTOCOL"] = "openai"
@@ -52,6 +73,11 @@ for _smtp_env_name in (
     "DOCPILOT_SMTP_FROM_NAME",
     "DOCPILOT_SMTP_PORT",
     "DOCPILOT_SMTP_TLS",
+    "DOCPILOT_RESEND_API_KEY",
+    "DOCPILOT_RESEND_FROM",
+    "DOCPILOT_RESEND_API_URL",
+    "RESEND_API_KEY",
+    "resend_api_key",
 ):
     os.environ.pop(_smtp_env_name, None)
 
@@ -75,6 +101,7 @@ try:
     from app.email import service as _email_service
     _email_service._backend = None
     _email_service.SMTP_CONFIGURED = False
+    _email_service.RESEND_CONFIGURED = False
 except ImportError:
     pass
 
@@ -127,15 +154,17 @@ def reset_notifications():
     from sqlalchemy import delete
 
     from app.db import SessionLocal
-    from app.models import Notification
+    from app.models import Notification, NotificationPreference
 
     db = SessionLocal()
     try:
         db.execute(delete(Notification))
+        db.execute(delete(NotificationPreference))
         db.commit()
         yield
     finally:
         db.execute(delete(Notification))
+        db.execute(delete(NotificationPreference))
         db.commit()
         db.close()
 

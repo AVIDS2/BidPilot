@@ -217,6 +217,171 @@ export function deleteProject(id: string) {
   return request<void>(`/projects/${id}`, { method: "DELETE" });
 }
 
+// Notification preferences
+export interface NotificationPreferencesRead {
+  in_app_enabled: boolean;
+  email_enabled: boolean;
+  review_updates: boolean;
+  agent_updates: boolean;
+  radar_updates: boolean;
+  material_updates: boolean;
+}
+
+export function getNotificationPreferences() {
+  return request<NotificationPreferencesRead>("/notifications/preferences");
+}
+
+export function updateNotificationPreferences(payload: Partial<NotificationPreferencesRead>) {
+  return request<NotificationPreferencesRead>("/notifications/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+// Tender radar
+export type NoticeSourceKind = "rss" | "json_feed" | "webhook";
+export type RadarNoticeType = "intent" | "tender" | "prequalification" | "rfi" | "other";
+export type RadarNoticeStatus = "new" | "saved" | "ignored" | "converted";
+export type RadarOverviewView = "recommended" | "all" | "intent" | "tender" | "saved" | "ignored";
+
+export interface NoticeSourceRead {
+  id: string;
+  name: string;
+  kind: NoticeSourceKind;
+  endpoint_url: string | null;
+  is_active: boolean;
+  polling_interval_minutes: number;
+  last_polled_at: string | null;
+  last_success_at: string | null;
+  last_error_code: string | null;
+  notice_count: number;
+}
+
+export interface NoticeSubscriptionRead {
+  id: string;
+  name: string;
+  keywords: string[];
+  regions: string[];
+  categories: string[];
+  budget_min: number | null;
+  budget_max: number | null;
+  is_active: boolean;
+  match_count: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface NoticeMatchRead {
+  subscription_id: string;
+  subscription_name: string;
+  score: number;
+  reasons: string[];
+}
+
+export interface RadarNoticeRead {
+  id: string;
+  source_id: string;
+  source_name: string;
+  external_id: string;
+  title: string;
+  buyer_name: string | null;
+  notice_type: RadarNoticeType;
+  region: string | null;
+  category: string | null;
+  budget_amount: number | null;
+  published_at: string | null;
+  deadline_at: string | null;
+  source_url: string;
+  summary: string | null;
+  status: RadarNoticeStatus;
+  converted_project_id: string | null;
+  created_at: string | null;
+  matches: NoticeMatchRead[];
+}
+
+export interface RadarTrendPoint {
+  day: string;
+  notice_count: number;
+}
+
+export interface RadarSummaryRead {
+  active_source_count: number;
+  source_attention_count: number;
+  active_subscription_count: number;
+  recommended_count: number;
+  saved_count: number;
+  due_soon_count: number;
+  trends: RadarTrendPoint[];
+}
+
+export interface RadarOverviewRead {
+  summary: RadarSummaryRead;
+  sources: NoticeSourceRead[];
+  subscriptions: NoticeSubscriptionRead[];
+  notices: RadarNoticeRead[];
+}
+
+export function getRadarOverview(params: {
+  view?: RadarOverviewView;
+  query?: string;
+  noticeType?: RadarNoticeType;
+} = {}) {
+  const query = new URLSearchParams();
+  if (params.view) query.set("view", params.view);
+  if (params.query?.trim()) query.set("query", params.query.trim());
+  if (params.noticeType) query.set("notice_type", params.noticeType);
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return request<RadarOverviewRead>(`/radar/overview${suffix}`);
+}
+
+export function createRadarSource(data: {
+  name: string;
+  kind: NoticeSourceKind;
+  endpoint_url?: string;
+  polling_interval_minutes?: number;
+}) {
+  return request<NoticeSourceRead>("/radar/sources", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateRadarSource(
+  sourceId: string,
+  data: Partial<Pick<NoticeSourceRead, "name" | "endpoint_url" | "is_active" | "polling_interval_minutes">>,
+) {
+  return request<NoticeSourceRead>(`/radar/sources/${sourceId}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function pollRadarSource(sourceId: string) {
+  return request<{ source_id: string; status: "succeeded" | "failed" | "skipped"; discovered_count: number; created_count: number; updated_count: number; error_code: string | null }>(
+    `/radar/sources/${sourceId}/poll`,
+    { method: "POST" },
+  );
+}
+
+export function createRadarSubscription(data: {
+  name: string;
+  keywords?: string[];
+  regions?: string[];
+  categories?: string[];
+  budget_min?: number;
+  budget_max?: number;
+}) {
+  return request<NoticeSubscriptionRead>("/radar/subscriptions", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateRadarNoticeStatus(noticeId: string, status: "new" | "saved" | "ignored") {
+  return request<RadarNoticeRead>(`/radar/notices/${noticeId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function convertRadarNoticeToProject(noticeId: string, projectName?: string) {
+  return request<{ notice: RadarNoticeRead; project_id: string; project_slug: string }>(
+    `/radar/notices/${noticeId}/convert`,
+    { method: "POST", body: JSON.stringify({ project_name: projectName || undefined }) },
+  );
+}
+
 export type ProjectRole = "owner" | "manager" | "contributor" | "reviewer" | "viewer";
 
 export interface ProjectMemberRead {
@@ -290,6 +455,7 @@ export interface DeliverableSectionRead {
   section_key: string;
   title: string;
   status: string;
+  approved_version_id?: string | null;
   assignee_type?: string;
   sort_order?: number;
 }
@@ -339,9 +505,20 @@ export interface SourceDocumentRead {
   id: string;
   bundle_id: string;
   storage_key: string;
+  source_url: string | null;
   mime_type: string;
   original_filename: string;
   parse_status: string;
+  parse_attempt_count: number;
+  parser_name: string | null;
+  parser_version: string | null;
+  parse_error_code: string | null;
+  parse_error_detail: string | null;
+  parse_retryable: boolean;
+  index_status: string;
+  index_error_code: string | null;
+  version_number: number;
+  supersedes_document_id: string | null;
 }
 
 export interface DocumentsPaginatedResponse {
@@ -364,6 +541,7 @@ export async function uploadDocument(
   file: File,
   onProgress?: (progress: number) => void,
   assistantAttachmentId?: string,
+  deferIngest = false,
 ): Promise<SourceDocumentRead> {
   const formData = new FormData();
   formData.append("file", file);
@@ -371,7 +549,9 @@ export async function uploadDocument(
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${API_BASE}/documents/upload?bundle_id=${encodeURIComponent(bundleId)}`);
+    const params = new URLSearchParams({ bundle_id: bundleId });
+    if (deferIngest) params.set("defer_ingest", "true");
+    xhr.open("POST", `${API_BASE}/documents/upload?${params.toString()}`);
 
     for (const [key, value] of Object.entries(getAuthHeaders())) {
       xhr.setRequestHeader(key, value);
@@ -405,6 +585,10 @@ export function getDocumentDownloadUrl(documentId: string) {
   return `${API_BASE}/documents/${documentId}/download`;
 }
 
+export function getDocumentBlob(documentId: string) {
+  return requestBlob(`/documents/${documentId}/download`);
+}
+
 // Assistant Attachments
 export interface AssistantAttachmentUploadResponse {
   id: string;
@@ -427,8 +611,17 @@ export async function uploadAssistantAttachment(
     method: "POST",
     headers: getAuthHeaders(),
     body: formData,
-  });
-  if (!resp.ok) throw new Error(`Assistant attachment upload failed: ${resp.status}`);
+      });
+  if (!resp.ok) {
+    let detail = "";
+    try {
+      const body = (await resp.json()) as { detail?: unknown };
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      // Keep the HTTP status as the fallback when the server did not return JSON.
+    }
+    throw new Error(detail || `Assistant attachment upload failed: ${resp.status}`);
+  }
   return resp.json();
 }
 
@@ -438,11 +631,26 @@ export interface DraftResponse {
   status: string;
 }
 
-export function draftSection(data: { project_id: string; section_key: string }) {
+export function draftSection(data: {
+  project_id: string;
+  section_key: string;
+  section_id?: string;
+  provider_config_id?: string;
+  reasoning_effort?: "low" | "medium" | "high" | "extra" | "max";
+  max_iterations?: number;
+}) {
   return request<DraftResponse>("/drafting/sections", { method: "POST", body: JSON.stringify(data) });
 }
 
-export function redraftSection(data: { project_id: string; section_key: string; review_feedback?: string }) {
+export function redraftSection(data: {
+  project_id: string;
+  section_key: string;
+  section_id?: string;
+  review_feedback?: string;
+  provider_config_id?: string;
+  reasoning_effort?: "low" | "medium" | "high" | "extra" | "max";
+  max_iterations?: number;
+}) {
   return request<DraftResponse>("/drafting/sections/redraft", { method: "POST", body: JSON.stringify(data) });
 }
 
@@ -463,6 +671,66 @@ export function listExecutionRuns(projectId: string) {
   return request<ExecutionRunRead[]>(`/execution/runs?project_id=${projectId}`);
 }
 
+// Response plans
+export interface ResponsePlanRead {
+  id: string;
+  project_id: string;
+  deliverable_id: string;
+  version_number: number;
+  status: string;
+  source_fingerprint: string;
+  unmapped_requirement_ids: string[];
+  created_by_actor: string;
+  created_at: string | null;
+}
+
+export interface ResponsePlanRequirementRead {
+  id: string;
+  requirement_id: string;
+  requirement_lock_version: number;
+  requirement_text: string;
+  priority: string;
+  owner_user_id: string | null;
+  verification_status: string;
+  assignment_reason: string;
+}
+
+export interface ResponsePlanEvidenceBindingRead {
+  id: string;
+  evidence_set_id: string;
+  execution_run_id: string;
+  generation_iteration: number;
+  evidence_set_status: string;
+  unmet_requirement_ids: string[];
+  degraded_reasons: string[];
+  content_plan: Record<string, unknown>;
+  created_at: string | null;
+}
+
+export interface ResponsePlanSectionRead {
+  id: string;
+  deliverable_section_id: string;
+  section_key: string;
+  title: string;
+  sort_order: number;
+  status: string;
+  requirements: ResponsePlanRequirementRead[];
+  evidence_bindings: ResponsePlanEvidenceBindingRead[];
+}
+
+export interface ResponsePlanDetailRead extends ResponsePlanRead {
+  sections: ResponsePlanSectionRead[];
+}
+
+export function listResponsePlans(projectId: string) {
+  return request<ResponsePlanRead[]>(`/response-plans?project_id=${encodeURIComponent(projectId)}`);
+}
+
+export function getResponsePlan(projectId: string, responsePlanId: string) {
+  const query = new URLSearchParams({ project_id: projectId });
+  return request<ResponsePlanDetailRead>(`/response-plans/${responsePlanId}?${query.toString()}`);
+}
+
 // Ops
 export interface RuntimeSummary {
   queue_depth: number;
@@ -475,16 +743,30 @@ export function getRuntimeSummary() {
 }
 
 export interface RuntimeEventRead {
+  event_id: string;
   run_id: string;
+  parent_event_id: string | null;
   sequence: number;
   type: string;
   public_summary: string;
   payload: Record<string, unknown>;
   schema_version: string;
+  timestamp: string;
 }
 
 export interface RuntimeEventsResponse {
   items: RuntimeEventRead[];
+}
+
+export interface RuntimeLinkedWorkflowRun {
+  id: string;
+  status: string;
+  project_id: string | null;
+  execution_run_id: string | null;
+  engine: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
 export interface RuntimeRunRead {
@@ -497,6 +779,7 @@ export interface RuntimeRunRead {
   engine: string;
   trace_id: string;
   parent_run_id: string | null;
+  linked_workflow_runs?: RuntimeLinkedWorkflowRun[];
 }
 
 export interface RuntimeRunListItem {
@@ -863,12 +1146,45 @@ export function createReviewComment(payload: ReviewCommentCreate) {
 export interface ReviewDecisionRead {
   id: string;
   section_id: string;
+  section_version_id: string;
   decision: string;
   comment: string | null;
 }
 
+export interface CollaborationBoardRead {
+  project_id: string;
+  members: Array<{ user_id: string; display_name: string; role: string }>;
+  requirement_items: Array<{
+    requirement_id: string;
+    section_key: string;
+    requirement_text: string;
+    status: string;
+    priority: string;
+    verification_status: string;
+    owner_user_id: string | null;
+    owner_display_name: string | null;
+    reviewer_user_id: string | null;
+    reviewer_display_name: string | null;
+    due_at: string | null;
+    overdue: boolean;
+    needs_assignment: boolean;
+    risk_level: string | null;
+    coverage_status: string | null;
+  }>;
+  unassigned_requirement_count: number;
+  overdue_requirement_count: number;
+  review_required_count: number;
+  open_review_thread_count: number;
+  active_workflow_count: number;
+}
+
+export function getCollaborationBoard(projectId: string) {
+  return request<CollaborationBoardRead>(`/collaboration/projects/${encodeURIComponent(projectId)}/board`);
+}
+
 export interface ReviewDecisionCreate {
   section_id: string;
+  section_version_id: string;
   decision: string;
   comment?: string | null;
 }
@@ -928,6 +1244,7 @@ export interface CurrentUser {
   email_verified?: boolean;
   org_id?: string;
   org_slug?: string;
+  verification_email_accepted?: boolean | null;
 }
 
 export interface TokenResponse {
@@ -1015,15 +1332,13 @@ export function verifyEmail(token: string) {
   return request<{ message: string }>(`/auth/verify-email?token=${token}`, { method: "POST" });
 }
 
-export function resendVerification(token: string, email?: string, turnstileToken?: string | null) {
+export function resendVerification(token?: string | null, email?: string, turnstileToken?: string | null) {
   const params = new URLSearchParams();
   if (email) params.set("email", email);
   if (turnstileToken) params.set("turnstile_token", turnstileToken);
   const query = params.toString();
-  return request<{ message: string }>(
-    `/auth/resend-verification${query ? `?${query}` : ""}`,
-    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
-  );
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+  return request<{ message: string }>(`/auth/resend-verification${query ? `?${query}` : ""}`, { method: "POST", headers });
 }
 
 export function adminVerifyUser(userId: string) {
@@ -1170,6 +1485,10 @@ export function retryExecutionRun(runId: string) {
 // Bundle Reingest
 export function reingestBundle(bundleId: string) {
   return request<BundleRead>(`/bundles/${bundleId}/reingest`, { method: "POST" });
+}
+
+export function reindexBundle(bundleId: string) {
+  return request<BundleRead>(`/bundles/${bundleId}/reindex`, { method: "POST" });
 }
 
 // Health Detailed
@@ -1631,18 +1950,41 @@ export interface ProviderModelsResult {
 
 // Chat
 export interface ChatMessageRead {
+  id: string;
   role: "user" | "assistant";
   content: string;
+  created_at: string | null;
+  runtime_run_id?: string | null;
+  attachments?: ChatMessageAttachmentRead[];
+}
+
+export interface ChatMessageAttachmentRead {
+  id: string;
+  assistant_attachment_id: string | null;
+  document_id: string | null;
+  name: string;
+  kind: "file" | "image";
+  mime_type: string;
+  size: number;
+  extraction_status: "extracted" | "empty" | "unsupported" | "failed";
+  extraction_error: string | null;
 }
 
 export interface ChatConversationRead {
   id: string;
   project_id: string | null;
   title: string | null;
+  is_pinned?: boolean;
   created_at: string | null;
 }
 
 export interface ChatHistoryRead {
+  items: ChatMessageRead[];
+  total: number;
+}
+
+export interface ChatConversationForkRead {
+  conversation: ChatConversationRead;
   items: ChatMessageRead[];
   total: number;
 }
@@ -1656,10 +1998,24 @@ export function getChatConversationMessages(conversationId: string) {
   return request<ChatHistoryRead>(`/chat/conversations/${conversationId}/messages`);
 }
 
+export function forkChatConversation(conversationId: string, checkpointMessageId: string) {
+  return request<ChatConversationForkRead>(`/chat/conversations/${conversationId}/fork`, {
+    method: "POST",
+    body: JSON.stringify({ checkpoint_message_id: checkpointMessageId }),
+  });
+}
+
 export function renameChatConversation(conversationId: string, title: string) {
   return request<ChatConversationRead>(`/chat/conversations/${conversationId}`, {
     method: "PATCH",
     body: JSON.stringify({ title }),
+  });
+}
+
+export function setChatConversationPinned(conversationId: string, isPinned: boolean) {
+  return request<ChatConversationRead>(`/chat/conversations/${conversationId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_pinned: isPinned }),
   });
 }
 
@@ -1708,6 +2064,85 @@ export function listProviderModels(payload: ListProviderModelsPayload) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+// Business webhooks
+export type WebhookEventType = "radar.notice.matched" | "radar.notice.saved" | "radar.notice.converted";
+export type WebhookDeliveryStatus = "pending" | "delivering" | "delivered" | "failed";
+
+export interface WebhookEndpointRead {
+  id: string;
+  name: string;
+  target_url: string;
+  events: WebhookEventType[];
+  is_active: boolean;
+  signing_secret_hint: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface WebhookEndpointCreateResult {
+  endpoint: WebhookEndpointRead;
+  signing_secret: string;
+}
+
+export interface WebhookDeliveryRead {
+  id: string;
+  endpoint_id: string;
+  endpoint_name: string;
+  event_type: string;
+  status: WebhookDeliveryStatus;
+  attempt_count: number;
+  max_attempts: number;
+  available_at: string | null;
+  last_http_status: number | null;
+  last_error_code: string | null;
+  delivered_at: string | null;
+  created_at: string | null;
+  payload: Record<string, unknown>;
+}
+
+export interface WebhookOverviewRead {
+  summary: {
+    active_endpoint_count: number;
+    delivery_count: number;
+    failed_delivery_count: number;
+    pending_delivery_count: number;
+  };
+  supported_events: WebhookEventType[];
+  endpoints: WebhookEndpointRead[];
+  deliveries: WebhookDeliveryRead[];
+}
+
+export function getWebhookOverview() {
+  return request<WebhookOverviewRead>("/webhooks/overview");
+}
+
+export function createWebhookEndpoint(payload: { name: string; target_url: string; events: WebhookEventType[] }) {
+  return request<WebhookEndpointCreateResult>("/webhooks/endpoints", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateWebhookEndpoint(
+  endpointId: string,
+  payload: Partial<{ name: string; target_url: string; events: WebhookEventType[]; is_active: boolean }>,
+) {
+  return request<WebhookEndpointRead>(`/webhooks/endpoints/${endpointId}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function deleteWebhookEndpoint(endpointId: string) {
+  return request<void>(`/webhooks/endpoints/${endpointId}`, { method: "DELETE" });
+}
+
+export function rotateWebhookSecret(endpointId: string) {
+  return request<WebhookEndpointCreateResult>(`/webhooks/endpoints/${endpointId}/rotate-secret`, { method: "POST" });
+}
+
+export function testWebhookEndpoint(endpointId: string) {
+  return request<{ delivery: WebhookDeliveryRead }>(`/webhooks/endpoints/${endpointId}/test`, { method: "POST" });
+}
+
+export function retryWebhookDelivery(deliveryId: string) {
+  return request<{ delivery: WebhookDeliveryRead }>(`/webhooks/deliveries/${deliveryId}/retry`, { method: "POST" });
 }
 
 // Invitations

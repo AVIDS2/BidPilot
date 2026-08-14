@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_URL = "https://api.openai.com/v1/chat/completions"
 _DEFAULT_MODEL = "gpt-4o-mini"
+_MAX_DRAFT_OUTPUT_TOKENS = 4_096
 ReasoningEffort = Literal["low", "medium", "high", "extra", "max", "ultra"]
 _MAX_REVIEW_FEEDBACK_CHARACTERS = 4_000
 _MAX_SYSTEM_PROMPT_CHARACTERS = 4_000
@@ -44,6 +45,17 @@ _OPENAI_REASONING_EFFORT: dict[str, str] = {
     "extra": "high",
     "ultra": "high",
     "max": "high",
+}
+
+_DEEPSEEK_REASONING_EFFORT: dict[str, str] = {
+    "low": "low",
+    # DeepSeek V4 documents these as compatibility aliases; emit only the
+    # native low/high/max values on the wire.
+    "medium": "high",
+    "high": "high",
+    "extra": "high",
+    "ultra": "max",
+    "max": "max",
 }
 
 
@@ -85,13 +97,28 @@ def _build_prompt(section_key: str, evidence_texts: list[str], review_feedback: 
         "only for factual support and address review feedback when applicable.\n\n"
         "UNTRUSTED_CONTEXT_JSON:\n"
         f"{packet}\n\n"
-        "Write the section content now."
+        "Write the section content now. Output only the final markdown section: "
+        "do not include analysis, chain-of-thought, planning notes, or process commentary. "
+        "Keep the draft concise and reviewable (preferably within 1200 Chinese characters)."
     )
 
 
 def _supports_reasoning_effort(url: str, model: str) -> bool:
     normalized = f"{url} {model}".lower()
-    return "api.openai.com" in normalized or model.lower().startswith(("o1", "o3", "o4", "gpt-5"))
+    return (
+        "api.openai.com" in normalized
+        or "api.deepseek.com" in normalized
+        or model.lower().startswith(("o1", "o3", "o4", "gpt-5", "deepseek-v4"))
+    )
+
+
+def _supports_deepseek_thinking(url: str, model: str) -> bool:
+    normalized = f"{url} {model}".lower()
+    return "api.deepseek.com" in normalized or "deepseek-v4" in model.lower()
+
+
+def _deepseek_reasoning_effort(reasoning_effort: str) -> str:
+    return _DEEPSEEK_REASONING_EFFORT[reasoning_effort]
 
 
 def _system_prompt_with_reasoning(system_prompt: str, reasoning_effort: str | None) -> str:
@@ -190,9 +217,17 @@ def draft_section(
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.3,
-        "max_tokens": 2000,
+        # Reasoning-capable Chat Completions models charge their internal
+        # reasoning against this limit.  2k can leave a valid request with no
+        # user-visible draft at all, so reserve enough budget for both.
+        "max_tokens": _MAX_DRAFT_OUTPUT_TOKENS,
     }
-    if reasoning_effort and _supports_reasoning_effort(request.url, model):
+    if _supports_deepseek_thinking(request.url, model):
+        # DeepSeek V4 defaults to thinking mode. Drafting is a bounded writing
+        # task, so disable it explicitly and reserve reasoning for the parser,
+        # planner, and reviewer structured-task calls.
+        payload["thinking"] = {"type": "disabled"}
+    elif reasoning_effort and _supports_reasoning_effort(request.url, model):
         payload["reasoning_effort"] = _OPENAI_REASONING_EFFORT[reasoning_effort]
 
     try:
@@ -220,7 +255,9 @@ def draft_section(
 
     try:
         data = resp.json()
-        content = data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
+        message = choice["message"]
+        content = message["content"]
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         raise ProviderInvocationError(
             "provider_response_invalid",
@@ -228,6 +265,20 @@ def draft_section(
             retryable=True,
         ) from exc
     if not isinstance(content, str) or not content.strip():
+        finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
+        reasoning_content = message.get("reasoning_content") if isinstance(message, dict) else None
+        logger.warning(
+            "LLM completed without draft content (finish_reason=%s, content_type=%s, reasoning_chars=%d)",
+            finish_reason,
+            type(content).__name__,
+            len(reasoning_content) if isinstance(reasoning_content, str) else 0,
+        )
+        if finish_reason == "length":
+            raise ProviderInvocationError(
+                "provider_response_truncated",
+                "模型输出在生成章节正文前达到长度上限，请提高输出额度后重试。",
+                retryable=False,
+            )
         raise ProviderInvocationError(
             "provider_response_invalid",
             "模型服务未返回可用草稿，正在按策略重试。",

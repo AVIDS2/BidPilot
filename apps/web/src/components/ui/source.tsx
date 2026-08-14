@@ -23,12 +23,13 @@ export type SourceProps = {
 }
 
 export function Source({ href, children }: SourceProps) {
-  let domain = ""
-  try {
-    domain = new URL(href).hostname
-  } catch {
-    domain = href.split("/").pop() || href
-  }
+  const domain = (() => {
+    try {
+      return new URL(href).hostname
+    } catch {
+      return href.split("/").pop() || href
+    }
+  })()
 
   return (
     <SourceContext.Provider value={{ href, domain }}>

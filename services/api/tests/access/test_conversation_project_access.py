@@ -122,7 +122,6 @@ def test_chat_and_assistant_reject_inaccessible_project_context(conversation_db,
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[require_auth] = override_require_auth
     monkeypatch.setattr("app.chat.router.stream_chat_response", fake_stream)
-    monkeypatch.setattr("app.assistant.router.stream_assistant_response", fake_stream)
     try:
         client = TestClient(app)
         chat = client.post(

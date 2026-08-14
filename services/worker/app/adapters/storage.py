@@ -7,6 +7,7 @@ source documents in a project-scoped bucket layout.
 import io
 import logging
 import os
+from os import PathLike
 logger = logging.getLogger(__name__)
 
 MINIO_ENDPOINT = os.environ.get("DOCPILOT_MINIO_ENDPOINT", "localhost:9000")
@@ -58,6 +59,26 @@ def upload_document(project_id: str, object_name: str, data: bytes, content_type
         content_type=content_type,
     )
     logger.info("Uploaded %s/%s (%d bytes)", bucket, object_name, len(data))
+    return f"{bucket}/{object_name}"
+
+
+def upload_bytes(project_id: str, object_name: str, data: bytes, content_type: str = "application/octet-stream") -> str:
+    """API-compatible alias used by shared document commands."""
+    return upload_document(project_id, object_name, data, content_type)
+
+
+def upload_file(
+    project_id: str,
+    object_name: str,
+    file_path: str | PathLike[str],
+    content_type: str = "application/octet-stream",
+) -> str:
+    """Upload a local file without first materializing it as bytes."""
+    client = _get_client()
+    bucket = _bucket_name(project_id)
+    _ensure_bucket(client, bucket)
+    client.fput_object(bucket, object_name, str(file_path), content_type=content_type)
+    logger.info("Uploaded %s/%s from %s", bucket, object_name, file_path)
     return f"{bucket}/{object_name}"
 
 

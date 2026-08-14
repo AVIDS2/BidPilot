@@ -58,7 +58,7 @@ def test_drafting_command_creates_linked_workflow_runtime_run(
 
     response = draft_section_command(
         test_db,
-        DraftSectionRequest(project_id=project.id, section_key="technical-approach"),
+        DraftSectionRequest(project_id=project.id, section_key="technical-approach", max_iterations=5),
         _user(default_org_id, default_user_id),
     )
 
@@ -68,12 +68,15 @@ def test_drafting_command_creates_linked_workflow_runtime_run(
     assert bridge.kind == "workflow_bridge"
     assert bridge.execution_run_id == response.run_id
     assert bridge.project_id == project.id
+    execution = test_db.get(ExecutionRun, response.run_id)
+    assert execution is not None
+    assert execution.input_json["max_iterations"] == 5
     assert [event.event_type for event in list_events_after(test_db, bridge.id)] == ["run.started"]
     outbox_event = test_db.query(TaskOutboxEvent).filter_by(execution_run_id=response.run_id).one()
     assert dispatched == [outbox_event.id]
     assert outbox_event.task_name == "worker.draft_section"
     assert outbox_event.args_json == [response.run_id, project.id, "technical-approach"]
-    assert outbox_event.kwargs_json == {"runtime_run_id": bridge.id}
+    assert outbox_event.kwargs_json == {"max_iterations": 5, "runtime_run_id": bridge.id}
 
 
 def test_drafting_stream_replays_runtime_events_without_checkpoint_table_reads(
@@ -242,7 +245,7 @@ def test_runtime_retry_action_returns_a_new_linked_workflow_attempt(
         project_id=project.id,
         run_type="draft_section",
         status="failed",
-        input_json={"section_key": "technical-approach"},
+        input_json={"section_key": "technical-approach", "max_iterations": 4},
     )
     test_db.add(source)
     test_db.commit()
@@ -280,9 +283,12 @@ def test_runtime_retry_action_returns_a_new_linked_workflow_attempt(
     retry = test_db.get(ExecutionRun, retry_execution_run_id)
     assert retry is not None
     assert retry.parent_execution_run_id == source.id
+    assert retry.input_json["max_iterations"] == 4
     retry_bridge = test_db.get(RuntimeRun, retry_runtime_run_id)
     assert retry_bridge is not None
     assert retry_bridge.parent_run_id == source_bridge.id
+    retry_outbox = test_db.query(TaskOutboxEvent).filter_by(execution_run_id=retry.id).one()
+    assert retry_outbox.kwargs_json["max_iterations"] == 4
     assert [event.event_type for event in list_events_after(test_db, parent.id)] == [
         "run.started",
         "capability.started",
