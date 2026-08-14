@@ -8,7 +8,7 @@ import shlex
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import NamedTuple
 
 
@@ -220,7 +220,7 @@ def write_evidence_artifact(artifact: dict[str, object], output_file: Path) -> P
 
 
 def resolve_evidence_output_file(output_file: Path) -> Path:
-    if output_file.is_absolute():
+    if output_file.is_absolute() or PureWindowsPath(output_file).is_absolute():
         return output_file
     return _REPOSITORY_ROOT / output_file
 

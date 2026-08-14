@@ -21,6 +21,12 @@ except UnsafeTestDatabaseError as exc:
 os.environ["DOCPILOT_DATABASE_URL"] = _test_database_url
 os.environ["DOCPILOT_TEST_DATABASE_URL"] = _test_database_url
 
+# API tests exercise deterministic in-memory auth throttles. Redis itself is
+# started in CI for queue/integration coverage, but must not leak into auth's
+# module-level limiter selection before the test fixtures import that module.
+os.environ.pop("DOCPILOT_REDIS_URL", None)
+os.environ.pop("DOCPILOT_RATE_LIMIT_STORAGE_URI", None)
+
 # Disable structlog JSON output during tests
 os.environ["DOCPILOT_LOGGING"] = "off"
 

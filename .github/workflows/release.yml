@@ -33,6 +33,10 @@ jobs:
       DOCPILOT_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
       DOCPILOT_TEST_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
       DOCPILOT_REDIS_URL: redis://localhost:6379/0
+      DOCPILOT_MINIO_ENDPOINT: localhost:9000
+      DOCPILOT_MINIO_ACCESS_KEY: docpilot
+      DOCPILOT_MINIO_SECRET_KEY: docpilot123
+      DOCPILOT_MINIO_SECURE: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,6 +45,18 @@ jobs:
       - run: pip install uv
       - run: uv sync --directory services/api
       - run: uv sync --directory services/worker
+      - name: Start MinIO for object-storage integration tests
+        run: |
+          docker run --detach --rm --name docpilot-minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=docpilot \
+            -e MINIO_ROOT_PASSWORD=docpilot123 \
+            minio/minio:RELEASE.2025-01-20T14-49-07Z server /data
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:9000/minio/health/live && exit 0
+            sleep 1
+          done
+          echo "MinIO did not become healthy" >&2
+          exit 1
       - run: uv run --directory services/api alembic upgrade head
       - run: uv run --directory services/api ruff check app tests
       - run: uv run --directory services/api pytest tests/ -q
@@ -51,15 +67,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: pnpm install
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @docpilot/web exec tsc --noEmit
       - run: pnpm --filter @docpilot/web exec vitest run
       - run: pnpm --filter @docpilot/web run build
 
   production-readiness:
+    # The authoritative production secret gate runs on the VPS immediately
+    # before deployment. Enable this mirror only after equivalent GitHub
+    # Actions secrets have been deliberately provisioned.
+    if: ${{ vars.DOCPILOT_VERIFY_PRODUCTION_ENV == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -9,21 +9,21 @@
       "id": "rfp",
       "path": "01-招标文件-智慧社区AI治理平台.md",
       "role": "rfp",
-      "sha256": "4279eaea41dacf7c99bc79af6bd83f12c579367b4534720d35f33b549a7a0915",
+      "sha256": "e98fbeba897feec70b3ae0f361a4c320c834f9880256f4829257c6b697646d70",
       "expected_anchors": ["三、功能要求", "五、项目实施要求", "七、评分办法"]
     },
     {
       "id": "supplier-capability",
       "path": "02-供应商能力资料-星河云智科技.md",
       "role": "supplier_capability",
-      "sha256": "5156c9bbba279277a4a0d0e1da592845f459bf494ec436e8fb778334991382b8",
+      "sha256": "6582dba7e04d4ea7de9dfe540214c6f8f874ed87fc28ce989e4ac530c6765821",
       "expected_anchors": ["二、核心能力", "三、产品架构", "五、服务承诺"]
     },
     {
       "id": "case-study",
       "path": "03-同类案例-智慧园区治理平台.md",
       "role": "case_study",
-      "sha256": "ad32a433a23a263b8a985e111b8cd8a9ae09160f08c2485bf47adc628ef2a88f",
+      "sha256": "482d74bfce912100a108e6ea99d8b61ba0c607a149e4e513404562231829264f",
       "expected_anchors": ["二、建设内容", "五、项目成效", "七、客户评价"]
     }
   ],

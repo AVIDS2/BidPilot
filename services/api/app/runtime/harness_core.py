@@ -177,7 +177,7 @@ class HarnessPlanUpdate:
     """
 
     summary: str
-    items: tuple[str, ...] = ()
+    items: tuple[JsonObject | str, ...] = ()
 
 
 @dataclass(frozen=True)

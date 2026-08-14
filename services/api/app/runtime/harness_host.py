@@ -154,17 +154,25 @@ class BidPilotHarnessPlanPolicy(HarnessPlanPolicy):
         context: HarnessExecutionContext,
     ) -> HarnessPlanUpdate | None:
         _ = messages
-        labels: list[str] = []
+        items: list[dict[str, str]] = []
         for call in calls:
             try:
                 label = get_capability_definition(call.name).label_zh
             except ValueError:
                 label = call.name
-            labels.append(label)
-        if not labels:
+            items.append(
+                {
+                    "id": call.id,
+                    "capability": call.name,
+                    "title": label,
+                    "status": "planned",
+                    "turn_id": context.turn_id,
+                }
+            )
+        if not items:
             return None
-        summary = f"执行计划：{'、'.join(labels)}。"
-        return HarnessPlanUpdate(summary=summary, items=tuple(labels))
+        summary = f"执行计划：{'、'.join(item['title'] for item in items)}。"
+        return HarnessPlanUpdate(summary=summary, items=tuple(items))
 
 
 class LangChainHarnessModelPort:
