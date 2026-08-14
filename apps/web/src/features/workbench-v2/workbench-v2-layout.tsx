@@ -207,6 +207,8 @@ export function WorkbenchV2Layout() {
                   type="button"
                   aria-label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
                   title={sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
+                  aria-pressed={sidebarCollapsed}
+                  data-state={sidebarCollapsed ? "collapsed" : "expanded"}
                   onClick={() => setSidebarCollapsed((value) => !value)}
                 >
                   {sidebarCollapsed ? <PanelLeftOpenIcon aria-hidden="true" /> : <PanelLeftCloseIcon aria-hidden="true" />}

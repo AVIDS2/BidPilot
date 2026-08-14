@@ -39,8 +39,8 @@
   min-height: 64px;
   justify-items: center;
   grid-template-columns: 1fr;
-  grid-template-rows: 28px 28px;
-  gap: 4px;
+  grid-template-rows: 30px 30px;
+  gap: 6px;
 }
 .workbench-v2.is-sidebar-collapsed .wb-workspace-switcher {
   width: 28px;
@@ -190,6 +190,28 @@
 .wb-icon-button--raised {
   border: 1px solid var(--wb-line-strong);
   background: var(--wb-surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.wb-sidebar-toggle {
+  color: #71727a;
+}
+
+.wb-sidebar-toggle:hover,
+.wb-sidebar-toggle[data-state="collapsed"] {
+  border: 1px solid var(--wb-line-strong);
+  background: var(--wb-surface);
+  color: var(--wb-text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
+.workbench-v2.is-sidebar-collapsed .wb-sidebar-toggle {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--wb-line-strong);
+  border-radius: 8px;
+  background: var(--wb-surface);
+  color: var(--wb-text);
   box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
 }
 
