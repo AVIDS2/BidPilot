@@ -1495,3 +1495,22 @@ unverified visual changes merely to iterate in production.
   deployment remains a separate step requiring a clean, committed release
   source and a server-side readiness check; neither is inferred from the
   passing tests.
+
+## Agent Harness pilot release (2026-08-15)
+
+- Published commit `01fa218` to the controlled VPS pilot. The versioned
+  production Compose path completed readiness, migration and LangGraph
+  checkpoint one-shot services before restarting API, Worker and Web.
+- Post-deploy checks passed: production readiness inside the API container,
+  public HTTPS liveness/readiness, container health and a 40-request HTTPS
+  smoke across `/health` and `/health/ready` (zero failures, p95 below the
+  one-second threshold). The resulting evidence is under
+  `artifacts/release-evidence/`.
+- The first smoke run received edge `403` responses only because Python's
+  default `urllib` User-Agent is blocked by the public edge. Updated the
+  smoke script to send the stable, credential-free
+  `BidPilot-ReleaseSmoke/1.0` identifier; normal browser/curl traffic and the
+  corrected scripted smoke both receive `200`.
+- The production API origin is `https://bidpilot-api.rglens.com`. Corrected
+  the primary VPS deployment guide, which still named the historical
+  `api.bidpilot.rglens.com` host without a working TLS route.

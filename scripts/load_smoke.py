@@ -13,6 +13,9 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
+SMOKE_USER_AGENT = "BidPilot-ReleaseSmoke/1.0"
+
+
 class Sample(NamedTuple):
     endpoint: str
     status_code: int | None
@@ -32,7 +35,11 @@ def request_once(base_url: str, endpoint: str, timeout: float) -> Sample:
     url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
     started_at = time.perf_counter()
     try:
-        request = Request(url, method="GET")
+        request = Request(
+            url,
+            headers={"User-Agent": SMOKE_USER_AGENT},
+            method="GET",
+        )
         with urlopen(request, timeout=timeout) as response:
             response.read()
             status_code = response.status

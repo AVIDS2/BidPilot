@@ -86,7 +86,7 @@ docker compose exec api python scripts/bootstrap_admin.py --email pilot-admin@ex
 ## Access
 
 - web: `https://bidpilot.rglens.com`
-- api: `https://api.bidpilot.rglens.com`
+- api: `https://bidpilot-api.rglens.com`
 
 The reverse proxy should route public traffic to the web and API containers. Keep database, Redis, and MinIO internal.
 
