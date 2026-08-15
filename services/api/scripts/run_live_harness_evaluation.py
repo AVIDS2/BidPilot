@@ -60,6 +60,19 @@ from app.usage.schemas import ProviderSource
 _SSE_EVENT = re.compile(r"^event: (?P<name>[^\n]+)$", re.MULTILINE)
 _SSE_DATA = re.compile(r"^data: (?P<data>.+)$", re.MULTILINE)
 _MAX_PUBLIC_TEXT = 1_200
+_PUBLIC_UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.IGNORECASE)
+_INTERNAL_REPLY_MARKERS = (
+    "active_project_id",
+    "runtime_run_id",
+    "short_id",
+    "list_deliverables",
+    "list_requirements",
+    "get_project_outline",
+    "list_sections",
+    "start_draft_section",
+    "create_deliverable",
+    "export_deliverable",
+)
 
 
 @dataclass(frozen=True)
@@ -492,6 +505,12 @@ def _evaluate_acceptance(payload: dict[str, Any]) -> dict[str, Any]:
     embedding = payload.get("embedding") or {}
     if embedding.get("status") != "success" or int(embedding.get("dimensions") or 0) <= 0:
         failures.append("向量模型调用未成功产生向量")
+
+    for scenario in scenarios.values():
+        reply = str(scenario.get("reply") or "")
+        normalized_reply = reply.lower()
+        if _PUBLIC_UUID.search(reply) or any(marker in normalized_reply for marker in _INTERNAL_REPLY_MARKERS):
+            failures.append(f"{scenario.get('name')} 向用户泄漏了内部标识符或工具名")
 
     return {"passed": not failures, "failures": failures}
 

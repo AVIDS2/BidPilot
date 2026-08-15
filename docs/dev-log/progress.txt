@@ -1447,3 +1447,51 @@ unverified visual changes merely to iterate in production.
   E2E `2 passed`, and targeted Python public-result smoke passed. Full pytest
   was not run because this shell lacks `DOCPILOT_TEST_DATABASE_URL` pointing
   at a dedicated database ending `_test`; the safety gate was not bypassed.
+
+## Harness observation/presentation boundary correction (2026-08-15)
+
+- Corrected the remaining conflation of model observation and user-facing
+  activity payloads in the framework-neutral Harness core. Tool results now
+  carry a redacted model payload for the following ReAct turn and a distinct,
+  minimal public payload for SSE/UI projection.
+- Removed raw tool arguments, run-trace panels, provider narration and inferred
+  chain-of-thought from the normal activity timeline. The timeline retains
+  durable states and real project, approval, canvas and delivery actions.
+- Added a strictly governed concurrent lane for independently prepared MCP
+  sensing calls. Product writes, downloads and approval-bearing tools remain
+  sequential. MCP observations are redacted, explicitly untrusted and capped
+  before being supplied to the model; the browser receives only a safe source
+  projection.
+- Source of truth for this contract:
+  `docs/architecture/2026-08-15-harness-observation-presentation-contract.md`.
+  This supersedes any earlier implication that ordinary users should see
+  runtime IDs or raw Trace/Span fields.
+2026-08-15 Agent harness verification follow-up
+- Directly exercised the MCP model-observation boundary after the harness split. This exposed a missing `redact_arguments` import in `bidpilot_harness_adapter.py`; added the explicit import before considering the change verified.
+- Re-ran the boundary assertion: external MCP output is redacted, bounded to a model-safe preview when oversized, labelled untrusted, and does not reuse the public UI payload.
+- Re-ran authenticated browser mocks for the real task-canvas action on desktop and mobile: 4/4 Playwright scenarios passed. The production web build and lint pass; lint still reports five pre-existing hook-dependency warnings outside the changed area.
+- Full API pytest remains intentionally blocked until `DOCPILOT_TEST_DATABASE_URL` points to a dedicated database whose name ends in `_test`; no development or production database was used as a substitute.
+
+## Agent Harness closeout verification (2026-08-15)
+
+- Ran the full API suite against an isolated test database after migrations:
+  `897 passed` (with 25 non-failing SQLAlchemy cleanup warnings). Worker tests
+  passed (`190 passed`); API and Worker Ruff checks passed.
+- Ran the Web typecheck, complete Vitest suite, production build, and targeted
+  Chromium/mobile-Chromium agent workspace checks. The latter covers the
+  conversation composer and opening a structured canvas action beside the
+  active conversation (`4 passed`). Web lint has zero errors and the same five
+  pre-existing hook-dependency warnings recorded above.
+- Ran the repository release rehearsal with browser coverage. Evidence is
+  `artifacts/release-evidence/harness-agent-rehearsal.json`; migrations,
+  static checks, tests, frontend build and browser checks all passed.
+- Ran the deterministic Harness contract evaluation (`19/19`, engineering
+  score `100/100`) and a live configured-model evaluation covering a normal
+  answer, material inspection, delivery creation, readiness analysis,
+  approval pause/resume and vector embedding. The live suite rejects public
+  UUIDs, internal tool names and raw arguments; it passed after provider
+  compatibility handling for a required-tool retry.
+- This is local, isolated-environment acceptance evidence only. Production
+  deployment remains a separate step requiring a clean, committed release
+  source and a server-side readiness check; neither is inferred from the
+  passing tests.

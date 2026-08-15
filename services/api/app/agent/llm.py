@@ -344,20 +344,22 @@ def get_required_tool_choice_llm(llm: BaseChatModel) -> BaseChatModel:
     settings.  Other providers retain their existing client because their
     tool-choice semantics are provider-specific.
     """
-    if not isinstance(llm, DeepSeekChatOpenAI):
-        return llm
-
     model_name = str(getattr(llm, "model_name", ""))
     base_url = str(getattr(llm, "openai_api_base", ""))
-    if not _supports_deepseek_v4_thinking("deepseek", base_url, model_name):
+    is_official_deepseek = isinstance(llm, DeepSeekChatOpenAI) and _supports_deepseek_v4_thinking(
+        "deepseek", base_url, model_name
+    )
+    is_opencode_go = _uses_opencode_go_deepseek_v4(None, base_url, model_name)
+    if not (is_official_deepseek or is_opencode_go):
         return llm
 
-    return DeepSeekChatOpenAI(
+    client_class = DeepSeekChatOpenAI if is_official_deepseek else ChatOpenAI
+    return client_class(
         api_key=llm.openai_api_key,
         base_url=llm.openai_api_base,
         model=model_name,
         streaming=True,
-        temperature=0.1,
+        temperature=0.1 if is_official_deepseek else 0.7,
         max_completion_tokens=getattr(llm, "max_tokens", None) or OPERATOR_PLANNER_MAX_OUTPUT_TOKENS,
         max_retries=getattr(llm, "max_retries", None),
         default_headers=getattr(llm, "default_headers", None),

@@ -98,16 +98,29 @@ class HarnessToolOutcome:
     kind: ToolOutcomeKind
     public_summary: str
     model_payload: JsonObject = field(default_factory=dict)
+    # The model receives ``model_payload`` on its next turn.  Hosts may project
+    # only the much smaller ``public_payload`` to an end user.  Keeping these
+    # channels separate is what lets the harness correct itself without
+    # leaking raw observations, identifiers, or tool protocol data into chat.
+    public_payload: JsonObject = field(default_factory=dict)
     error_code: str | None = None
     pause_reason: str | None = None
     recoverable: bool = True
 
     @classmethod
-    def succeeded(cls, public_summary: str, model_payload: Mapping[str, Any] | None = None) -> "HarnessToolOutcome":
+    def succeeded(
+        cls,
+        public_summary: str,
+        model_payload: Mapping[str, Any] | None = None,
+        *,
+        public_payload: Mapping[str, Any] | None = None,
+    ) -> "HarnessToolOutcome":
+        model_result = dict(model_payload or {})
         return cls(
             kind=ToolOutcomeKind.SUCCEEDED,
             public_summary=public_summary,
-            model_payload=dict(model_payload or {}),
+            model_payload=model_result,
+            public_payload=dict(public_payload) if public_payload is not None else model_result,
         )
 
     @classmethod
@@ -118,6 +131,7 @@ class HarnessToolOutcome:
         error_code: str = "tool_execution_failed",
         recoverable: bool = True,
         model_payload: Mapping[str, Any] | None = None,
+        public_payload: Mapping[str, Any] | None = None,
     ) -> "HarnessToolOutcome":
         return cls(
             kind=ToolOutcomeKind.FAILED,
@@ -125,6 +139,7 @@ class HarnessToolOutcome:
             error_code=error_code,
             recoverable=recoverable,
             model_payload=dict(model_payload or {}),
+            public_payload=dict(public_payload or {}),
         )
 
     @classmethod
@@ -134,12 +149,14 @@ class HarnessToolOutcome:
         *,
         pause_reason: str,
         model_payload: Mapping[str, Any] | None = None,
+        public_payload: Mapping[str, Any] | None = None,
     ) -> "HarnessToolOutcome":
         return cls(
             kind=ToolOutcomeKind.PAUSED,
             public_summary=public_summary,
             pause_reason=pause_reason,
             model_payload=dict(model_payload or {}),
+            public_payload=dict(public_payload or {}),
         )
 
     @classmethod
@@ -413,20 +430,36 @@ class HarnessLoop:
 
             if self._can_execute_parallel(calls):
                 context = self._execution_context(turn_id=turn_id, step=step)
-                for call in calls:
-                    async for event in self._emit(
-                        HarnessEvent(
-                            type="tool.started",
-                            turn_id=turn_id,
-                            tool_call_id=call.id,
-                            tool_name=call.name,
-                            payload={"arguments": dict(call.arguments)},
+                # A governed executor may persist a safe read preflight before
+                # the calls fan out. Writes and approvals never enter this
+                # branch. If an unexpected preflight blocks one read, none of
+                # the siblings is started; every model tool call still receives
+                # a result so the next turn has a coherent transcript.
+                prepared = [await self._prepare_call(call, context) for call in calls]
+                if any(outcome is not None for outcome in prepared):
+                    outcomes = tuple(
+                        outcome
+                        or HarnessToolOutcome.blocked(
+                            "parallel read was not started because another requested read needs attention",
+                            error_code="parallel_batch_interrupted",
                         )
-                    ):
-                        yield event
-                outcomes = await asyncio.gather(
-                    *(self._execute_call(call, context) for call in calls),
-                )
+                        for outcome in prepared
+                    )
+                else:
+                    for call in calls:
+                        async for event in self._emit(
+                            HarnessEvent(
+                                type="tool.started",
+                                turn_id=turn_id,
+                                tool_call_id=call.id,
+                                tool_name=call.name,
+                                payload={},
+                            )
+                        ):
+                            yield event
+                    outcomes = await asyncio.gather(
+                        *(self._execute_call(call, context) for call in calls),
+                    )
                 paused_outcome: HarnessToolOutcome | None = None
                 terminal_failure: HarnessToolOutcome | None = None
                 for call, outcome in zip(calls, outcomes, strict=True):
@@ -448,7 +481,7 @@ class HarnessLoop:
                                 "error_code": outcome.error_code,
                                 "pause_reason": outcome.pause_reason,
                                 "recoverable": outcome.recoverable,
-                                "result": outcome.model_payload,
+                                "result": outcome.public_payload,
                             },
                         )
                     ):
@@ -512,7 +545,7 @@ class HarnessLoop:
                             turn_id=turn_id,
                             tool_call_id=call.id,
                             tool_name=call.name,
-                            payload={"arguments": dict(call.arguments)},
+                            payload={},
                         )
                     ):
                         yield event
@@ -535,7 +568,7 @@ class HarnessLoop:
                             "error_code": outcome.error_code,
                             "pause_reason": outcome.pause_reason,
                             "recoverable": outcome.recoverable,
-                            "result": outcome.model_payload,
+                            "result": outcome.public_payload,
                         },
                     )
                 ):
@@ -634,16 +667,22 @@ class HarnessLoop:
     def _can_execute_parallel(self, calls: Sequence[HarnessToolCall]) -> bool:
         """Allow concurrency only when both the host and tool declarations opt in.
 
-        Governed product executors expose ``prepare`` to persist actions and
-        approvals, so they intentionally use the sequential lane. A stateless
-        read-only executor can opt in with ``allow_parallel_tools = True``.
+        Governed product executors must opt in separately with both
+        ``allow_parallel_prepared_tools`` and a pure
+        ``can_prepare_parallel(calls)`` predicate. This reserves concurrency
+        for a predeclared read-only lane without weakening approval or write
+        ordering.
         """
         if len(calls) < 2 or not self.config.parallel_tools:
             return False
         if not bool(getattr(self.executor, "allow_parallel_tools", False)):
             return False
         if callable(getattr(self.executor, "prepare", None)):
-            return False
+            if not bool(getattr(self.executor, "allow_parallel_prepared_tools", False)):
+                return False
+            can_prepare_parallel = getattr(self.executor, "can_prepare_parallel", None)
+            if not callable(can_prepare_parallel) or not bool(can_prepare_parallel(calls)):
+                return False
         return all(
             (definition := self._tool_definitions.get(call.name)) is not None and definition.parallel_safe
             for call in calls

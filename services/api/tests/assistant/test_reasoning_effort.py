@@ -138,6 +138,37 @@ def test_required_tool_choice_client_disables_deepseek_v4_thinking(monkeypatch) 
     assert created[-1]["temperature"] == 0.1
 
 
+def test_required_tool_choice_client_disables_opencode_go_thinking(monkeypatch) -> None:
+    from app.agent import llm as agent_llm
+
+    created: list[dict[str, object]] = []
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+            self.openai_api_key = kwargs.get("api_key", "sk-test")
+            self.openai_api_base = kwargs.get("base_url", "https://opencode.ai/zen/go/v1")
+            self.model_name = kwargs.get("model", "deepseek-v4-flash")
+            self.max_tokens = kwargs.get("max_completion_tokens")
+            self.max_retries = kwargs.get("max_retries", 2)
+            self.default_headers = kwargs.get("default_headers")
+
+    monkeypatch.setattr(agent_llm, "ChatOpenAI", FakeChatOpenAI)
+    source = FakeChatOpenAI(
+        api_key="sk-test",
+        base_url="https://opencode.ai/zen/go/v1",
+        model="deepseek-v4-flash",
+        max_completion_tokens=1234,
+    )
+
+    action_llm = agent_llm.get_required_tool_choice_llm(source)
+
+    assert isinstance(action_llm, FakeChatOpenAI)
+    assert created[-1]["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert created[-1]["max_completion_tokens"] == 1234
+    assert created[-1]["temperature"] == 0.7
+
+
 def test_agent_llm_maps_anthropic_reasoning_effort(monkeypatch) -> None:
     from app.agent import llm as agent_llm
 

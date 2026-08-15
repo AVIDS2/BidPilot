@@ -364,58 +364,6 @@ function ResultFacts({ item }: { item: AssistantExecutionItem }) {
   );
 }
 
-function RunTrace({ item }: { item: AssistantExecutionItem }) {
-  if (!item.runtimeRunId && !item.turnId && !item.toolCallId) return null;
-  return (
-    <details className="cr-run-trace">
-      <summary>运行记录</summary>
-      <dl>
-        {item.runtimeRunId && <div><dt>运行</dt><dd>{item.runtimeRunId}</dd></div>}
-        {item.turnId && <div><dt>回合</dt><dd>{item.turnId}</dd></div>}
-        {item.toolCallId && <div><dt>操作</dt><dd>{item.toolCallId}</dd></div>}
-      </dl>
-    </details>
-  );
-}
-
-function redactPayload(value: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(value)
-      .slice(0, 24)
-      .map(([key, entry]) => [
-        key,
-        /(password|secret|token|api[_-]?key|authorization)/i.test(key) ? "***redacted***" : entry,
-      ]),
-  );
-}
-
-function ToolPayloadDetails({ item }: { item: AssistantExecutionItem }) {
-  const argumentsPayload = item.arguments && Object.keys(item.arguments).length > 0
-    ? redactPayload(item.arguments)
-    : null;
-  const resultPayload = item.result && Object.keys(item.result).length > 0
-    ? redactPayload(item.result)
-    : null;
-  if (!argumentsPayload && !resultPayload) return null;
-  return (
-    <details className="cr-run-trace cr-tool-payload">
-      <summary>工具输入与返回</summary>
-      {argumentsPayload && (
-        <div>
-          <small>输入参数</small>
-          <pre>{JSON.stringify(argumentsPayload, null, 2)}</pre>
-        </div>
-      )}
-      {resultPayload && (
-        <div>
-          <small>公开返回</small>
-          <pre>{JSON.stringify(resultPayload, null, 2)}</pre>
-        </div>
-      )}
-    </details>
-  );
-}
-
 interface ActivityTurn {
   id: string;
   items: AssistantExecutionItem[];
@@ -720,8 +668,6 @@ function StepDetail({
       <StructuredUiAction item={item} onOpenWorkflowCanvas={onOpenWorkflowCanvas} />
       <ArtifactActions item={item} t={t} />
       <WorkflowCanvasAction item={item} onOpenWorkflowCanvas={onOpenWorkflowCanvas} />
-      <ToolPayloadDetails item={item} />
-      <RunTrace item={item} />
       {canCancel && onCancelWorkflow && (
         <button
           type="button"

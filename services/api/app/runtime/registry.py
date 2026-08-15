@@ -23,6 +23,9 @@ class CapabilityDefinition:
 class PublicCapabilityResult:
     summary: str
     payload: dict[str, Any]
+    # Rich, redacted observation for the model only. The event feed and chat UI
+    # must use ``payload`` so ordinary users never receive raw service output.
+    observation_payload: dict[str, Any] | None = None
 
 
 _CAPABILITIES = (
@@ -580,11 +583,12 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
             for key in ("run_id", "runtime_run_id", "project_id", "section_key")
             if isinstance(result.get(key), str)
         }
-        section_key = result.get("section_key") or "目标章节"
+        section_key = result.get("section_key")
+        action = "起草" if capability_name == "start_draft_section" else "重写"
         summary = (
-            f"章节「{section_key}」起草工作流已启动。"
-            if capability_name == "start_draft_section"
-            else f"章节「{section_key}」重写工作流已启动。"
+            f"章节「{section_key}」{action}工作流已启动。"
+            if isinstance(section_key, str) and section_key.strip()
+            else f"{action}工作流已启动。"
         )
         return PublicCapabilityResult(summary, payload)
     if capability_name == "write_section":

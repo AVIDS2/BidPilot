@@ -63,6 +63,7 @@ function createState(): AIAssistantState {
       },
     ],
     pendingConfirmation: null,
+    pendingInput: null,
     sessionError: null,
     selectedProviderConfigId: null,
     reasoningEffort: "medium",

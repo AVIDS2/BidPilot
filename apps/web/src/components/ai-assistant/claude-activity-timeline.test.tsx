@@ -142,7 +142,8 @@ describe("ClaudeActivityTimeline", () => {
     expect(screen.getByText("文件已生成")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Download DOCX/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看交付物" })).toBeInTheDocument();
-    expect(screen.getByText("运行记录")).toBeInTheDocument();
+    expect(screen.queryByText("运行记录")).not.toBeInTheDocument();
+    expect(screen.queryByText("工具输入与返回")).not.toBeInTheDocument();
   });
 
   it("shows a concrete failure message and stable error code", () => {

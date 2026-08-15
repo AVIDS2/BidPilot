@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.assistant.task_state import clear_task_state, set_task_state
+from app.assistant.audit import redact_arguments
 from app.auth.schemas import CurrentUser
 from app.chat.service import bind_conversation_project_context
 from app.db import SessionLocal
@@ -71,6 +72,9 @@ class BidPilotToolExecutor:
     therefore sees the exact action it is about to execute, and an identical
     call key is replayed instead of run twice.
     """
+
+    allow_parallel_tools = True
+    allow_parallel_prepared_tools = True
 
     def __init__(
         self,
@@ -140,7 +144,6 @@ class BidPilotToolExecutor:
                         "title": title,
                         "tool_call_id": call.id,
                         "turn_id": context.turn_id,
-                        "arguments": dict(call.arguments),
                         "provider": f"mcp:{server_name}",
                     },
                 ),
@@ -255,6 +258,16 @@ class BidPilotToolExecutor:
         )
         return None
 
+    def can_prepare_parallel(self, calls: Sequence[HarnessToolCall]) -> bool:
+        """Restrict fan-out to read-only MCP sensing tools.
+
+        Product capabilities always create a RuntimeAction and may require
+        approval, so their ordering is intentionally preserved. MCP calls are
+        separately namespaced and sensing-only by default; their preflight is
+        local bookkeeping rather than a business mutation.
+        """
+        return bool(calls) and all(self._mcp_route(call.name) is not None for call in calls)
+
     async def execute(
         self,
         call: HarnessToolCall,
@@ -319,7 +332,11 @@ class BidPilotToolExecutor:
         if callable(getattr(self.db, "get", None)):
             clear_task_state(self.db, self.conversation_id)
         self._bind_created_project(prepared.capability_name, result.payload)
-        outcome = HarnessToolOutcome.succeeded(result.summary, result.payload)
+        outcome = HarnessToolOutcome.succeeded(
+            result.summary,
+            result.observation_payload or result.payload,
+            public_payload=result.payload,
+        )
         if prepared.mutation_key is not None:
             self._successful_mutations[prepared.mutation_key] = outcome
         return outcome
@@ -351,9 +368,31 @@ class BidPilotToolExecutor:
                 summary=message,
                 payload={"reason_code": "mcp_unavailable"},
             )
-            return HarnessToolOutcome.failed(message, error_code="mcp_unavailable", recoverable=True)
+            return HarnessToolOutcome.failed(
+                message,
+                error_code="mcp_unavailable",
+                recoverable=True,
+                # The model needs a machine-readable reason in order to choose
+                # a fallback or ask the user to retry. The browser only gets
+                # the short public message above.
+                model_payload={
+                    "provider": f"mcp:{prepared.server_name}",
+                    "error_code": "mcp_unavailable",
+                    "retryable": True,
+                },
+                public_payload={"reason_code": "mcp_unavailable"},
+            )
 
         payload = self._mcp_public_payload(outcome, call.arguments, prepared)
+        model_observation = self._mcp_model_observation(outcome, call.arguments, prepared)
+        # Search candidates are already normalized to a small public-safe
+        # schema. Surface them at the top level for the model as well: the
+        # next turn can select a source without parsing an arbitrary MCP blob.
+        if prepared.public_tool_name == "web_search":
+            for key in ("query", "count", "items"):
+                value = payload.get(key)
+                if value is not None:
+                    model_observation[key] = value
         summary = (
             f"联网搜索返回 {payload.get('count', 0)} 条结果。"
             if prepared.public_tool_name == "web_search"
@@ -367,7 +406,11 @@ class BidPilotToolExecutor:
             summary=summary,
             payload=payload,
         )
-        return HarnessToolOutcome.succeeded(summary, payload)
+        return HarnessToolOutcome.succeeded(
+            summary,
+            model_observation,
+            public_payload=payload,
+        )
 
     @staticmethod
     def _mcp_route(name: str) -> tuple[str, str, str, str] | None:
@@ -387,7 +430,7 @@ class BidPilotToolExecutor:
         arguments: Mapping[str, Any],
         prepared: _PreparedMcpTool,
     ) -> dict[str, Any]:
-        """Pass bounded, explicitly untrusted MCP data back to the model."""
+        """Build the small, user-facing projection of an MCP result."""
         if not isinstance(outcome, Mapping):
             outcome = {}
         if prepared.public_tool_name == "web_search":
@@ -405,6 +448,44 @@ class BidPilotToolExecutor:
         elif isinstance(content, str) and content.strip():
             payload["content"] = content[:2_000]
         return payload
+
+    @staticmethod
+    def _mcp_model_observation(
+        outcome: Any,
+        arguments: Mapping[str, Any],
+        prepared: _PreparedMcpTool,
+    ) -> dict[str, Any]:
+        """Return a bounded redacted MCP observation to the next model turn.
+
+        MCP results are external and untrusted. The harness nevertheless needs
+        the actual result, not the UI projection, so it can reason about empty
+        searches, select an attachment, or recover from a malformed response.
+        This boundary redacts secrets and hard-bounds the JSON before it ever
+        reaches a provider context window.
+        """
+        raw = redact_arguments(outcome)
+        try:
+            encoded = json.dumps(raw, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            encoded = json.dumps({"value": "<unserializable MCP result>"})
+            raw = {"value": "<unserializable MCP result>"}
+        max_characters = 12_000
+        result: Any = raw
+        truncated = len(encoded) > max_characters
+        if truncated:
+            result = {
+                "truncated": True,
+                "preview": encoded[:max_characters],
+                "original_characters": len(encoded),
+            }
+        return {
+            "provider": f"mcp:{prepared.server_name}",
+            "tool": prepared.tool_name,
+            "untrusted": True,
+            "request": redact_arguments(dict(arguments)),
+            "result": result,
+            "truncated": truncated,
+        }
 
     def _publish_mcp_result(
         self,

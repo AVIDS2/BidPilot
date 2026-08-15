@@ -43,7 +43,6 @@ from .harness_loop import (
     _extract_public_text_content,
     _sse,
     build_capability_tool_specs,
-    build_public_reasoning,
     build_turn_summary,
     resolve_harness_budgets,
 )
@@ -416,18 +415,9 @@ class CoreStreamingHarness(StreamingHarness):
                 )
             return
         if event.type == "turn.model_response":
-            narration = build_public_reasoning(
-                [],
-                active_project_id=self.active_project_id,
-                completed_capabilities=self._completed_capabilities,
-                model_narration=model.last_text,
-            )
-            if narration:
-                async for rendered in self._emit_public_reasoning(
-                    turn_id=event.turn_id or "turn-unknown",
-                    content=narration,
-                ):
-                    yield rendered
+            # Provider/model narration is internal working state. The user sees
+            # a durable activity status and the action result, never an inferred
+            # chain-of-thought or a raw tool protocol transcript.
             return
         if event.type == "plan.updated":
             payload = {
@@ -754,6 +744,7 @@ def _to_core_tool_definition(spec: Mapping[str, Any]) -> HarnessToolDefinition:
         name=str(function.get("name") or ""),
         description=str(function.get("description") or ""),
         parameters=dict(function.get("parameters") or {}),
+        parallel_safe=str(function.get("name") or "").startswith("mcp_"),
         provider_spec=dict(spec),
     )
 

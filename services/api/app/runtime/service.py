@@ -83,9 +83,9 @@ def _action_event_payload(action: RuntimeAction, **payload: Any) -> dict[str, An
     }
     if action.turn_id:
         value["turn_id"] = action.turn_id
-    # RuntimeAction already stores this payload through redact_arguments.
-    # Replay clients need it to explain what the tool was actually asked to do.
-    value["arguments"] = action.arguments_json or {}
+    # RuntimeAction stores redacted arguments for audit and operator diagnosis.
+    # Do not replay them through every ordinary conversation event. Approval
+    # events explicitly add the small, editable subset they need to render.
     value.update(payload)
     return value
 
@@ -1178,6 +1178,11 @@ def _execute_action(
             execution_arguments.setdefault("parent_runtime_run_id", run.id)
         raw_result = execute(db, user, execution_arguments)
         public_result = format_public_result(action.capability_name, raw_result)
+        public_result = PublicCapabilityResult(
+            public_result.summary,
+            public_result.payload,
+            observation_payload=redact_arguments(raw_result),
+        )
     except Exception as exc:
         failure = classify_capability_failure(exc)
         logger.warning(
