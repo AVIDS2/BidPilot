@@ -810,7 +810,7 @@ export function KnowledgePageV2() {
 
   async function handleDocumentDownload(document: SourceDocumentRead) {
     try {
-      const blob = await getDocumentBlob(document.id);
+      const blob = await getDocumentBlob(document.id, 120_000);
       const url = URL.createObjectURL(blob);
       const anchor = window.document.createElement("a");
       anchor.href = url;
