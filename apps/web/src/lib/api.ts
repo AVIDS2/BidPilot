@@ -162,6 +162,16 @@ async function requestBlob(path: string, options?: RequestInit): Promise<Blob> {
   throw lastError;
 }
 
+async function requestBlobWithTimeout(path: string, timeoutMs: number): Promise<Blob> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await requestBlob(path, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const ASSISTANT_DOWNLOAD_PATH =
   /^\/(?:export\/deliverables\/[0-9a-f-]{36}\/(?:docx|pdf)|readiness\/packs\/[0-9a-f-]{36}\/(?:xlsx|docx))$/i;
 
@@ -585,8 +595,8 @@ export function getDocumentDownloadUrl(documentId: string) {
   return `${API_BASE}/documents/${documentId}/download`;
 }
 
-export function getDocumentBlob(documentId: string) {
-  return requestBlob(`/documents/${documentId}/download`);
+export function getDocumentBlob(documentId: string, timeoutMs = 20_000) {
+  return requestBlobWithTimeout(`/documents/${documentId}/download`, timeoutMs);
 }
 
 // Assistant Attachments

@@ -727,6 +727,9 @@ export function KnowledgePageV2() {
       .some((value) => value.toLocaleLowerCase().includes(needle));
   }), [projectFilter, query, sharedKnowledge]);
   const selectedRecord = materialRecords.find((record) => record.document.id === selectedDocumentId) ?? null;
+  const selectedPreviewDocumentId = selectedRecord?.document.id ?? null;
+  const selectedPreviewMimeType = selectedRecord?.document.mime_type ?? "";
+  const selectedPreviewFilename = selectedRecord?.document.original_filename ?? "";
   const failedCount = materialRecords.filter((record) => record.document.parse_status === "failed" || ["failed", "degraded"].includes(record.document.index_status)).length;
   const processingCount = materialRecords.filter((record) => (record.document.parse_status !== "parsed" && record.document.parse_status !== "failed" && record.document.parse_status !== "not_applicable") || record.document.index_status === "indexing").length;
   const uploadMutation = useMutation({
@@ -774,7 +777,9 @@ export function KnowledgePageV2() {
   }, [projects, uploadProjectId]);
 
   useEffect(() => {
-    if (!selectedRecord || !isPreviewableDocument(selectedRecord.document)) {
+    const isText = selectedPreviewMimeType.startsWith("text/") || /\.(?:txt|md|markdown|csv|json|xml|ya?ml)$/i.test(selectedPreviewFilename);
+    const isPreviewable = selectedPreviewMimeType === "application/pdf" || selectedPreviewMimeType.startsWith("image/") || isText;
+    if (!selectedPreviewDocumentId || !isPreviewable) {
       setPreviewUrl(null);
       setTextPreview(null);
       setPreviewError(false);
@@ -785,10 +790,10 @@ export function KnowledgePageV2() {
     setPreviewUrl(null);
     setTextPreview(null);
     setPreviewError(false);
-    void getDocumentBlob(selectedRecord.document.id)
+    void getDocumentBlob(selectedPreviewDocumentId)
       .then((blob) => {
         if (!active) return;
-        if (isTextDocument(selectedRecord.document)) {
+        if (isText) {
           return blob.text().then((value) => {
             if (active) setTextPreview(value.slice(0, 100_000));
           });
@@ -801,7 +806,7 @@ export function KnowledgePageV2() {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [selectedRecord]);
+  }, [selectedPreviewDocumentId, selectedPreviewFilename, selectedPreviewMimeType]);
 
   async function handleDocumentDownload(document: SourceDocumentRead) {
     try {
