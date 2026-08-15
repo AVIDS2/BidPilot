@@ -334,7 +334,6 @@ function resultFacts(item: AssistantExecutionItem): ResultFact[] {
   add("处理状态", "status", publicStatusText);
   add("解析状态", "parse_status", publicStatusText);
   add("入库状态", "storage_status", publicStatusText);
-  add("结果数量", "count");
   add("附件数量", "attachment_count");
   add("已处理章节", "processed_count");
   add("待处理章节", "remaining_count");

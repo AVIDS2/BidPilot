@@ -8,13 +8,10 @@ import {
 } from "react";
 import {
   BotIcon,
-  CircleAlertIcon,
-  CirclePauseIcon,
   ChevronDownIcon,
   Clock3Icon,
   FileSearchIcon,
   FileTextIcon,
-  LoaderCircleIcon,
   MoreHorizontalIcon,
   PanelTopIcon,
   PencilIcon,
@@ -352,58 +349,6 @@ function AgentFooter({ onHistory }: { onHistory: () => void }) {
   );
 }
 
-function latestRelevantExecution(state: AIAssistantState, status: AIAssistantState["status"]) {
-  return [...state.executionItems]
-    .reverse()
-    .find((item) =>
-      status === "failed"
-        ? item.status === "failed"
-        : item.status === "running" || item.status === "pending",
-    );
-}
-
-function scrollToLatestAgentTrace() {
-  document.querySelector(".cr-task-trace:last-of-type, .assistant-claude-timeline:last-of-type")
-    ?.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
-/**
- * Pi/OpenCode keep session state attached to the active turn instead of
- * permanently decorating the page chrome. Hide idle/completed states and
- * surface only the concrete blocking or executing step above the composer.
- */
-function AgentRunIndicator({ state }: { state: AIAssistantState }) {
-  const status = state.status;
-  const active = latestRelevantExecution(state, status);
-  if (status === "idle" || status === "completed") return null;
-
-  const tone = status === "failed" ? "failed" : status === "needs_input" || status === "needs_confirmation" ? "waiting" : "running";
-  const Icon = tone === "failed" ? CircleAlertIcon : tone === "waiting" ? CirclePauseIcon : LoaderCircleIcon;
-  const headline =
-    status === "thinking" ? "正在理解你的请求" :
-    status === "needs_input" ? "还需要你补充信息" :
-    status === "needs_confirmation" ? "等待你确认下一步" :
-    status === "running_workflow" ? "正在运行任务编排" :
-    status === "failed" ? "这一步没有完成" : "正在执行";
-  const detail =
-    status === "needs_input" ? state.pendingInput?.message :
-    status === "needs_confirmation" ? state.pendingConfirmation?.message :
-    active?.summary || active?.title || (status === "thinking" ? "正在整理上下文与下一步" : "执行详情会实时出现在本轮轨迹中");
-
-  return (
-    <div className={`agent-run-indicator is-${tone}`} role="status" aria-live="polite">
-      <Icon aria-hidden="true" size={15} />
-      <span className="agent-run-indicator-copy">
-        <strong>{headline}</strong>
-        {detail ? <small>{detail}</small> : null}
-      </span>
-      <button type="button" onClick={scrollToLatestAgentTrace}>
-        查看轨迹
-      </button>
-    </div>
-  );
-}
-
 export function LinearAgentWorkspace() {
   const navigate = useNavigate();
   const {
@@ -570,7 +515,6 @@ export function LinearAgentWorkspace() {
                   onOpenWorkflowCanvas={openWorkflowCanvas}
                 />
                 <div className="bp-linear-agent-composer-slot" aria-label="Agent composer">
-                  <AgentRunIndicator state={state} />
                   <AIAssistantPanel
                     variant="linear-agent"
                     onPreviewAttachment={(selection) => {
