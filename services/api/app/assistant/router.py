@@ -18,12 +18,10 @@ from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
 from app.chat.service import resolve_conversation_project_context
 from app.db import get_db
-from app.models import RuntimeAction, RuntimeRun
 from app.providers.service import get_provider_config
 from app.runtime.service import (
     assistant_turn_idempotency_key,
     find_idempotent_runtime_run,
-    find_pending_approval_for_conversation,
 )
 from app.security.secrets import decrypt_secret
 from app.usage.schemas import ProviderSource
@@ -40,12 +38,7 @@ from .attachments import (
     hydrate_assistant_attachments,
     stage_assistant_attachment,
 )
-from .runtime import classify_locally
-from .schemas import AssistantAttachmentUploadResponse, AssistantIntent, AssistantRequest
-from app.runtime.assistant_adapter import (
-    _is_confirmation_followup,
-    stream_runtime_assistant_response,
-)
+from .schemas import AssistantAttachmentUploadResponse, AssistantRequest
 from app.runtime.operator_adapter import stream_existing_assistant_run, stream_operator_assistant_response
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -121,41 +114,6 @@ def _assistant_engine() -> str:
     """
     configured = os.getenv("DOCPILOT_ASSISTANT_ENGINE", "harness").lower()
     return LEGACY_ASSISTANT_ENGINE_ALIASES.get(configured, configured)
-
-
-def _deterministic_demo_intent(payload: AssistantRequest) -> AssistantIntent | None:
-    """Recognize only the no-model first-run demo capability.
-
-    All other messages remain with the configured assistant engine. This keeps
-    the fast path bounded instead of turning the local classifier into a
-    general replacement for the LangGraph operator.
-    """
-    if payload.confirmation is not None:
-        return None
-    intent = classify_locally(payload.message, payload.project_id)
-    return intent if intent.tool_name == "create_demo_workspace" else None
-
-
-def _resumes_deterministic_runtime_approval(
-    db: Session,
-    user: CurrentUser,
-    payload: AssistantRequest,
-) -> bool:
-    """Keep a demo approval on its original durable Runtime run.
-
-    The operator adapter owns only ``langgraph_operator`` runs, so routing a
-    confirmation for a deterministic run back to it would strand the approval.
-    """
-    if not payload.conversation_id or (
-        payload.confirmation is None and not _is_confirmation_followup(payload.message)
-    ):
-        return False
-    approval = find_pending_approval_for_conversation(db, user, payload.conversation_id)
-    if approval is None:
-        return False
-    action = db.get(RuntimeAction, approval.action_id)
-    run = db.get(RuntimeRun, action.run_id) if action is not None else None
-    return run is not None and run.engine == "deterministic"
 
 
 @router.post("/attachments", response_model=AssistantAttachmentUploadResponse)
@@ -241,25 +199,6 @@ async def assistant_stream(
         }
     )
 
-    # A first-run demo seeds bounded built-in data through Runtime; it must not
-    # depend on a provider configuration, model availability, or AI quota.
-    deterministic_demo_intent = _deterministic_demo_intent(payload)
-    if deterministic_demo_intent is not None:
-        payload = payload.model_copy(update={"provider_config_id": None})
-    if deterministic_demo_intent is not None or _resumes_deterministic_runtime_approval(
-        db,
-        user,
-        payload,
-    ):
-        return _assistant_sse_response(
-            stream_runtime_assistant_response(
-                db,
-                user,
-                payload,
-                intent_override=deterministic_demo_intent,
-            )
-        )
-
     provider_source, provider_type, provider_id, api_key, base_url, model, provider_config_id = _resolve_request_provider(db, user, payload)
     payload = payload.model_copy(update={"provider_config_id": provider_config_id})
     try:
@@ -282,8 +221,6 @@ async def assistant_stream(
                 model=model,
             )
         )
-    if assistant_engine == "deterministic":
-        return _assistant_sse_response(stream_runtime_assistant_response(db, user, payload))
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail=f"Unsupported assistant runtime: {assistant_engine}",

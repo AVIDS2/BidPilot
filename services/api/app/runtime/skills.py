@@ -33,41 +33,6 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[4]
 _SKILLS_DIR = _ROOT / "docs" / "agent-skills"
 
-# Fallback triggers only used when a SKILL.md has no parseable frontmatter.
-# New skills should declare their own description; this table keeps the two
-# existing packs stable while the loader is upgraded.
-_LEGACY_TRIGGERS: dict[str, tuple[str, ...]] = {
-    "bid-outline-first": (
-        "起草",
-        "拟草",
-        "章节",
-        "大纲",
-        "write_section",
-        "start_draft",
-        "执行摘要",
-        "全部章节",
-        "多章节",
-        "整本",
-        "campaign",
-        "section",
-        "draft",
-        "outline",
-    ),
-    "bid-research": (
-        "研究",
-        "调研",
-        "联网",
-        "web_search",
-        "检索资料",
-        "政策",
-        "竞品",
-        "fetch_url",
-        "research",
-        "search the web",
-    ),
-}
-
-
 @dataclass(frozen=True)
 class SkillMetadata:
     """Level-1 discovery record for one skill."""
@@ -167,62 +132,14 @@ def _read_skill_body(skill_name: str) -> str:
     return "\n".join(compact).strip()
 
 
-def _description_keywords(description: str) -> list[str]:
-    """Tokenize a skill description for deterministic routing.
+def select_skill_names(_user_message: str = "", *, max_skills: int = 2) -> list[str]:
+    """Return the bounded skill set available to the model this turn.
 
-    Extracts both English words (>=3 chars) and meaningful Chinese fragments
-    (2-4 char runs), since descriptions may be authored in either language.
-    Routing stays on the description (the spec's routing contract) without
-    invoking an LLM per turn.
+    Skill activation is intentionally model-driven. The runtime never routes
+    on user-message fragments, trigger tables, or lexical similarity.
     """
-    lowered = description.casefold()
-    keywords: list[str] = []
-    for token in re.findall(r"[a-z0-9][a-z0-9_-]{2,}", lowered):
-        if len(token) >= 3:
-            keywords.append(token)
-    # Chinese runs: split into 2-4 char fragments so routing tolerates
-    # wording variation ("投标" / "投标文件" / "技术标书").
-    for run in re.findall(r"[一-鿿]{2,}", description):
-        if len(run) <= 4:
-            keywords.append(run)
-        else:
-            for index in range(len(run) - 1):
-                fragment = run[index : index + 2]
-                if fragment not in keywords:
-                    keywords.append(fragment)
-    return keywords
-
-
-def select_skill_names(user_message: str, *, max_skills: int = 2) -> list[str]:
-    """Return skill names whose description matches the user message.
-
-    Matching runs against ``description`` (the standard routing signal) plus a
-    legacy Chinese-trigger fallback for existing packs.  Skills are ranked by
-    how many description keywords hit, so a more specific skill (e.g. the
-    tender writer) wins over a generic one (e.g. outline-first) when both
-    could apply.  Both signals are conservative keyword checks; neither ever
-    executes the skill body.
-    """
-    text = (user_message or "").strip()
-    if not text:
-        return []
-    lowered = text.casefold()
-    index = build_skill_index()
-    scored: list[tuple[int, int, str]] = []  # (hit_count, index_order, name)
-    for order, skill in enumerate(index):
-        desc = skill.description.strip()
-        score = 0
-        if desc and desc.casefold() != "no description provided.":
-            score += sum(1 for keyword in _description_keywords(desc) if keyword in lowered)
-        # Legacy Chinese/English trigger fallback.
-        legacy = _LEGACY_TRIGGERS.get(skill.name, ())
-        if any(trigger in text or trigger.casefold() in lowered for trigger in legacy):
-            score += 1
-        if score > 0:
-            scored.append((score, order, skill.name))
-    # Highest specificity first; stable tie-break by discovery order.
-    scored.sort(key=lambda item: (-item[0], item[1]))
-    return [name for _score, _order, name in scored[:max_skills]]
+    del max_skills
+    return [skill.name for skill in build_skill_index()]
 
 
 def build_skill_index_block() -> str:
@@ -236,7 +153,7 @@ def build_skill_index_block() -> str:
 
 
 def build_skill_prompt_block(user_message: str) -> str:
-    """Return an optional system-prompt appendix with matched skill bodies."""
+    """Return the model-visible skill bodies without message-based routing."""
     names = select_skill_names(user_message)
     if not names:
         return ""

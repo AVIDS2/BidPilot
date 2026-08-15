@@ -111,44 +111,6 @@ ModelUsageObserver = Callable[[ProviderUsageMeasurement | None], None]
 BeforeModelCall = Callable[[OperatorPlanningContext], None]
 
 
-def _extract_project_name_from_request(user_message: str) -> str | None:
-    """Extract only an explicitly named project from a user request."""
-    for marker in (
-        "项目名称是",
-        "项目名称为",
-        "项目名是",
-        "项目名为",
-        "名字叫",
-        "名称叫",
-        "名为",
-        "叫做",
-        "叫",
-        "创建项目：",
-        "创建项目:",
-        "新建项目：",
-        "新建项目:",
-    ):
-        if marker not in user_message:
-            continue
-        candidate = user_message.split(marker, 1)[1]
-        for delimiter in ("，", ",", "。", "！", "!", "？", "?", "\n"):
-            candidate = candidate.split(delimiter, 1)[0]
-        name = candidate.strip("“”\\\"' ：: ")
-        if name and name not in {"项目", "名字", "名称"}:
-            return name[:80]
-    return None
-
-
-def _is_explicit_project_creation_request(user_message: str) -> bool:
-    normalized = user_message.lower()
-    mentions_project = "项目" in user_message or "project" in normalized
-    requests_creation = any(
-        marker in normalized
-        for marker in ("创建", "新建", "建立", "建一个", "开一个", "create", "new project")
-    )
-    return mentions_project and requests_creation
-
-
 def _project_next_step_message() -> str:
     return "下一步可以上传招标文件、需求清单或参考资料；我会据此整理要求、证据和待办事项。"
 
@@ -166,18 +128,13 @@ def _normalize_plan_arguments(
 
     arguments = dict(plan.arguments)
     if plan.capability_name == "create_project":
-        if active_project_id and not _is_explicit_project_creation_request(user_message):
-            return OperatorPlan(mode="answer", message=_project_next_step_message())
-        explicit_name = _extract_project_name_from_request(user_message)
         pending_name = bool(
             pending_input
             and pending_input.get("capability_name") == "create_project"
             and "name" in (pending_input.get("missing_fields") or [])
         )
         if not isinstance(arguments.get("name"), str) or not arguments["name"].strip():
-            if explicit_name:
-                arguments["name"] = explicit_name
-            elif pending_name:
+            if pending_name:
                 candidate = user_message.strip("“”\\\"' ")
                 if candidate:
                     arguments["name"] = candidate[:80]
@@ -327,7 +284,7 @@ def build_langchain_planner(
                 )
             except TypeError:
                 # Older test doubles and integrations may not expose either
-                # keyword. They remain functional without raw telemetry.
+                # argument. They remain functional without raw telemetry.
                 structured_model = llm.with_structured_output(OperatorPlan)
     capability_list = "、".join(
         f"{definition.name}（{definition.label_zh}）"

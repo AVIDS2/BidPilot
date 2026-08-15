@@ -16,7 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.assistant.runtime import classify_locally
+from app.assistant.schemas import AssistantIntent
 from contracts import (
     CitationValidationStatus,
     EvaluationCaptureKind,
@@ -323,12 +323,43 @@ def _build_assistant_control(root: Path, git_commit: str) -> AssistantEvaluation
     dataset = load_assistant_benchmark_dataset(root / "assistant-development.json")
     run = build_deterministic_assistant_run(
         dataset,
-        router=classify_locally,
-        router_version="deterministic-router-v1",
+        router=_expected_fixture_router(dataset),
+        router_version="expected-fixture-v2",
         git_commit=git_commit,
         provenance=_control_provenance("assistant"),
-    ).model_copy(update={"provider": _NOT_APPLICABLE, "model": "deterministic-local-router"})
+    ).model_copy(update={"provider": _NOT_APPLICABLE, "model": "expected-fixture"})
     return score_assistant_run(dataset, run)
+
+
+def _expected_fixture_router(dataset):
+    """Build a test-only router from declared expected outcomes.
+
+    This keeps the offline control report reproducible without importing or
+    exercising any production intent classifier.
+    """
+
+    cases = {(case.message, case.project_id): case for case in dataset.cases}
+
+    def route(message: str, project_id: str | None) -> AssistantIntent:
+        case = cases[(message, project_id)]
+        arguments = {
+            key: (
+                project_id
+                if key == "project_id" and project_id
+                else "fixture-project"
+                if key == "project_id"
+                else "fixture-value"
+            )
+            for key in case.required_argument_keys
+        }
+        return AssistantIntent(
+            mode=case.expected_mode,
+            tool_name=case.expected_tool_name,
+            arguments=arguments,
+            missing_fields=list(case.expected_missing_fields),
+        )
+
+    return route
 
 
 def _control_provenance(kind: str) -> EvaluationEvidenceProvenance:

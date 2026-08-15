@@ -160,22 +160,6 @@ def _mcp_search_payload(
         "items": items,
     }
 
-# Messages / capabilities that justify a higher step budget without global YOLO.
-_CAMPAIGN_MESSAGE_MARKERS = (
-    "全部章节",
-    "所有章节",
-    "整本",
-    "多章节",
-    "批量起草",
-    "完整起草",
-    "整包导出",
-    "导出全套",
-    "研究并写入",
-    "run_section_campaign",
-    "section campaign",
-    "all sections",
-    "full draft",
-)
 _CAMPAIGN_CAPABILITIES = frozenset(
     {
         "run_section_campaign",
@@ -189,33 +173,6 @@ _CAMPAIGN_CAPABILITIES = frozenset(
     }
 )
 
-# "Test yourself" must not become permission to randomly create, edit, or
-# delete customer data. Keep those requests useful by limiting the model to
-# read-only diagnostic capabilities unless the user also names a real action.
-_DIAGNOSTIC_MESSAGE_MARKERS = (
-    "随便调用",
-    "随便用",
-    "测试工具",
-    "测试一下",
-    "测试你的",
-    "长任务能力",
-    "多轮调用",
-)
-_MUTATING_REQUEST_MARKERS = (
-    "创建",
-    "删除",
-    "上传",
-    "写入",
-    "起草",
-    "导出",
-    "配置",
-    "修改",
-    "更新",
-    "提交",
-    "审批",
-    "同步",
-    "抓取",
-)
 _SAFE_DIAGNOSTIC_CAPABILITIES = frozenset(
     {
         "search_projects",
@@ -283,10 +240,8 @@ def public_model_failure_message(exc: Exception) -> str:
 
 
 def _is_diagnostic_only_request(user_message: str) -> bool:
-    text = (user_message or "").strip()
-    return bool(text) and any(marker in text for marker in _DIAGNOSTIC_MESSAGE_MARKERS) and not any(
-        marker in text for marker in _MUTATING_REQUEST_MARKERS
-    )
+    del user_message
+    return False
 
 
 def resolve_harness_budgets(
@@ -300,9 +255,7 @@ def resolve_harness_budgets(
     campaign language (or an explicit force) raises the ceiling further while
     cancellation and consecutive-failure guards remain in force.
     """
-    text = (user_message or "").strip()
-    lowered = text.casefold()
-    if force_campaign or any(marker in text or marker in lowered for marker in _CAMPAIGN_MESSAGE_MARKERS):
+    if force_campaign:
         return HARNESS_CAMPAIGN_MAX_STEPS, HARNESS_CAMPAIGN_MAX_TOOLS_PER_TURN
     return HARNESS_MAX_STEPS, HARNESS_MAX_TOOLS_PER_TURN
 
@@ -311,7 +264,7 @@ def resolve_harness_budgets(
 _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
     "search_projects": {
         "type": "object",
-        "properties": {"query": {"type": "string", "description": "Optional project name keyword"}},
+        "properties": {"query": {"type": "string", "description": "Optional project name or phrase"}},
         "additionalProperties": False,
     },
     "create_demo_workspace": {"type": "object", "properties": {}, "additionalProperties": False},
