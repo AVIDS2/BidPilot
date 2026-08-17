@@ -44,27 +44,18 @@ function renderPanel() {
 }
 
 async function expandActivityDetails() {
-  // Completed trace details stay collapsed until the reader asks for them.
+  // Completed task turns stay collapsed until the reader asks for them.
   await waitFor(() => {
-    expect(
-      screen.queryByRole("button", { name: "Expand activity details" }) ||
-        screen.queryByRole("button", { name: "Collapse activity details" }),
-    ).toBeTruthy();
+    expect(document.querySelector(".cr-task-turn-summary")).toBeTruthy();
   });
-  const collapse = screen.queryByRole("button", {
-    name: "Collapse activity details",
-  });
-  if (collapse) {
-    expect(collapse).toHaveAttribute("aria-expanded", "true");
+  const summary = document.querySelector<HTMLButtonElement>(".cr-task-turn-summary");
+  if (!summary) throw new Error("Task turn summary was not rendered");
+  if (summary.getAttribute("aria-expanded") === "true") {
     return;
   }
-  fireEvent.click(
-    screen.getByRole("button", { name: "Expand activity details" }),
-  );
+  fireEvent.click(summary);
   await waitFor(() => {
-    expect(
-      screen.getByRole("button", { name: "Collapse activity details" }),
-    ).toHaveAttribute("aria-expanded", "true");
+    expect(summary).toHaveAttribute("aria-expanded", "true");
   });
 }
 
@@ -781,8 +772,7 @@ describe("AIAssistantPanel", () => {
     expect(
       screen.queryByText("raw detail should be hidden until expanded"),
     ).not.toBeInTheDocument();
-    const turn = screen.getByRole("button", { name: /Turn 1/ });
-    fireEvent.click(turn);
+    await expandActivityDetails();
     await expandToolDetails("Open page");
     expect(
       screen.getByText("raw detail should be hidden until expanded"),

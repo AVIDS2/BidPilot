@@ -184,6 +184,59 @@ Expected outcomes:
 
 See [P0-D8 Role-Aware Bid Rehearsal](role-aware-rehearsal.md).
 
+## Scenario AC-09: Read-only opportunity research convergence
+
+Purpose:
+
+- prove that the Assistant can research public tender opportunities without
+  silently mutating business state or entering an unbounded search loop
+
+Steps:
+
+1. ask for no more than five current opportunities in one city and explicitly
+   prohibit project creation, downloads, imports, workflows, and form submits
+2. observe the initial public acknowledgement and the single nested research
+   task timeline
+3. verify the model loads `opportunity-deep-research` by exact Skill name
+4. repeat one identical search request and continue until the research budget
+   closes
+5. inspect the final answer and durable Runtime events
+
+Expected outcomes:
+
+- no mutation capability executes
+- duplicate queries do not reach the search provider
+- no more than six actual searches execute; two no-new-source rounds force
+  synthesis, and three post-boundary attempts hard-stop the run
+- the final answer cites traceable sources and marks unknown facts as pending
+  verification
+- the browser shows one parent task, meaningful progress, and source links;
+  it does not expose raw queries, tool parameters, or result counts
+
+## Scenario AC-10: Project-plan limit is terminal and truthful
+
+Purpose:
+
+- prove that approval automation cannot be confused with account entitlement,
+  and that a non-recoverable plan limit never causes repeated project creation
+
+Steps:
+
+1. use a starter workspace already at its project-count limit
+2. select the `Auto-run` / `自动执行` approval mode
+3. ask the Assistant to create one named opportunity project
+4. inspect capability calls, the final user message, and Runtime events
+
+Expected outcomes:
+
+- `create_project` executes exactly once
+- the run terminates with `project_limit_exceeded`, not
+  `capability_input_invalid`
+- the user is told to archive an existing project or adjust the plan
+- no second model/tool attempt occurs and no project is created
+- the approval-mode hint states that account permissions, plan quotas, and
+  safety boundaries still apply
+
 ## Release requirement
 
 A release is not production-ready unless the scenarios relevant to its phase pass with current code and current docs.

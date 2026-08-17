@@ -654,7 +654,7 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
         if items:
             payload["items"] = items
         return PublicCapabilityResult(
-            f"联网搜索返回 {count} 条结果。",
+            "已获得可追溯的公开来源，正在核对关键信息。",
             {k: v for k, v in payload.items() if v is not None},
         )
     if capability_name == "discover_remote_documents":

@@ -55,6 +55,10 @@ refer to the older operator path; this inventory is the current authority.
   `RuntimeApproval` is the durable approval record; text confirmation is only
   a UI/input method, never the authority itself.
 - Destructive actions can require typed confirmation even in `full_access`.
+- `approval_mode=full_access` means that optional confirmation prompts may be
+  skipped. It never bypasses account authorization, tenant boundaries, plan
+  quotas, required inputs, idempotency, or destructive-action safeguards. The
+  product label is `Auto-run` / `自动执行` so this boundary is explicit.
 - A workflow started by a capability creates a `RuntimeRun(kind=workflow_bridge)`
   linked to its parent assistant turn and to the worker `ExecutionRun`.
 
@@ -83,6 +87,11 @@ not reuse the original submit ID as a new assistant turn.
 - Supported reasoning levels are exactly `low`, `medium`, `high`, `extra`,
   and `max`. Adapter mappings may reduce unsupported provider levels, but the
   public vocabulary does not change per provider.
+- Capability failures are classified into stable public error codes before
+  they are returned to the model or user. Non-recoverable business outcomes
+  such as `project_limit_exceeded`, invalid input, forbidden access, missing
+  resources, and state conflicts terminate the run after the first attempt.
+  They must not enter the generic consecutive-failure retry loop.
 
 ## Event contract
 
@@ -120,6 +129,10 @@ Before changing this runtime, preserve tests for:
 - attachment hydration from server-owned staged metadata
 - redacted provider/model failures after the SSE stream starts
 - workflow bridge linkage between assistant run and worker execution
+- one-attempt termination for non-recoverable capability failures, including
+  project plan limits even when approval mode is `full_access`
+- dynamic Skill loading without keyword routing, duplicate-search suppression,
+  research convergence, and one nested public task timeline
 
 ## External MCP tools (sensing extensions)
 
@@ -157,13 +170,27 @@ may expose mutation tools.
 
 Skills live under `docs/agent-skills/<name>/SKILL.md` with standard YAML
 frontmatter (`name`, `description`). The Harness loads Level-1 metadata
-(name + description) into `AVAILABLE_SKILLS` every turn and reads the selected
-skill body (Level 2) only when routed. Routing runs against the description
-(English + Chinese fragments) plus a legacy trigger table, ranked by
-specificity.
+(name + description) into `AVAILABLE_SKILLS` every turn. The model selects a
+skill by meaning and calls the server-owned `read_skill(name)` tool to load its
+Level-2 body. The server accepts only an exact allowlisted skill name. Product
+code must not route skills by matching user-message keywords.
 
 Current skills:
 
 - `bid-outline-first` — resolve outline `section_key` before drafting
 - `bid-research` — external research, fetch pages into project, cite
 - `bid-tender-writer` — five-stage tender technical response workflow
+- `opportunity-deep-research` — read-only opportunity research with official
+  source verification, explicit search budgets, deduplication, and convergence
+
+### Research convergence
+
+Read-only opportunity research is one public parent task, not a flat list of
+search turns. The Harness deduplicates normalized queries, permits at most six
+search calls, and closes research after two rounds without a new source. The
+model then receives a trusted instruction to synthesize the answer and mark
+unknown facts as pending verification. If it still requests searches three
+times after the boundary, the Harness terminates the loop with a concise public
+message. Search counts and raw queries remain model/system observations; the
+user timeline shows sources, verification progress, and the final evidence-
+backed answer.

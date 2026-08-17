@@ -184,6 +184,45 @@ describe("ClaudeAgentThread", () => {
     expect(screen.getAllByText(/先确认项目范围，再读取大纲。/)).toHaveLength(1);
   });
 
+  it("groups multiple model turns under one parent task timeline", () => {
+    const state = createState();
+    state.messages[1] = {
+      ...state.messages[1],
+      content: "",
+      transcriptParts: [
+        {
+          id: "task-title",
+          kind: "reasoning",
+          text: "招标机会调研",
+          title: "招标机会调研",
+          source: "harness",
+          turnId: "turn-search-1",
+          completed: true,
+          timestamp: 2,
+        },
+        { id: "turn-1", kind: "turn", turnId: "turn-search-1", timestamp: 3 },
+        { id: "turn-2", kind: "turn", turnId: "turn-search-2", timestamp: 4 },
+      ],
+    };
+    state.executionItems = [
+      { ...state.executionItems[0], id: "search-1", turnId: "turn-search-1", toolName: "web_search" },
+      { ...state.executionItems[0], id: "search-2", turnId: "turn-search-2", toolName: "web_search" },
+    ];
+
+    render(
+      <ClaudeAgentThread
+        state={state}
+        onCancelWorkflow={vi.fn().mockResolvedValue(undefined)}
+        onConfigureProvider={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancelConfirmation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByTestId("assistant-timeline")).toHaveLength(1);
+    expect(screen.getByText("招标机会调研: web_search,web_search")).toBeInTheDocument();
+  });
+
   it("sends user retry through the durable checkpoint action", () => {
     const onRetryFromCheckpoint = vi.fn();
     const state = createState();

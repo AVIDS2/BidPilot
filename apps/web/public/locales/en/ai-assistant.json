@@ -27,13 +27,13 @@
     "options": {
       "request_approval": "Request approval",
       "risky_only": "Approve risky",
-      "full_access": "Full access",
+      "full_access": "Auto-run",
       "custom": "Custom"
     },
     "hints": {
       "request_approval": "Ask before every change",
       "risky_only": "Only stop risky actions",
-      "full_access": "Auto-run most actions; deletes still confirm",
+      "full_access": "Skip optional confirmations; account permissions, plan limits, and safety boundaries still apply",
       "custom": "Use organization policy"
     }
   },

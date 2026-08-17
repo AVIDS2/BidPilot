@@ -490,6 +490,20 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                     },
                 )
             ]
+        if stage == "task_started":
+            return [
+                _sse(
+                    "assistant.task_started",
+                    {
+                        **runtime_metadata,
+                        "turn_id": turn_id,
+                        "title": payload.get("title") or event.public_summary,
+                        "summary": event.public_summary,
+                        "skill_name": payload.get("skill_name"),
+                        "state": "thinking",
+                    },
+                )
+            ]
         if stage == "tool_plan":
             return [
                 _sse(

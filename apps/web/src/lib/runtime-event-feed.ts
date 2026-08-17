@@ -169,6 +169,19 @@ export function runtimeEventToAssistantEvents(
           data: { ...metadata, turn_id: turnId, summary: event.public_summary, state: "thinking" },
         }];
       }
+      if (stage === "task_started") {
+        return [{
+          eventType: "assistant.task_started",
+          data: {
+            ...metadata,
+            turn_id: turnId,
+            title: asString(payload.title) || event.public_summary,
+            summary: event.public_summary,
+            skill_name: asString(payload.skill_name),
+            state: "thinking",
+          },
+        }];
+      }
       if (stage === "tool_plan") {
         return [{
           eventType: "assistant.plan_updated",

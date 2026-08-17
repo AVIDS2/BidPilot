@@ -191,6 +191,11 @@ def test_build_public_reasoning_uses_only_safe_model_authored_progress() -> None
         completed_capabilities=[],
         model_narration="SERVER_AUTHORIZATION_SCOPE: actor_id=secret",
     ) is None
+    assert "官方来源" in (build_public_reasoning(
+        ["web_search"],
+        active_project_id=None,
+        completed_capabilities=[],
+    ) or "")
 
 
 def test_extract_public_text_content_keeps_text_blocks_and_drops_reasoning() -> None:
@@ -209,6 +214,29 @@ def test_resolve_harness_budgets_raises_for_campaign_language() -> None:
     # A campaign is one governed capability; its worker owns each internal
     # wave, so the model must not batch unrelated writes in the same turn.
     assert campaign_tools == 1
+
+
+def test_research_queries_are_deduplicated_and_bounded() -> None:
+    from app.usage.schemas import ProviderSource
+
+    harness = StreamingHarness(
+        db=_FakeDb(),  # type: ignore[arg-type]
+        user=_FakeUser(),  # type: ignore[arg-type]
+        run=_FakeRun(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        llm=_FakeBoundLLM([]),
+        provider_type="openai",
+        provider_source=ProviderSource.OFFICIAL,
+        model="test",
+        user_message="调研常州招标机会",
+    )
+
+    assert harness._search_block_reason({"query": "常州 医疗 信息化 招标"}) is None
+    assert "已经执行过" in (harness._search_block_reason({"query": "  常州   医疗 信息化 招标 "}) or "")
+    harness._record_search_result({"items": []})
+    harness._record_search_result({"items": []})
+    assert harness._search_must_finalize is True
+    assert "收敛边界" in (harness._search_block_reason({"query": "常州 政务 数字化 招标"}) or "")
 
 
 def test_harness_commits_when_capacity_reservation_is_not_needed(
@@ -872,6 +900,188 @@ def test_streaming_harness_stops_after_repeated_tool_failures_without_leaking_er
     )
 
 
+def test_streaming_harness_stops_after_one_project_limit_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from app.runtime import harness_loop as module
+    from app.usage.schemas import ProviderSource
+
+    llm = _FakeBoundLLM(
+        [
+            _FakeAIMessage(
+                tool_calls=[
+                    {
+                        "id": "call-create",
+                        "name": "create_project",
+                        "args": {"name": "常州智慧医保惠民服务提升项目"},
+                    }
+                ]
+            ),
+            _FakeAIMessage(
+                tool_calls=[
+                    {
+                        "id": "call-create-again",
+                        "name": "create_project",
+                        "args": {"name": "常州智慧医保惠民服务提升项目"},
+                    }
+                ]
+            ),
+        ]
+    )
+    executed: list[str] = []
+    terminal_failures: list[dict[str, Any]] = []
+    saved_messages: list[str] = []
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    def _failing_execute(*_args: Any, **kwargs: Any) -> None:
+        executed.append(str(kwargs["capability_name"]))
+        raise ValueError("starter plan limit of 3 projects would be exceeded. Upgrade to create more.")
+
+    def _fail_runtime(_db: Any, _run_id: str, _message: str, **kwargs: Any) -> None:
+        terminal_failures.append(kwargs)
+
+    monkeypatch.setattr(module, "execute_capability", _failing_execute)
+    monkeypatch.setattr(module, "fail_runtime_run", _fail_runtime)
+    monkeypatch.setattr(
+        module,
+        "save_message",
+        lambda _db, _conversation_id, _role, content: saved_messages.append(content),
+    )
+    monkeypatch.setattr(module, "reserve_assistant_model_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
+    monkeypatch.setattr("app.runtime.assistant_adapter._render_runtime_event", lambda *args, **kwargs: [])
+
+    harness = StreamingHarness(
+        db=_FakeDb(),  # type: ignore[arg-type]
+        user=_FakeUser(),  # type: ignore[arg-type]
+        run=_FakeRun(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        llm=llm,
+        provider_type="openai",
+        provider_source=ProviderSource.OFFICIAL,
+        model="test",
+        user_message="创建常州智慧医保惠民服务提升项目",
+        approval_mode="full_access",
+    )
+
+    async def _collect() -> None:
+        async for raw in harness.run():
+            event_type = ""
+            payload = ""
+            for line in raw.strip().splitlines():
+                if line.startswith("event: "):
+                    event_type = line[7:]
+                elif line.startswith("data: "):
+                    payload = line[6:]
+            if event_type and payload:
+                events.append((event_type, json.loads(payload)))
+
+    asyncio.run(_collect())
+
+    assert executed == ["create_project"]
+    assert len(llm.calls) == 1
+    assert terminal_failures == [{"error_code": "project_limit_exceeded", "parent_event_id": None}]
+    assert saved_messages == ["当前工作区已达到项目数量上限。请归档一个现有项目或调整套餐后再创建。"]
+    failure = next(payload for event, payload in events if event == "assistant.tool_failed")
+    assert failure["error_code"] == "project_limit_exceeded"
+    assert events[-1][0] == "assistant.end"
+    assert events[-1][1]["state"] == "failed"
+
+
+def test_streaming_harness_hard_stops_a_repeated_research_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from app.runtime import harness_loop as module
+    from app.runtime.registry import PublicCapabilityResult
+    from app.usage.schemas import ProviderSource
+
+    repeated_call = {
+        "name": "web_search",
+        "args": {"query": "常州 医疗信息化 招标 公告"},
+    }
+    llm = _FakeBoundLLM(
+        [
+            _FakeAIMessage(tool_calls=[{"id": f"search-{index}", **repeated_call}])
+            for index in range(4)
+        ]
+    )
+    executed: list[str] = []
+    saved_messages: list[str] = []
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    class _Action:
+        status = "succeeded"
+
+    class _Execution:
+        approval = None
+        action = _Action()
+        result = PublicCapabilityResult(
+            "已获得可追溯的公开来源，正在核对关键信息。",
+            {
+                "items": [
+                    {
+                        "title": "常州市政府采购公告",
+                        "url": "https://example.gov.cn/tender/1",
+                    }
+                ]
+            },
+        )
+
+    def _execute(*_args: Any, **kwargs: Any) -> _Execution:
+        executed.append(str(kwargs["capability_name"]))
+        return _Execution()
+
+    monkeypatch.setattr(module, "execute_capability", _execute)
+    monkeypatch.setattr(module, "complete_runtime_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        module,
+        "save_message",
+        lambda _db, _conversation_id, _role, content: saved_messages.append(content),
+    )
+    monkeypatch.setattr(module, "reserve_assistant_model_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.runtime.events.list_events_after", lambda *args, **kwargs: [])
+    monkeypatch.setattr("app.runtime.assistant_adapter._render_runtime_event", lambda *args, **kwargs: [])
+
+    harness = StreamingHarness(
+        db=_FakeDb(),  # type: ignore[arg-type]
+        user=_FakeUser(),  # type: ignore[arg-type]
+        run=_FakeRun(),  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        llm=llm,
+        provider_type="openai",
+        provider_source=ProviderSource.OFFICIAL,
+        model="test",
+        user_message="只读调研常州医疗信息化招标机会，不要下载或创建项目。",
+    )
+
+    async def _collect() -> None:
+        async for raw in harness.run():
+            event_type = ""
+            payload = ""
+            for line in raw.strip().splitlines():
+                if line.startswith("event: "):
+                    event_type = line[7:]
+                elif line.startswith("data: "):
+                    payload = line[6:]
+            if event_type and payload:
+                events.append((event_type, json.loads(payload)))
+
+    asyncio.run(_collect())
+
+    assert executed == ["web_search"]
+    assert len(llm.calls) == 4
+    assert saved_messages == [
+        "我已停止重复搜索，避免继续空转。当前公开来源还不足以整理成可靠候选清单，"
+        "请缩小地区、行业或时间范围后再试；本次没有创建项目或下载资料。"
+    ]
+    assert events[-1][0] == "assistant.end"
+    assert events[-1][1]["state"] == "completed"
+
+
 def test_streaming_harness_stops_immediately_after_remote_import_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1077,7 +1287,7 @@ def test_streaming_harness_replaces_provider_reasoning_with_safe_narration(
     final_answer_index = next(index for index, (event, _payload) in enumerate(events) if event == "assistant.message")
 
     assert events[reasoning_index][1]["content"] == "梳理项目范围，确认接下来要处理的对象。"
-    assert events[reasoning_index][1]["title"] == "梳理项目范围，确认接下来要处理的对象。"
+    assert "title" not in events[reasoning_index][1]
     assert events[reasoning_index][1]["source"] == "harness"
     assert all("先核对当前项目范围" not in payload.get("content", "") for _event, payload in events)
     assert reasoning_index < reasoning_completed_index < tool_started_index < final_answer_index

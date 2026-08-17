@@ -1514,3 +1514,28 @@ unverified visual changes merely to iterate in production.
 - The production API origin is `https://bidpilot-api.rglens.com`. Corrected
   the primary VPS deployment guide, which still named the historical
   `api.bidpilot.rglens.com` host without a working TLS route.
+
+## Assistant research and terminal-failure correction (2026-08-18)
+
+- Removed message-keyword Skill routing. The Harness now exposes only Skill
+  metadata and loads an exact allowlisted Skill through `read_skill` when the
+  model selects it by meaning. Added the read-only
+  `opportunity-deep-research` procedure with official-source checks and an
+  explicit convergence contract.
+- Added duplicate-query suppression, a six-search budget, a two-round
+  no-new-source boundary, and a runtime hard stop if a model keeps requesting
+  searches after closure. Search turns render below one public parent task.
+- Corrected the reproduced starter-plan incident: project-count exhaustion is
+  now `project_limit_exceeded`, terminates after one capability attempt, and is
+  not mislabeled as invalid tool input. Renamed the misleading `Full access`
+  UI label to `Auto-run` and documented that it never bypasses authorization,
+  quotas, validation, or safety boundaries.
+- Added focused regressions for the exact project-limit request and a model
+  repeating the same research query. Release verification: Runtime API
+  incident regressions `2 passed`, related Runtime coverage `34 passed`, Web
+  `35 files / 149 tests passed`, Ruff passed, Web lint has 0 errors and 5
+  pre-existing Hook warnings, and the production Web build passed. The wider
+  Runtime directory still contains nine pre-existing legacy
+  deterministic/operator or keyword-routing assertions that conflict with the
+  current Harness-only, model-selected routing contract; they were not hidden
+  or made green by restoring keyword matching.

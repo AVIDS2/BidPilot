@@ -113,8 +113,6 @@ function WebSearchSources({ item, t }: { item: AssistantExecutionItem; t: Transl
   const sources = searchSources(item);
   if (sources.length === 0) return null;
 
-  const query = typeof item.result?.query === "string" ? item.result.query : "";
-
   return (
     <section
       className="cr-search-evidence"
@@ -123,12 +121,7 @@ function WebSearchSources({ item, t }: { item: AssistantExecutionItem; t: Transl
       <header className="cr-search-evidence-header">
         <span>
           <Globe2Icon size={14} />
-          {query
-            ? t("activity.searchSourcesFor", {
-              query,
-              defaultValue: `Search results for "${query}"`,
-            })
-            : t("activity.searchSources", { defaultValue: "Search sources" })}
+          {t("activity.verifiedPublicSources", { defaultValue: "已核对的公开来源" })}
         </span>
       </header>
       <div className="cr-search-source-list">

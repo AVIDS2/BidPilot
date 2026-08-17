@@ -80,6 +80,12 @@ def classify_capability_failure(exc: BaseException) -> PublicRuntimeFailure:
         # These are server-owned validation outcomes. Keep their public meaning
         # without echoing a dynamic project name or any raw exception payload.
         raw = str(exc)
+        normalized = raw.casefold()
+        if "plan limit" in normalized and "projects would be exceeded" in normalized:
+            return PublicRuntimeFailure(
+                "project_limit_exceeded",
+                "当前工作区已达到项目数量上限。请归档一个现有项目或调整套餐后再创建。",
+            )
         if "审批已过期" in raw:
             return PublicRuntimeFailure(
                 "approval_expired",

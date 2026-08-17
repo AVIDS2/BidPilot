@@ -27,13 +27,13 @@
     "options": {
       "request_approval": "请求批准",
       "risky_only": "替我审批",
-      "full_access": "完全访问",
+      "full_access": "自动执行",
       "custom": "自定义"
     },
     "hints": {
       "request_approval": "变更前都询问你",
       "risky_only": "只拦截风险操作",
-      "full_access": "尽量自动执行，删除仍确认",
+      "full_access": "跳过可选确认；仍受账号权限、套餐配额和安全边界限制",
       "custom": "使用组织自定义策略"
     }
   },

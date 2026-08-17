@@ -847,17 +847,20 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === "assistant.plan_updated") {
-    const items = Array.isArray(parsed.items) ? parsed.items : [];
-    const titles = items
-      .map((item) => asRecord(item).title)
-      .filter((title): title is string => typeof title === "string" && title.length > 0);
+    // Tool-plan internals are model context, not a useful user-facing row.
+    // Real progress arrives as reasoning and capability lifecycle events.
+    return;
+  }
+
+  if (eventType === "assistant.task_started") {
+    const title = typeof parsed.title === "string" && parsed.title.trim()
+      ? parsed.title.trim()
+      : "处理请求";
     dispatch({
       type: "APPEND_VISIBLE_REASONING",
-      content: typeof parsed.summary === "string" && parsed.summary.trim()
-        ? parsed.summary
-        : titles.length > 0 ? `执行计划：${titles.join("、")}。` : "已更新执行计划。",
+      content: title,
       turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : undefined,
-      title: "执行计划",
+      title,
       source: "harness",
     });
     dispatch({

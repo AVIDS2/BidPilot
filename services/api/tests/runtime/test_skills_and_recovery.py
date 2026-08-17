@@ -6,15 +6,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.runtime.skills import build_skill_prompt_block, select_skill_names
+from app.runtime.skills import build_skill_prompt_block, read_skill, select_skill_names
 
 
-def test_select_skills_for_outline_and_research() -> None:
-    assert "bid-outline-first" in select_skill_names("请起草执行摘要全部章节")
-    assert "bid-research" in select_skill_names("联网研究一下政策资料")
-    block = build_skill_prompt_block("请大纲优先批量起草章节")
+def test_skill_loading_requires_an_explicit_model_choice() -> None:
+    assert select_skill_names("请起草执行摘要全部章节") == []
+    assert select_skill_names("联网研究一下政策资料") == []
+    block = build_skill_prompt_block(["bid-outline-first"])
     assert "skill:bid-outline-first" in block
     assert "get_project_outline" in block or "section_key" in block
+    research = read_skill("opportunity-deep-research")
+    assert "6" in research
+    assert "只读" in research
 
 
 def test_outline_auto_recovery_single_project(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,15 +92,10 @@ def test_skill_index_block_lists_metadata_without_bodies() -> None:
     assert "get_project_outline" not in block
 
 
-def test_select_skill_routes_on_description_and_legacy_zh() -> None:
-    """New-style skills route on description; legacy packs keep zh triggers."""
+def test_select_skill_names_only_validates_explicit_names() -> None:
+    """The runtime never routes a Skill by words in a user message."""
     from app.runtime.skills import select_skill_names
 
-    # Legacy Chinese trigger still works for existing packs.
-    assert "bid-outline-first" in select_skill_names("请起草执行摘要全部章节")
-    # English description keyword route also works.
-    assert "bid-outline-first" in select_skill_names("draft a technical response")
-    assert "bid-research" in select_skill_names("研究一下竞品")
-    assert "bid-research" in select_skill_names("research the market")
-    # Unrelated input matches nothing.
-    assert select_skill_names("今天天气怎么样") == []
+    assert select_skill_names("bid-outline-first") == ["bid-outline-first"]
+    assert select_skill_names(["opportunity-deep-research"]) == ["opportunity-deep-research"]
+    assert select_skill_names("请起草执行摘要全部章节") == []

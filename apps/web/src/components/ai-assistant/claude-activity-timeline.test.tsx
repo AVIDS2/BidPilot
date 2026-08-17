@@ -109,6 +109,8 @@ describe("ClaudeActivityTimeline", () => {
       "https://example.com/procurement-guide",
     );
     expect(screen.queryByText("Unsafe source")).not.toBeInTheDocument();
+    expect(screen.queryByText("2 results")).not.toBeInTheDocument();
+    expect(screen.queryByText(/招标文件响应模板/)).not.toBeInTheDocument();
   });
 
   it("shows concrete export facts and real project actions instead of a generic completion line", () => {

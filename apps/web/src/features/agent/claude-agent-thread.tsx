@@ -319,32 +319,10 @@ function ClaudeAssistantMessage({
   const hasNarrativePart = parts.some((part) => part.kind === "narrative" && part.text);
   const isTimelineTitle = (part: Extract<AssistantTranscriptPart, { kind: "reasoning" }>) =>
     Boolean(part.turnId && part.title && part.title.trim() === part.text.trim());
-  const turnIds = useMemo(
-    () => new Set(parts.flatMap((part) => (part.kind === "turn" ? [part.turnId] : []))),
+  const firstTurnPartId = useMemo(
+    () => parts.find((part) => part.kind === "turn")?.id,
     [parts],
   );
-  const toolsByTurn = useMemo(() => {
-    const groups = new Map<string, AssistantExecutionItem[]>();
-    for (const item of activityItems) {
-      if (!item.turnId) continue;
-      const items = groups.get(item.turnId) ?? [];
-      items.push(item);
-      groups.set(item.turnId, items);
-    }
-    return groups;
-  }, [activityItems]);
-  const orphanTools = useMemo(
-    () => activityItems.filter((item) => !item.turnId || !turnIds.has(item.turnId)),
-    [activityItems, turnIds],
-  );
-  const titlesByTurn = useMemo(() => {
-    const titles = new Map<string, string>();
-    for (const part of parts) {
-      if (part.kind !== "reasoning" || !part.turnId || !part.title) continue;
-      titles.set(part.turnId, part.title);
-    }
-    return titles;
-  }, [parts]);
   const orphanTaskTitle = useMemo(
     () => parts.find(
       (part): part is Extract<AssistantTranscriptPart, { kind: "reasoning" }> =>
@@ -396,12 +374,12 @@ function ClaudeAssistantMessage({
             if (part.kind === "reasoning") {
               return isTimelineTitle(part) ? null : <ClaudeReasoning key={part.id} part={part} />;
             }
-            const items = toolsByTurn.get(part.turnId) ?? [];
-            return items.length ? (
-                <ClaudeActivityTimeline
-                  key={part.id}
-                  items={items}
-                  taskTitle={titlesByTurn.get(part.turnId)}
+            if (part.id !== firstTurnPartId) return null;
+            return activityItems.length ? (
+              <ClaudeActivityTimeline
+                key={part.id}
+                items={activityItems}
+                taskTitle={orphanTaskTitle}
                 nested
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
@@ -409,9 +387,9 @@ function ClaudeAssistantMessage({
               />
             ) : null;
           })}
-          {orphanTools.length > 0 && (
+          {!firstTurnPartId && activityItems.length > 0 && (
             <ClaudeActivityTimeline
-              items={orphanTools}
+              items={activityItems}
               taskTitle={orphanTaskTitle}
               nested
               onCancelWorkflow={onCancelWorkflow}

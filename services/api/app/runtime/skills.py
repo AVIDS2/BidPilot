@@ -9,17 +9,17 @@ and the AI-Agents-in-Depth chapter on skills:
     injected once per turn as ``AVAILABLE_SKILLS`` so the model can route on
     ``description`` ("when to use me") without consuming full bodies.
 
-  Level 2 (instructions, loaded when triggered):
-    ``build_skill_prompt_block`` reads the matched SKILL.md body (cached,
-    compacted) and appends it as ``SELECTED_PROCEDURAL_SKILLS``.
+  Level 2 (instructions, loaded explicitly):
+    The model calls ``read_skill`` with an exact name from ``AVAILABLE_SKILLS``.
+    The cached, compacted body is then returned as a tool observation.
 
   Level 3 (resources / scripts):
     Bundled files are referenced by the body; they are read on demand by the
     tools the skill prescribes.  No token cost until accessed.
 
-Matching stays deterministic and conservative: it runs against the
-``description`` (the routing contract), never against arbitrary user text, so
-untrusted input cannot silently flip a skill on.
+Skill selection is model-driven. The base prompt only exposes metadata and the
+model must explicitly call ``read_skill`` before a procedure enters context.
+The runtime never routes skills by matching words in the user's message.
 """
 
 from __future__ import annotations
@@ -132,14 +132,24 @@ def _read_skill_body(skill_name: str) -> str:
     return "\n".join(compact).strip()
 
 
-def select_skill_names(_user_message: str = "", *, max_skills: int = 2) -> list[str]:
-    """Return the bounded skill set available to the model this turn.
-
-    Skill activation is intentionally model-driven. The runtime never routes
-    on user-message fragments, trigger tables, or lexical similarity.
-    """
-    del max_skills
-    return [skill.name for skill in build_skill_index()]
+def select_skill_names(
+    requested_names: str | list[str] | tuple[str, ...] | None = None,
+    *,
+    max_skills: int = 2,
+) -> list[str]:
+    """Validate explicitly requested skill names without inspecting user text."""
+    if requested_names is None:
+        return []
+    requested = [requested_names] if isinstance(requested_names, str) else list(requested_names)
+    available = set(list_skill_names())
+    selected: list[str] = []
+    for raw_name in requested:
+        name = str(raw_name or "").strip()
+        if name in available and name not in selected:
+            selected.append(name)
+        if len(selected) >= max(1, max_skills):
+            break
+    return selected
 
 
 def build_skill_index_block() -> str:
@@ -147,14 +157,23 @@ def build_skill_index_block() -> str:
     index = build_skill_index()
     if not index:
         return ""
-    lines = ["AVAILABLE_SKILLS:", "The following skills may help. Read the selected skill body only when relevant."]
+    lines = [
+        "AVAILABLE_SKILLS:",
+        "Choose by meaning, not keyword matching. Call read_skill(name) before following a skill; do not invent its contents.",
+    ]
     lines.extend(skill.to_index_line() for skill in index)
     return "\n".join(lines)
 
 
-def build_skill_prompt_block(user_message: str) -> str:
-    """Return the model-visible skill bodies without message-based routing."""
-    names = select_skill_names(user_message)
+def read_skill(skill_name: str) -> str:
+    """Return one allowlisted server-owned Skill body for model context."""
+    names = select_skill_names(skill_name, max_skills=1)
+    return _read_skill_body(names[0]) if names else ""
+
+
+def build_skill_prompt_block(skill_names: list[str] | tuple[str, ...] | None = None) -> str:
+    """Return bodies only for explicit names; retained for tests and replay."""
+    names = select_skill_names(skill_names)
     if not names:
         return ""
     chunks: list[str] = ["## Active project skills (follow when relevant)"]
@@ -179,5 +198,6 @@ __all__ = [
     "build_skill_prompt_block",
     "clear_skill_cache",
     "list_skill_names",
+    "read_skill",
     "select_skill_names",
 ]

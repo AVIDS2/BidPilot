@@ -394,7 +394,7 @@ class BidPilotToolExecutor:
                 if value is not None:
                     model_observation[key] = value
         summary = (
-            f"联网搜索返回 {payload.get('count', 0)} 条结果。"
+            "已获得可追溯的公开来源，正在核对关键信息。"
             if prepared.public_tool_name == "web_search"
             else f"{prepared.title}已完成。"
         )
@@ -584,6 +584,14 @@ class BidPilotToolExecutor:
         user can still start a new, deliberately confirmed attempt later.
         """
         if capability_name == "fetch_url_to_project":
+            return False
+        if error_code in {
+            "project_limit_exceeded",
+            "capability_input_invalid",
+            "capability_forbidden",
+            "capability_conflict",
+            "capability_resource_not_found",
+        }:
             return False
         return not error_code.startswith("authorization_")
 
