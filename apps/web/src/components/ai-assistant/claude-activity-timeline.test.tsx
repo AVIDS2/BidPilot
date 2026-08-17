@@ -37,15 +37,15 @@ describe("ClaudeActivityTimeline", () => {
     expect(screen.getByTestId("assistant-runtime-workflow-running").querySelector(".cr-runtime-timeline")).toHaveClass("is-running");
     expect(container.querySelector(".cr-runtime-node.is-running")).toBeInTheDocument();
 
-    const detailGrid = container.querySelector(".cr-tool-grid");
-    const detailGridInner = container.querySelector(".cr-tool-grid-inner");
+    const detailGrid = container.querySelector(".cr-command-grid");
+    const detailGridInner = container.querySelector(".cr-command-grid-inner");
     expect(detailGrid).toHaveClass("is-open");
     expect(detailGridInner).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse activity details" }));
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
 
     expect(detailGrid).not.toHaveClass("is-open");
-    expect(container.querySelector(".cr-tool-grid-inner")).toBe(detailGridInner);
+    expect(container.querySelector(".cr-command-grid-inner")).toBe(detailGridInner);
   });
 
   it("keeps a tool detail mounted through its closing grid transition", () => {
@@ -61,8 +61,7 @@ describe("ClaudeActivityTimeline", () => {
     };
     const { container } = renderTimeline([completedTool]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
-    fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
     fireEvent.click(screen.getByRole("button", { name: "Show Search projects details" }));
     expect(container.querySelector(".cr-public-summary")).toHaveTextContent("Found 3 projects.");
 
@@ -99,10 +98,9 @@ describe("ClaudeActivityTimeline", () => {
         ],
       },
     };
-    renderTimeline([searchTool]);
+    const { container } = renderTimeline([searchTool]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
-    fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
     fireEvent.click(screen.getByRole("button", { name: /Show .*search.* details/i }));
 
     expect(screen.getByText("公共采购招标文件指南")).toBeInTheDocument();
@@ -132,14 +130,13 @@ describe("ClaudeActivityTimeline", () => {
         download_path: "/exports/export-1/docx",
       },
     };
-    renderTimeline([exportTool]);
+    const { container } = renderTimeline([exportTool]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
-    fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
     fireEvent.click(screen.getByRole("button", { name: /Show .*deliverable details/i }));
 
     expect(screen.getAllByText("技术响应文件")).toHaveLength(2);
-    expect(screen.getByText("文件已生成")).toBeInTheDocument();
+    expect(screen.getByText("文件已生成，可下载或查看")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Download DOCX/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看交付物" })).toBeInTheDocument();
     expect(screen.queryByText("运行记录")).not.toBeInTheDocument();
@@ -174,13 +171,12 @@ describe("ClaudeActivityTimeline", () => {
       },
     };
     const onOpenWorkflowCanvas = vi.fn();
-    renderTimeline([workflow], onOpenWorkflowCanvas);
+    const { container } = renderTimeline([workflow], onOpenWorkflowCanvas);
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
-    fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
     fireEvent.click(screen.getByRole("button", { name: /Show .*section.* details/i }));
 
-    fireEvent.click(screen.getByRole("button", { name: "打开任务编排画布" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开响应工作流" }));
     expect(onOpenWorkflowCanvas).toHaveBeenCalledWith("project-1");
   });
 
@@ -191,25 +187,24 @@ describe("ClaudeActivityTimeline", () => {
       toolName: "open_page",
       status: "succeeded",
       title: "打开页面",
-      summary: "已准备好任务编排画布入口，请点击打开。",
+      summary: "已准备好响应工作流入口，请点击打开。",
       timestamp: 1,
       result: {
         route: "/projects/project-1?surface=workflow",
         ui_action: {
           type: "canvas",
-          label: "打开任务编排画布",
+          label: "打开响应工作流",
           route: "/projects/project-1?surface=workflow",
         },
       },
     };
     const onOpenWorkflowCanvas = vi.fn();
-    renderTimeline([openCanvas], onOpenWorkflowCanvas);
+    const { container } = renderTimeline([openCanvas], onOpenWorkflowCanvas);
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand activity details" }));
-    fireEvent.click(screen.getByRole("button", { name: /(?:执行回合|Turn) 1/ }));
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
     fireEvent.click(screen.getByRole("button", { name: /Show .*page details/i }));
 
-    fireEvent.click(screen.getByRole("button", { name: "打开任务编排画布" }));
+    fireEvent.click(screen.getByRole("button", { name: "打开响应工作流" }));
     expect(onOpenWorkflowCanvas).toHaveBeenCalledWith("project-1");
   });
 });

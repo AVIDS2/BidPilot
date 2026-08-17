@@ -238,15 +238,19 @@ test("opens a structured canvas action beside the current Agent conversation", a
 
   await page.goto("/agent?conversation=canvas-conversation&project_id=project-1");
   await expect(page.getByText("已准备好当前项目的任务编排。", { exact: true })).toBeVisible();
-  // Replayed runtime traces render as a nested turn, so this transcript has
-  // no outer collapsible activity group. Open the turn, then its real tool.
-  await page.getByRole("button", { name: /Turn 1 Open page/ }).click();
+  // Replay is a flat execution timeline: open the actual turn, then its tool.
+  await page.getByRole("button", { name: /^Open page/ }).click();
   await page.getByRole("button", { name: /Show Open page details/i }).click();
   await page.getByRole("button", { name: "打开任务编排画布" }).click();
 
-  await expect(page.getByRole("complementary", { name: "任务编排画布" })).toBeVisible();
+  if (testInfo.project.name === "mobile-chromium") {
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "响应工作流" })).toBeVisible();
+  } else {
+    await expect(page.getByRole("complementary", { name: "任务编排画布" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "关闭任务编排画布" })).toBeVisible();
+  }
   await expect(page.getByTestId("bidpilot-workflow-canvas")).toBeVisible();
-  await expect(page.getByRole("button", { name: "关闭任务编排画布" })).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath(`agent-workspace-${testInfo.project.name}-canvas.png`),
     fullPage: true,

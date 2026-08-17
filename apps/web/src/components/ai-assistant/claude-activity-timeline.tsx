@@ -24,6 +24,7 @@ import {
   getAssistantToolIcon,
   getAssistantToolLabel,
 } from "./assistant-tool-metadata";
+import { parseAgentUiAction } from "./agent-ui-action";
 import "./claude-activity-timeline.css";
 
 type ActivityStatus = AssistantExecutionItem["status"];
@@ -113,7 +114,6 @@ function WebSearchSources({ item, t }: { item: AssistantExecutionItem; t: Transl
   if (sources.length === 0) return null;
 
   const query = typeof item.result?.query === "string" ? item.result.query : "";
-  const count = typeof item.result?.count === "number" ? item.result.count : sources.length;
 
   return (
     <section
@@ -130,7 +130,6 @@ function WebSearchSources({ item, t }: { item: AssistantExecutionItem; t: Transl
             })
             : t("activity.searchSources", { defaultValue: "Search sources" })}
         </span>
-        <small>{t("activity.searchResultCount", { count, defaultValue: `${count} results` })}</small>
       </header>
       <div className="cr-search-source-list">
         {sources.map((source) => (
@@ -334,9 +333,6 @@ function resultFacts(item: AssistantExecutionItem): ResultFact[] {
   add("处理状态", "status", publicStatusText);
   add("解析状态", "parse_status", publicStatusText);
   add("入库状态", "storage_status", publicStatusText);
-  add("附件数量", "attachment_count");
-  add("已处理章节", "processed_count");
-  add("待处理章节", "remaining_count");
   return facts;
 }
 
@@ -345,8 +341,7 @@ function ResultFacts({ item }: { item: AssistantExecutionItem }) {
   const error = publicText(item.errorMessage) || (item.status === "failed" ? displaySummary(item, () => "") : "");
   if (!facts.length && !error && !item.errorCode) return null;
   return (
-    <section className={`cr-result-facts${item.status === "failed" ? " is-failed" : ""}`} aria-label="本次操作结果">
-      <header>{item.status === "failed" ? "失败详情" : "本次操作结果"}</header>
+    <div className={`cr-result-facts${item.status === "failed" ? " is-failed" : ""}`} aria-label={item.status === "failed" ? "失败详情" : "相关资源"}>
       {facts.length > 0 && (
         <dl>
           {facts.map((fact) => (
@@ -359,7 +354,7 @@ function ResultFacts({ item }: { item: AssistantExecutionItem }) {
       )}
       {error && <p>{error}</p>}
       {item.errorCode && <small>错误代码：{item.errorCode}</small>}
-    </section>
+    </div>
   );
 }
 
@@ -504,12 +499,11 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
     : "交付物";
   if (actions.length === 0 && !deliverableId) return null;
   return (
-    <section className="cr-artifact-actions" aria-label="交付物操作">
-      <header>
+    <div className="cr-artifact-actions cr-resource-row" aria-label="交付物操作">
+      <div className="cr-resource-row-copy">
         <FileCheck2Icon size={14} />
-        <span>{title}</span>
-        <small>{actions.length > 0 ? "文件已生成" : "可在项目工作区查看"}</small>
-      </header>
+        <span><strong>{title}</strong><small>{actions.length > 0 ? "文件已生成，可下载或查看" : "可在项目工作区查看"}</small></span>
+      </div>
       <div className="cr-inline-actions">
       {actions.map(([format, path]) => (
         <button
@@ -538,7 +532,7 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
         </button>
       )}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -554,12 +548,11 @@ function WorkflowCanvasAction({
   if (item.kind !== "workflow" || !projectId) return null;
   const sectionKey = typeof result.section_key === "string" ? result.section_key : "";
   return (
-    <section className="cr-artifact-actions" aria-label="响应工作流操作">
-      <header>
+    <div className="cr-artifact-actions cr-resource-row" aria-label="响应工作流操作">
+      <div className="cr-resource-row-copy">
         <TimerIcon size={14} />
-        <span>响应工作流</span>
-        <small>{sectionKey ? `章节：${sectionKey}` : "项目任务编排"}</small>
-      </header>
+        <span><strong>响应工作流</strong><small>{sectionKey ? `章节：${sectionKey}` : "项目任务编排"}</small></span>
+      </div>
       <div className="cr-inline-actions">
         <button
           type="button"
@@ -572,10 +565,10 @@ function WorkflowCanvasAction({
           }}
         >
           <TimerIcon size={13} />
-          打开任务编排画布
+          打开响应工作流
         </button>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -586,44 +579,34 @@ function StructuredUiAction({
   item: AssistantExecutionItem;
   onOpenWorkflowCanvas?: (projectId: string) => void;
 }) {
-  const rawAction = item.result?.ui_action;
-  if (!rawAction || typeof rawAction !== "object" || Array.isArray(rawAction)) return null;
-  const action = rawAction as Record<string, unknown>;
-  const type = typeof action.type === "string" ? action.type : "";
-  const label = typeof action.label === "string" && action.label.trim()
-    ? action.label.trim()
-    : "继续";
-  const route = typeof action.route === "string" ? action.route : "";
-  const href = publicUrl(action.href);
+  const action = parseAgentUiAction(item.result?.ui_action);
+  if (!action) return null;
 
-  // This is intentionally a small allow-list. Agent output can describe a
-  // UI action, never inject arbitrary markup or event handlers into the app.
-  if (type === "canvas" && route.startsWith("/projects")) {
-    const projectId = /^\/projects\/([^?/#]+)/.exec(route)?.[1];
+  if (action.type === "canvas") {
     return (
       <div className="cr-inline-actions cr-structured-action">
         <button
           type="button"
           onClick={() => {
-            if (projectId && onOpenWorkflowCanvas) {
-              onOpenWorkflowCanvas(projectId);
+            if (onOpenWorkflowCanvas) {
+              onOpenWorkflowCanvas(action.projectId);
               return;
             }
-            navigateToInternalRoute(route);
+            navigateToInternalRoute(action.route);
           }}
         >
           <TimerIcon size={13} />
-          {label}
+          {action.label}
         </button>
       </div>
     );
   }
-  if (type === "link" && href) {
+  if (action.type === "external-link") {
     return (
       <div className="cr-inline-actions cr-structured-action">
-        <a href={href.href} rel="noreferrer" target="_blank">
+        <a href={action.href} rel="noreferrer" target="_blank">
           <ExternalLinkIcon size={13} />
-          {label}
+          {action.label}
         </a>
       </div>
     );
@@ -781,7 +764,6 @@ function ToolStep({
 
 function TaskTurn({
   turn,
-  index,
   title,
   t,
   onCancelWorkflow,
@@ -790,7 +772,6 @@ function TaskTurn({
   cancellingRunId,
 }: {
   turn: ActivityTurn;
-  index: number;
   title?: string;
   t: Translate;
   onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
@@ -803,7 +784,8 @@ function TaskTurn({
   const [open, setOpen] = useState(() => active || tone === "failed");
   const previousTone = useRef(tone);
   const summary = displayGroupSummary(turn.items, t);
-  const actionTitle = title;
+  const actionTitle = title || summary;
+  const secondarySummary = title ? summary : "";
 
   useEffect(() => {
     if (active || tone === "failed") setOpen(true);
@@ -820,8 +802,8 @@ function TaskTurn({
         onClick={() => setOpen((current) => !current)}
       >
         <span>
-          {actionTitle || t("activity.turnLabel", { index: index + 1, defaultValue: `执行回合 ${index + 1}` })}
-          <small>{summary}</small>
+          {actionTitle}
+          {secondarySummary && <small>{secondarySummary}</small>}
         </span>
         <span className={`cr-group-status is-${tone}`}>
           {active && <Loader2Icon className="cr-group-spinner" size={13} />}
@@ -860,24 +842,8 @@ export function ClaudeActivityTimeline({
 }: ClaudeActivityTimelineProps) {
   const { t } = useTranslation("ai-assistant");
   const tone = aggregateStatus(items);
-  const active = statusIsActive(tone);
-  const [open, setOpen] = useState(() => active || tone === "failed");
-  const previousTone = useRef(tone);
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
   const turns = useMemo(() => groupActivityTurns(items), [items]);
-  const summary = useMemo(
-    () => taskTitle || t("activity.taskSummary", {
-      turns: turns.length,
-      defaultValue: `任务执行 · ${turns.length} 个回合`,
-    }),
-    [taskTitle, t, turns.length],
-  );
-
-  useEffect(() => {
-    if (active || tone === "failed") setOpen(true);
-    else if (statusIsActive(previousTone.current)) setOpen(false);
-    previousTone.current = tone;
-  }, [active, tone]);
 
   if (items.length === 0) return null;
 
@@ -891,68 +857,27 @@ export function ClaudeActivityTimeline({
     }
   };
 
-  if (nested) {
-    return (
-      <div className="assistant-claude-timeline cr-tool-group cr-tool-group-nested" data-testid="assistant-activity-timeline" data-status={tone}>
-        <div className="cr-task-turns">
-          {turns.map((turn, index) => (
-            <TaskTurn
-              key={turn.id}
-              turn={turn}
-              index={index}
-              title={taskTitle}
-              t={t}
-              onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
-              onConfigureProvider={onConfigureProvider}
-              onOpenWorkflowCanvas={onOpenWorkflowCanvas}
-              cancellingRunId={cancellingRunId}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <section className={`assistant-claude-timeline cr-tool-group${tone === "succeeded" ? " is-quiet" : ""}`} data-testid="assistant-activity-timeline" data-status={tone}>
-      <button
-        type="button"
-        className="cr-tool-summary"
-        aria-expanded={open}
-        aria-label={open ? "Collapse activity details" : "Expand activity details"}
-        aria-live={active ? "polite" : "off"}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span>
-          <TimerIcon size={15} />
-          {summary}
-        </span>
-        <span className={`cr-group-status is-${tone}`}>
-          {active && <Loader2Icon className="cr-group-spinner" size={13} />}
-          {statusText(tone, t)}
-          <ChevronDownIcon size={14} />
-        </span>
-      </button>
-      <div className={`cr-tool-grid${open ? " is-open" : ""}`}>
-        <div className="cr-tool-grid-inner">
-          <div className="cr-task-turns">
-            {turns.map((turn, index) => (
-              <TaskTurn
-                key={turn.id}
-                turn={turn}
-                index={index}
-                title={taskTitle}
-                t={t}
-              onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
-              onConfigureProvider={onConfigureProvider}
-              onOpenWorkflowCanvas={onOpenWorkflowCanvas}
-              cancellingRunId={cancellingRunId}
-              />
-            ))}
-          </div>
-        </div>
+    <div
+      className={`assistant-claude-timeline cr-tool-group${nested ? " cr-tool-group-nested" : ""}${tone === "succeeded" ? " is-quiet" : ""}`}
+      data-testid="assistant-activity-timeline"
+      data-status={tone}
+    >
+      <div className="cr-task-turns">
+        {turns.map((turn) => (
+          <TaskTurn
+            key={turn.id}
+            turn={turn}
+            title={taskTitle}
+            t={t}
+            onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
+            onConfigureProvider={onConfigureProvider}
+            onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+            cancellingRunId={cancellingRunId}
+          />
+        ))}
       </div>
-    </section>
+    </div>
   );
 }
 

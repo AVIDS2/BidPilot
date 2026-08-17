@@ -331,20 +331,10 @@
 }
 
 .assistant-claude-timeline .cr-result-facts {
-  padding: 9px 10px;
+  margin: 7px 0 4px;
+  padding: 0;
 }
 
-.assistant-claude-timeline .cr-result-facts > header,
-.assistant-claude-timeline .cr-artifact-actions > header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #47453f;
-  font-size: 12px;
-  font-weight: 580;
-}
-
-.assistant-claude-timeline .cr-result-facts > header { margin-bottom: 6px; }
 .assistant-claude-timeline .cr-result-facts dl,
 .assistant-claude-timeline .cr-run-trace dl {
   display: grid;
@@ -390,14 +380,29 @@
 }
 
 .assistant-claude-timeline .cr-result-facts.is-failed {
-  border-color: color-mix(in oklch, #b5544b 28%, var(--cr-line));
-  background: color-mix(in oklch, #fff7f5 80%, var(--cr-paper));
+  padding-left: 10px;
+  border-left: 2px solid color-mix(in oklch, #b5544b 58%, var(--cr-line));
 }
 
-.assistant-claude-timeline .cr-artifact-actions { padding: 9px 10px; }
-.assistant-claude-timeline .cr-artifact-actions > header > svg { color: #5e8874; }
-.assistant-claude-timeline .cr-artifact-actions > header > small { margin-left: auto; color: #86847e; font-size: 11px; font-weight: 450; }
-.assistant-claude-timeline .cr-artifact-actions .cr-inline-actions { margin-top: 8px; }
+.assistant-claude-timeline .cr-artifact-actions { margin: 9px 0 4px; padding: 0; }
+.assistant-claude-timeline .cr-resource-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.assistant-claude-timeline .cr-resource-row-copy {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 7px;
+}
+.assistant-claude-timeline .cr-resource-row-copy > svg { flex: 0 0 auto; margin-top: 2px; color: #5e8874; }
+.assistant-claude-timeline .cr-resource-row-copy > span { display: grid; min-width: 0; gap: 1px; }
+.assistant-claude-timeline .cr-resource-row-copy strong { overflow: hidden; color: #45433e; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-claude-timeline .cr-resource-row-copy small { overflow: hidden; color: #85827b; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-claude-timeline .cr-resource-row .cr-inline-actions { flex: 0 0 auto; margin: 0; }
 
 .assistant-claude-timeline .cr-run-trace { padding: 0; }
 .assistant-claude-timeline .cr-run-trace > summary {
@@ -672,10 +677,8 @@
 .assistant-claude-timeline .cr-remote-import {
   min-width: 0;
   margin: 4px 0 9px;
-  border: 1px solid #e2e1dc;
-  border-radius: 7px;
-  background: rgb(255 255 255 / 62%);
-  padding: 10px;
+  border-left: 1px solid #e2e1dc;
+  padding: 2px 0 2px 10px;
 }
 
 .assistant-claude-timeline .cr-remote-materials > header,

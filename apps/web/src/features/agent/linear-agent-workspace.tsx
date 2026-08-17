@@ -34,14 +34,23 @@ import {
   setChatConversationPinned,
   type ChatConversationRead,
 } from "@/lib/api";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import "./linear-agent-workspace.css";
 
 function AgentPreviewCanvas({
   selection,
   onClose,
+  showHeader = true,
 }: {
   selection: AttachmentPreviewSelection | null;
   onClose: () => void;
+  showHeader?: boolean;
 }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [textPreview, setTextPreview] = useState<string | null>(null);
@@ -67,13 +76,15 @@ function AgentPreviewCanvas({
   const isImage = selection.kind === "image";
   return (
     <aside className="agent-preview-canvas" aria-label="附件预览画布">
-      <header className="agent-preview-header">
-        <div className="agent-preview-heading">
-          <strong title={selection.name}>{selection.name}</strong>
-          <span>{formatPreviewSize(selection.size)} · {isImage ? "图片" : "文件"}</span>
-        </div>
-        <button type="button" className="agent-preview-close" aria-label="关闭预览" onClick={onClose}><XIcon size={16} /></button>
-      </header>
+      {showHeader && (
+        <header className="agent-preview-header">
+          <div className="agent-preview-heading">
+            <strong title={selection.name}>{selection.name}</strong>
+            <span>{formatPreviewSize(selection.size)} · {isImage ? "图片" : "文件"}</span>
+          </div>
+          <button type="button" className="agent-preview-close" aria-label="关闭预览" onClick={onClose}><XIcon size={16} /></button>
+        </header>
+      )}
       <div className="agent-preview-body">
         {isImage && (selection.previewUrl || objectUrl) ? <img src={selection.previewUrl || objectUrl || undefined} alt={selection.name} /> : null}
         {!isImage && isPdf && objectUrl ? <iframe title={selection.name} src={objectUrl} /> : null}
@@ -95,11 +106,13 @@ function AgentWorkflowCanvas({
   state,
   onClose,
   onOpenProject,
+  showHeader = true,
 }: {
   projectId: string;
   state: AIAssistantState;
   onClose: () => void;
   onOpenProject: () => void;
+  showHeader?: boolean;
 }) {
   const workflow = useMemo(() => {
     const matchesProject = (item: AIAssistantState["executionItems"][number]) => {
@@ -113,13 +126,15 @@ function AgentWorkflowCanvas({
 
   return (
     <aside className="agent-preview-canvas agent-workflow-canvas" aria-label="任务编排画布">
-      <header className="agent-preview-header">
-        <div className="agent-preview-heading">
-          <strong>任务编排画布</strong>
-          <span>{workflow?.isWaitingApproval ? "当前在等待人工确认" : workflow?.summary || "查看本次任务的执行路径与节点状态"}</span>
-        </div>
-        <button type="button" className="agent-preview-close" aria-label="关闭任务编排画布" onClick={onClose}><XIcon size={16} /></button>
-      </header>
+      {showHeader && (
+        <header className="agent-preview-header">
+          <div className="agent-preview-heading">
+            <strong>响应工作流</strong>
+            <span>{workflow?.isWaitingApproval ? "当前在等待人工确认" : workflow?.summary || "查看本次任务的执行路径与节点状态"}</span>
+          </div>
+          <button type="button" className="agent-preview-close" aria-label="关闭任务编排画布" onClick={onClose}><XIcon size={16} /></button>
+        </header>
+      )}
       <div className="agent-preview-body agent-workflow-body">
         <WorkflowCanvas
           currentNode={workflow?.currentNode ?? null}
@@ -133,6 +148,22 @@ function AgentWorkflowCanvas({
       </footer>
     </aside>
   );
+}
+
+function useCompactViewport() {
+  const [isCompact, setIsCompact] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 820px)").matches : false,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 820px)");
+    const sync = () => setIsCompact(mediaQuery.matches);
+    sync();
+    mediaQuery.addEventListener("change", sync);
+    return () => mediaQuery.removeEventListener("change", sync);
+  }, []);
+
+  return isCompact;
 }
 
 function formatPreviewSize(size: number) {
@@ -365,6 +396,7 @@ export function LinearAgentWorkspace() {
   const [workflowCanvasProjectId, setWorkflowCanvasProjectId] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState(420);
   const [isPreviewResizing, setIsPreviewResizing] = useState(false);
+  const isCompactViewport = useCompactViewport();
   const workspaceRef = useRef<HTMLDivElement>(null);
   const historySurfaceRef = useRef<HTMLDivElement>(null);
   const previewResizeStartRef = useRef({ x: 0, width: 420 });
@@ -429,10 +461,17 @@ export function LinearAgentWorkspace() {
     setWorkflowCanvasProjectId(projectId);
   };
   const hasSideCanvas = Boolean(previewAttachment || workflowCanvasProjectId);
-
-  useEffect(() => {
+  const showDesktopCanvas = hasSideCanvas && !isCompactViewport;
+  const closeSideSurface = () => {
+    setPreviewAttachment(null);
     setWorkflowCanvasProjectId(null);
-  }, [state.currentConversationId]);
+  };
+  const mobileSurfaceTitle = workflowCanvasProjectId ? "响应工作流" : previewAttachment?.name || "附件预览";
+  const mobileSurfaceDescription = workflowCanvasProjectId
+    ? "查看当前任务的执行路径与节点状态"
+    : previewAttachment
+      ? `${formatPreviewSize(previewAttachment.size)} · ${previewAttachment.kind === "image" ? "图片" : "文件"}`
+      : "";
 
   const handlePreviewResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -460,7 +499,7 @@ export function LinearAgentWorkspace() {
   return (
     <div className={`linear-agent-embedded bidpilot-linear-agent${isPreviewResizing ? " is-preview-resizing" : ""}`} ref={workspaceRef}>
       <main
-        className={`linear-main${hasSideCanvas ? " has-preview-canvas" : ""}`}
+        className={`linear-main${showDesktopCanvas ? " has-preview-canvas" : ""}`}
         style={{ "--preview-width": `${previewWidth}px` } as CSSProperties}
       >
         <section className="agent-canvas">
@@ -529,7 +568,7 @@ export function LinearAgentWorkspace() {
             )}
           </div>
         </section>
-        {hasSideCanvas ? (
+        {showDesktopCanvas ? (
           <div
             className="agent-preview-resize-handle"
             aria-label="调整预览画布宽度"
@@ -545,18 +584,49 @@ export function LinearAgentWorkspace() {
             }}
           />
         ) : null}
-        {workflowCanvasProjectId ? (
+        {showDesktopCanvas && workflowCanvasProjectId ? (
           <AgentWorkflowCanvas
             projectId={workflowCanvasProjectId}
             state={state}
             onClose={() => setWorkflowCanvasProjectId(null)}
             onOpenProject={() => navigate(`/projects/${workflowCanvasProjectId}?surface=workflow`)}
           />
-        ) : (
+        ) : showDesktopCanvas ? (
           <AgentPreviewCanvas selection={previewAttachment} onClose={() => setPreviewAttachment(null)} />
-        )}
+        ) : null}
         <AgentFooter onHistory={() => setHistoryOpen((value) => !value)} />
       </main>
+      <Sheet
+        open={isCompactViewport && hasSideCanvas}
+        onOpenChange={(open) => {
+          if (!open) closeSideSurface();
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="agent-mobile-side-sheet w-[min(100vw,34rem)] max-w-none gap-0 p-0 sm:max-w-none"
+        >
+          <SheetHeader className="agent-mobile-side-sheet-header">
+            <SheetTitle>{mobileSurfaceTitle}</SheetTitle>
+            <SheetDescription>{mobileSurfaceDescription}</SheetDescription>
+          </SheetHeader>
+          {workflowCanvasProjectId ? (
+            <AgentWorkflowCanvas
+              projectId={workflowCanvasProjectId}
+              state={state}
+              onClose={closeSideSurface}
+              onOpenProject={() => navigate(`/projects/${workflowCanvasProjectId}?surface=workflow`)}
+              showHeader={false}
+            />
+          ) : (
+            <AgentPreviewCanvas
+              selection={previewAttachment}
+              onClose={closeSideSurface}
+              showHeader={false}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
