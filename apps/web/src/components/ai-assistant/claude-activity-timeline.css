@@ -156,6 +156,26 @@
   }
 }
 
+@keyframes claude-timeline-status-breathe {
+  0%, 100% { background-position: 100% 50%; opacity: 0.64; }
+  50% { background-position: 0 50%; opacity: 1; }
+}
+
+.assistant-claude-timeline .cr-group-status.is-running .cr-status-copy,
+.assistant-claude-timeline .cr-group-status.is-pending .cr-status-copy,
+.assistant-claude-timeline .cr-step-status.is-running,
+.assistant-claude-timeline .cr-step-status.is-pending,
+.assistant-claude-timeline .cr-runtime-status.is-running,
+.assistant-claude-timeline .cr-runtime-status.is-pending {
+  color: transparent;
+  background-image: linear-gradient(90deg, #8b8983 12%, #2f6fed 48%, #8b8983 84%);
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: claude-timeline-status-breathe 2.1s ease-in-out infinite;
+}
+
 .assistant-claude-timeline .cr-tool-grid,
 .assistant-claude-timeline .cr-command-grid,
 .assistant-claude-timeline .cr-runtime-grid {
@@ -509,6 +529,12 @@
   color: #a2a09b;
   font-size: 12px;
   font-style: normal;
+}
+
+.assistant-claude-timeline .cr-runtime-status {
+  color: #8d8b85;
+  font-size: 11px;
+  font-weight: 520;
 }
 
 .assistant-claude-timeline .cr-run-step[data-status="succeeded"] .cr-step-status {
@@ -938,6 +964,18 @@
   .assistant-claude-timeline .cr-runtime-timeline.is-running::before,
   .assistant-claude-timeline .cr-runtime-node.is-running .cr-runtime-marker::after {
     animation: none;
+  }
+
+  .assistant-claude-timeline .cr-group-status.is-running .cr-status-copy,
+  .assistant-claude-timeline .cr-group-status.is-pending .cr-status-copy,
+  .assistant-claude-timeline .cr-step-status.is-running,
+  .assistant-claude-timeline .cr-step-status.is-pending,
+  .assistant-claude-timeline .cr-runtime-status.is-running,
+  .assistant-claude-timeline .cr-runtime-status.is-pending {
+    animation: none;
+    background: none;
+    color: #696761;
+    -webkit-text-fill-color: currentColor;
   }
 
   .assistant-claude-timeline .cr-task-turn.is-running .cr-task-turn-summary,

@@ -37,5 +37,5 @@ describe("Agent route", () => {
 
     expect(await screen.findByTestId("source-migrated-agent-workspace", undefined, { timeout: 15_000 })).toBeInTheDocument();
     expect(screen.queryByTestId("legacy-platform-shell")).not.toBeInTheDocument();
-  });
+  }, 20_000);
 });

@@ -1677,33 +1677,47 @@ export function AIAssistantProvider({
     dispatch({ type: "CLEAR_TRANSIENT_STATE" });
     dispatch({ type: "SET_STATUS", status: "thinking" });
     try {
-      const history = await getChatConversationMessages(conversationId);
+      const [history, runs] = await Promise.all([
+        getChatConversationMessages(conversationId),
+        listRuntimeRuns(12, conversationId).catch((replayError) => {
+          console.error("Failed to list runtime transcript:", replayError);
+          return [];
+        }),
+      ]);
       if (!isCurrentLoad()) return;
       const messages = toStoredChatMessages(history.items);
-      dispatch({
-        type: "REPLACE_MESSAGES",
-        messages,
-      });
 
       // Replay durable runtime tool events so history shows L1/L2 tool cards,
       // not only plain assistant text. Runtime events also repair a missing
       // chat row when the browser disconnected before the final save commit.
+      // Fetch runs concurrently and commit the transcript once: rendering the
+      // chat first and appending execution records later caused visible lag
+      // and layout jumps on every conversation restore.
       let restoredMessages = messages;
       const runtimeReplay: Array<{
         runId: string;
         messageId?: string;
         events: Awaited<ReturnType<typeof listRuntimeEvents>>["items"];
       }> = [];
-      try {
-        const runs = await listRuntimeRuns(12, conversationId);
-        if (!isCurrentLoad()) return;
-        // Replay oldest→newest so tool order matches conversation flow.
-        for (const run of [...runs].reverse()) {
-          const response = await listRuntimeEvents(run.id, 0);
-          if (!isCurrentLoad()) return;
+      const replayResponses = await Promise.all(
+        [...runs].reverse().map(async (run) => {
+          try {
+            const response = await listRuntimeEvents(run.id, 0);
+            return { run, events: response.items };
+          } catch (replayError) {
+            console.error(`Failed to restore runtime transcript ${run.id}:`, replayError);
+            return null;
+          }
+        }),
+      );
+      if (!isCurrentLoad()) return;
+      // Merge oldest→newest so tool order matches conversation flow.
+      for (const replay of replayResponses) {
+        if (replay) {
+          const { run, events } = replay;
           const merged = mergeRecoveredRuntimeMessage(
             restoredMessages,
-            recoverRuntimeMessageFromEvents(run.id, response.items),
+            recoverRuntimeMessageFromEvents(run.id, events),
           );
           restoredMessages = merged.messages;
           runtimeReplay.push({
@@ -1712,48 +1726,42 @@ export function AIAssistantProvider({
               restoredMessages.find((message) => message.runtimeRunId === run.id)?.id ??
               merged.messageId ??
               findAssistantMessageNearTimestamp(restoredMessages, run.finished_at ?? run.created_at),
-            events: response.items,
+            events,
           });
         }
-        if (!isCurrentLoad()) return;
-        if (restoredMessages !== messages) {
-          dispatch({ type: "REPLACE_MESSAGES", messages: restoredMessages });
-        }
+      }
+      dispatch({ type: "REPLACE_MESSAGES", messages: restoredMessages });
 
-        // A run belongs to its own assistant response, never to whichever
-        // response happened to be last when the transcript was restored.
-        for (const { messageId, events } of runtimeReplay) {
-          if (!messageId) continue;
-          dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId });
-          for (const event of events) {
-            for (const compatibilityEvent of runtimeEventToAssistantEvents(
-              event,
-              conversationId,
-            )) {
-              // Text is already in chat history. Reasoning and tool lifecycle
-              // are durable trace data and must survive a reload.
-              if (
-                compatibilityEvent.eventType !== "assistant.tool_started" &&
-                compatibilityEvent.eventType !== "assistant.tool_succeeded" &&
-                compatibilityEvent.eventType !== "assistant.tool_failed" &&
-                compatibilityEvent.eventType !== "assistant.turn_started" &&
-                compatibilityEvent.eventType !== "assistant.turn_finished" &&
-                compatibilityEvent.eventType !== "assistant.reasoning" &&
-                compatibilityEvent.eventType !== "assistant.reasoning_completed"
-              ) {
-                continue;
-              }
-              handleAssistantSseEvent(
-                compatibilityEvent.eventType,
-                compatibilityEvent.data,
-                dispatch,
-              );
+      // A run belongs to its own assistant response, never to whichever
+      // response happened to be last when the transcript was restored.
+      for (const { messageId, events } of runtimeReplay) {
+        if (!messageId) continue;
+        dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId });
+        for (const event of events) {
+          for (const compatibilityEvent of runtimeEventToAssistantEvents(
+            event,
+            conversationId,
+          )) {
+            // Text is already in chat history. Reasoning and tool lifecycle
+            // are durable trace data and must survive a reload.
+            if (
+              compatibilityEvent.eventType !== "assistant.tool_started" &&
+              compatibilityEvent.eventType !== "assistant.tool_succeeded" &&
+              compatibilityEvent.eventType !== "assistant.tool_failed" &&
+              compatibilityEvent.eventType !== "assistant.turn_started" &&
+              compatibilityEvent.eventType !== "assistant.turn_finished" &&
+              compatibilityEvent.eventType !== "assistant.reasoning" &&
+              compatibilityEvent.eventType !== "assistant.reasoning_completed"
+            ) {
+              continue;
             }
+            handleAssistantSseEvent(
+              compatibilityEvent.eventType,
+              compatibilityEvent.data,
+              dispatch,
+            );
           }
         }
-      } catch (replayError) {
-        if (!isCurrentLoad()) return;
-        console.error("Failed to restore tool transcript:", replayError);
       }
 
       if (!isCurrentLoad()) return;

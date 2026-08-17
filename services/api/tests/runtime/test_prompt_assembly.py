@@ -39,6 +39,12 @@ def _assemble(*, conversation, user_message: str, memory=None, attachments=None,
         memory_version="memory-v3",
         background_notifications=[{"kind": "workflow_finished", "run_id": "run-1"}],
         user_message=user_message,
+        previous_terminal_action={
+            "capability_name": "create_project",
+            "status": "failed",
+            "error_code": "project_limit_exceeded",
+            "message": "当前工作区已达到项目数量上限。",
+        },
     )
 
 
@@ -59,12 +65,14 @@ def test_prompt_assembly_uses_the_required_order_and_untrusted_boundary() -> Non
         memory=[{"title": "已核验资质", "body_markdown": injection}],
     )
 
-    assert len(assembly.messages) == 5
+    assert len(assembly.messages) == 6
     assert "Trusted policy" in str(assembly.messages[0].content)
     assert "SERVER_AUTHORIZATION_SCOPE" in str(assembly.messages[1].content)
     assert "SELECTED_PROCEDURAL_SKILLS" in str(assembly.messages[2].content)
     assert "UNRESOLVED_TASK_AND_APPROVAL_STATE" in str(assembly.messages[3].content)
-    assert injection not in "\n".join(str(message.content) for message in assembly.messages[:4])
+    assert "PREVIOUS_TERMINAL_ACTION" in str(assembly.messages[4].content)
+    assert "project_limit_exceeded" in str(assembly.messages[4].content)
+    assert injection not in "\n".join(str(message.content) for message in assembly.messages[:5])
 
     records = _packet_records(assembly)
     assert [record["section"] for record in records] == [
@@ -81,6 +89,7 @@ def test_prompt_assembly_uses_the_required_order_and_untrusted_boundary() -> Non
     assert records[-1]["content"] == "基于附件起草技术方案"
     assert assembly.trace["assembly_order"][0] == "system_policy"
     assert assembly.trace["assembly_order"][-1] == "current_user_request"
+    assert assembly.trace["has_previous_terminal_action"] is True
 
 
 def test_context_budget_preserves_request_scope_and_exposes_truncation() -> None:

@@ -420,13 +420,9 @@ function RuntimeTimeline({
 }) {
   const hasRunningNode = nodes.some((node) => node.status === "running");
   const active = statusIsActive(item.status) || hasRunningNode;
-  const [open, setOpen] = useState(() => active || item.status === "failed");
+  const [open, setOpen] = useState(false);
   const completed = nodes.filter((node) => node.status === "completed").length;
   const summary = t("activity.workflowProgress", { defaultValue: "Workflow steps" });
-
-  useEffect(() => {
-    if (active || item.status === "failed") setOpen(true);
-  }, [active, item.status]);
 
   if (nodes.length === 0) return null;
 
@@ -443,6 +439,9 @@ function RuntimeTimeline({
           {summary}
           <small className="cr-runtime-count">
             {completed}/{nodes.length}
+          </small>
+          <small className={`cr-runtime-status is-${active ? "running" : item.status}`}>
+            {statusText(active ? "running" : item.status, t)}
           </small>
           <small className="cr-runtime-completion">
             {t("execution.nodesCompleted", {
@@ -681,30 +680,21 @@ function ToolStep({
   onOpenWorkflowCanvas?: (projectId: string) => void;
   isCancelling: boolean;
 }) {
-  const [open, setOpen] = useState(() => statusIsActive(item.status) || item.status === "failed");
-  const [renderDetail, setRenderDetail] = useState(() => statusIsActive(item.status) || item.status === "failed");
+  const [open, setOpen] = useState(false);
+  const [renderDetail, setRenderDetail] = useState(false);
   const detailCloseTimer = useRef<number | null>(null);
-  const previousStatus = useRef(item.status);
   const Icon: LucideIcon = getAssistantToolIcon(item);
   const label = item.toolName
     ? getAssistantToolLabel(item.toolName, t)
     : t("activity.workflow.default", { defaultValue: "Workflow" });
   const active = statusIsActive(item.status);
 
-  useEffect(() => {
-    if (active || item.status === "failed") {
+  useEffect(
+    () => () => {
       if (detailCloseTimer.current !== null) window.clearTimeout(detailCloseTimer.current);
-      setRenderDetail(true);
-      setOpen(true);
-    } else if (statusIsActive(previousStatus.current)) {
-      setOpen(false);
-      detailCloseTimer.current = window.setTimeout(() => setRenderDetail(false), 320);
-    }
-    previousStatus.current = item.status;
-    return () => {
-      if (detailCloseTimer.current !== null) window.clearTimeout(detailCloseTimer.current);
-    };
-  }, [active, item.status]);
+    },
+    [],
+  );
 
   const toggleDetail = () => {
     if (!open) {
@@ -774,17 +764,10 @@ function TaskTurn({
 }) {
   const tone = aggregateStatus(turn.items);
   const active = statusIsActive(tone);
-  const [open, setOpen] = useState(() => active || tone === "failed");
-  const previousTone = useRef(tone);
+  const [open, setOpen] = useState(false);
   const summary = displayGroupSummary(turn.items, t);
   const actionTitle = title || summary;
   const secondarySummary = title ? summary : "";
-
-  useEffect(() => {
-    if (active || tone === "failed") setOpen(true);
-    else if (statusIsActive(previousTone.current)) setOpen(false);
-    previousTone.current = tone;
-  }, [active, tone]);
 
   return (
     <section className={`cr-task-turn is-${tone}`}>
@@ -800,7 +783,7 @@ function TaskTurn({
         </span>
         <span className={`cr-group-status is-${tone}`}>
           {active && <Loader2Icon className="cr-group-spinner" size={13} />}
-          {statusText(tone, t)}
+          <span className="cr-status-copy">{statusText(tone, t)}</span>
           <ChevronDownIcon size={14} />
         </span>
       </button>

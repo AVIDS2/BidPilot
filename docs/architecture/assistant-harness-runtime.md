@@ -46,6 +46,34 @@ refer to the older operator path; this inventory is the current authority.
 6. The assistant response, terminal state, and public event summaries are
    persisted in PostgreSQL. SSE is a live projection of that durable trace.
 
+## Pi-style prompt and resource assembly
+
+The default system prompt follows the small, composable structure used by
+Pi's `buildSystemPrompt` rather than encoding a second natural-language
+router. The implementation reference is the MIT-licensed
+`badlogic/pi-mono` `packages/coding-agent/src/core/system-prompt.ts` (reviewed
+at commit `936aff0`). BidPilot adapts the identity and product boundary but
+keeps the same architecture:
+
+1. a stable assistant identity and a short set of general execution rules;
+2. provider-native tool schemas supplied separately from the prose prompt;
+3. trusted runtime/project context assembled near the current turn;
+4. a small `AVAILABLE_SKILLS` index, with full instructions loaded on demand
+   through the real `read_skill` tool.
+
+The server must not infer a capability, force a required tool call, or select
+a Skill by matching words in the user message. The model chooses tools from
+their schemas. Runtime code remains responsible for validation, authorization,
+approval, quotas, idempotency, loop bounds, and truthful failure handling.
+When a requested action has enough input, the model invokes the action tool;
+it does not imitate an approval request in assistant prose. Policy may then
+create a durable `RuntimeApproval` and pause the run.
+
+A previous non-retryable action outcome is appended as a trusted,
+argument-free `PREVIOUS_TERMINAL_ACTION` block on the next turn. This gives the
+model the failure fact needed to answer a follow-up without replaying the old
+action or exposing its stored parameters.
+
 ## Pauses and approval
 
 - Missing required input persists `ChatTaskState(status=needs_input)` and
@@ -106,6 +134,14 @@ Core events are `run.started`, `plan.updated`, `capability.*`,
 `approval.*`, `workflow.linked`, `message.*`, and terminal `run.*` events.
 The legacy `assistant.*` SSE names are a compatibility projection only; new
 backend work should produce durable runtime events first.
+
+The browser restores transcript messages and all recent run-event streams in
+parallel, merges them by durable time/sequence, and commits one conversation
+snapshot. This prevents a transcript from rendering first and execution
+history jumping in later. Timeline groups are collapsed by default at every
+level and are never opened or closed by incoming events; only the user changes
+disclosure state. Running/thinking aggregate labels may use a restrained
+motion treatment, while completed or failed labels remain static.
 
 ## Non-goals of this baseline
 

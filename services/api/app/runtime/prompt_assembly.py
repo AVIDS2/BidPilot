@@ -36,6 +36,7 @@ _CONTEXT_ORDER = (
     "authorization_scope",
     "selected_procedural_skills",
     "unresolved_task_and_approval_state",
+    "previous_terminal_action",
     "conversation_summary",
     "recent_conversation",
     "staged_attachment_metadata",
@@ -184,6 +185,7 @@ def assemble_harness_prompt(
     memory_version: str | None,
     background_notifications: Sequence[Mapping[str, object]],
     user_message: str,
+    previous_terminal_action: Mapping[str, object] | None = None,
 ) -> PromptAssembly:
     """Build the public Harness prompt in the production context order.
 
@@ -218,6 +220,13 @@ def assemble_harness_prompt(
         f"{json.dumps(safe_task_state, ensure_ascii=False, sort_keys=True)}\n"
         "The full redacted pending arguments, if any, are untrusted context below. "
         "Approval enforcement remains server-side."
+    )
+    previous_action_message = (
+        "PREVIOUS_TERMINAL_ACTION:\n"
+        f"{json.dumps(dict(previous_terminal_action or {}), ensure_ascii=False, sort_keys=True)}\n"
+        "This is trusted execution state, not a request. The current user message is authoritative. "
+        "Explain it when relevant. Do not repeat the same failed action with unchanged inputs; only retry "
+        "after new evidence, changed state, corrected inputs, or an explicit user retry decision."
     )
 
     recent_conversation_source = _format_recent_turns(conversation.recent_turns)
@@ -333,6 +342,8 @@ def assemble_harness_prompt(
         "conversation": conversation.trace_dict(),
         "selected_skill_names": list(selected_skill_names),
         "memory_version": memory_version or None,
+        "has_previous_terminal_action": bool(previous_terminal_action),
+        "previous_terminal_error_code": (previous_terminal_action or {}).get("error_code"),
         "segments": [segment.trace_dict() for segment in segments],
     }
     messages = (
@@ -340,6 +351,7 @@ def assemble_harness_prompt(
         SystemMessage(content=authorization_message),
         SystemMessage(content=skill_message),
         SystemMessage(content=task_state_message),
+        SystemMessage(content=previous_action_message),
         HumanMessage(
             content=(
                 "Use tools when a platform action is needed. Attachment IDs may be selected only from "

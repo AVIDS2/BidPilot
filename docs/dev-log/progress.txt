@@ -1539,3 +1539,31 @@ unverified visual changes merely to iterate in production.
   deterministic/operator or keyword-routing assertions that conflict with the
   current Harness-only, model-selected routing contract; they were not hidden
   or made green by restoring keyword matching.
+
+## Pi-style Harness and stable timeline correction (2026-08-18)
+
+- Removed the remaining message-triggered required-tool retry path and its
+  action/confirmation/negation markers. The provider receives one native tool
+  binding; the model, not server-side phrase matching, selects the next action.
+- Rebased the default prompt on Pi's compact prompt-construction pattern:
+  stable identity, short general guidelines, provider-native tool schemas,
+  trusted runtime context, and progressive Skill disclosure through the now
+  executable `read_skill` tool. Runtime policy owns approvals and creates the
+  durable pause instead of asking the model to simulate confirmation text.
+- Added a scoped `PREVIOUS_TERMINAL_ACTION` observation so vague follow-ups do
+  not replay a prior terminal write. The observation excludes stored action
+  arguments and internal identifiers.
+- Conversation restoration now loads transcript, run inventory, and recent
+  event streams concurrently, merges once, and avoids the late history jump.
+  Timeline levels stay collapsed until explicitly opened; incoming status
+  changes do not fight user disclosure state. Active aggregate labels receive
+  the only motion treatment, with reduced-motion support.
+- Verification: focused Runtime and stress coverage `60 passed`; the complete
+  Web suite passed `35 files / 149 tests`; TypeScript, Ruff and the production
+  build passed. Web lint has zero errors and five pre-existing Hook warnings.
+  Deterministic Harness evaluation passed `22/22 (100/100)`. Playwright passed
+  the Agent workspace and structured canvas action on desktop Chromium and
+  Pixel 7 (`4/4`). The configured `opencode-go/deepseek-v4-flash` live suite
+  passed ordinary answer, project reads, delivery creation, readiness,
+  durable approval pause/resume, and vector embedding against an isolated test
+  database.

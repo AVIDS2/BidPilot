@@ -341,7 +341,10 @@ async def _execute(output_dir: Path) -> tuple[Path, bool]:
             db,
             context,
             name="approval_request",
-            message="创建一个名为“真实验收审批项目”的投标项目。先请求确认，不要只解释。",
+            message=(
+                "创建一个名为“真实验收审批项目”的投标项目，信息已经完整，请直接发起创建动作。"
+                "平台会按当前权限策略处理需要的审批。"
+            ),
             approval_mode="risky_only",
         )
         results.append(approval_request)

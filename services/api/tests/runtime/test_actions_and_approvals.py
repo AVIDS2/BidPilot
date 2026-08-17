@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from app.auth.schemas import CurrentUser
-from app.models import AuditEvent, ExecutionRun, Project, RuntimeAction, RuntimeRun
+from app.models import AuditEvent, ChatConversation, ExecutionRun, Project, RuntimeAction, RuntimeRun
 from app.runtime.events import list_events_after
 from app.runtime.service import (
     RuntimeApprovalExpiredError,
@@ -19,12 +19,80 @@ from app.runtime.service import (
     create_workflow_bridge_run,
     execute_capability,
     fail_runtime_run,
+    get_previous_terminal_action_context,
     reconcile_runtime_run_for_replay,
     request_runtime_cancellation,
     resolve_approval,
     request_workflow_cancellation,
 )
 from contracts.runtime import RuntimeActionStatus, RuntimeApprovalDecisionType, RuntimeApprovalStatus
+
+
+def test_previous_terminal_action_context_is_scoped_and_argument_free(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    conversation_id = str(uuid.uuid4())
+    test_db.add(
+        ChatConversation(
+            id=conversation_id,
+            user_id=default_user_id,
+            title="failure continuity",
+        )
+    )
+    test_db.flush()
+    previous_run = RuntimeRun(
+        kind="assistant_turn",
+        status="failed",
+        org_id=default_org_id,
+        user_id=default_user_id,
+        conversation_id=conversation_id,
+        engine="streaming_harness",
+        trace_id=f"trace-{uuid.uuid4().hex}",
+        policy_snapshot_json={"approval_mode": "full_access"},
+    )
+    current_run = RuntimeRun(
+        kind="assistant_turn",
+        status="running",
+        org_id=default_org_id,
+        user_id=default_user_id,
+        conversation_id=conversation_id,
+        engine="streaming_harness",
+        trace_id=f"trace-{uuid.uuid4().hex}",
+        policy_snapshot_json={"approval_mode": "full_access"},
+    )
+    test_db.add_all((previous_run, current_run))
+    test_db.flush()
+    test_db.add(
+        RuntimeAction(
+            run_id=previous_run.id,
+            action_key="failed-create",
+            capability_name="create_project",
+            status="failed",
+            risk_level="low_risk_write",
+            policy_outcome="allow",
+            approval_mode="full_access",
+            arguments_json={"name": "must-not-enter-model-context"},
+            error_code="project_limit_exceeded",
+            error_message="当前工作区已达到项目数量上限。",
+            completed_at=datetime.now(UTC),
+        )
+    )
+    test_db.commit()
+
+    context = get_previous_terminal_action_context(
+        test_db,
+        _user(default_org_id, default_user_id),
+        conversation_id=conversation_id,
+        exclude_run_id=current_run.id,
+    )
+
+    assert context is not None
+    assert context["capability_name"] == "create_project"
+    assert context["error_code"] == "project_limit_exceeded"
+    assert "arguments" not in context
+    assert "must-not-enter-model-context" not in str(context)
 
 
 def _user(default_org_id: str, default_user_id: str) -> CurrentUser:

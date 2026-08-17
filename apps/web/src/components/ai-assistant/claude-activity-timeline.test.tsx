@@ -31,21 +31,36 @@ function renderTimeline(
 }
 
 describe("ClaudeActivityTimeline", () => {
-  it("keeps nested detail grids mounted when collapsed and marks only running workflow nodes", () => {
-    const { container } = renderTimeline([runningWorkflow]);
+  it("keeps every timeline level closed until the reader opens it", () => {
+    const { container, rerender } = renderTimeline([runningWorkflow]);
+    const taskSummary = container.querySelector(".cr-task-turn-summary")!;
 
-    expect(screen.getByTestId("assistant-runtime-workflow-running").querySelector(".cr-runtime-timeline")).toHaveClass("is-running");
-    expect(container.querySelector(".cr-runtime-node.is-running")).toBeInTheDocument();
+    expect(taskSummary).toHaveAttribute("aria-expanded", "false");
+    expect(container.querySelector(".cr-group-status.is-running .cr-status-copy")).toBeInTheDocument();
+    expect(screen.queryByTestId("assistant-runtime-workflow-running")).not.toBeInTheDocument();
 
-    const detailGrid = container.querySelector(".cr-command-grid");
-    const detailGridInner = container.querySelector(".cr-command-grid-inner");
-    expect(detailGrid).toHaveClass("is-open");
-    expect(detailGridInner).toBeInTheDocument();
+    rerender(
+      <MemoryRouter>
+        <ClaudeActivityTimeline items={[{ ...runningWorkflow, status: "failed" }]} />
+      </MemoryRouter>,
+    );
+    const failedTaskSummary = container.querySelector(".cr-task-turn-summary")!;
+    expect(failedTaskSummary).toHaveAttribute("aria-expanded", "false");
 
-    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
+    fireEvent.click(failedTaskSummary);
+    const toolSummary = screen.getByRole("button", { name: /Show .*section.* details/i });
+    expect(toolSummary).toHaveAttribute("aria-expanded", "false");
 
-    expect(detailGrid).not.toHaveClass("is-open");
-    expect(container.querySelector(".cr-command-grid-inner")).toBe(detailGridInner);
+    fireEvent.click(toolSummary);
+    const runtime = screen.getByTestId("assistant-runtime-workflow-running");
+    const runtimeSummary = runtime.querySelector(".cr-runtime-summary")!;
+    expect(runtimeSummary).toHaveAttribute("aria-expanded", "false");
+    expect(runtime.querySelector(".cr-runtime-status")).toBeInTheDocument();
+
+    fireEvent.click(runtimeSummary);
+    expect(runtimeSummary).toHaveAttribute("aria-expanded", "true");
+    expect(runtime.querySelector(".cr-runtime-timeline")).toHaveClass("is-running");
+    expect(runtime.querySelector(".cr-runtime-node.is-running")).toBeInTheDocument();
   });
 
   it("keeps a tool detail mounted through its closing grid transition", () => {
@@ -156,7 +171,10 @@ describe("ClaudeActivityTimeline", () => {
       errorMessage: "远程服务器拒绝了附件下载请求。",
       errorCode: "remote_download_forbidden",
     };
-    renderTimeline([failedTool]);
+    const { container } = renderTimeline([failedTool]);
+
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
+    fireEvent.click(screen.getByRole("button", { name: /Show .* details/i }));
 
     expect(screen.getByText("远程服务器拒绝了附件下载请求。")).toBeInTheDocument();
     expect(screen.getByText("错误代码：remote_download_forbidden")).toBeInTheDocument();

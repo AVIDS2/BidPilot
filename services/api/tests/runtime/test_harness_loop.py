@@ -191,11 +191,11 @@ def test_build_public_reasoning_uses_only_safe_model_authored_progress() -> None
         completed_capabilities=[],
         model_narration="SERVER_AUTHORIZATION_SCOPE: actor_id=secret",
     ) is None
-    assert "官方来源" in (build_public_reasoning(
+    assert build_public_reasoning(
         ["web_search"],
         active_project_id=None,
         completed_capabilities=[],
-    ) or "")
+    ) is None
 
 
 def test_extract_public_text_content_keeps_text_blocks_and_drops_reasoning() -> None:
@@ -206,14 +206,17 @@ def test_extract_public_text_content_keeps_text_blocks_and_drops_reasoning() -> 
     ]) == "梳理项目范围，确认起草对象。"
 
 
-def test_resolve_harness_budgets_raises_for_campaign_language() -> None:
+def test_resolve_harness_budgets_does_not_route_from_user_wording() -> None:
     default_steps, default_tools = resolve_harness_budgets("搜索项目")
     campaign_steps, campaign_tools = resolve_harness_budgets("请把全部章节批量起草")
+    forced_steps, forced_tools = resolve_harness_budgets(
+        "ordinary wording",
+        force_campaign=True,
+    )
     assert default_steps == HARNESS_MAX_STEPS
-    assert campaign_steps == HARNESS_CAMPAIGN_MAX_STEPS
-    # A campaign is one governed capability; its worker owns each internal
-    # wave, so the model must not batch unrelated writes in the same turn.
-    assert campaign_tools == 1
+    assert (campaign_steps, campaign_tools) == (default_steps, default_tools)
+    assert forced_steps == HARNESS_CAMPAIGN_MAX_STEPS
+    assert forced_tools == 1
 
 
 def test_research_queries_are_deduplicated_and_bounded() -> None:
@@ -764,27 +767,15 @@ def test_streaming_harness_pauses_for_missing_required_tool_input(
     assert len(llm.calls) == 1
 
 
-def test_streaming_harness_limits_test_requests_to_read_only_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_streaming_harness_does_not_filter_tools_from_test_wording(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import asyncio
 
     from app.runtime import harness_loop as module
     from app.usage.schemas import ProviderSource
 
-    llm = _FakeBoundLLM(
-        [
-            _FakeAIMessage(
-                tool_calls=[{"id": "call-create", "name": "create_project", "args": {"name": "不应创建"}}],
-            ),
-            _FakeAIMessage(content="我只完成了安全的只读诊断。"),
-        ]
-    )
-    executed: list[str] = []
-
-    def fake_execute_capability(*args: Any, **kwargs: Any) -> None:
-        executed.append(str(kwargs["capability_name"]))
-        raise AssertionError("diagnostic mode must not execute a write capability")
-
-    monkeypatch.setattr(module, "execute_capability", fake_execute_capability)
+    llm = _FakeBoundLLM([_FakeAIMessage(content="我会按你的目标决定是否需要工具。")])
     monkeypatch.setattr(module, "save_message", lambda *args, **kwargs: None)
     monkeypatch.setattr(module, "complete_runtime_run", lambda *args, **kwargs: None)
     monkeypatch.setattr(module, "reserve_assistant_model_tokens", lambda *args, **kwargs: None)
@@ -820,10 +811,9 @@ def test_streaming_harness_limits_test_requests_to_read_only_tools(monkeypatch: 
 
     available_names = {tool["function"]["name"] for tool in llm.tools}
     assert "search_projects" in available_names
-    assert "create_project" not in available_names
-    assert executed == []
-    failure = next(payload for event, payload in events if event == "assistant.tool_failed")
-    assert "安全诊断" in failure["error_message"]
+    assert "create_project" in available_names
+    assert "assistant.tool_started" not in [event for event, _ in events]
+    assert "assistant.tool_failed" not in [event for event, _ in events]
 
 
 def test_streaming_harness_stops_after_repeated_tool_failures_without_leaking_errors(

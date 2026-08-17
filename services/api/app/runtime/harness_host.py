@@ -14,7 +14,6 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
-from app.agent.llm import get_required_tool_choice_llm
 from app.chat.service import save_message
 from contracts.runtime import RuntimeEventType
 
@@ -41,6 +40,7 @@ from .harness_loop import (
     StreamingHarness,
     _TOOL_PARAMETER_SCHEMAS,
     _extract_public_text_content,
+    _READ_SKILL_TOOL_SPEC,
     _sse,
     build_capability_tool_specs,
     build_turn_summary,
@@ -52,88 +52,6 @@ from .service import (
     finalize_requested_runtime_cancellation,
     runtime_cancellation_requested,
 )
-
-
-_REQUIRED_TOOL_CALL_CORRECTION = """
-服务端拒绝了上一回合的纯文本确认，因为它没有产生任何工具调用。
-本轮用户请求已经明确要求执行一个业务动作。现在必须从已注册工具中选择唯一合适的工具并返回工具调用，参数必须来自用户请求和当前上下文。
-不要输出确认问题、计划说明或普通自然语言；不要假装已经执行。高风险操作会由服务端审批层暂停，缺少字段时由工具结果返回待补充信息。
-""".strip()
-
-_ACTION_MARKERS = (
-    "创建",
-    "新建",
-    "生成",
-    "起草",
-    "导入",
-    "下载",
-    "上传",
-    "删除",
-    "更新",
-    "运行",
-    "执行",
-    "发起",
-    "审核",
-    "提交",
-    "导出",
-    "入库",
-    "同步",
-    "发送",
-    "create",
-    "download",
-    "upload",
-    "run",
-    "execute",
-)
-_CONFIRMATION_MARKERS = ("请确认", "请您确认", "确认", "确认后", "确认执行", "确认把", "将调用", "会调用", "调用接口")
-_NEGATION_MARKERS = (
-    "不要执行",
-    "别执行",
-    "不执行",
-    "不要创建",
-    "别创建",
-    "不创建",
-    "不要生成",
-    "不要写入",
-    "不写入",
-    "仅解释",
-    "只解释",
-    "仅查询",
-    "只查询",
-    "不要修改",
-    "不修改",
-    "什么是",
-    "能否说明",
-)
-
-
-def _requires_tool_call_correction(user_message: str, model_text: str) -> bool:
-    """Detect a model's explicit promise to act without a protocol tool call."""
-    user = user_message.strip().lower()
-    text = model_text.strip().lower()
-    explicit_action_request = any(marker in user for marker in _ACTION_MARKERS)
-    clarification_only = any(marker in user for marker in _NEGATION_MARKERS) and not any(
-        marker in user for marker in ("不要只解释", "不要仅解释", "不要只说明")
-    )
-    if not user or not text or (clarification_only and not explicit_action_request):
-        return False
-    return bool(
-        any(marker.lower() in user for marker in _ACTION_MARKERS)
-        and any(marker.lower() in text for marker in _CONFIRMATION_MARKERS)
-        and ("调用" in text or "执行" in text or "入库" in text or "创建" in text)
-    )
-
-
-def _build_required_tool_bound(llm: Any, provider_specs: Sequence[dict[str, Any]]) -> Any | None:
-    """Build the optional provider-specific required-tool retry binding."""
-    try:
-        action_llm = get_required_tool_choice_llm(llm)
-        return action_llm.bind_tools(provider_specs, tool_choice="required")
-    except (TypeError, ValueError):
-        # Test doubles and providers without a compatible required-tool
-        # contract continue on the normal binding; they never fail a turn at
-        # startup merely because the recovery binding is unavailable.
-        return None
 
 
 class BidPilotHarnessPlanPolicy(HarnessPlanPolicy):
@@ -177,14 +95,12 @@ class BidPilotHarnessPlanPolicy(HarnessPlanPolicy):
 class LangChainHarnessModelPort:
     """Map the core's portable transcript to the existing provider adapter."""
 
-    def __init__(self, host: "CoreStreamingHarness", bound: Any, required_tool_bound: Any | None = None) -> None:
+    def __init__(self, host: "CoreStreamingHarness", bound: Any) -> None:
         self.host = host
         self.bound = bound
-        self.required_tool_bound = required_tool_bound
         self.last_text = ""
         self.turn_id = "turn-1"
         self.step = 1
-        self._required_tool_retry_used = False
 
     def begin_turn(self, *, turn_id: str, step: int) -> None:
         self.turn_id = turn_id
@@ -225,44 +141,6 @@ class LangChainHarnessModelPort:
                 raise HarnessModelFailure(str(exc), error_code="usage_limit_exceeded") from exc
             raise
         self.last_text = "".join(text_parts)
-        if (
-            not buffered_calls
-            and self.required_tool_bound is not None
-            and not self._required_tool_retry_used
-            and _requires_tool_call_correction(self.host.user_message, self.last_text)
-        ):
-            # A prose "please confirm" answer cannot create a durable
-            # approval, action, or trace.  Let the model choose a tool in a
-            # one-shot non-thinking retry; the governed adapter still owns
-            # validation, authorization, and approval before any side effect.
-            self._required_tool_retry_used = True
-            text_parts.clear()
-            buffered_calls.clear()
-            retry_usage: dict[str, Any] = {"measurement": None}
-            try:
-                self.host._reserve_model_capacity()
-                await self.host._collect_model_step(
-                    self.required_tool_bound,
-                    [
-                        *_to_langchain_messages(messages),
-                        SystemMessage(content=_REQUIRED_TOOL_CALL_CORRECTION),
-                        HumanMessage(
-                            content=self.host._trusted_runtime_status(
-                                turn_id=self.turn_id,
-                                step=self.step,
-                            )
-                        ),
-                    ],
-                    text_parts,
-                    buffered_calls,
-                    turn_id=self.turn_id,
-                    usage_holder=retry_usage,
-                )
-                self.host._observe_model_usage(retry_usage.get("measurement"))
-            except Exception:
-                self.host._mark_active_reservations_uncertain()
-                raise
-            self.last_text = "".join(text_parts)
         return HarnessModelStep(
             text=self.last_text,
             tool_calls=tuple(
@@ -299,6 +177,7 @@ class CoreStreamingHarness(StreamingHarness):
         initial_messages = self._initial_messages(background_notifications=notifications)
         self._persist_context_trace()
         provider_specs = build_capability_tool_specs(allowed_names=self._allowed_capability_names)
+        provider_specs.append(_READ_SKILL_TOOL_SPEC)
         try:
             from .mcp_client import list_mcp_tool_specs
 
@@ -317,8 +196,7 @@ class CoreStreamingHarness(StreamingHarness):
             pass
         tools = tuple(_to_core_tool_definition(spec) for spec in provider_specs)
         bound = self.llm.bind_tools(provider_specs)
-        required_tool_bound = _build_required_tool_bound(self.llm, provider_specs)
-        model = LangChainHarnessModelPort(self, bound, required_tool_bound)
+        model = LangChainHarnessModelPort(self, bound)
         executor = BidPilotToolExecutor(
             db=self.db,
             user=self.user,

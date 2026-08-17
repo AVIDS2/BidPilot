@@ -182,38 +182,26 @@ def test_core_host_emits_confirmation_end_for_approval_pause(monkeypatch) -> Non
     assert payload["state"] == "needs_confirmation"
 
 
-def test_core_host_retries_prose_confirmation_as_a_required_tool_call(monkeypatch) -> None:
-    """A model promise must never replace the durable approval tool path."""
-    from app.runtime import background_tasks, harness_host, harness_loop
-
-    class _ToolExecutor:
-        async def prepare(self, _call, _context):
-            return HarnessToolOutcome.paused("需要确认", pause_reason="needs_approval")
-
-        async def execute(self, _call, _context):
-            raise AssertionError("approval pause must not execute")
+def test_core_host_never_forces_a_tool_call_from_message_keywords(monkeypatch) -> None:
+    """The model protocol, not server-side word matching, owns action selection."""
+    from app.runtime import background_tasks, harness_loop
 
     monkeypatch.setattr(background_tasks, "collect_completed_notifications", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(harness_loop, "record_runtime_context_trace", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(harness_loop, "reserve_assistant_model_tokens", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(harness_host, "BidPilotToolExecutor", lambda **_kwargs: _ToolExecutor())
-    monkeypatch.setattr(harness_host, "publish_event", lambda *_args, **_kwargs: None)
-    llm = _FakeBoundLlm(
-        [
-            _FakeMessage("项目名称已明确，请确认。确认后我将调用创建接口完成项目创建。"),
-            _FakeMessage("", [{"id": "call-1", "name": "create_project", "args": {"name": "验收项目"}}]),
-        ]
-    )
+    monkeypatch.setattr("app.runtime.harness_host.save_message", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("app.runtime.harness_host.complete_runtime_run", lambda *_args, **_kwargs: None)
+    llm = _FakeBoundLlm([_FakeMessage("我还缺少足够信息，先不执行。")])
     harness = _harness(llm)
-    harness.user_message = "请创建一个名为验收项目的投标项目，先请求确认，不要只解释"
+    harness.user_message = "创建、执行、导入、下载、确认"
 
     async def collect() -> list[str]:
         return [event async for event in harness.run()]
 
     raw_events = asyncio.run(collect())
 
-    assert len(llm.calls) == 2
-    assert {"tool_choice": "required"} in llm.bind_options
+    assert len(llm.calls) == 1
+    assert llm.bind_options == [{}]
     end_event = next(event for event in raw_events if "event: assistant.end" in event)
     payload = json.loads(next(line[6:] for line in end_event.splitlines() if line.startswith("data: ")))
-    assert payload["state"] == "needs_confirmation"
+    assert payload["state"] == "completed"

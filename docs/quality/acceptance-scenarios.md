@@ -237,6 +237,57 @@ Expected outcomes:
 - the approval-mode hint states that account permissions, plan quotas, and
   safety boundaries still apply
 
+## Scenario AC-11: Model-selected action and durable approval resume
+
+Purpose:
+
+- prove that the Assistant uses provider-native tool calling without a
+  keyword router or a prose-only imitation of product approval
+
+Steps:
+
+1. ask a normal knowledge question containing action-like words and verify no
+   tool is forced
+2. ask to create a fully named project under `risky_only`
+3. inspect the paused action and `RuntimeApproval`
+4. approve through the assistant confirmation contract and resume the same run
+
+Expected outcomes:
+
+- ordinary text never triggers a server-selected or required tool retry
+- the model calls `create_project` from its tool schema
+- policy pauses the run as `awaiting_approval`; assistant prose is not used as
+  the approval authority
+- approval resumes the original run and creates the project exactly once
+- the next turn receives a bounded previous terminal-action fact when the
+  prior action ended non-retryably
+
+## Scenario AC-12: Stable conversation replay and timeline disclosure
+
+Purpose:
+
+- prove that durable execution history appears without delayed layout jumps
+  or event-driven disclosure flicker
+
+Steps:
+
+1. open a conversation containing transcript messages and several recent runs
+2. delay one run-event response while allowing the other requests to finish
+3. observe the first committed conversation snapshot
+4. stream running, completed, and failed child events into collapsed groups
+5. expand and collapse each level manually
+
+Expected outcomes:
+
+- transcript and run history are fetched concurrently and committed once
+  after chronological merge
+- task, turn, and tool groups are collapsed by default
+- live or terminal events never force a group open or closed
+- only active aggregate status text has the restrained breathing treatment;
+  completed and failed states are static
+- model observations and internal parameters remain absent from the user
+  timeline
+
 ## Release requirement
 
 A release is not production-ready unless the scenarios relevant to its phase pass with current code and current docs.

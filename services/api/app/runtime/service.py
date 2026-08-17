@@ -75,6 +75,51 @@ class RuntimeRunCreation:
     created: bool
 
 
+def get_previous_terminal_action_context(
+    db: Session,
+    user: CurrentUser,
+    *,
+    conversation_id: str,
+    exclude_run_id: str,
+) -> dict[str, Any] | None:
+    """Return the latest trusted action failure for the next model turn.
+
+    Conversation prose is not a reliable source for deciding whether a prior
+    mutation actually ran. This small server-owned observation lets the model
+    explain a failure or choose a different action without replaying raw audit
+    data, arguments, or internal identifiers.
+    """
+
+    action = db.scalar(
+        select(RuntimeAction)
+        .join(RuntimeRun, RuntimeAction.run_id == RuntimeRun.id)
+        .where(
+            RuntimeRun.conversation_id == conversation_id,
+            RuntimeRun.org_id == user.org_id,
+            RuntimeRun.user_id == user.id,
+            RuntimeRun.id != exclude_run_id,
+            RuntimeAction.status.in_(
+                (
+                    RuntimeActionStatus.FAILED.value,
+                    RuntimeActionStatus.DENIED.value,
+                    RuntimeActionStatus.EXPIRED.value,
+                )
+            ),
+        )
+        .order_by(RuntimeAction.completed_at.desc(), RuntimeAction.created_at.desc())
+        .limit(1)
+    )
+    if action is None:
+        return None
+    return {
+        "capability_name": action.capability_name,
+        "status": action.status,
+        "error_code": action.error_code or "capability_execution_failed",
+        "message": action.error_message or action.public_summary or "上一项操作未能完成。",
+        "occurred_at": (action.completed_at or action.created_at).isoformat(),
+    }
+
+
 def _action_event_payload(action: RuntimeAction, **payload: Any) -> dict[str, Any]:
     """Return the stable, public correlation fields for one action event."""
     value: dict[str, Any] = {

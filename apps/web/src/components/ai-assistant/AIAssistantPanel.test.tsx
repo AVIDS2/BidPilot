@@ -15,6 +15,7 @@ vi.mock("@/lib/api", () => ({
   uploadDocument: vi.fn(),
   uploadAssistantAttachment: vi.fn(),
   downloadAssistantArtifact: vi.fn(),
+  listRuntimeRuns: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
   listRuntimeEvents: vi.fn().mockResolvedValue({ items: [] }),
   cancelRuntimeWorkflow: vi.fn(),
 }));
@@ -69,6 +70,29 @@ async function expandToolDetails(label: string) {
       screen.getByRole("button", { name: `Hide ${label} details` }),
     ).toHaveAttribute("aria-expanded", "true");
   });
+}
+
+async function expandAllActivityDetails() {
+  await waitFor(() => {
+    expect(document.querySelector(".cr-task-turn-summary")).toBeTruthy();
+  });
+  for (const summary of document.querySelectorAll<HTMLButtonElement>(
+    ".cr-task-turn-summary",
+  )) {
+    if (summary.getAttribute("aria-expanded") !== "true") {
+      fireEvent.click(summary);
+    }
+  }
+  await waitFor(() => {
+    expect(document.querySelector(".cr-run-step-button")).toBeTruthy();
+  });
+  for (const step of document.querySelectorAll<HTMLButtonElement>(
+    ".cr-run-step-button",
+  )) {
+    if (step.getAttribute("aria-expanded") !== "true") {
+      fireEvent.click(step);
+    }
+  }
 }
 
 describe("AIAssistantPanel", () => {
@@ -235,7 +259,7 @@ describe("AIAssistantPanel", () => {
     expect(screen.queryByText("Aborted")).not.toBeInTheDocument();
   });
 
-  it("presents a live tool run as an expanded timeline rail", async () => {
+  it("keeps a live tool run collapsed until the reader opens it", async () => {
     let requestSignal: AbortSignal | undefined;
     const encoder = new TextEncoder();
     vi.stubGlobal(
@@ -276,10 +300,18 @@ describe("AIAssistantPanel", () => {
       "data-status",
       "running",
     );
+    const collapsedLiveTool = screen.getByRole("button", {
+      name: "Show Search projects details",
+    });
+    expect(collapsedLiveTool).toHaveAttribute("aria-busy", "true");
+    expect(collapsedLiveTool).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByText("running").length).toBeGreaterThan(0);
+
+    await expandActivityDetails();
+    await expandToolDetails("Search projects");
     expect(
       screen.getByRole("button", { name: "Hide Search projects details" }),
     ).toHaveAttribute("aria-busy", "true");
-    expect(screen.getAllByText("running").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Stop generating" }));
     await waitFor(() => {
@@ -456,6 +488,7 @@ describe("AIAssistantPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
+    await expandAllActivityDetails();
     expect(
       await screen.findByText("助手连接已结束，但运行记录未报告终态。已解除待发送队列，请重试或查看运行记录。"),
     ).toBeInTheDocument();
@@ -508,6 +541,7 @@ describe("AIAssistantPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
+    await expandAllActivityDetails();
     expect(
       await screen.findAllByText(
         "所选模型配置已不可用，已切回平台默认模型。请确认后重新发送。",
@@ -557,6 +591,7 @@ describe("AIAssistantPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
+    await expandAllActivityDetails();
     const cancelButton = await screen.findByRole("button", {
       name: "Cancel workflow",
     });
@@ -629,6 +664,7 @@ describe("AIAssistantPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
+    await expandAllActivityDetails();
     expect(
       await screen.findByText(
         "Model service authentication failed. Check the key and permissions, then test the connection again.",

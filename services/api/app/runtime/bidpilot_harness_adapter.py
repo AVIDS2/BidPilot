@@ -36,6 +36,7 @@ from .registry import (
     missing_required_capability_arguments,
 )
 from .service import execute_prepared_capability, prepare_capability_execution
+from .skills import read_skill
 from contracts.runtime import RuntimeEventType
 from contracts.runtime import RuntimeRiskLevel
 
@@ -61,6 +62,12 @@ class _PreparedMcpTool:
     tool_name: str
     public_tool_name: str
     title: str
+
+
+@dataclass(frozen=True)
+class _PreparedSkill:
+    name: str
+    body: str
 
 
 class BidPilotToolExecutor:
@@ -123,6 +130,18 @@ class BidPilotToolExecutor:
                     "该工具请求被当前安全策略阻止。",
                     error_code="capability_policy_blocked",
                 )
+        if call.name == "read_skill":
+            name = str(call.arguments.get("name") or "").strip()
+            body = read_skill(name)
+            if not body:
+                return HarnessToolOutcome.failed(
+                    "未找到该流程技能，请使用 AVAILABLE_SKILLS 中的准确名称。",
+                    error_code="skill_not_found",
+                    recoverable=True,
+                )
+            self._prepared[call.id] = _PreparedSkill(name=name, body=body)
+            return None
+
         mcp_route = self._mcp_route(call.name)
         if mcp_route is not None:
             server_name, tool_name, public_tool_name, title = mcp_route
@@ -282,6 +301,16 @@ class BidPilotToolExecutor:
             )
         if isinstance(prepared, _PreparedMcpTool):
             return await self._execute_mcp(call, prepared, _context)
+        if isinstance(prepared, _PreparedSkill):
+            return HarnessToolOutcome.succeeded(
+                f"已加载流程技能：{prepared.name}。",
+                {
+                    "status": "loaded",
+                    "skill_name": prepared.name,
+                    "instructions": prepared.body,
+                },
+                public_payload={"skill_name": prepared.name},
+            )
         try:
             if prepared.capability_name in EXTERNAL_IO_CAPABILITIES:
                 execution = await asyncio.to_thread(

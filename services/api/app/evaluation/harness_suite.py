@@ -84,6 +84,26 @@ HARNESS_EVALUATION_TARGETS: tuple[HarnessEvaluationTarget, ...] = (
         pytest_targets=("tests/runtime/test_harness_core.py::test_plain_conversation_completes_without_a_tool",),
     ),
     HarnessEvaluationTarget(
+        id="cross-domain-no-keyword-tool-forcing",
+        dimension="cross_domain",
+        p0=True,
+        detail="自然语言中的动作词不会触发服务端工具路由或 required-tool 重试。",
+        pytest_targets=("tests/runtime/test_harness_host.py::test_core_host_never_forces_a_tool_call_from_message_keywords",),
+    ),
+    HarnessEvaluationTarget(
+        id="cross-turn-terminal-action-context",
+        dimension="loop_recovery",
+        detail="上一轮终止动作以可信、无参数的上下文进入下一轮，模型无需重放失败调用。",
+        pytest_targets=("tests/runtime/test_actions_and_approvals.py::test_previous_terminal_action_context_is_scoped_and_argument_free",),
+    ),
+    HarnessEvaluationTarget(
+        id="project-limit-is-terminal",
+        dimension="loop_recovery",
+        p0=True,
+        detail="项目额度耗尽只报告一次明确终止错误，不伪装成参数错误或重复调用。",
+        pytest_targets=("tests/runtime/test_harness_loop.py::test_streaming_harness_stops_after_one_project_limit_failure",),
+    ),
+    HarnessEvaluationTarget(
         id="cross-domain-steering",
         dimension="cross_domain",
         detail="用户转向输入在工具边界优先，不继续执行被放弃的后续调用。",
