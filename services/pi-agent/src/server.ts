@@ -18,7 +18,15 @@ async function readJson(request: AsyncIterable<Uint8Array>): Promise<unknown> {
 const server = createServer(async (request, response) => {
   if (request.method === "GET" && request.url === "/health") {
     response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({ status: "ok", runtime: "pi-coding-agent-session" }));
+    response.end(
+      JSON.stringify({
+        status: "ok",
+        runtime: "pi-coding-agent-session",
+        sandbox_profiles: ["governed_cloud"],
+        host_tools: false,
+        trusted_extensions: ["bidpilot-governance", "bidpilot-skills"],
+      }),
+    );
     return;
   }
   if (request.method !== "POST" || request.url !== "/v1/runs") {

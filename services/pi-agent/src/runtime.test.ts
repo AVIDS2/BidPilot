@@ -35,6 +35,15 @@ function request(): PiRunRequest {
         executionMode: "parallel",
       },
     ],
+    resources: {
+      extensions: ["bidpilot-governance", "bidpilot-skills"],
+      skills: [{ name: "project-review", description: "Review project state when a user asks for a project assessment." }],
+    },
+    sandbox: {
+      profile: "governed_cloud",
+      hostTools: "disabled",
+      network: "bridge_only",
+    },
     toolCallback: { url: "http://tool.test/execute", token: "token" },
     maxTurns: 4,
   };
@@ -184,4 +193,53 @@ test("independent read tools execute in parallel through the governed bridge", a
   });
 
   assert.equal(maxActive, 2);
+});
+
+test("untrusted extensions are rejected before a model request", async () => {
+  const invalid = request();
+  invalid.resources.extensions.push("tenant-javascript");
+  const faux = createFauxCore({ api: "openai-completions", provider: "test-provider", models: [{ id: "test-model" }] });
+  const runtime = await testRuntime(faux.streamSimple);
+
+  await assert.rejects(
+    runPiAgent(invalid, () => undefined, { createModelRuntime: async () => runtime }),
+    /Untrusted Pi extension requested/,
+  );
+  assert.equal(faux.state.callCount, 0);
+});
+
+test("cloud sandbox refuses host tools even when they are requested as custom tools", async () => {
+  const invalid = request();
+  invalid.tools[0] = { ...invalid.tools[0], name: "bash" };
+  const faux = createFauxCore({ api: "openai-completions", provider: "test-provider", models: [{ id: "test-model" }] });
+  const runtime = await testRuntime(faux.streamSimple);
+
+  await assert.rejects(
+    runPiAgent(invalid, () => undefined, { createModelRuntime: async () => runtime }),
+    /Host tool cannot be exposed/,
+  );
+  assert.equal(faux.state.callCount, 0);
+});
+
+test("governance extension blocks oversized tool input without calling the bridge", async () => {
+  const faux = createFauxCore({ api: "openai-completions", provider: "test-provider", models: [{ id: "test-model" }] });
+  faux.setResponses([
+    fauxAssistantMessage(fauxToolCall("get_project_status", { payload: "x".repeat(2048) }, { id: "tool-large" })),
+  ]);
+  const runtime = await testRuntime(faux.streamSimple);
+  const governed = request();
+  governed.sandbox.maxToolInputBytes = 1024;
+  let bridgeCalls = 0;
+
+  const events: string[] = [];
+  await runPiAgent(governed, (event) => { events.push(event.type); }, {
+    createModelRuntime: async () => runtime,
+    fetch: async () => {
+      bridgeCalls += 1;
+      return new Response("{}", { status: 500 });
+    },
+  });
+
+  assert.equal(bridgeCalls, 0);
+  assert.ok(events.includes("tool.completed"));
 });

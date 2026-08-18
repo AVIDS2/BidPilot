@@ -16,6 +16,7 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import type { PiApi, PiRunRequest, PiRuntimeEvent, PiToolBridgeResponse } from "./contracts.js";
+import { buildTrustedExtensions, resolveSandbox, type ResolvedSandbox } from "./sandbox.js";
 
 type EventSink = (event: PiRuntimeEvent) => void | Promise<void>;
 
@@ -53,8 +54,8 @@ async function createModelRuntime(request: PiRunRequest): Promise<{ runtime: Mod
   return { runtime, model };
 }
 
-function toolObservation(response: PiToolBridgeResponse): string {
-  return JSON.stringify(
+function toolObservation(response: PiToolBridgeResponse, sandbox: ResolvedSandbox): string {
+  const observation = JSON.stringify(
     {
       status: response.kind,
       summary: response.publicSummary,
@@ -62,6 +63,19 @@ function toolObservation(response: PiToolBridgeResponse): string {
       pause_reason: response.pauseReason ?? null,
       retryable: response.recoverable ?? false,
       data: response.modelPayload,
+    },
+    null,
+    2,
+  );
+  const bytes = Buffer.byteLength(observation, "utf8");
+  if (bytes <= sandbox.maxToolObservationBytes) return observation;
+  return JSON.stringify(
+    {
+      status: "failed",
+      summary: "工具结果超过单次模型观察上限，请使用筛选、分页或更窄的查询重试。",
+      error_code: "tool_observation_too_large",
+      retryable: true,
+      data: { original_bytes: bytes, limit_bytes: sandbox.maxToolObservationBytes },
     },
     null,
     2,
@@ -74,6 +88,7 @@ function createTools(
   request: PiRunRequest,
   fetchImpl: typeof globalThis.fetch,
   turnState: TurnState,
+  sandbox: ResolvedSandbox,
 ): ToolDefinition[] {
   return request.tools.map((definition) =>
     defineTool({
@@ -105,7 +120,7 @@ function createTools(
         }
         const outcome = (await response.json()) as PiToolBridgeResponse;
         return {
-          content: [{ type: "text", text: toolObservation(outcome) }],
+          content: [{ type: "text", text: toolObservation(outcome, sandbox) }],
           details: outcome,
           terminate:
             outcome.kind === "paused" ||
@@ -226,6 +241,7 @@ export async function runPiAgent(
   dependencies: PiRuntimeDependencies = {},
 ): Promise<void> {
   const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+  const sandbox = resolveSandbox(request);
   const registered = dependencies.createModelRuntime
     ? { runtime: await dependencies.createModelRuntime(), model: undefined }
     : await createModelRuntime(request);
@@ -236,7 +252,7 @@ export async function runPiAgent(
   if (!model) throw new Error(`Pi model is unavailable: ${request.model.provider}/${request.model.id}`);
 
   const turnState: TurnState = { id: "turn-0", step: 0 };
-  const tools = createTools(request, fetchImpl, turnState);
+  const tools = createTools(request, fetchImpl, turnState, sandbox);
   const cwd = process.cwd();
   const settingsManager = SettingsManager.inMemory({
     defaultThinkingLevel: request.model.thinkingLevel ?? "off",
@@ -260,6 +276,7 @@ export async function runPiAgent(
     noThemes: true,
     noContextFiles: true,
     systemPrompt: request.systemPrompt,
+    extensionFactories: buildTrustedExtensions(request, sandbox),
   });
   await resourceLoader.reload();
   const { session } = await createAgentSession({
@@ -278,7 +295,11 @@ export async function runPiAgent(
   let terminalEmitted = false;
   session.agent.afterToolCall = async ({ result }) => {
     const outcome = result.details as PiToolBridgeResponse | undefined;
-    if (!outcome) return undefined;
+    // Preserve Pi's native termination hint for governance blocks. A blocked
+    // call has an empty details object rather than a bridge outcome.
+    if (!outcome || !["succeeded", "failed", "paused", "blocked"].includes(outcome.kind)) {
+      return { isError: true, terminate: result.terminate === true };
+    }
     const failed = outcome.kind === "failed" || outcome.kind === "blocked";
     return {
       isError: failed,

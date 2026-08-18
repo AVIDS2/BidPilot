@@ -15,12 +15,9 @@ from typing import Any
 import httpx
 from sqlalchemy.orm import Session
 
-from app.assistant.attachments import attachment_planner_context, build_attachment_context
-from app.assistant.task_state import pending_input_context
 from app.auth.schemas import CurrentUser
 from app.chat.service import save_message
 from app.models import RuntimeRun
-from app.usage.schemas import ProviderSource
 from contracts.runtime import RuntimeRiskLevel
 
 from .assistant_adapter import _render_runtime_events, _sse
@@ -30,6 +27,7 @@ from .pi_bridge import create_pi_bridge_token
 from .prompt_assembly import ConversationContextWindow, assemble_harness_prompt
 from .registry import CAPABILITY_REGISTRY
 from .service import complete_runtime_run, fail_runtime_run, get_previous_terminal_action_context
+from .skills import build_skill_index
 
 
 logger = logging.getLogger(__name__)
@@ -78,6 +76,28 @@ def _pi_tools() -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+def _pi_resources() -> dict[str, Any]:
+    """Trusted Pi resources selected by the server, never by browser input."""
+    return {
+        "extensions": ["bidpilot-governance", "bidpilot-skills"],
+        "skills": [
+            {"name": skill.name, "description": skill.description}
+            for skill in build_skill_index()
+        ],
+    }
+
+
+def _pi_sandbox() -> dict[str, Any]:
+    """Cloud Pi is capability-only; full_access affects business approval, not host access."""
+    return {
+        "profile": "governed_cloud",
+        "hostTools": "disabled",
+        "network": "bridge_only",
+        "maxToolInputBytes": 128 * 1024,
+        "maxToolObservationBytes": 512 * 1024,
+    }
 
 
 def _assembled_prompt(
@@ -131,6 +151,7 @@ def _assembled_prompt(
         background_notifications=background_notifications,
         user_message=user_message,
         previous_terminal_action=previous,
+        include_skill_index=False,
     )
     systems = "\n\n".join(_content(message.content) for message in assembly.messages[:-1])
     current = _content(assembly.messages[-1].content)
@@ -212,6 +233,8 @@ async def stream_pi_assistant_response(
             "thinkingLevel": _thinking_level(reasoning_effort),
         },
         "tools": _pi_tools(),
+        "resources": _pi_resources(),
+        "sandbox": _pi_sandbox(),
         "toolCallback": {"url": callback_url, "token": create_pi_bridge_token(run=run, user=user)},
         "maxTurns": 24,
     }

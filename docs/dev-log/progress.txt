@@ -1578,3 +1578,12 @@ unverified visual changes merely to iterate in production.
   regression coverage for a complete tool turn, thinking isolation,
   non-recoverable stop and parallel reads, plus a real
   `opencode-go/deepseek-v4-flash` tool-loop rehearsal.
+- 2026-08-18: Added Pi-native trusted resource loading and the implemented
+  `governed_cloud` sandbox contract. The API now supplies validated Skill
+  metadata and trusted extension IDs per turn; Pi's inline extension hooks
+  enforce the authorized capability set and append progressive Skill metadata,
+  while full procedures remain behind `read_skill`. Host tools, extension
+  paths, tenant code, direct network tools, oversized inputs and oversized
+  model observations are rejected. `Auto-run` remains a business approval mode,
+  not host access. Sidecar tests passed 9/9, API resource/prompt regressions
+  passed 10/10, and Web SSE/timeline regressions passed 47/47.

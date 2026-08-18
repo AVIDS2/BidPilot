@@ -1,6 +1,6 @@
 # Assistant Harness Runtime Boundary
 
-> Status: Pi `AgentSession` runtime implemented and verified with a real model/tool turn; production acceptance pending, 2026-08-18
+> Status: Pi `AgentSession`, trusted dynamic resources and governed cloud sandbox implemented; production acceptance pending, 2026-08-18
 
 ## Purpose
 
@@ -61,27 +61,64 @@ second source of truth would violate the control-plane boundary and make
 horizontal deployment inconsistent.
 
 The sidecar uses Pi's native `ModelRuntime`, `SettingsManager`, resource loader,
-retry/compaction lifecycle and `agent_settled` terminal signal. New turns do
-not call the retired Python ReAct loop or a locally reimplemented model loop.
-The Pi session receives only server-defined BidPilot tools; built-in host
-`bash`, `read`, `write` and `edit` tools are disabled in the cloud sidecar.
-Private deployments may add a separately governed workspace companion, but
-tenant business writes must continue to pass through the internal tool bridge.
+extension hooks, retry/compaction lifecycle and `agent_settled` terminal signal.
+New turns do not call the retired Python ReAct loop or a locally reimplemented
+model loop. The Pi session receives only server-defined BidPilot tools;
+built-in host `bash`, `read`, `write`, `edit`, `grep`, `find`, and `ls` tools are
+disabled in the cloud sidecar. Private deployments may add a separately
+governed workspace companion, but tenant business writes must continue to pass
+through the internal tool bridge.
+
+### Trusted runtime resources and cloud sandbox
+
+The API sends a server-authored resource and sandbox snapshot with every Pi
+turn. Browser input cannot add extension paths, executable code, tools, or
+Skills. The cloud sidecar accepts exactly one implemented profile:
+
+- `profile=governed_cloud`
+- `hostTools=disabled`
+- `network=bridge_only`
+- bounded tool input and model-observation sizes
+
+Pi extensions run in-process and Pi does not provide an operating-system
+sandbox. Therefore the sidecar loads only compiled, allowlisted inline
+extension factories (`bidpilot-governance` and `bidpilot-skills`). It rejects
+filesystem extension paths, tenant JavaScript, duplicate resources, host-tool
+names, direct model-selected network access, oversized input, and unknown
+extension identifiers before a model-selected action can execute.
+
+`bidpilot-governance` enforces the exact API-authorized capability set again at
+Pi's native `tool_call` hook. `bidpilot-skills` uses Pi's native
+`before_agent_start` hook to append Level-1 Skill metadata. Complete procedures
+remain behind the governed `read_skill` capability. This preserves Pi's
+progressive-disclosure model without giving the sidecar a general filesystem
+reader or loading all business instructions into every prompt.
+
+`approval_mode=full_access` / `Auto-run` is a business confirmation policy. It
+does not change the sandbox profile, grant host access, reveal credentials, or
+allow direct writes. The sidecar has no database or object-storage credentials;
+every business observation and mutation crosses the short-lived, run-scoped API
+bridge and is rechecked against tenant, policy, quota, approval, idempotency,
+and audit rules.
+
+A future `isolated_workspace` profile must run outside this process in a
+container, VM, or microVM with an allowlisted mount, short-lived credentials,
+network policy, CPU/memory/time quotas, output limits, and a separate audited
+bridge. It must not be implemented as an in-process permission callback and is
+not currently available.
 
 ## Pi prompt and resource assembly
 
 The Pi sidecar receives a small, composable system prompt rather than a
 natural-language keyword router. The implementation reference is the
-MIT-licensed
-`badlogic/pi-mono` `packages/coding-agent/src/core/system-prompt.ts` (reviewed
-at commit `936aff0`). BidPilot adapts the identity and product boundary but
-keeps the same architecture:
+MIT-licensed `earendil-works/pi` coding-agent runtime. BidPilot adapts the
+identity and product boundary but keeps the same architecture:
 
 1. a stable assistant identity and a short set of general execution rules;
 2. provider-native tool schemas supplied separately from the prose prompt;
 3. trusted runtime/project context assembled near the current turn;
-4. a small `AVAILABLE_SKILLS` index, with full instructions loaded on demand
-   through the real `read_skill` tool.
+4. a small `<available_skills>` catalogue injected by a trusted Pi extension,
+   with full instructions loaded on demand through the real `read_skill` tool.
 
 The server must not infer a capability, force a required tool call, or select
 a Skill by matching words in the user message. The model chooses tools from
@@ -247,11 +284,13 @@ may expose mutation tools.
 ### Skills (progressive disclosure)
 
 Skills live under `docs/agent-skills/<name>/SKILL.md` with standard YAML
-frontmatter (`name`, `description`). The Harness loads Level-1 metadata
-(name + description) into `AVAILABLE_SKILLS` every turn. The model selects a
-skill by meaning and calls the server-owned `read_skill(name)` tool to load its
-Level-2 body. The server accepts only an exact allowlisted skill name. Product
-code must not route skills by matching user-message keywords.
+frontmatter (`name`, `description`). The API validates this server-owned
+registry, sends Level-1 metadata only, and omits the older prompt-assembly Skill
+block for Pi turns. The trusted `bidpilot-skills` extension appends the catalogue
+at Pi's `before_agent_start` boundary. The model selects a Skill by meaning and
+calls the server-owned `read_skill(name)` tool to load its Level-2 body. The API
+accepts only an exact allowlisted Skill name. Product code must not route Skills
+by matching user-message keywords.
 
 Current skills:
 

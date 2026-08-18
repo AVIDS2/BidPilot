@@ -176,6 +176,21 @@ Pi runtime variables:
 - `DOCPILOT_PI_TOOL_BRIDGE_URL` — API-only callback URL for governed tool execution.
 - `DOCPILOT_PI_INTERNAL_SECRET` — dedicated short-lived bridge-token signing secret; production must not reuse `DOCPILOT_JWT_SECRET`.
 
+The production Pi sidecar currently accepts only the server-authored
+`governed_cloud` sandbox snapshot. It loads the compiled trusted extensions
+`bidpilot-governance` and `bidpilot-skills`, disables Pi host tools, and permits
+business I/O only through the signed API bridge. No environment variable may
+enable `bash`, arbitrary filesystem extension paths, tenant JavaScript, or
+direct model-selected network access in this sidecar. `Auto-run` / `full_access`
+changes optional business confirmation behavior only; it never changes this
+sandbox boundary.
+
+An `isolated_workspace` runner is a separate deployment capability and is not
+enabled by configuration today. When implemented, it must be a container,
+VM, or microVM with explicit mounts, egress, quotas, short-lived credentials,
+and audit controls. Do not add an environment flag that simulates this boundary
+inside the Pi process.
+
 Resend is the preferred transactional email provider. Set `RESEND_API_KEY`
 and, when a different verified domain is needed, `DOCPILOT_RESEND_FROM`.
 The default sender is `BidPilot <notifications@updates.rglens.com>`, which must
