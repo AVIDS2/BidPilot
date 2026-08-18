@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - services/pi-agent
 allowBuilds:
   esbuild: true
   msw: true

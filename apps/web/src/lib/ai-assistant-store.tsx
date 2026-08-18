@@ -818,6 +818,17 @@ function handleAssistantSseEvent(
   dispatch: Dispatch<Action>,
   options?: AssistantSseHandlingOptions,
 ) {
+  // One durable runtime event may project to several compatibility SSE
+  // frames that share the same runtime sequence. In particular run.failed
+  // emits both the public failure and assistant.end. The sequence de-duplicator
+  // may reject the latter, but the request has still reached a terminal state.
+  if (
+    eventType === "assistant.end" ||
+    eventType === "assistant.confirmation_requested" ||
+    eventType === "assistant.missing_input"
+  ) {
+    options?.onTerminal?.();
+  }
   const runtimeRunId = typeof parsed.runtime_run_id === "string" ? parsed.runtime_run_id : undefined;
   if (runtimeRunId) {
     options?.onRuntimeRun?.(runtimeRunId);

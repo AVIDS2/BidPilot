@@ -101,6 +101,24 @@ services:
         condition: service_healthy
     command: ["/app/.venv/bin/python", "/app/scripts/setup_langgraph_checkpoints.py"]
 
+  pi-agent:
+    build:
+      context: ./repo
+      dockerfile: services/pi-agent/Dockerfile
+    container_name: bidpilot-pi-agent
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PI_AGENT_PORT: "8787"
+    expose:
+      - "8787"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r => { if (!r.ok) process.exit(1) })"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   api:
     build:
       context: ./repo
@@ -114,7 +132,10 @@ services:
       DOCPILOT_AUTH_REQUIRED: "true"
       DOCPILOT_LANGGRAPH_CHECKPOINTER: postgres
       DOCPILOT_AGENT_CHECKPOINTER: postgres
-      DOCPILOT_ASSISTANT_ENGINE: harness
+      DOCPILOT_ASSISTANT_ENGINE: pi
+      DOCPILOT_PI_AGENT_URL: http://pi-agent:8787
+      DOCPILOT_PI_TOOL_BRIDGE_URL: http://api:8000/internal/pi/tools/execute
+      DOCPILOT_PI_INTERNAL_SECRET: ${DOCPILOT_PI_INTERNAL_SECRET:?DOCPILOT_PI_INTERNAL_SECRET is required}
     depends_on:
       checkpoints:
         condition: service_completed_successfully
@@ -124,6 +145,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      pi-agent:
+        condition: service_healthy
     ports:
       - "127.0.0.1:3101:8000"
     healthcheck:

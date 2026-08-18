@@ -22,7 +22,10 @@ x-docpilot-env: &docpilot-env
   DOCPILOT_PROVIDER_DOMESTIC_BASE_URL: ${DOCPILOT_PROVIDER_DOMESTIC_BASE_URL:-}
   DOCPILOT_PROVIDER_DOMESTIC_MODEL: ${DOCPILOT_PROVIDER_DOMESTIC_MODEL:-}
   DOCPILOT_LLM_MODEL_PRIMARY: ${DOCPILOT_LLM_MODEL_PRIMARY:-}
-  DOCPILOT_ASSISTANT_ENGINE: ${DOCPILOT_ASSISTANT_ENGINE:-harness}
+  DOCPILOT_ASSISTANT_ENGINE: ${DOCPILOT_ASSISTANT_ENGINE:-pi}
+  DOCPILOT_PI_AGENT_URL: ${DOCPILOT_PI_AGENT_URL:-http://pi-agent:8787}
+  DOCPILOT_PI_TOOL_BRIDGE_URL: ${DOCPILOT_PI_TOOL_BRIDGE_URL:-http://api:8000/internal/pi/tools/execute}
+  DOCPILOT_PI_INTERNAL_SECRET: ${DOCPILOT_PI_INTERNAL_SECRET:-${DOCPILOT_JWT_SECRET}}
   DOCPILOT_ASSISTANT_API_KEY: ${DOCPILOT_ASSISTANT_API_KEY:-}
   DOCPILOT_ASSISTANT_PROTOCOL: ${DOCPILOT_ASSISTANT_PROTOCOL:-}
   DOCPILOT_ASSISTANT_PROVIDER_ID: ${DOCPILOT_ASSISTANT_PROVIDER_ID:-}
@@ -105,6 +108,23 @@ services:
         condition: service_healthy
     command: ["/app/.venv/bin/python", "/app/scripts/setup_langgraph_checkpoints.py"]
 
+  pi-agent:
+    build:
+      context: .
+      dockerfile: services/pi-agent/Dockerfile
+    container_name: docpilot-pi-agent
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PI_AGENT_PORT: "8787"
+    expose:
+      - "8787"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r => { if (!r.ok) process.exit(1) })"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: .
@@ -121,6 +141,8 @@ services:
         condition: service_started
       minio:
         condition: service_started
+      pi-agent:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:

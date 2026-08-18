@@ -31,6 +31,23 @@ function renderTimeline(
 }
 
 describe("ClaudeActivityTimeline", () => {
+  it("interpolates the aggregate status for a multi-action turn", () => {
+    const secondWorkflow: AssistantExecutionItem = {
+      ...runningWorkflow,
+      id: "workflow-running-2",
+      toolName: "get_project_summary",
+      title: "Read project",
+      turnId: "turn-shared",
+    };
+    const { container } = renderTimeline([
+      { ...runningWorkflow, turnId: "turn-shared" },
+      secondWorkflow,
+    ]);
+
+    expect(container.querySelector(".cr-task-turn-summary")).toHaveTextContent(/2/);
+    expect(container.textContent).not.toContain("{{status}}");
+  });
+
   it("keeps every timeline level closed until the reader opens it", () => {
     const { container, rerender } = renderTimeline([runningWorkflow]);
     const taskSummary = container.querySelector(".cr-task-turn-summary")!;

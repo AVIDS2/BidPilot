@@ -31,6 +31,7 @@ from app.requirements.router import router as requirements_router
 from app.readiness.router import router as readiness_router
 from app.retrieval.router import router as retrieval_router
 from app.runtime.router import router as runtime_router
+from app.runtime.pi_bridge import router as pi_bridge_router
 from app.review.router import router as review_router
 from app.scenarios.router import router as scenarios_router
 from app.parsed_assets.router import router as parsed_assets_router
@@ -176,6 +177,9 @@ app.include_router(content_library_router, dependencies=_protected)
 app.include_router(changes_router, dependencies=_protected)
 app.include_router(collaboration_router, dependencies=_protected)
 app.include_router(assistant_router, dependencies=_protected)
+# Pi sidecar calls this route with a short-lived, run-scoped token. It must not
+# inherit the browser auth dependency, because the sidecar has no user session.
+app.include_router(pi_bridge_router)
 app.include_router(usage_router, dependencies=_protected)
 app.include_router(runtime_router, dependencies=_protected)
 

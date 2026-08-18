@@ -1,9 +1,8 @@
-"""SSE adapter for the governed server-side Harness runtime.
+"""SSE facade for governed assistant turns.
 
-The adapter deliberately renders the same legacy ``assistant.*`` events as the
-existing web client expects, but those events are derived from durable runtime
-records. The LangGraph operator implementation remains an isolated migration
-path; public assistant turns run through ``StreamingHarness``.
+New turns are dispatched to the Pi sidecar. This module retains the durable
+run/idempotency/approval facade and historical replay paths, while the old
+Python loop is not an automatic fallback for new requests.
 """
 
 from __future__ import annotations
@@ -34,6 +33,7 @@ from app.agent.llm import get_agent_llm
 from app.usage.schemas import ProviderSource
 from app.usage.service import UsageLimitExceeded, reserve_assistant_model_tokens
 from contracts.model_usage import ProviderUsageMeasurement
+from contracts.runtime import RuntimeApprovalDecisionType
 from contracts.usage_ledger import (
     mark_model_reservation_uncertain,
     record_model_usage,
@@ -56,6 +56,7 @@ from .harness_loop import (
     classify_model_failure,
     stream_harness_assistant_response,
 )
+from .pi_adapter import stream_pi_assistant_response
 from .operator_graph import (
     OperatorPlanningContext,
     OperatorPlan,
@@ -69,11 +70,13 @@ from .model_limits import (
 from .prompt_assembly import ConversationContextWindow, compact_conversation_context
 from .service import (
     assistant_turn_idempotency_key,
+    complete_runtime_run,
     create_or_get_runtime_run,
     fail_runtime_run,
     find_idempotent_runtime_run,
     find_pending_approval_for_conversation,
     reconcile_runtime_run_for_replay,
+    resolve_approval,
 )
 
 
@@ -235,7 +238,7 @@ async def stream_operator_assistant_response(
     memory_context = _load_authorized_memory_context(db, user, payload, project_id=active_project_id)
     # One public turn has one runtime. Do not let a deployment-only flag switch
     # between two incompatible loops after the client has started streaming.
-    engine = "streaming_harness"
+    engine = "pi"
     creation = create_or_get_runtime_run(
         db,
         user,
@@ -281,57 +284,23 @@ async def stream_operator_assistant_response(
             "state": "thinking",
         },
     )
-    if engine == "streaming_harness":
-        try:
-            llm = get_agent_llm(
-                provider_type=provider_type,
-                provider_id=provider_id,
-                api_key=api_key,
-                base_url=base_url,
-                model=model,
-                reasoning_effort=payload.reasoning_effort,  # type: ignore[arg-type]
-            )
-        except Exception as exc:
-            # StreamingResponse has already sent its headers after the first
-            # event. Convert adapter/configuration errors into the same durable
-            # terminal contract as an in-loop provider failure instead of
-            # letting Starlette abort a half-open SSE response.
-            logger.warning(
-                "Harness model client construction failed: runtime_run=%s provider_type=%s error_type=%s",
-                run.id,
-                provider_type,
-                type(exc).__name__,
-            )
-            failure = classify_model_failure(exc)
-            try:
-                fail_runtime_run(db, run.id, failure.message, error_code=failure.error_code)
-            except ValueError:
-                pass
-            save_message(db, conversation_id, "assistant", failure.message)
-            for event in _render_runtime_events(
-                db,
-                run.id,
-                after_sequence=1,
-                conversation_id=conversation_id,
-            ):
-                yield event
-            return
+    if engine == "pi":
         memory_records = []
         if memory_context is not None:
             from .operator_graph import _memory_context_records
 
             memory_records = _memory_context_records(memory_context)
-        async for event in stream_harness_assistant_response(
+        async for event in stream_pi_assistant_response(
             db,
             user,
             run=run,
             conversation_id=conversation_id,
-            llm=llm,
             provider_type=provider_type,
-            provider_source=provider_source,
+            provider_id=provider_id,
+            api_key=api_key,
+            base_url=base_url,
             model=model,
             user_message=payload.message,
-            conversation_context=list(conversation_window.recent_turns),
             conversation_window=conversation_window,
             memory_context_records=memory_records,
             memory_context_version=memory_context.memory_version if memory_context is not None else None,
@@ -340,10 +309,7 @@ async def stream_operator_assistant_response(
             active_project_id=active_project_id,
             pending_input=pending_input,
             approval_mode=payload.approval_mode,
-            provider_config_id=payload.provider_config_id,
             reasoning_effort=payload.reasoning_effort,
-            locale=payload.locale,
-            after_sequence=1,
         ):
             yield event
         return
@@ -458,7 +424,7 @@ async def _resume_operator_approval(
         or approval.user_id != user.id
         or approval.org_id != user.org_id
         or run.conversation_id != conversation_id
-        or run.engine not in {"langgraph_operator", "streaming_harness"}
+        or run.engine not in {"langgraph_operator", "streaming_harness", "pi"}
     ):
         yield _sse(
             "assistant.tool_failed",
@@ -472,6 +438,40 @@ async def _resume_operator_approval(
         "assistant.start",
         {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "thinking"},
     )
+    if run.engine == "pi":
+        if confirmation.approved:
+            decision = (
+                RuntimeApprovalDecisionType.EDIT
+                if confirmation.arguments
+                else RuntimeApprovalDecisionType.APPROVE
+            )
+        else:
+            decision = RuntimeApprovalDecisionType.REJECT
+        execution = resolve_approval(
+            db,
+            user,
+            approval_id=approval.id,
+            decision=decision,
+            edited_arguments=(dict(confirmation.arguments) if confirmation.arguments else None),
+        )
+        if confirmation.approved and execution.result is not None:
+            reply = execution.result.summary
+        elif confirmation.approved:
+            reply = "已执行确认的操作。"
+        else:
+            reply = "已取消该操作。"
+            run.status = "running"
+            db.commit()
+        save_message(db, conversation_id, "assistant", reply)
+        complete_runtime_run(db, run.id, reply)
+        for event in _render_runtime_events(
+            db,
+            run.id,
+            after_sequence=before_sequence,
+            conversation_id=conversation_id,
+        ):
+            yield event
+        return
     if run.engine == "streaming_harness":
         harness = StreamingHarness(
             db=db,

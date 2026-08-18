@@ -47,8 +47,9 @@ logger = logging.getLogger(__name__)
 # These names are accepted only so an already deployed environment can move to
 # the canonical value without splitting the public assistant behavior.
 LEGACY_ASSISTANT_ENGINE_ALIASES = {
-    "operator": "harness",
-    "streaming_harness": "harness",
+    "operator": "pi",
+    "harness": "pi",
+    "streaming_harness": "pi",
 }
 LEGACY_ASSISTANT_ENGINE_ALIAS_RETIREMENT_DATE = "2026-09-30"
 SSE_HEARTBEAT_SECONDS = max(5, int(os.getenv("DOCPILOT_ASSISTANT_SSE_HEARTBEAT_SECONDS", "12")))
@@ -112,7 +113,7 @@ def _assistant_engine() -> str:
     ``operator`` and ``streaming_harness`` remain accepted environment aliases
     during migration, but both resolve to the same governed Harness path.
     """
-    configured = os.getenv("DOCPILOT_ASSISTANT_ENGINE", "harness").lower()
+    configured = os.getenv("DOCPILOT_ASSISTANT_ENGINE", "pi").lower()
     return LEGACY_ASSISTANT_ENGINE_ALIASES.get(configured, configured)
 
 
@@ -207,7 +208,7 @@ async def assistant_stream(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
     assistant_engine = _assistant_engine()
-    if assistant_engine == "harness":
+    if assistant_engine == "pi":
         return _assistant_sse_response(
             stream_operator_assistant_response(
                 db,

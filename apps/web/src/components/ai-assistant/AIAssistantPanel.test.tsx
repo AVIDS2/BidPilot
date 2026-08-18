@@ -468,6 +468,35 @@ describe("AIAssistantPanel", () => {
     expect(screen.queryByText("stream interrupted")).not.toBeInTheDocument();
   });
 
+  it("accepts assistant.end when it shares a durable sequence with a failure frame", async () => {
+    const { listRuntimeEvents } = await import("@/lib/api");
+    vi.mocked(listRuntimeEvents).mockResolvedValue({ items: [] });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-terminal-sequence","runtime_run_id":"run-terminal-sequence","state":"thinking"}',
+            'event: assistant.tool_failed\ndata: {"runtime_run_id":"run-terminal-sequence","runtime_sequence":14,"tool_name":"create_project","error_code":"project_limit_exceeded","error_message":"当前工作区已达到项目数量上限。","state":"failed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-terminal-sequence","runtime_run_id":"run-terminal-sequence","runtime_sequence":14,"state":"failed"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Create a project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(listRuntimeEvents).not.toHaveBeenCalled();
+    expect(screen.queryByText(/助手连接已结束/)).not.toBeInTheDocument();
+  });
+
   it("releases a queued prompt when an SSE response closes without a terminal event", async () => {
     const { listRuntimeEvents } = await import("@/lib/api");
     vi.mocked(listRuntimeEvents).mockResolvedValue({ items: [] });

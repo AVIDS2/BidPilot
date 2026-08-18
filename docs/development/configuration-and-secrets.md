@@ -168,7 +168,13 @@ catalogue, and invoice matching are still separate launch requirements.
 
 `DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres` is the production default for durable workflow checkpoints. `DOCPILOT_AGENT_CHECKPOINTER=postgres` is the corresponding durable setting for the interactive Assistant. `memory` is allowed only for explicit local smoke tests where checkpoint behavior is being isolated.
 
-`DOCPILOT_ASSISTANT_ENGINE=harness` is the production default. It uses the product runtime policy, idempotency, approval, and event contracts; `deterministic` remains a local/test fallback. `operator` and `streaming_harness` are temporary configuration aliases only and must not appear in new deployment files.
+`DOCPILOT_ASSISTANT_ENGINE=pi` is the production default for new assistant turns. The Pi sidecar owns the model/tool loop and native streaming; the API remains authoritative for policy, idempotency, approval, audit, and business writes. `operator` and `streaming_harness` are historical parser aliases only and must not appear in new deployment files. There is no automatic fallback to the retired Python loop.
+
+Pi runtime variables:
+
+- `DOCPILOT_PI_AGENT_URL` — internal Pi sidecar URL, for example `http://pi-agent:8787`.
+- `DOCPILOT_PI_TOOL_BRIDGE_URL` — API-only callback URL for governed tool execution.
+- `DOCPILOT_PI_INTERNAL_SECRET` — dedicated short-lived bridge-token signing secret; production must not reuse `DOCPILOT_JWT_SECRET`.
 
 Resend is the preferred transactional email provider. Set `RESEND_API_KEY`
 and, when a different verified domain is needed, `DOCPILOT_RESEND_FROM`.
@@ -248,7 +254,7 @@ replay protection; application changes must preserve it.
 - `DOCPILOT_ENV` must be `production`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER` must be `postgres`
 - `DOCPILOT_AGENT_CHECKPOINTER` must be `postgres`
-- `DOCPILOT_ASSISTANT_ENGINE` must be `harness`
+- `DOCPILOT_ASSISTANT_ENGINE` must be `pi`
 - `DOCPILOT_RATE_LIMIT` must be a reviewed positive fixed-window budget such as `1000/minute`
 - `DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING` must be a reviewed non-negative
   per-workspace platform maximum; `0` intentionally disables platform-funded

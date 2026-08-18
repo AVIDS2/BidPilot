@@ -1,6 +1,6 @@
 # Assistant Harness Runtime Boundary
 
-> Status: P0 baseline, 2026-07-26
+> Status: Pi runtime implemented; real-model and production acceptance pending, 2026-08-18
 
 ## Purpose
 
@@ -9,28 +9,32 @@ and must not silently replace each other:
 
 | Mode | Owner | Use it for |
 | --- | --- | --- |
-| Assistant Harness | `StreamingHarness` | A user conversation that selects one product capability at a time, reads results, asks for missing input, and obtains approval for governed actions. |
+| Assistant Harness | Pi `Agent` (`services/pi-agent`) | A user conversation that decides with provider-native tool calls, reads structured observations, asks for missing input, and obtains approval for governed actions. |
 | LangGraph workflow | API + worker + `ExecutionRun` | Long-running bid pipelines such as document ingestion, drafting, validation, review, and export. |
 
-The public `/assistant/stream` endpoint always resolves to the governed
-Harness. Historical `operator` and `streaming_harness` environment values are
-compatibility aliases, not alternate public runtimes.
+The public `/assistant/stream` endpoint resolves to the Pi runtime. Historical
+`operator`, `harness`, and `streaming_harness` values are parser aliases to Pi,
+not alternate public runtimes. There is no automatic fallback to the retired
+Python loop: an unavailable Pi sidecar produces a durable, diagnosable failure.
 
 ## Runtime inventory and migration boundary
 
 | Entry | Production status | Boundary / removal plan |
 | --- | --- | --- |
-| `/assistant/stream` -> `StreamingHarness` | Supported public Assistant path | The only endpoint allowed to create a new `assistant_turn`. |
+| `/assistant/stream` -> Pi sidecar | Supported public Assistant path | The only endpoint allowed to create a new `assistant_turn`; it projects Pi events onto the durable runtime trace. |
 | `/assistant/attachments` | Supported companion API | Stages private attachment metadata; it cannot execute tools or start an agent loop. |
-| `runtime/operator_adapter.py` | Internal compatibility facade | It renders the durable SSE projection and dispatches new turns to `StreamingHarness`; it is not a second HTTP entry point. |
+| `runtime/operator_adapter.py` | Internal compatibility facade | It owns preflight/idempotency and dispatches new turns to Pi; it is not a second HTTP entry point. |
+| `services/pi-agent` | Supported model loop | Pi owns model turns, native streaming, parallel independent read tools, tool lifecycle, and bounded continuation. It has no database credentials. |
+| `/internal/pi/tools/execute` | Internal bridge | Run-scoped token only. The existing BidPilot adapter remains authoritative for permissions, approvals, idempotency, audit and business writes. |
 | `runtime/operator_graph.py` | Historical-run compatibility only | New public turns never create `langgraph_operator` runs. Retain only to finish/resume historical durable runs, then remove after **2026-09-30**. |
 | `agent/graph.py` | Legacy ReAct compatibility only | No production route imports it. Retain only for temporary checkpoint-policy coverage; remove after **2026-09-30** unless a migration dependency is recorded. |
 | Worker LangGraph graphs | Supported workflow engine | These are not Assistant routes. They execute durable `ExecutionRun` workflows for ingestion, drafting, validation and review resume. |
 
-Production configuration must set `DOCPILOT_ASSISTANT_ENGINE=harness`.
-`operator` and `streaming_harness` are configuration-parser aliases only and
-must not be used in new deployment files. Historical development notes may
-refer to the older operator path; this inventory is the current authority.
+Production configuration must set `DOCPILOT_ASSISTANT_ENGINE=pi` and provide
+`DOCPILOT_PI_AGENT_URL`, `DOCPILOT_PI_TOOL_BRIDGE_URL`, and a dedicated
+`DOCPILOT_PI_INTERNAL_SECRET` (the JWT secret is a local-development fallback
+only). Historical development notes may refer to the older Python loop; this
+inventory is the current authority.
 
 ## Harness turn lifecycle
 
@@ -38,19 +42,20 @@ refer to the older operator path; this inventory is the current authority.
 2. The API resolves the project boundary, staged attachments, and a complete
    server-side or encrypted BYOK model configuration.
 3. A `RuntimeRun(kind=assistant_turn)` is created before any capability runs.
-4. The Harness streams native model tool calls. One capability is executed per
-   model turn; campaign work uses the dedicated `run_section_campaign` tool
-   rather than a burst of independent writes.
+4. Pi streams native model text/tool events. Independent read-only calls may
+   execute in parallel; mutating calls are sequential and each goes through the
+   internal bridge. Campaign work uses the dedicated `run_section_campaign`
+   tool rather than a burst of independent writes.
 5. Every capability goes through authorization, policy, audit, and durable
    runtime events. The model never bypasses a product service.
 6. The assistant response, terminal state, and public event summaries are
    persisted in PostgreSQL. SSE is a live projection of that durable trace.
 
-## Pi-style prompt and resource assembly
+## Pi prompt and resource assembly
 
-The default system prompt follows the small, composable structure used by
-Pi's `buildSystemPrompt` rather than encoding a second natural-language
-router. The implementation reference is the MIT-licensed
+The Pi sidecar receives a small, composable system prompt rather than a
+natural-language keyword router. The implementation reference is the
+MIT-licensed
 `badlogic/pi-mono` `packages/coding-agent/src/core/system-prompt.ts` (reviewed
 at commit `936aff0`). BidPilot adapts the identity and product boundary but
 keeps the same architecture:
@@ -145,8 +150,10 @@ motion treatment, while completed or failed labels remain static.
 
 ## Non-goals of this baseline
 
-- The Harness is not an unconstrained coding agent and cannot execute shell,
-  server, or arbitrary network commands.
+- The cloud sidecar is not given a tenant's raw server shell. A future local or
+  private-deployment companion may expose a workspace-scoped Bash tool with
+  explicit approval, timeout, audit and output limits; cloud business tools do
+  not imply arbitrary host access.
 - LangGraph checkpoint state is not business truth. Product state, approvals,
   messages, audits, and run history live in PostgreSQL.
 - This does not yet replace the knowledge plane. Retrieval and memory adapters

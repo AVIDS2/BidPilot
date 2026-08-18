@@ -275,6 +275,7 @@ function displayGroupSummary(items: AssistantExecutionItem[], t: Translate) {
   }
   return t("activity.groupSummary", {
     count: items.length,
+    status: statusText(active, t).toLowerCase(),
     defaultValue: `${items.length} operations ${statusText(active, t).toLowerCase()}`,
   });
 }
