@@ -191,6 +191,36 @@ describe("AIAssistantPanel", () => {
     expect(screen.queryByText("本轮已完成")).not.toBeInTheDocument();
   });
 
+  it("keeps Pi session lifecycle private instead of rendering timeline cards", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-pi-state","state":"thinking"}',
+            'event: assistant.runtime_state\ndata: {"phase":"compaction.started","state":"thinking"}',
+            'event: assistant.runtime_state\ndata: {"phase":"retry.started","attempt":1,"max_attempts":2,"state":"thinking"}',
+            'event: assistant.message\ndata: {"content":"已恢复并完成。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-pi-state","full_response":"已恢复并完成。"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "继续处理" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("已恢复并完成。")).toBeInTheDocument();
+    expect(screen.queryByText("compaction.started")).not.toBeInTheDocument();
+    expect(screen.queryByText("retry.started")).not.toBeInTheDocument();
+    expect(document.querySelector(".cr-task-turn-summary")).not.toBeInTheDocument();
+  });
+
   it("submits a prompt once when Enter is pressed", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

@@ -943,6 +943,13 @@ function handleAssistantSseEvent(
     return;
   }
 
+  if (eventType === "assistant.runtime_state") {
+    // Pi retry/compaction/queue lifecycle updates the live session state only.
+    // It must not create timeline cards or expose provider thinking content.
+    dispatch({ type: "SET_STATUS", status: "thinking" });
+    return;
+  }
+
   if (eventType === "assistant.reasoning" && typeof parsed.content === "string") {
     // Only the Harness may publish user-facing reasoning. Provider thinking
     // tokens are private model state and must never become transcript text.

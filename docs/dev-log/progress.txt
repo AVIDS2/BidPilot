@@ -1567,3 +1567,14 @@ unverified visual changes merely to iterate in production.
   passed ordinary answer, project reads, delivery creation, readiness,
   durable approval pause/resume, and vector embedding against an isolated test
   database.
+- 2026-08-18: Replaced the Assistant sidecar's low-level Pi loop integration
+  with the official `@earendil-works/pi-coding-agent` `createAgentSession`
+  runtime. Pi now owns provider streaming, native retry/compaction/queue
+  lifecycle, tool execution and settled termination for every new Assistant
+  turn. PostgreSQL remains the durable conversation and control-plane truth;
+  cloud built-in host tools stay disabled and all business actions still pass
+  through the governed internal bridge. Provider thinking text is private,
+  while Pi lifecycle signals update only ephemeral UI state. Added sidecar
+  regression coverage for a complete tool turn, thinking isolation,
+  non-recoverable stop and parallel reads, plus a real
+  `opencode-go/deepseek-v4-flash` tool-loop rehearsal.

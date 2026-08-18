@@ -1,54 +1,56 @@
-import { Agent, type AgentEvent, type AgentTool, type StreamFn } from "@earendil-works/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import {
+  DefaultResourceLoader,
+  ModelRuntime,
+  SessionManager,
+  SettingsManager,
+  createAgentSession,
+  defineTool,
+  type AgentSessionEvent,
+  type ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
+import {
+  InMemoryCredentialStore,
   Type,
   type AssistantMessage,
   type Model,
-  type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
-import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
-import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 import type { PiApi, PiRunRequest, PiRuntimeEvent, PiToolBridgeResponse } from "./contracts.js";
 
 type EventSink = (event: PiRuntimeEvent) => void | Promise<void>;
 
 export interface PiRuntimeDependencies {
   fetch?: typeof globalThis.fetch;
-  streamFn?: StreamFn;
+  createModelRuntime?: () => Promise<ModelRuntime>;
 }
 
-function createModel(request: PiRunRequest): Model<PiApi> {
-  return {
-    id: request.model.id,
-    name: request.model.name ?? request.model.id,
-    api: request.model.api,
-    provider: request.model.provider,
+async function createModelRuntime(request: PiRunRequest): Promise<{ runtime: ModelRuntime; model: Model<PiApi> }> {
+  const runtime = await ModelRuntime.create({
+    credentials: new InMemoryCredentialStore(),
+    modelsPath: null,
+    refreshOnCreate: false,
+  });
+  runtime.registerProvider(request.model.provider, {
+    name: request.model.provider,
     baseUrl: request.model.baseUrl.replace(/\/$/, ""),
-    reasoning: request.model.reasoning ?? false,
-    input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: request.model.contextWindow ?? 128_000,
-    maxTokens: request.model.maxTokens ?? 16_384,
-  };
-}
-
-function providerStream(api: PiApi) {
-  if (api === "anthropic-messages") return anthropicMessagesApi().streamSimple;
-  if (api === "openai-responses") return openAIResponsesApi().streamSimple;
-  return openAICompletionsApi().streamSimple;
-}
-
-function createStreamFn(request: PiRunRequest) {
-  const stream = providerStream(request.model.api);
-  return (model: Model<any>, context: any, options?: SimpleStreamOptions) =>
-    stream(model, context, {
-      ...options,
-      apiKey: request.model.apiKey,
-      sessionId: request.sessionId,
-      timeoutMs: 120_000,
-      maxRetries: 1,
-      maxRetryDelayMs: 10_000,
-    });
+    apiKey: request.model.apiKey,
+    api: request.model.api,
+    models: [
+      {
+        id: request.model.id,
+        name: request.model.name ?? request.model.id,
+        api: request.model.api,
+        reasoning: request.model.reasoning ?? false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: request.model.contextWindow ?? 128_000,
+        maxTokens: request.model.maxTokens ?? 16_384,
+      },
+    ],
+  });
+  const model = runtime.getModel(request.model.provider, request.model.id) as Model<PiApi> | undefined;
+  if (!model) throw new Error(`Pi model registration failed: ${request.model.provider}/${request.model.id}`);
+  return { runtime, model };
 }
 
 function toolObservation(response: PiToolBridgeResponse): string {
@@ -68,44 +70,51 @@ function toolObservation(response: PiToolBridgeResponse): string {
 
 type TurnState = { id: string; step: number };
 
-function createTools(request: PiRunRequest, fetchImpl: typeof globalThis.fetch, turnState: TurnState): AgentTool[] {
-  return request.tools.map((definition) => ({
-    name: definition.name,
-    label: definition.label,
-    description: definition.description,
-    parameters: Type.Unsafe(definition.parameters),
-    executionMode: definition.executionMode ?? "sequential",
-    execute: async (toolCallId, params, signal) => {
-      const response = await fetchImpl(request.toolCallback.url, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${request.toolCallback.token}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          run_id: request.runId,
-          tool_call_id: toolCallId,
-          name: definition.name,
-          arguments: params,
-          turn_id: turnState.id,
-          step: turnState.step,
-        }),
-        signal,
-      });
-      if (!response.ok) {
-        throw new Error(`tool bridge rejected ${definition.name} (${response.status})`);
-      }
-      const outcome = (await response.json()) as PiToolBridgeResponse;
-      return {
-        content: [{ type: "text", text: toolObservation(outcome) }],
-        details: outcome,
-        terminate:
-          outcome.kind === "paused" ||
-          outcome.kind === "blocked" ||
-          (outcome.kind === "failed" && outcome.recoverable === false),
-      };
-    },
-  }));
+function createTools(
+  request: PiRunRequest,
+  fetchImpl: typeof globalThis.fetch,
+  turnState: TurnState,
+): ToolDefinition[] {
+  return request.tools.map((definition) =>
+    defineTool({
+      name: definition.name,
+      label: definition.label,
+      description: definition.description,
+      promptSnippet: `${definition.name}: ${definition.description}`,
+      parameters: Type.Unsafe(definition.parameters),
+      executionMode: definition.executionMode ?? "sequential",
+      execute: async (toolCallId, params, signal) => {
+        const response = await fetchImpl(request.toolCallback.url, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${request.toolCallback.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            run_id: request.runId,
+            tool_call_id: toolCallId,
+            name: definition.name,
+            arguments: params,
+            turn_id: turnState.id,
+            step: turnState.step,
+          }),
+          signal,
+        });
+        if (!response.ok) {
+          throw new Error(`tool bridge rejected ${definition.name} (${response.status})`);
+        }
+        const outcome = (await response.json()) as PiToolBridgeResponse;
+        return {
+          content: [{ type: "text", text: toolObservation(outcome) }],
+          details: outcome,
+          terminate:
+            outcome.kind === "paused" ||
+            outcome.kind === "blocked" ||
+            (outcome.kind === "failed" && outcome.recoverable === false),
+        };
+      },
+    }),
+  );
 }
 
 function textFromAssistant(message: AssistantMessage): string {
@@ -115,7 +124,28 @@ function textFromAssistant(message: AssistantMessage): string {
     .join("");
 }
 
-function publicEvent(event: AgentEvent): PiRuntimeEvent | null {
+function coreEvent(event: AgentSessionEvent): AgentEvent | null {
+  if (
+    event.type === "queue_update" ||
+    event.type === "compaction_start" ||
+    event.type === "compaction_end" ||
+    event.type === "auto_retry_start" ||
+    event.type === "auto_retry_end" ||
+    event.type === "agent_settled" ||
+    event.type === "entry_appended" ||
+    event.type === "session_info_changed" ||
+    event.type === "thinking_level_changed" ||
+    event.type === "summarization_retry_scheduled" ||
+    event.type === "summarization_retry_attempt_start" ||
+    event.type === "summarization_retry_finished" ||
+    event.type === "bash_execution_update"
+  ) {
+    return null;
+  }
+  return event as AgentEvent;
+}
+
+function publicCoreEvent(event: AgentEvent): PiRuntimeEvent | null {
   if (event.type === "message_update") {
     const update = event.assistantMessageEvent;
     if (update.type === "text_delta") return { type: "text.delta", delta: update.delta };
@@ -156,58 +186,129 @@ function publicEvent(event: AgentEvent): PiRuntimeEvent | null {
   return null;
 }
 
+function publicSessionEvent(event: AgentSessionEvent): PiRuntimeEvent | null {
+  if (event.type === "queue_update") {
+    return {
+      type: "queue.updated",
+      steering: event.steering.length,
+      follow_up: event.followUp.length,
+    };
+  }
+  if (event.type === "compaction_start") {
+    return { type: "compaction.started", reason: event.reason };
+  }
+  if (event.type === "compaction_end") {
+    return {
+      type: "compaction.completed",
+      reason: event.reason,
+      aborted: event.aborted,
+      will_retry: event.willRetry,
+    };
+  }
+  if (event.type === "auto_retry_start") {
+    return {
+      type: "retry.started",
+      attempt: event.attempt,
+      max_attempts: event.maxAttempts,
+      delay_ms: event.delayMs,
+    };
+  }
+  if (event.type === "auto_retry_end") {
+    return { type: "retry.completed", attempt: event.attempt, success: event.success };
+  }
+  const core = coreEvent(event);
+  return core ? publicCoreEvent(core) : null;
+}
+
 export async function runPiAgent(
   request: PiRunRequest,
   sink: EventSink,
   dependencies: PiRuntimeDependencies = {},
 ): Promise<void> {
   const fetchImpl = dependencies.fetch ?? globalThis.fetch;
-  const model = createModel(request);
-  let turns = 0;
+  const registered = dependencies.createModelRuntime
+    ? { runtime: await dependencies.createModelRuntime(), model: undefined }
+    : await createModelRuntime(request);
+  let model = registered.model;
+  if (!model) {
+    model = registered.runtime.getModel(request.model.provider, request.model.id) as Model<PiApi> | undefined;
+  }
+  if (!model) throw new Error(`Pi model is unavailable: ${request.model.provider}/${request.model.id}`);
+
   const turnState: TurnState = { id: "turn-0", step: 0 };
   const tools = createTools(request, fetchImpl, turnState);
-  const agent = new Agent({
-    initialState: {
-      systemPrompt: request.systemPrompt,
-      model,
-      thinkingLevel: request.model.thinkingLevel ?? "off",
-      tools,
-      messages: [],
+  const cwd = process.cwd();
+  const settingsManager = SettingsManager.inMemory({
+    defaultThinkingLevel: request.model.thinkingLevel ?? "off",
+    steeringMode: "all",
+    followUpMode: "all",
+    retry: {
+      enabled: true,
+      maxRetries: 2,
+      baseDelayMs: 1_000,
+      provider: { maxRetryDelayMs: 10_000, maxRetries: 1, timeoutMs: 120_000 },
     },
-    streamFn: dependencies.streamFn ?? createStreamFn(request),
-    sessionId: request.sessionId,
-    toolExecution: "parallel",
-    afterToolCall: async ({ result }) => {
-      const outcome = result.details as PiToolBridgeResponse | undefined;
-      if (!outcome) return undefined;
-      const failed = outcome.kind === "failed" || outcome.kind === "blocked";
-      return {
-        isError: failed,
-        terminate:
-          outcome.kind === "paused" ||
-          outcome.kind === "blocked" ||
-          (outcome.kind === "failed" && outcome.recoverable === false),
-      };
-    },
-    shouldStopAfterTurn: () => {
-      turns += 1;
-      return turns >= (request.maxTurns ?? 24);
-    },
+    httpIdleTimeoutMs: 120_000,
   });
-  agent.subscribe(async (event) => {
+  const resourceLoader = new DefaultResourceLoader({
+    cwd,
+    agentDir: cwd,
+    settingsManager,
+    noExtensions: true,
+    noSkills: true,
+    noPromptTemplates: true,
+    noThemes: true,
+    noContextFiles: true,
+    systemPrompt: request.systemPrompt,
+  });
+  await resourceLoader.reload();
+  const { session } = await createAgentSession({
+    cwd,
+    modelRuntime: registered.runtime,
+    model,
+    thinkingLevel: request.model.thinkingLevel ?? "off",
+    noTools: "builtin",
+    customTools: tools,
+    resourceLoader,
+    sessionManager: SessionManager.inMemory(cwd),
+    settingsManager,
+  });
+
+  let turns = 0;
+  let terminalEmitted = false;
+  session.agent.afterToolCall = async ({ result }) => {
+    const outcome = result.details as PiToolBridgeResponse | undefined;
+    if (!outcome) return undefined;
+    const failed = outcome.kind === "failed" || outcome.kind === "blocked";
+    return {
+      isError: failed,
+      terminate:
+        outcome.kind === "paused" ||
+        outcome.kind === "blocked" ||
+        (outcome.kind === "failed" && outcome.recoverable === false),
+    };
+  };
+  session.agent.shouldStopAfterTurn = () => {
+    turns += 1;
+    return turns >= (request.maxTurns ?? 24);
+  };
+  const unsubscribe = session.subscribe(async (event) => {
     if (event.type === "turn_start") {
       turnState.step += 1;
       turnState.id = `turn-${turnState.step}`;
     }
-    if (event.type === "agent_end") {
-      await sink(
-        agent.state.errorMessage
-          ? { type: "agent.failed", error: agent.state.errorMessage }
-          : { type: "agent.completed" },
-      );
+    if (event.type === "agent_settled") {
+      if (!terminalEmitted) {
+        terminalEmitted = true;
+        await sink(
+          session.state.errorMessage
+            ? { type: "agent.failed", error: session.state.errorMessage }
+            : { type: "agent.completed" },
+        );
+      }
       return;
     }
-    const projected = publicEvent(event);
+    const projected = publicSessionEvent(event);
     if (projected) {
       if (event.type === "turn_start" || event.type.startsWith("tool_execution_")) {
         projected.turn_id = turnState.id;
@@ -215,5 +316,20 @@ export async function runPiAgent(
       await sink(projected);
     }
   });
-  await agent.prompt(request.userMessage);
+
+  try {
+    await session.prompt(request.userMessage, { expandPromptTemplates: false, source: "rpc" });
+    await session.waitForIdle();
+    if (!terminalEmitted) {
+      terminalEmitted = true;
+      await sink(
+        session.state.errorMessage
+          ? { type: "agent.failed", error: session.state.errorMessage }
+          : { type: "agent.completed" },
+      );
+    }
+  } finally {
+    unsubscribe();
+    session.dispose();
+  }
 }
