@@ -64,6 +64,14 @@ then atomically replaces the outer Compose file before rebuilding containers.
 This prevents application code and production topology from silently diverging;
 the outer `.env` is never copied, committed, or changed by the script.
 
+Pi releases are fail-closed: when `DOCPILOT_ASSISTANT_ENGINE=pi`, deployment
+must use the complete production Compose topology, including the healthy
+`pi-agent` sidecar. A missing `DOCPILOT_PI_INTERNAL_SECRET` or an invalid
+production Compose file stops deployment before application services are
+replaced. The legacy application-only compatibility path is available only to
+an explicitly non-Pi deployment; it must never produce a new API that depends
+on a sidecar absent from the live topology.
+
 For an existing pilot that still has the older deploy script, update that script
 once from the reviewed repository version before using the new release path.
 

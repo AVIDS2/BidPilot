@@ -17,3 +17,8 @@
   real provider truncation was reproduced; regression tests cover the contract.
 - Next handoff entry: use the production deployment record and post-release smoke
   evidence as the source of truth before beginning new product work.
+- The first production promotion attempt correctly failed readiness because the
+  legacy outer Compose topology did not contain `pi-agent`. The deploy helper is
+  now fail-closed for Pi: it requires the complete versioned production Compose
+  and the dedicated internal bridge secret instead of partially replacing API,
+  Worker, and Web against an incomplete topology.

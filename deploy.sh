@@ -63,7 +63,7 @@ if redis.password and not vals.get("DOCPILOT_REDIS_PASSWORD"):
 soft_defaults = {
     "DOCPILOT_ENV": "production",
     "DOCPILOT_AGENT_CHECKPOINTER": vals.get("DOCPILOT_LANGGRAPH_CHECKPOINTER") or "postgres",
-    "DOCPILOT_ASSISTANT_ENGINE": "harness",
+    "DOCPILOT_ASSISTANT_ENGINE": "pi",
     "USE_LANGGRAPH": "true",
     "DOCPILOT_RATE_LIMIT": "120/minute",
     "DOCPILOT_AUTH_REQUIRED": "true",
@@ -134,6 +134,15 @@ readiness_need = {
     "DOCPILOT_TRUSTED_PROXY_CIDRS",
     "DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING",
 }
+if "DOCPILOT_ASSISTANT_ENGINE" in keys:
+    values = {}
+    for line in text.splitlines():
+        if not line or line.strip().startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    if values.get("DOCPILOT_ASSISTANT_ENGINE", "pi").lower() == "pi":
+        readiness_need.add("DOCPILOT_PI_INTERNAL_SECRET")
 need = compose_need | readiness_need
 missing = sorted(need - keys)
 if missing:
@@ -157,6 +166,21 @@ if [[ "$use_full_compose" -eq 1 ]]; then
   mv "$NEXT_COMPOSE_FILE" "$COMPOSE_FILE"
   docker compose up -d --build
 else
+  assistant_engine="$(python3 - <<'PY'
+from pathlib import Path
+
+value = "pi"
+for line in Path("/app/bidpilot/.env").read_text(encoding="utf-8", errors="replace").splitlines():
+    if line.startswith("DOCPILOT_ASSISTANT_ENGINE="):
+        value = line.split("=", 1)[1].strip().strip('"').strip("'") or "pi"
+        break
+print(value.lower())
+PY
+)"
+  if [[ "$assistant_engine" == "pi" ]]; then
+    echo "fatal: Pi assistant requires the complete production compose topology; refusing a partial application-only deploy" >&2
+    exit 1
+  fi
   echo "deploy_mode=app_services_only"
   rm -f "$NEXT_COMPOSE_FILE"
   # Keep current topology. Rebuild application services only.
