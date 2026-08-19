@@ -451,6 +451,43 @@ def list_linked_workflow_runs(
     )
 
 
+def list_runtime_child_runs(
+    db: Session,
+    current_user: CurrentUser,
+    *,
+    parent_run_id: str,
+    limit: int = 20,
+) -> list[RuntimeRunListRow]:
+    """Return direct, visible child runs without exposing their private input."""
+
+    parent = get_visible_runtime_run(db, parent_run_id, current_user)
+    latest_event_summary = (
+        select(RuntimeEvent.public_summary)
+        .where(RuntimeEvent.run_id == RuntimeRun.id)
+        .order_by(RuntimeEvent.sequence.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    rows = db.execute(
+        select(RuntimeRun, latest_event_summary.label("latest_event_summary"))
+        .where(
+            RuntimeRun.parent_run_id == parent.id,
+            RuntimeRun.org_id == parent.org_id,
+            RuntimeRun.kind == "subagent",
+        )
+        .order_by(RuntimeRun.created_at.asc(), RuntimeRun.id.asc())
+        .limit(max(1, min(limit, 100)))
+    ).all()
+    return [
+        RuntimeRunListRow(
+            run=run,
+            project_name=None,
+            latest_event_summary=event_summary,
+        )
+        for run, event_summary in rows
+    ]
+
+
 def complete_runtime_run(
     db: Session,
     run_id: str,

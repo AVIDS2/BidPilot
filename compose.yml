@@ -26,6 +26,7 @@ x-docpilot-env: &docpilot-env
   DOCPILOT_PI_AGENT_URL: ${DOCPILOT_PI_AGENT_URL:-http://pi-agent:8787}
   DOCPILOT_PI_TOOL_BRIDGE_URL: ${DOCPILOT_PI_TOOL_BRIDGE_URL:-http://api:8000/internal/pi/tools/execute}
   DOCPILOT_PI_INTERNAL_SECRET: ${DOCPILOT_PI_INTERNAL_SECRET:-${DOCPILOT_JWT_SECRET}}
+  DOCPILOT_INTERNAL_UNLIMITED_USAGE: ${DOCPILOT_INTERNAL_UNLIMITED_USAGE:-false}
   DOCPILOT_ASSISTANT_API_KEY: ${DOCPILOT_ASSISTANT_API_KEY:-}
   DOCPILOT_ASSISTANT_PROTOCOL: ${DOCPILOT_ASSISTANT_PROTOCOL:-}
   DOCPILOT_ASSISTANT_PROVIDER_ID: ${DOCPILOT_ASSISTANT_PROVIDER_ID:-}
@@ -144,7 +145,7 @@ services:
       pi-agent:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${DOCPILOT_API_PORT:-8000}:8000"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()\""]
       interval: 10s

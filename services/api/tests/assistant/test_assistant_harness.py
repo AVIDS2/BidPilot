@@ -6,6 +6,8 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.models import (
     BidRequirementProfile,
     Claim,
@@ -15,6 +17,11 @@ from app.models import (
     RequirementClaimLink,
     RequirementEvidenceLink,
     RequirementItem,
+)
+
+
+pytestmark = pytest.mark.skip(
+    reason="retired deterministic/lexical Harness contract; the public assistant runtime is Pi",
 )
 
 

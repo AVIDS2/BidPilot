@@ -6,10 +6,13 @@ Give future implementation sessions one quick status file so work can resume wit
 
 ## Current status
 
-- repository state: all phases (0–4) implementation complete; Phase 4 scenario expansion complete
-- implementation state: 28 domain modules; 34 API tests + 13 worker tests = 47 total passing; full E2E smoke test covering MVP acceptance criteria; ContractPilot scenario package with auto-section creation; scenario-aware drafting (system prompts) and requirement extraction (keywords); scenario selector UI; full ingest pipeline with MinIO-backed parser; drafting pipeline with evidence linking + review feedback; HNSW index; ParsedAsset CRUD; TipTap editor; DOCX export with MinIO persistence + status tracking; audit recording; MinIO storage adapter; ReviewComment model+endpoints; document upload/download with SHA-256 checksum; requirement manual correction (PUT); redraft with review feedback; missing-evidence markers; deliverable export_status tracking; bundle re-ingest; auth middleware (DOCPILOT_AUTH_REQUIRED); real OpenAI-compatible embedding/LLM adapters; CI pipeline; staging deployment docs; structured logging (structlog); detailed health check (Postgres/Redis/MinIO); execution run retry; Celery dead-letter queue + retry policy; backup/restore scripts; SLO/error budget definitions; frontend with scenario selector + reingest/retry buttons + requirements + evidence + version diff + code-splitting
-- active phase: `Phase 4 scenario expansion` — complete
-- next intended workstream: commercial packaging, customer-specific hardening, and pilot exit criteria validation
+- repository state: Pi-based assistant migration and governed subagent closure implemented locally; public `/assistant/stream` is Pi-only
+- implementation state: API/Worker/Pi contracts cover run-scoped bridge auth, durable parent/child runs, foreground/background delegation, safe user projection, bounded terminal waits, replay, cancellation, and fail-safe SSE errors; frontend renders nested chronological child activity without exposing private tool payloads
+- browser acceptance: authenticated Playwright run completed two independent read-only child tasks in parallel; the parent waited in the same turn and summarized real project/skill results with zero console errors
+- focused checks: API Pi/runtime contract suite `22 passed, 29 skipped`; Worker subagent/event suite `8 passed`; frontend assistant/timeline/event suite `57 passed`; Pi package tests `12 passed` and build succeeds
+- legacy test suites that assert the retired lexical/deterministic/Python Harness endpoint are explicitly skipped or require migration; they are not production contracts
+- active phase: `Pi production convergence` — local closure complete; public deployment remains a separate release decision
+- next intended workstream: real-provider/staging soak, load and failure-recovery evaluation, then release promotion
 
 ## Phase 0 completion summary
 
@@ -309,3 +312,71 @@ Update this file whenever one of these changes:
 ## Short note for future agents
 
 The documentation set is meant to drive continuous implementation. If code and docs diverge, fix the docs or the implementation before continuing broader work.
+
+## 2026-08-19 Pi runtime release candidate
+
+- New Assistant turns use the Pi `AgentSession` sidecar exclusively. The retired
+  deterministic and lexical Harness contracts remain only as explicitly skipped
+  historical tests; they are not a production fallback.
+- Business capabilities remain server-owned and are projected into Pi as dynamic
+  tool schemas. Tool execution, tenant checks, approvals, quotas, audit and
+  durable run events continue through the governed API bridge.
+- Foreground child agents can run independent read-only work in parallel and are
+  joined into the parent turn. Background child agents are queued through the
+  durable worker outbox and surface as parent-child run history.
+- The Agent timeline maps transcript and durable runtime events into one nested,
+  chronological public view. Internal provider reasoning and raw bridge payloads
+  are not exposed to users.
+- Release-candidate verification on Windows:
+  - API: `822 passed, 60 skipped, 0 failed`
+  - Worker: `194 passed, 0 failed`
+  - Pi sidecar: `12 passed, 0 failed`; TypeScript build passed
+  - Web: `154 passed, 0 failed`; Vite production build passed
+- The fixture-source hash check now canonicalizes line endings before hashing so
+  the same reviewed evaluation fixture is valid on Windows and Linux.
+- Production configuration must set `DOCPILOT_ASSISTANT_ENGINE=pi` and keep the
+  Pi internal bridge secret out of source control and user-visible events.
+
+### Lexical-routing purge
+
+- `/assistant/stream` is now an unconditional Pi entry point. The runtime engine
+  can no longer be selected by an environment alias or by message text.
+- New turns in `operator_adapter.py` create `engine="pi"` runs and call Pi
+  directly; the unreachable legacy graph branch was removed from that path.
+- Skill selection is semantic and progressive through Pi's trusted resource
+  catalogue plus `read_skill`; no user-message keyword table is present.
+- Source-contract tests reject reintroduction of confirmation/cancellation
+  phrase routers, keyword trigger tables, old intent classification, or the
+  retired Python loop in the public Pi path.
+- Real local black-box checks covered: a no-tool answer (zero tools, one terminal
+  event), bounded read-only opportunity research (only `web_search`, no write),
+  and one structured `create_project` call (one success, no retry loop).
+
+## 2026-08-19 formal-release acceptance
+
+- The isolated golden path passed all 10 stages against real PostgreSQL, Redis,
+  Celery, object storage and the configured model provider. It created one
+  project with role-aware buyer and supplier bundles, ingested three documents,
+  extracted 32 buyer requirements, kept supplier identity material out of the
+  requirement set, verified evidence coverage, exercised reject/redraft/approve,
+  exported a 38,474-byte DOCX, retried a controlled failed run, and pinned the
+  material manifest plus checksum. Redacted evidence is retained locally at
+  `output/release-evidence/formal-release-golden-path.json`.
+- The live browser chain passed registration, administrator verification,
+  login, project creation, tender upload, parse/index completion, a Pi Assistant
+  project-status turn with a terminal event, deliverable and section creation,
+  model-backed drafting, human approval, and DOCX download.
+- Web verification passed 154 unit tests, lint with no errors, TypeScript/Vite
+  production build, five mobile Chromium scenarios, and the live desktop
+  Chromium workflow. The existing test-only React `act` warnings and large
+  Assistant chunk warning remain performance/test-hygiene follow-ups, not
+  correctness failures.
+- Worker drafting now budgets 16,000 completion tokens so providers that account
+  for reasoning and visible output in one completion do not truncate long bid
+  sections at the former 4,096-token ceiling. The adapter and drafter regression
+  suite passed 46 tests.
+- `.env.local-runtime` is explicitly ignored. Release evidence contains no
+  environment values or credentials.
+- The repeatable release rehearsal passed migrations, API and Worker static
+  checks and full suites, frontend typecheck/tests/build, and a 40-request API
+  load smoke with zero failures and 90.01 ms aggregate p95 latency.

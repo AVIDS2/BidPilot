@@ -66,6 +66,44 @@ class McpToolSpec:
     parameters: dict[str, Any]
 
 
+def normalize_mcp_search_payload(
+    outcome: dict[str, Any],
+    arguments: dict[str, Any],
+    server_name: str,
+) -> dict[str, Any]:
+    """Project a verifiable MCP search response into the public timeline shape."""
+    source = outcome.get("structured_content")
+    if not isinstance(source, dict):
+        raw = outcome.get("content")
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = None
+            source = parsed if isinstance(parsed, dict) else {}
+        else:
+            source = {}
+    candidates = source.get("results") or source.get("items") or []
+    items: list[dict[str, str]] = []
+    if isinstance(candidates, list):
+        for candidate in candidates[:10]:
+            if not isinstance(candidate, dict):
+                continue
+            title = str(candidate.get("title") or "").strip()
+            url = str(candidate.get("url") or "").strip()
+            snippet = str(candidate.get("content") or candidate.get("snippet") or "").strip()
+            if title and url.startswith(("https://", "http://")):
+                items.append(
+                    {"title": title[:200], "url": url[:500], "snippet": snippet[:500]}
+                )
+    return {
+        "query": str(arguments.get("query") or "").strip(),
+        "provider": f"mcp:{server_name}",
+        "count": len(items),
+        "items": items,
+    }
+
+
 def _env_servers(env: dict[str, str] | None = None) -> list[McpServerConfig]:
     raw = (env or os.environ).get(_ENV_NAME, "")
     if not raw.strip():

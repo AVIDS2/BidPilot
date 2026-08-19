@@ -22,6 +22,7 @@ from contracts.usage_ledger import (
 )
 from contracts.usage_budget_policy import (
     OfficialTokenCeilingConfigurationError,
+    internal_unlimited_usage_enabled,
     require_official_monthly_token_ceiling,
 )
 
@@ -105,6 +106,8 @@ def _provider_source(runtime: RuntimeRun) -> str:
 
 
 def _token_limit_ceiling_for_source(provider_source: str) -> int | None:
+    if internal_unlimited_usage_enabled():
+        return None
     if provider_source != "official":
         return None
     try:
@@ -161,6 +164,8 @@ def begin_workflow_model_call(
             logger.warning("Cannot begin model call without workflow runtime: run=%s", run_id)
             return WorkflowModelCall(reservation_key=None, workload=workload)
         run, runtime = context
+        if internal_unlimited_usage_enabled():
+            return WorkflowModelCall(reservation_key=None, workload=workload)
         primary_key = _reservation_key(run)
         if not primary_key:
             return WorkflowModelCall(reservation_key=None, workload=workload)

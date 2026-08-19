@@ -60,7 +60,7 @@ def test_publish_allocates_contiguous_sequences_and_redacts_payload(
         RuntimeEventDraft(
             type=RuntimeEventType.CAPABILITY_STARTED,
             public_summary="正在搜索项目。",
-            payload={"api_key": "sk-should-never-persist", "query": "示例"},
+            payload={"api_key": "test-secret-should-never-persist", "query": "示例"},
         ),
     )
 
@@ -114,7 +114,7 @@ def test_publish_persists_provider_reasoning_as_a_replayable_event(
         RuntimeEventDraft(
             type=RuntimeEventType.REASONING_DELTA,
             public_summary="先检查现有项目，再决定下一步。",
-            payload={"turn_id": "turn-1", "source": "provider", "api_key": "sk-never-store"},
+            payload={"turn_id": "turn-1", "source": "provider", "api_key": "test-secret-never-store"},
         ),
     )
 
@@ -142,21 +142,6 @@ def test_provider_reasoning_event_is_not_exposed_to_the_sse_stream() -> None:
     rendered = _render_runtime_event(event, "conversation-1")
 
     assert rendered == []
-
-
-def test_legacy_generated_narration_is_not_replayed_to_the_sse_stream() -> None:
-    event = SimpleNamespace(
-        id="event-legacy-reasoning-1",
-        run_id="run-1",
-        parent_event_id="turn-event-1",
-        sequence=3,
-        event_type=RuntimeEventType.REASONING_DELTA.value,
-        public_summary="为推进当前任务，我先导出交付物，再根据真实结果决定下一步。",
-        payload_json={"turn_id": "turn-1", "source": "harness"},
-        created_at=datetime.now(UTC),
-    )
-
-    assert _render_runtime_event(event, "conversation-1") == []
 
 
 def test_project_runtime_run_is_hidden_from_non_member(

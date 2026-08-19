@@ -1,6 +1,6 @@
 # Assistant Harness Runtime Boundary
 
-> Status: Pi `AgentSession`, trusted dynamic resources and governed cloud sandbox implemented; production acceptance pending, 2026-08-18
+> Status: Pi `AgentSession`, trusted dynamic resources, governed cloud sandbox, foreground/background subagent delegation, and browser-verified parent/child closure implemented locally, 2026-08-19
 
 ## Purpose
 
@@ -12,10 +12,10 @@ and must not silently replace each other:
 | Assistant Harness | Pi `AgentSession` (`services/pi-agent`) | A user conversation that decides with provider-native tool calls, reads structured observations, asks for missing input, and obtains approval for governed actions. |
 | LangGraph workflow | API + worker + `ExecutionRun` | Long-running bid pipelines such as document ingestion, drafting, validation, review, and export. |
 
-The public `/assistant/stream` endpoint resolves to the Pi runtime. Historical
-`operator`, `harness`, and `streaming_harness` values are parser aliases to Pi,
-not alternate public runtimes. There is no automatic fallback to the retired
-Python loop: an unavailable Pi sidecar produces a durable, diagnosable failure.
+The public `/assistant/stream` endpoint enters the Pi runtime unconditionally.
+It does not read an engine selector and cannot route a turn from user wording.
+There is no automatic fallback to the retired Python loop: an unavailable Pi
+sidecar produces a durable, diagnosable failure.
 
 ## Runtime inventory and migration boundary
 
@@ -27,6 +27,13 @@ Python loop: an unavailable Pi sidecar produces a durable, diagnosable failure.
 | `services/pi-agent` | Supported model loop | The official `@earendil-works/pi-coding-agent` `createAgentSession` runtime owns model turns, provider streaming, retry, compaction, queue lifecycle, parallel independent read tools, tool lifecycle, and bounded continuation. It has no database credentials. |
 | `/internal/pi/tools/execute` | Internal bridge | Run-scoped token only. The existing BidPilot adapter remains authoritative for permissions, approvals, idempotency, audit and business writes. |
 | `runtime/operator_graph.py` | Historical-run compatibility only | New public turns never create `langgraph_operator` runs. Retain only to finish/resume historical durable runs, then remove after **2026-09-30**. |
+
+User text is data for the model, never server-side control flow. Production
+code must not select a Skill, tool, retry policy, execution budget, or runtime
+by substring/regex matching against the message. Pi selects tools through
+provider-native tool calls; the API validates the structured call. The exact
+project-name comparison used for destructive deletion is a typed confirmation
+protocol, not an intent router.
 | `agent/graph.py` | Legacy ReAct compatibility only | No production route imports it. Retain only for temporary checkpoint-policy coverage; remove after **2026-09-30** unless a migration dependency is recorded. |
 | Worker LangGraph graphs | Supported workflow engine | These are not Assistant routes. They execute durable `ExecutionRun` workflows for ingestion, drafting, validation and review resume. |
 
@@ -82,7 +89,8 @@ Skills. The cloud sidecar accepts exactly one implemented profile:
 
 Pi extensions run in-process and Pi does not provide an operating-system
 sandbox. Therefore the sidecar loads only compiled, allowlisted inline
-extension factories (`bidpilot-governance` and `bidpilot-skills`). It rejects
+extension factories (`bidpilot-governance`, `bidpilot-skills` and
+`bidpilot-subagents`). It rejects
 filesystem extension paths, tenant JavaScript, duplicate resources, host-tool
 names, direct model-selected network access, oversized input, and unknown
 extension identifiers before a model-selected action can execute.
@@ -106,6 +114,89 @@ container, VM, or microVM with an allowlisted mount, short-lived credentials,
 network policy, CPU/memory/time quotas, output limits, and a separate audited
 bridge. It must not be implemented as an in-process permission callback and is
 not currently available.
+
+### Pi-compatible subagents
+
+Pi's official documentation intentionally leaves subagents and plan mode out
+of the core; they are extension concerns. The first-party
+`bidpilot-subagents` extension follows the official Pi example's three modes:
+
+- `single`: one specialist profile and one self-contained task
+- `parallel`: independent tasks queued at the same time
+- `chain`: ordered tasks where each child depends on the previous child
+
+The extension does not call `child_process`, read local agent files, or load an
+arbitrary npm package. It sends one structured `spawn_subagents` call through
+the existing run-scoped bridge. The API then creates a `RuntimeRun(kind=subagent)`
+for every child, links it with `parent_run_id` and `trace_id`, writes the task
+to the transactional outbox, and lets Worker execute it through a fresh Pi
+sidecar session. Each child receives a new bridge token and the same tenant,
+project, approval and audit boundary as its parent.
+
+At delegation time the API freezes a versioned Pi execution contract containing
+the audited tool schemas, trusted resource IDs and cloud sandbox settings. The
+Worker consumes that snapshot instead of importing API-private runtime modules
+or rebuilding a newer capability surface. Bridge JWT encoding and provider
+protocol mappings live in the framework-neutral contracts package so API and
+Worker share wire behavior without sharing service internals.
+
+The current governance limits are explicit: at most eight child runs per
+request, maximum depth three, maximum 32 child turns, and a 12 KiB delegated
+prompt. A queued child is never reported as completed. Chain steps wait for a
+successful predecessor and become a durable failure if that predecessor fails.
+The model receives child run IDs, profiles, queue state and the resumable next
+step; the browser can render the parent/child relationship from durable
+runtime events instead of a synthetic progress card.
+
+Foreground delegation is the default: after the API enqueues children, the
+bridge briefly joins their durable terminal observations back into the same Pi
+tool result. The parent therefore continues reasoning in the current turn and
+can summarize real child output without a second user message. The wait is
+bounded; if a child is still running, the model receives `waiting` plus durable
+run IDs and the normal wake notification path remains available. `background`
+is only an explicit asynchronous choice. Raw child prompts, bridge tokens,
+private thinking and tool payloads are never projected to the user. Chain
+workers wait for their dependency before claiming the outbox lease, so a normal
+long-running predecessor cannot turn the successor into a duplicate delivery.
+
+Market packages such as `nicobailon/pi-subagents` and `tintinweb/pi-subagents`
+were reviewed for interaction ideas (async delegation, parallel reviewers,
+artifacts and steering). They are not installed into the cloud sidecar because
+Pi extensions run in-process and third-party code would otherwise bypass
+BidPilot's tenant and audit boundary. They remain reference implementations
+for later private-deployment adapters after code and license review.
+
+### Pi package admission policy
+
+Pi packages can bundle extensions, Skills, prompt templates and themes from npm,
+git or local paths. Pi's official package documentation also states that these
+packages run with full system access. BidPilot therefore does not execute
+`pi install` at request time and does not accept package identifiers from a
+browser, tenant setting, model tool call or project document.
+
+Cloud admission is a build-time registry in
+`services/pi-agent/src/extensions/registry.ts`. Every executable entry records
+an internal ID, contract version, deployment profile and first-party source.
+The cloud runtime currently admits only governance, progressive Skill loading
+and the audited subagent bridge. An npm or git package name is not an extension
+ID and fails before a model turn starts.
+
+Market review on 2026-08-18 produced this deployment classification:
+
+| Capability | Representative references | Cloud decision | Private deployment decision |
+| --- | --- | --- | --- |
+| Subagents | official Pi example, `nicobailon/pi-subagents`, `@tintinweb/pi-subagents` | First-party governed equivalent implemented | Pinned package may be evaluated in an isolated workspace |
+| Context pruning | `championswimmer/pi-context-prune` | Reimplement only against BidPilot's durable context policy | Candidate after retention/eval review |
+| Interactive shell | `nicobailon/pi-interactive-shell` | Rejected from shared sidecar | Candidate only inside a workspace container/VM with quotas and approval |
+| Browser control | `tianrendong/pi-chrome` | Rejected from shared sidecar | Candidate only with a dedicated browser profile and network policy |
+| Local model provider | `huggingface/pi-llama` | Not a shared-cloud extension | Candidate adapter for enterprise on-premises inference |
+
+Private-deployment admission must pin an exact npm version or git commit and
+record license, source URL, checksum, approved resource paths, required host
+capabilities and review status. Installation belongs in the isolated workspace
+image build, never in the long-lived shared sidecar. Updating a package creates
+a new reviewed image and execution-contract version; it cannot silently change
+an in-flight run.
 
 ## Pi prompt and resource assembly
 

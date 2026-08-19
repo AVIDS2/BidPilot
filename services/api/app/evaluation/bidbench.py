@@ -264,7 +264,11 @@ def _verify_source_hashes(
             raise ValueError(f"source path escapes dataset directory: {source.path}")
         if not source_path.is_file():
             raise ValueError(f"source file not found: {source.path}")
-        actual = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        # Git may check text fixtures out with CRLF on Windows. The benchmark
+        # hash is over canonical UTF-8/LF bytes so integrity checks remain
+        # stable across developer machines and CI operating systems.
+        canonical = source_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        actual = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         if actual.casefold() != source.sha256.casefold():
             raise ValueError(
                 f"source sha256 mismatch for {source.id}: expected {source.sha256}, got {actual}"

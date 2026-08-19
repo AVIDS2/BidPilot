@@ -74,10 +74,11 @@ def _override_get_db(SessionLocal):
     return dependency
 
 
-def test_assistant_stream_records_official_usage(client):
+def test_assistant_stream_records_official_usage(client, monkeypatch):
     SessionLocal = _make_db()
     user = _make_user(SessionLocal)
     try:
+        monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "pi")
         app.dependency_overrides[get_db] = _override_get_db(SessionLocal)
         app.dependency_overrides[require_auth] = _override_user(user)
 
@@ -117,5 +118,31 @@ def test_assistant_stream_blocks_starter_after_official_limit(client):
         response = client.post("/assistant/stream", json={"message": "你好"})
         assert response.status_code == 403
         assert "starter assistant limit" in response.text
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_internal_test_mode_bypasses_assistant_count_limit(client, monkeypatch):
+    SessionLocal = _make_db()
+    user = _make_user(SessionLocal)
+    with SessionLocal() as db:
+        for _ in range(100):
+            record_usage_event(
+                db,
+                user_id=user.id,
+                org_id=user.org_id,
+                event_type=ASSISTANT_MESSAGE_STARTED,
+                provider_source=ProviderSource.OFFICIAL,
+            )
+        db.commit()
+
+    try:
+        monkeypatch.setenv("DOCPILOT_INTERNAL_UNLIMITED_USAGE", "true")
+        app.dependency_overrides[get_db] = _override_get_db(SessionLocal)
+        app.dependency_overrides[require_auth] = _override_user(user)
+
+        response = client.post("/assistant/stream", json={"message": "你好"})
+
+        assert response.status_code == 200
     finally:
         app.dependency_overrides.clear()

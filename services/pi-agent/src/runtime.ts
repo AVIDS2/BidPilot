@@ -99,26 +99,45 @@ function createTools(
       parameters: Type.Unsafe(definition.parameters),
       executionMode: definition.executionMode ?? "sequential",
       execute: async (toolCallId, params, signal) => {
-        const response = await fetchImpl(request.toolCallback.url, {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${request.toolCallback.token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            run_id: request.runId,
-            tool_call_id: toolCallId,
-            name: definition.name,
-            arguments: params,
-            turn_id: turnState.id,
-            step: turnState.step,
-          }),
-          signal,
-        });
-        if (!response.ok) {
-          throw new Error(`tool bridge rejected ${definition.name} (${response.status})`);
+        let outcome: PiToolBridgeResponse;
+        try {
+          const response = await fetchImpl(request.toolCallback.url, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${request.toolCallback.token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              run_id: request.runId,
+              tool_call_id: toolCallId,
+              name: definition.name,
+              arguments: params,
+              turn_id: turnState.id,
+              step: turnState.step,
+            }),
+            signal,
+          });
+          if (!response.ok) {
+            outcome = {
+              kind: "failed",
+              publicSummary: "执行服务拒绝了本次操作，本轮已停止。",
+              modelPayload: { tool: definition.name, http_status: response.status },
+              errorCode: "pi_bridge_rejected",
+              recoverable: false,
+            };
+          } else {
+            outcome = (await response.json()) as PiToolBridgeResponse;
+          }
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          outcome = {
+            kind: "failed",
+            publicSummary: "执行服务暂时不可达，本轮已停止，未执行该操作。",
+            modelPayload: { tool: definition.name, failure: "bridge_unreachable" },
+            errorCode: "pi_bridge_unreachable",
+            recoverable: false,
+          };
         }
-        const outcome = (await response.json()) as PiToolBridgeResponse;
         return {
           content: [{ type: "text", text: toolObservation(outcome, sandbox) }],
           details: outcome,
@@ -276,7 +295,7 @@ export async function runPiAgent(
     noThemes: true,
     noContextFiles: true,
     systemPrompt: request.systemPrompt,
-    extensionFactories: buildTrustedExtensions(request, sandbox),
+    extensionFactories: buildTrustedExtensions(request, sandbox, fetchImpl),
   });
   await resourceLoader.reload();
   const { session } = await createAgentSession({

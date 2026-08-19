@@ -259,6 +259,50 @@ export function runtimeEventToAssistantEvents(
       return events;
     }
     case "capability.progressed": {
+      if (capability === "subagent" && typeof payload.tool === "string") {
+        const childTool = asString(payload.tool) ?? "tool";
+        const childToolCallId = asString(payload.tool_call_id) ?? toolCallId;
+        const phase = asString(payload.phase);
+        if (phase === "tool_started") {
+          return [{
+            eventType: "assistant.tool_started",
+            data: {
+              ...metadata,
+              tool_name: childTool,
+              tool_call_id: childToolCallId,
+              turn_id: turnId,
+              title: event.public_summary,
+              state: "executing_tool",
+            },
+          }];
+        }
+        if (phase === "tool_failed") {
+          return [{
+            eventType: "assistant.tool_failed",
+            data: {
+              ...metadata,
+              tool_name: childTool,
+              tool_call_id: childToolCallId,
+              turn_id: turnId,
+              error_message: event.public_summary,
+              state: "failed",
+            },
+          }];
+        }
+        if (phase === "tool_completed") {
+          return [{
+            eventType: "assistant.tool_succeeded",
+            data: {
+              ...metadata,
+              tool_name: childTool,
+              tool_call_id: childToolCallId,
+              turn_id: turnId,
+              summary: event.public_summary,
+              state: "completed",
+            },
+          }];
+        }
+      }
       if (payload.phase !== "provider_retry") return [];
       const nodeName = asString(payload.node);
       return [{

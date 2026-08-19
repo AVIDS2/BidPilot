@@ -1,3 +1,12 @@
+# ruff: noqa: E402
+
+import pytest
+
+pytest.skip(
+    "retired lexical assistant compatibility tests; public assistant is Pi-only",
+    allow_module_level=True,
+)
+
 from app.assistant.runtime import _extract_project_name
 
 

@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import json
 from typing import Any
 
 import pytest
+
+pytest.skip(
+    "retired Python Harness loop; public assistant execution is Pi-only",
+    allow_module_level=True,
+)
 
 from app.runtime.harness_loop import (
     HARNESS_CAMPAIGN_MAX_STEPS,

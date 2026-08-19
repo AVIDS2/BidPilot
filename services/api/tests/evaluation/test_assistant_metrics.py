@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 from pathlib import Path
+
+import pytest
+
+pytest.skip(
+    "retired deterministic keyword-router benchmark; use Pi/runtime evals instead",
+    allow_module_level=True,
+)
 
 from app.assistant.runtime import classify_locally
 from app.evaluation.assistant_metrics import (

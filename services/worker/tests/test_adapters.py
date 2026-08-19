@@ -495,6 +495,9 @@ class TestLLMAdapter:
         assert error.value.retryable is False
         assert captured["max_tokens"] == llm_adapter._MAX_DRAFT_OUTPUT_TOKENS
 
+    def test_draft_budget_supports_reasoning_and_full_section_output(self) -> None:
+        assert llm_adapter._MAX_DRAFT_OUTPUT_TOKENS == 16_000
+
     def test_production_missing_provider_never_returns_stub(self, monkeypatch) -> None:
         _clear_chat_env(monkeypatch)
         monkeypatch.setenv("DOCPILOT_ENV", "production")

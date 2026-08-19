@@ -16,6 +16,7 @@ from contracts.usage_ledger import (
 from contracts.usage_budget_policy import (
     OfficialTokenCeilingConfigurationError,
     configured_official_monthly_token_ceiling,
+    internal_unlimited_usage_enabled,
     require_official_monthly_token_ceiling,
 )
 
@@ -54,6 +55,8 @@ class UsageLimitExceeded(ValueError):
 
 def _official_token_ceiling(*, require_configured: bool) -> int | None:
     """Resolve platform-funded capacity without applying it to a user's BYOK calls."""
+    if internal_unlimited_usage_enabled():
+        return None
     try:
         if require_configured:
             return require_official_monthly_token_ceiling()
@@ -224,38 +227,48 @@ def get_usage_quota(
     workflow_used = count_official_workflow_starts(db, org_id, now)
     assistant_used = count_official_assistant_messages(db, org_id, now)
     indexing_used = count_official_indexing_starts(db, org_id, now)
+    unlimited = internal_unlimited_usage_enabled()
+    official_usage = _model_usage_read(
+        model_usage_summary(
+            db,
+            org_id=org_id,
+            provider_source="official",
+            now=now,
+            token_limit_ceiling=official_token_ceiling,
+        )
+    )
+    byok_usage = _model_usage_read(
+        model_usage_summary(db, org_id=org_id, provider_source="byok", now=now)
+    )
+    if unlimited:
+        official_usage = official_usage.model_copy(
+            update={"token_limit": None, "remaining_tokens": None}
+        )
+        byok_usage = byok_usage.model_copy(
+            update={"token_limit": None, "remaining_tokens": None}
+        )
     return UsageQuotaRead(
         plan=entitlement.plan,
-        monthly_workflow_limit=entitlement.monthly_workflow_limit,
+        monthly_workflow_limit=-1 if unlimited else entitlement.monthly_workflow_limit,
         monthly_workflow_used=workflow_used,
         monthly_workflow_remaining=_remaining(
-            entitlement.monthly_workflow_limit,
+            -1 if unlimited else entitlement.monthly_workflow_limit,
             workflow_used,
         ),
-        monthly_assistant_limit=entitlement.monthly_assistant_limit,
+        monthly_assistant_limit=-1 if unlimited else entitlement.monthly_assistant_limit,
         monthly_assistant_used=assistant_used,
         monthly_assistant_remaining=_remaining(
-            entitlement.monthly_assistant_limit,
+            -1 if unlimited else entitlement.monthly_assistant_limit,
             assistant_used,
         ),
-        monthly_indexing_limit=entitlement.monthly_indexing_limit,
+        monthly_indexing_limit=-1 if unlimited else entitlement.monthly_indexing_limit,
         monthly_indexing_used=indexing_used,
         monthly_indexing_remaining=_remaining(
-            entitlement.monthly_indexing_limit,
+            -1 if unlimited else entitlement.monthly_indexing_limit,
             indexing_used,
         ),
-        official_model_usage=_model_usage_read(
-            model_usage_summary(
-                db,
-                org_id=org_id,
-                provider_source="official",
-                now=now,
-                token_limit_ceiling=official_token_ceiling,
-            )
-        ),
-        byok_model_usage=_model_usage_read(
-            model_usage_summary(db, org_id=org_id, provider_source="byok", now=now)
-        ),
+        official_model_usage=official_usage,
+        byok_model_usage=byok_usage,
         trial_window_start=month_start.isoformat(),
     )
 
@@ -446,6 +459,8 @@ def check_workflow_quota(
     if provider_source != ProviderSource.OFFICIAL:
         return
     entitlement = _require_official_entitlement(db, user_id=user_id, org_id=org_id)
+    if internal_unlimited_usage_enabled():
+        return
     if entitlement.monthly_workflow_limit < 0:
         return
     used = count_official_workflow_starts(db, org_id)
@@ -465,6 +480,8 @@ def check_assistant_quota(
     if provider_source != ProviderSource.OFFICIAL:
         return
     entitlement = _require_official_entitlement(db, user_id=user_id, org_id=org_id)
+    if internal_unlimited_usage_enabled():
+        return
     if entitlement.monthly_assistant_limit < 0:
         return
     used = count_official_assistant_messages(db, org_id)
@@ -484,6 +501,8 @@ def check_indexing_quota(
     if provider_source != ProviderSource.OFFICIAL:
         return
     entitlement = _require_official_entitlement(db, user_id=user_id, org_id=org_id)
+    if internal_unlimited_usage_enabled():
+        return
     if entitlement.monthly_indexing_limit < 0:
         return
     used = count_official_indexing_starts(db, org_id)
@@ -507,7 +526,7 @@ def reserve_workflow_model_tokens(
     runtime_run_id: str | None = None,
 ) -> ModelUsageReservation | None:
     """Reserve server-owned model capacity before a drafting job is queued."""
-    if provider_source == ProviderSource.STUB:
+    if provider_source == ProviderSource.STUB or internal_unlimited_usage_enabled():
         return None
     reserved_tokens = (
         WORKFLOW_ANTHROPIC_RESERVED_TOKENS
@@ -550,7 +569,7 @@ def reserve_assistant_model_tokens(
     runtime_run_id: str,
 ) -> ModelUsageReservation | None:
     """Reserve bounded Operator-planning capacity for one graph invocation."""
-    if provider_source == ProviderSource.STUB:
+    if provider_source == ProviderSource.STUB or internal_unlimited_usage_enabled():
         return None
     try:
         token_limit_ceiling = (

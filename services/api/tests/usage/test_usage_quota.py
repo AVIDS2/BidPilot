@@ -109,6 +109,35 @@ def test_monthly_quota_unlimited_for_professional():
         db.close()
 
 
+def test_internal_test_mode_reports_unlimited_without_changing_membership(monkeypatch):
+    db = _make_db()
+    try:
+        user, project = _make_user(db, "starter")
+        record_usage_event(
+            db,
+            user_id=user.id,
+            org_id=user.org_id,
+            project_id=project.id,
+            event_type="workflow_draft_started",
+            provider_source=ProviderSource.OFFICIAL,
+        )
+        db.commit()
+        monkeypatch.setenv("DOCPILOT_INTERNAL_UNLIMITED_USAGE", "true")
+
+        quota = get_usage_quota(db, user.id)
+
+        assert quota.plan == "starter"
+        assert quota.monthly_workflow_limit == -1
+        assert quota.monthly_workflow_used == 1
+        assert quota.monthly_workflow_remaining is None
+        assert quota.monthly_assistant_limit == -1
+        assert quota.monthly_indexing_limit == -1
+        assert quota.official_model_usage.token_limit is None
+        assert quota.official_model_usage.remaining_tokens is None
+    finally:
+        db.close()
+
+
 def test_count_official_workflow_starts_ignores_byok():
     db = _make_db()
     try:

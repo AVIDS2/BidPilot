@@ -157,6 +157,31 @@ test("a non-recoverable tool failure terminates without another model turn", asy
   assert.ok(projected.some((event) => event.type === "agent.completed"));
 });
 
+test("an unreachable tool bridge becomes a structured terminal observation", async () => {
+  const faux = createFauxCore({ api: "openai-completions", provider: "test-provider", models: [{ id: "test-model" }] });
+  faux.setResponses([
+    fauxAssistantMessage(fauxToolCall("get_project_status", {}, { id: "tool-network" })),
+  ]);
+  const runtime = await testRuntime(faux.streamSimple);
+  const projected: Array<Record<string, unknown>> = [];
+  await runPiAgent(request(), (event) => {
+    projected.push(event);
+  }, {
+    createModelRuntime: async () => runtime,
+    fetch: async () => {
+      throw new TypeError("Failed to fetch");
+    },
+  });
+
+  assert.equal(faux.state.callCount, 1);
+  const completed = projected.find((event) => event.type === "tool.completed");
+  assert.equal(completed?.is_error, true);
+  const result = completed?.result as Record<string, unknown> | undefined;
+  assert.equal(result?.errorCode, "pi_bridge_unreachable");
+  assert.equal(JSON.stringify(projected).includes("Failed to fetch"), false);
+  assert.ok(projected.some((event) => event.type === "agent.completed"));
+});
+
 test("independent read tools execute in parallel through the governed bridge", async () => {
   const faux = createFauxCore({ api: "openai-completions", provider: "test-provider", models: [{ id: "test-model" }] });
   faux.setResponses([
@@ -242,4 +267,36 @@ test("governance extension blocks oversized tool input without calling the bridg
 
   assert.equal(bridgeCalls, 0);
   assert.ok(events.includes("tool.completed"));
+});
+
+test("first-party subagents extension delegates through the governed bridge", async () => {
+  const faux = createFauxCore({ api: "openai-completions", provider: "test-provider", models: [{ id: "test-model" }] });
+  faux.setResponses([
+    fauxAssistantMessage(fauxToolCall("spawn_subagents", {
+      mode: "parallel",
+      tasks: [
+        { agent: "researcher", task: "查找公开资料" },
+        { agent: "reviewer", task: "检查证据完整性" },
+      ],
+    }, { id: "subagent-call" })),
+  ]);
+  const runtime = await testRuntime(faux.streamSimple);
+  const delegated: Array<Record<string, unknown>> = [];
+  const subagentRequest = request();
+  subagentRequest.resources.extensions.push("bidpilot-subagents");
+  await runPiAgent(subagentRequest, () => undefined, {
+    createModelRuntime: async () => runtime,
+    fetch: async (_input, init) => {
+      delegated.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      return new Response(JSON.stringify({
+        kind: "succeeded",
+        publicSummary: "已创建 2 个受治理子 Agent。",
+        modelPayload: { mode: "parallel", child_run_ids: ["child-a", "child-b"] },
+        recoverable: true,
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    },
+  });
+  assert.equal(delegated.length, 1);
+  assert.equal(delegated[0]?.name, "spawn_subagents");
+  assert.ok(delegated[0]?.arguments);
 });

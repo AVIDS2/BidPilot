@@ -128,16 +128,6 @@ def _normalize_plan_arguments(
 
     arguments = dict(plan.arguments)
     if plan.capability_name == "create_project":
-        pending_name = bool(
-            pending_input
-            and pending_input.get("capability_name") == "create_project"
-            and "name" in (pending_input.get("missing_fields") or [])
-        )
-        if not isinstance(arguments.get("name"), str) or not arguments["name"].strip():
-            if pending_name:
-                candidate = user_message.strip("“”\\\"' ")
-                if candidate:
-                    arguments["name"] = candidate[:80]
         if isinstance(arguments.get("name"), str) and arguments["name"].strip():
             arguments["name"] = arguments["name"].strip()
             arguments.setdefault("scenario_package", "bidpilot")

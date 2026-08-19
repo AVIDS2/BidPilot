@@ -191,15 +191,23 @@ def _add_agent_wake_notification(
     title = "后台任务已完成" if status == "succeeded" else "后台任务失败"
     body_parts = [summary]
     if isinstance(result, dict):
+        result_summary = result.get("summary")
+        if run.kind == "subagent" and isinstance(result_summary, str) and result_summary.strip():
+            body_parts = [result_summary.strip()]
         section_key = result.get("section_key")
         if isinstance(section_key, str) and section_key:
             body_parts.append(f"章节：{section_key}")
         execution_run_id = result.get("execution_run_id")
         if isinstance(execution_run_id, str) and execution_run_id:
             body_parts.append(f"运行：{execution_run_id[:8]}")
+    wake_conversation_id = run.conversation_id
+    if run.kind == "subagent" and run.parent_run_id:
+        parent = db.get(RuntimeRun, run.parent_run_id)
+        if parent is not None and parent.conversation_id:
+            wake_conversation_id = parent.conversation_id
     link = f"/agent?wake={run.id}"
-    if run.conversation_id:
-        link = f"/agent?conversation={run.conversation_id}&wake={run.id}"
+    if wake_conversation_id:
+        link = f"/agent?conversation={wake_conversation_id}&wake={run.id}"
     db.add(
         Notification(
             user_id=run.user_id,

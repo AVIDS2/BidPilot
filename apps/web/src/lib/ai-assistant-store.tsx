@@ -12,6 +12,7 @@ import {
   cancelRuntimeWorkflow,
   forkChatConversation,
   getChatConversationMessages,
+  listRuntimeChildRuns,
   listRuntimeEvents,
   listRuntimeRuns,
   listChatConversations,
@@ -126,12 +127,15 @@ export interface AssistantInputRequest {
 export interface AssistantExecutionItem {
   id: string;
   messageId?: string;
-  kind: "intent" | "tool" | "workflow";
+  kind: "intent" | "tool" | "workflow" | "subagent";
   toolName?: string;
   toolCallId?: string;
   turnId?: string;
   runId?: string;
   runtimeRunId?: string;
+  parentRuntimeRunId?: string;
+  agentProfile?: string;
+  agentMode?: string;
   status: "pending" | "running" | "succeeded" | "failed" | "cancelled";
   title: string;
   summary?: string;
@@ -252,6 +256,7 @@ type Action =
       turnId?: string;
       runId?: string;
       runtimeRunId?: string;
+      parentRuntimeRunId?: string;
       patch: Partial<AssistantExecutionItem>;
     }
   | {
@@ -554,6 +559,9 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "FINALIZE_OPEN_EXECUTION_ITEMS": {
       const executionItems = state.executionItems.map((item) => {
         if (!isOpenExecutionStatus(item.status)) return item;
+        // Child runs have an independent lifecycle. A parent transcript ending
+        // must never manufacture a terminal state for a still-running child.
+        if (item.kind === "subagent") return item;
         if (action.runtimeRunId && item.runtimeRunId && item.runtimeRunId !== action.runtimeRunId) {
           return item;
         }
@@ -669,6 +677,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
             toolCallId: action.patch.toolCallId ?? item.toolCallId,
             turnId: item.turnId ?? action.patch.turnId ?? action.turnId,
             runtimeRunId: item.runtimeRunId ?? action.patch.runtimeRunId ?? action.runtimeRunId,
+            parentRuntimeRunId: item.parentRuntimeRunId ?? action.patch.parentRuntimeRunId ?? action.parentRuntimeRunId,
             runId: item.runId ?? action.patch.runId ?? action.runId,
             messageId: item.messageId ?? state.activeAssistantMessageId ?? undefined,
           };
@@ -685,6 +694,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           turnId: action.turnId,
           runId: action.runId,
           runtimeRunId: action.runtimeRunId,
+          parentRuntimeRunId: action.parentRuntimeRunId,
           status: action.patch.status ?? "pending",
           title: action.toolName,
           timestamp: Date.now(),
@@ -800,6 +810,15 @@ interface AssistantSseHandlingOptions {
   onConversation?: (conversationId: string) => void;
   onTerminal?: () => void;
   navigate?: (path: string) => void;
+  onSubagents?: (parentRunId: string, children: AssistantSubagentDescriptor[]) => void;
+}
+
+interface AssistantSubagentDescriptor {
+  run_id: string;
+  task_id?: string;
+  profile?: string;
+  mode?: string;
+  status?: string;
 }
 
 function handleAssistantSsePart(
@@ -982,6 +1001,9 @@ function handleAssistantSseEvent(
       (typeof parsed.turn_id === "string" && parsed.turn_id) ||
       (runtimeRunId ? `run:${runtimeRunId}` : undefined);
     const title = typeof parsed.title === "string" && parsed.title ? parsed.title : toolName;
+    const parentRuntimeRunId = typeof parsed.parent_runtime_run_id === "string"
+      ? parsed.parent_runtime_run_id
+      : undefined;
     if (turnId) {
       dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
     }
@@ -1000,6 +1022,7 @@ function handleAssistantSseEvent(
         toolCallId,
         turnId,
         runtimeRunId,
+        parentRuntimeRunId,
         arguments: asRecord(parsed.arguments),
         isRunning: true,
       },
@@ -1079,6 +1102,9 @@ function handleAssistantSseEvent(
       (typeof parsed.turn_id === "string" && parsed.turn_id) ||
       (runtimeRunId ? `run:${runtimeRunId}` : undefined);
     const result = asRecord(parsed.result);
+    const parentRuntimeRunId = typeof parsed.parent_runtime_run_id === "string"
+      ? parsed.parent_runtime_run_id
+      : undefined;
     if (turnId) {
       dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
     }
@@ -1088,6 +1114,7 @@ function handleAssistantSseEvent(
       toolCallId,
       turnId,
       runtimeRunId,
+      parentRuntimeRunId,
       patch: {
         status: "succeeded",
         result,
@@ -1096,9 +1123,14 @@ function handleAssistantSseEvent(
         toolCallId,
         turnId,
         runtimeRunId,
+        parentRuntimeRunId,
         title: typeof parsed.title === "string" && parsed.title ? parsed.title : toolName,
       },
     });
+    if (toolName === "spawn_subagents" && runtimeRunId) {
+      const children = normalizeSubagentChildren(result.children);
+      if (children.length > 0) options?.onSubagents?.(runtimeRunId, children);
+    }
     // A completed tool is not necessarily a completed turn: the harness may
     // still be deciding on the next action or composing the final response.
     dispatch({ type: "SET_STATUS", status: "thinking" });
@@ -1122,18 +1154,23 @@ function handleAssistantSseEvent(
     const turnId =
       (typeof parsed.turn_id === "string" && parsed.turn_id) ||
       (runtimeRunId ? `run:${runtimeRunId}` : undefined);
+    const parentRuntimeRunId = typeof parsed.parent_runtime_run_id === "string"
+      ? parsed.parent_runtime_run_id
+      : undefined;
     dispatch({
       type: "UPDATE_EXECUTION_ITEM",
       toolName,
       toolCallId,
       turnId,
       runtimeRunId,
+      parentRuntimeRunId,
       patch: {
         status: "failed",
         errorMessage: String(parsed.error_message ?? "Tool failed"),
         errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
         toolCallId,
         turnId,
+        parentRuntimeRunId,
       },
     });
     dispatch({ type: "SET_STATUS", status: "failed" });
@@ -1456,6 +1493,130 @@ function waitForRuntimePoll() {
   return new Promise<void>((resolve) => window.setTimeout(resolve, RUNTIME_EVENT_POLL_INTERVAL_MS));
 }
 
+function childStatus(value: string | undefined): AssistantExecutionItem["status"] {
+  if (value === "failed") return "failed";
+  if (value === "completed" || value === "succeeded") return "succeeded";
+  if (value === "cancelled") return "cancelled";
+  if (value === "queued") return "pending";
+  return "running";
+}
+
+function addSubagentItem(
+  parentRunId: string,
+  child: AssistantSubagentDescriptor,
+  dispatch: Dispatch<Action>,
+) {
+  if (!child.run_id) return;
+  const profile = child.profile?.trim() || "通用子 Agent";
+  dispatch({
+    type: "ADD_EXECUTION_ITEM",
+    item: {
+      id: `subagent-${child.run_id}`,
+      kind: "subagent",
+      toolName: "subagent",
+      runtimeRunId: child.run_id,
+      parentRuntimeRunId: parentRunId,
+      agentProfile: profile,
+      agentMode: child.mode,
+      status: childStatus(child.status),
+      title: `${profile} 子 Agent`,
+      summary: child.status === "queued" ? "已进入队列，等待执行。" : undefined,
+      isRunning: childStatus(child.status) === "running",
+      timestamp: Date.now(),
+    },
+  });
+}
+
+async function pollRuntimeSubagent(
+  parentRunId: string,
+  child: AssistantSubagentDescriptor,
+  dispatch: Dispatch<Action>,
+  options?: AssistantSseHandlingOptions,
+  isActive: () => boolean = () => true,
+) {
+  if (!isActive()) return;
+  addSubagentItem(parentRunId, child, dispatch);
+  let afterSequence = 0;
+  const childOptions: AssistantSseHandlingOptions = {
+    ...options,
+    onTerminal: undefined,
+    onRuntimeRun: undefined,
+  };
+
+  for (let attempt = 0; attempt < RUNTIME_EVENT_POLL_MAX_ATTEMPTS; attempt += 1) {
+    if (!isActive()) return;
+    const response = await listRuntimeEvents(child.run_id, afterSequence);
+    if (!isActive()) return;
+    let terminalStatus: AssistantExecutionItem["status"] | null = null;
+    for (const event of response.items) {
+      afterSequence = Math.max(afterSequence, event.sequence);
+      dispatch({
+        type: "UPDATE_EXECUTION_ITEM",
+        toolName: "subagent",
+        runtimeRunId: child.run_id,
+        parentRuntimeRunId: parentRunId,
+        patch: {
+          status: "running",
+          isRunning: true,
+          summary: event.public_summary,
+        },
+      });
+      for (const compatibilityEvent of runtimeEventToAssistantEvents(event, null)) {
+        // A child agent owns its own transcript. The parent timeline only
+        // receives public tool lifecycle events; child text, reasoning and
+        // terminal events must never become a second parent reply.
+        if (![
+          "assistant.tool_started",
+          "assistant.tool_succeeded",
+          "assistant.tool_failed",
+          "assistant.tool_progressed",
+        ].includes(compatibilityEvent.eventType)) {
+          continue;
+        }
+        const data = {
+          ...compatibilityEvent.data,
+          parent_runtime_run_id: parentRunId,
+        };
+        handleAssistantSseEvent(compatibilityEvent.eventType, data, dispatch, childOptions);
+      }
+      if (event.type === "run.completed") terminalStatus = "succeeded";
+      if (event.type === "run.failed") terminalStatus = "failed";
+      if (event.type === "run.cancelled") terminalStatus = "cancelled";
+    }
+    if (terminalStatus) {
+      dispatch({
+        type: "UPDATE_EXECUTION_ITEM",
+        toolName: "subagent",
+        runtimeRunId: child.run_id,
+        parentRuntimeRunId: parentRunId,
+        patch: {
+          status: terminalStatus,
+          isRunning: false,
+          summary: terminalStatus === "succeeded" ? "子 Agent 已完成委派任务。" : undefined,
+        },
+      });
+      return;
+    }
+    await waitForRuntimePoll();
+  }
+}
+
+function normalizeSubagentChildren(value: unknown): AssistantSubagentDescriptor[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object") return [];
+    const item = candidate as Record<string, unknown>;
+    if (typeof item.run_id !== "string" || !item.run_id) return [];
+    return [{
+      run_id: item.run_id,
+      task_id: typeof item.task_id === "string" ? item.task_id : undefined,
+      profile: typeof item.profile === "string" ? item.profile : undefined,
+      mode: typeof item.mode === "string" ? item.mode : undefined,
+      status: typeof item.status === "string" ? item.status : undefined,
+    }];
+  });
+}
+
 async function pollRuntimeWorkflow(
   runtimeRunId: string,
   toolName: string,
@@ -1640,6 +1801,12 @@ export function AIAssistantProvider({
   const runtimeEventCursorsRef = useRef<RuntimeEventCursor>({});
   const activeStreamAbortRef = useRef<AbortController | null>(null);
   const activeAssistantRuntimeRunRef = useRef<string | null>(null);
+  const subagentPollsRef = useRef(new Set<string>());
+  const subagentPollGenerationRef = useRef(0);
+  const observeSubagentsRef = useRef<(
+    parentRunId: string,
+    children: AssistantSubagentDescriptor[],
+  ) => void>(() => undefined);
   // A previous history request may resolve after the user has picked another
   // conversation. Only the newest request is allowed to project server state.
   const conversationLoadVersionRef = useRef(0);
@@ -1663,6 +1830,37 @@ export function AIAssistantProvider({
     );
     return true;
   }, []);
+
+  const observeSubagents = useCallback((
+    parentRunId: string,
+    children: AssistantSubagentDescriptor[],
+  ) => {
+    const generation = subagentPollGenerationRef.current;
+    for (const child of children) {
+      if (!child.run_id || subagentPollsRef.current.has(child.run_id)) continue;
+      subagentPollsRef.current.add(child.run_id);
+      void pollRuntimeSubagent(parentRunId, child, dispatch, {
+        shouldHandleRuntimeEvent,
+        onSubagents: (nestedParent, nestedChildren) => {
+          observeSubagentsRef.current?.(nestedParent, nestedChildren);
+        },
+      }, () => subagentPollGenerationRef.current === generation).catch((error) => {
+        if (subagentPollGenerationRef.current !== generation) return;
+        dispatch({
+          type: "UPDATE_EXECUTION_ITEM",
+          toolName: "subagent",
+          runtimeRunId: child.run_id,
+          parentRuntimeRunId: parentRunId,
+          patch: {
+            status: "failed",
+            isRunning: false,
+            errorMessage: error instanceof Error ? error.message : "子 Agent 运行记录读取失败。",
+          },
+        });
+      });
+    }
+  }, [shouldHandleRuntimeEvent]);
+  observeSubagentsRef.current = observeSubagents;
 
   const open = useCallback(
     (mode?: AssistantMode) => dispatch({ type: "OPEN", mode }),
@@ -1693,6 +1891,8 @@ export function AIAssistantProvider({
     dispatch({ type: "CLEAR_MESSAGES" });
     // Clear previous run tool cards so restored transcript only shows this conversation.
     dispatch({ type: "CLEAR_TRANSIENT_STATE" });
+    subagentPollGenerationRef.current += 1;
+    subagentPollsRef.current.clear();
     dispatch({ type: "SET_STATUS", status: "thinking" });
     try {
       const [history, runs] = await Promise.all([
@@ -1720,8 +1920,11 @@ export function AIAssistantProvider({
       const replayResponses = await Promise.all(
         [...runs].reverse().map(async (run) => {
           try {
-            const response = await listRuntimeEvents(run.id, 0);
-            return { run, events: response.items };
+            const [response, children] = await Promise.all([
+              listRuntimeEvents(run.id, 0),
+              listRuntimeChildRuns(run.id).catch(() => []),
+            ]);
+            return { run, events: response.items, children };
           } catch (replayError) {
             console.error(`Failed to restore runtime transcript ${run.id}:`, replayError);
             return null;
@@ -1733,6 +1936,14 @@ export function AIAssistantProvider({
       for (const replay of replayResponses) {
         if (replay) {
           const { run, events } = replay;
+          if (replay.children.length > 0) {
+            observeSubagents(run.id, replay.children.map((child) => ({
+              run_id: child.id,
+              profile: child.profile ?? undefined,
+              mode: child.mode ?? undefined,
+              status: child.status,
+            })));
+          }
           const merged = mergeRecoveredRuntimeMessage(
             restoredMessages,
             recoverRuntimeMessageFromEvents(run.id, events),
@@ -1777,6 +1988,10 @@ export function AIAssistantProvider({
               compatibilityEvent.eventType,
               compatibilityEvent.data,
               dispatch,
+              {
+                shouldHandleRuntimeEvent,
+                onSubagents: (parentRunId, children) => observeSubagentsRef.current?.(parentRunId, children),
+              },
             );
           }
         }
@@ -1809,7 +2024,7 @@ export function AIAssistantProvider({
         dispatch({ type: "SET_STATUS", status: "idle" });
       }
     }
-  }, []);
+  }, [observeSubagents, shouldHandleRuntimeEvent]);
 
   const updateConversationTitle = useCallback((conversationId: string, title: string) => {
     dispatch({ type: "UPDATE_CONVERSATION_TITLE", conversationId, title });
@@ -1878,11 +2093,13 @@ export function AIAssistantProvider({
 
   const startNewConversation = useCallback(() => {
     conversationLoadVersionRef.current += 1;
+    subagentPollGenerationRef.current += 1;
     didAutoRestoreRef.current = true;
     removeStoredValue("lastAssistantConversationId");
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: null });
     dispatch({ type: "CLEAR_MESSAGES" });
     dispatch({ type: "CLEAR_TRANSIENT_STATE" });
+    subagentPollsRef.current.clear();
     dispatch({ type: "SET_STATUS", status: "idle" });
     dispatch({ type: "OPEN", mode: "panel" });
   }, []);
@@ -1963,6 +2180,7 @@ export function AIAssistantProvider({
       const sseOptions: AssistantSseHandlingOptions = {
         shouldHandleRuntimeEvent,
         navigate: (path) => navigateRef.current?.(path),
+        onSubagents: (parentRunId, children) => observeSubagents(parentRunId, children),
         onRuntimeRun: (runId) => {
           activeRuntimeRunId = runId;
           activeAssistantRuntimeRunRef.current = runId;
@@ -2117,6 +2335,7 @@ export function AIAssistantProvider({
       state.selectedProviderConfigId,
       state.status,
       shouldHandleRuntimeEvent,
+      observeSubagents,
     ],
   );
 

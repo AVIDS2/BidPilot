@@ -159,7 +159,7 @@ def build_skill_index_block() -> str:
         return ""
     lines = [
         "AVAILABLE_SKILLS:",
-        "Choose by meaning, not keyword matching. Call read_skill(name) before following a skill; do not invent its contents.",
+        "Select the skill whose declared scope fits the current goal. Call read_skill(name) before following it; do not invent its contents.",
     ]
     lines.extend(skill.to_index_line() for skill in index)
     return "\n".join(lines)

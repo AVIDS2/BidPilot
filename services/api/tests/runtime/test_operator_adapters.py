@@ -40,6 +40,14 @@ from contracts.memory import MemoryCitation, MemoryCitationSource, MemoryContext
 from contracts.untrusted_context import UNTRUSTED_CONTEXT_SYSTEM_GUARD
 
 
+# Historical direct coverage for the retired Python Harness/operator graph.
+# The public assistant route is Pi-only and must never use this module as its
+# production contract.
+pytestmark = pytest.mark.skip(
+    reason="retired Python Harness/operator endpoint; Pi is the sole public assistant runtime",
+)
+
+
 def _user(default_org_id: str, default_user_id: str) -> CurrentUser:
     return CurrentUser(
         id=default_user_id,

@@ -18,6 +18,7 @@ from contracts.embedding_metering import (
 )
 from contracts.usage_budget_policy import (
     OfficialTokenCeilingConfigurationError,
+    internal_unlimited_usage_enabled,
     require_official_monthly_token_ceiling,
 )
 from contracts.usage_ledger import ModelUsageBudgetExceeded
@@ -47,6 +48,12 @@ def generate_metered_query_embedding(
     """Embed a query or safely fall back to lexical retrieval without bypassing cost policy."""
     profile = get_embedding_profile()
     if profile is None:
+        return (
+            generate_query_embedding(query)
+            if timeout_seconds is None
+            else generate_query_embedding(query, timeout_seconds=timeout_seconds)
+        )
+    if internal_unlimited_usage_enabled():
         return (
             generate_query_embedding(query)
             if timeout_seconds is None

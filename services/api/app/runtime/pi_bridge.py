@@ -7,7 +7,6 @@ policy, approval, idempotency and audit boundaries remain authoritative.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 import os
 from typing import Any
 
@@ -19,10 +18,12 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.db import SessionLocal
 from app.models import RuntimeRun
+from contracts.pi_bridge import encode_pi_bridge_token
 from .bidpilot_harness_adapter import BidPilotToolExecutor
 from .harness_core import HarnessExecutionContext, HarnessToolCall
-from .harness_loop import _TOOL_PARAMETER_SCHEMAS
 from .registry import CAPABILITY_REGISTRY
+from .subagent_control import create_subagent_runs, wait_for_subagent_results
+from .tool_catalog import _TOOL_PARAMETER_SCHEMAS
 
 
 router = APIRouter(prefix="/internal/pi", tags=["internal-pi"])
@@ -52,23 +53,17 @@ def _secret() -> str:
 
 
 def create_pi_bridge_token(*, run: RuntimeRun, user: CurrentUser) -> str:
-    now = datetime.now(UTC)
-    return jwt.encode(
-        {
-            "purpose": "pi-tool-bridge",
-            "run_id": run.id,
-            "user_id": user.id,
-            "org_id": user.org_id,
-            "email": user.email,
-            "display_name": user.display_name,
-            "role": user.role,
-            "plan": user.plan,
-            "org_slug": user.org_slug,
-            "exp": now + timedelta(seconds=_TOKEN_TTL_SECONDS),
-            "iat": now,
-        },
-        _secret(),
-        algorithm=_ALGORITHM,
+    return encode_pi_bridge_token(
+        run_id=run.id,
+        user_id=user.id,
+        org_id=user.org_id,
+        email=user.email,
+        display_name=user.display_name,
+        role=user.role,
+        plan=user.plan,
+        org_slug=user.org_slug,
+        secret=_secret(),
+        ttl_seconds=_TOKEN_TTL_SECONDS,
     )
 
 
@@ -140,6 +135,68 @@ def execute_pi_tool(
             completed_tool_names=(),
             failed_tool_names=(),
         )
+        if payload.name == "spawn_subagents":
+            try:
+                result = create_subagent_runs(
+                    db,
+                    user,
+                    parent_run_id=run.id,
+                    arguments=payload.arguments,
+                )
+            except ValueError as exc:
+                code = str(exc) or "subagent_input_invalid"
+                return {
+                    "kind": "failed",
+                    "publicSummary": "子 Agent 派生参数无效或超过治理限制。",
+                    "modelPayload": {"error_code": code, "retryable": False},
+                    "publicPayload": {"error_code": code},
+                    "errorCode": code,
+                    "recoverable": False,
+                }
+            completion = str(payload.arguments.get("completion") or "foreground")
+            if completion not in {"foreground", "background"}:
+                completion = "foreground"
+            if completion == "foreground":
+                try:
+                    result = {
+                        **result,
+                        **wait_for_subagent_results(
+                            db,
+                            user,
+                            parent_run_id=run.id,
+                            child_run_ids=[str(child["run_id"]) for child in result["children"]],
+                        ),
+                    }
+                except ValueError as exc:
+                    code = str(exc) or "subagent_wait_failed"
+                    return {
+                        "kind": "failed",
+                        "publicSummary": "无法读取受治理子 Agent 的执行结果。",
+                        "modelPayload": {"error_code": code, "retryable": False},
+                        "publicPayload": {"error_code": code},
+                        "errorCode": code,
+                        "recoverable": False,
+                    }
+            completed = result.get("completed") is True
+            public_summary = (
+                f"{len(result['children'])} 个子 Agent 已完成。"
+                if completed
+                else f"已派生 {len(result['children'])} 个受治理子 Agent，后台运行中。"
+            )
+            return {
+                "kind": "succeeded",
+                "publicSummary": public_summary,
+                "modelPayload": result,
+                "publicPayload": {
+                    "mode": result["mode"],
+                    "status": result.get("status"),
+                    "children": [
+                        {"run_id": child["run_id"], "status": child.get("status")}
+                        for child in result["children"]
+                    ],
+                },
+                "recoverable": not completed,
+            }
         executor = BidPilotToolExecutor(
             db=db,
             user=user,

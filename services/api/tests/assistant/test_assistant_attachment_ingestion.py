@@ -19,6 +19,7 @@ from app.assistant.attachments import (
     stage_assistant_attachment,
 )
 from app.assistant.schemas import AssistantAttachmentPayload
+from app.usage.schemas import ProviderSource
 from app.auth.schemas import CurrentUser
 from app.documents.service import upload_document_command
 from app.models import AssistantAttachment, Bundle, Project, ProjectMember, RuntimeRun, SourceDocument
@@ -321,7 +322,7 @@ def test_expired_staged_attachment_is_not_usable(
     assert exc_info.value.status_code == 410
 
 
-def test_harness_stream_hydrates_attachment_metadata_before_model_turn(
+def test_pi_stream_hydrates_attachment_metadata_before_model_turn(
     client,
     test_db,
     default_org_id: str,
@@ -330,27 +331,26 @@ def test_harness_stream_hydrates_attachment_metadata_before_model_turn(
 ) -> None:
     user = _user(default_org_id, default_user_id)
     record, _ = _stage_text_attachment(test_db, user, monkeypatch)
-    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "harness")
+    monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "pi")
+    captured: dict[str, object] = {}
 
-    class Response:
-        content = "已收到附件。"
-        tool_calls: list[dict] = []
-        usage_metadata = None
+    async def capture_pi_request(_db, _user, payload, **_kwargs):
+        captured["attachment"] = payload.attachments[0]
+        yield 'event: assistant.end\ndata: {"state":"completed"}\n\n'
 
-    class CapturingHarnessLLM:
-        def __init__(self) -> None:
-            self.calls: list[list[object]] = []
-
-        def bind_tools(self, _tools):
-            return self
-
-        def invoke(self, messages):
-            self.calls.append(list(messages))
-            return Response()
-
-    llm = CapturingHarnessLLM()
-    monkeypatch.setattr("app.runtime.operator_adapter.get_agent_llm", lambda **_kwargs: llm)
-    monkeypatch.setattr("app.runtime.operator_adapter._load_authorized_memory_context", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "app.assistant.router._resolve_request_provider",
+        lambda *_args, **_kwargs: (
+            ProviderSource.OFFICIAL,
+            "openai",
+            "test",
+            "test-key",
+            "http://model.invalid/v1",
+            "test-model",
+            None,
+        ),
+    )
+    monkeypatch.setattr("app.assistant.router.stream_operator_assistant_response", capture_pi_request)
 
     response = client.post(
         "/assistant/stream",
@@ -369,12 +369,12 @@ def test_harness_stream_hydrates_attachment_metadata_before_model_turn(
 
     assert response.status_code == 200
     assert "浏览器伪造正文" not in response.text
-    assert llm.calls
-    prompt = "\n".join(str(getattr(message, "content", "")) for message in llm.calls[0])
-    assert "requirements.txt (file, text/plain" in prompt
-    assert "强制项：提供近三年类似项目业绩。" in prompt
-    assert "browser-spoofed-name.txt" not in prompt
-    assert "浏览器伪造正文" not in prompt
+    attachment = captured["attachment"]
+    assert getattr(attachment, "name") == "requirements.txt"
+    assert getattr(attachment, "mime_type") == "text/plain"
+    assert "强制项：提供近三年类似项目业绩。" in getattr(attachment, "extracted_text")
+    assert "browser-spoofed-name.txt" not in str(attachment)
+    assert "浏览器伪造正文" not in str(attachment)
 
 
 def test_operator_preserves_staged_attachment_through_governed_project_setup(

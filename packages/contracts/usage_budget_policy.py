@@ -12,11 +12,30 @@ from collections.abc import Mapping
 
 
 OFFICIAL_MONTHLY_TOKEN_CEILING_ENV = "DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING"
+INTERNAL_UNLIMITED_USAGE_ENV = "DOCPILOT_INTERNAL_UNLIMITED_USAGE"
 HOSTED_ENVIRONMENTS = frozenset({"production", "staging"})
 
 
 class OfficialTokenCeilingConfigurationError(ValueError):
     """Raised when hosted platform-funded AI has no safe token ceiling."""
+
+
+def internal_unlimited_usage_enabled(
+    environment: Mapping[str, str] | None = None,
+) -> bool:
+    """Return whether an explicitly configured internal test deployment is unmetered.
+
+    This switch is intentionally narrow: callers may bypass product quotas and
+    token-budget reservations, but authentication, tenant isolation, approval,
+    audit, and provider credentials remain mandatory.
+    """
+    source = os.environ if environment is None else environment
+    return source.get(INTERNAL_UNLIMITED_USAGE_ENV, "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def is_hosted_environment(environment: Mapping[str, str] | None = None) -> bool:
@@ -49,6 +68,8 @@ def require_official_monthly_token_ceiling(
     environment: Mapping[str, str] | None = None,
 ) -> int | None:
     """Require a ceiling in staging/production while keeping local development usable."""
+    if internal_unlimited_usage_enabled(environment):
+        return None
     value = configured_official_monthly_token_ceiling(environment)
     if value is None and is_hosted_environment(environment):
         raise OfficialTokenCeilingConfigurationError(

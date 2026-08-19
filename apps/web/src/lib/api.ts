@@ -805,6 +805,19 @@ export interface RuntimeRunListItem {
   latest_event_summary: string | null;
 }
 
+export interface RuntimeChildRunRead {
+  id: string;
+  parent_run_id: string;
+  kind: string;
+  status: string;
+  profile: string | null;
+  mode: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  latest_event_summary: string | null;
+}
+
 export function listRuntimeRuns(limit = 50, conversationId?: string | null) {
   const params = new URLSearchParams({
     limit: String(Math.min(Math.max(limit, 1), 100)),
@@ -816,6 +829,15 @@ export function listRuntimeRuns(limit = 50, conversationId?: string | null) {
 export function listRuntimeEvents(runId: string, afterSequence = 0) {
   return request<RuntimeEventsResponse>(
     `/runtime/runs/${encodeURIComponent(runId)}/events?after_sequence=${afterSequence}`,
+  );
+}
+
+export function listRuntimeChildRuns(runId: string, limit = 20) {
+  const params = new URLSearchParams({
+    limit: String(Math.min(Math.max(limit, 1), 100)),
+  });
+  return request<RuntimeChildRunRead[]>(
+    `/runtime/runs/${encodeURIComponent(runId)}/children?${params.toString()}`,
   );
 }
 

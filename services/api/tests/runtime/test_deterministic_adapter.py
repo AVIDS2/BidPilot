@@ -5,8 +5,15 @@ from __future__ import annotations
 import json
 import uuid
 
+import pytest
+
 from app.models import AssistantActionAudit, ChatMessage, Project, RuntimeApproval, RuntimeRun
 from app.runtime.service import assistant_turn_idempotency_key
+
+
+pytestmark = pytest.mark.skip(
+    reason="retired deterministic assistant adapter; the public assistant runtime is Pi",
+)
 
 
 def _events(response_text: str) -> list[tuple[str, dict]]:

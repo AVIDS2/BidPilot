@@ -15,6 +15,7 @@ from .repository import get_visible_runtime_run
 from .schemas import (
     RuntimeActionResolutionRead,
     RuntimeApprovalResolveRequest,
+    RuntimeChildRunRead,
     RuntimeEventRead,
     RuntimeEventsResponse,
     RuntimeLinkedWorkflowRun,
@@ -25,6 +26,7 @@ from .service import (
     RuntimeApprovalExpiredError,
     RuntimeApprovalResolvedError,
     list_linked_workflow_runs,
+    list_runtime_child_runs,
     list_runtime_runs_query,
     request_runtime_cancellation,
     resolve_approval,
@@ -99,6 +101,38 @@ def get_runtime_run(
             for child in linked_workflow_runs
         ],
     )
+
+
+@router.get("/runs/{run_id}/children", response_model=list[RuntimeChildRunRead])
+def list_runtime_children(
+    run_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> list[RuntimeChildRunRead]:
+    children = list_runtime_child_runs(
+        db,
+        current_user,
+        parent_run_id=run_id,
+        limit=limit,
+    )
+    items: list[RuntimeChildRunRead] = []
+    for row in children:
+        subagent = (row.run.input_json or {}).get("subagent")
+        safe_subagent = subagent if isinstance(subagent, dict) else {}
+        items.append(RuntimeChildRunRead(
+            id=row.run.id,
+            parent_run_id=run_id,
+            kind=row.run.kind,
+            status=row.run.status,
+            profile=(str(safe_subagent.get("profile")) if safe_subagent.get("profile") else None),
+            mode=(str(safe_subagent.get("mode")) if safe_subagent.get("mode") else None),
+            created_at=row.run.created_at,
+            started_at=row.run.started_at,
+            finished_at=row.run.finished_at,
+            latest_event_summary=row.latest_event_summary,
+        ))
+    return items
 
 
 @router.get("/runs/{run_id}/events", response_model=RuntimeEventsResponse)

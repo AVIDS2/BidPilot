@@ -96,6 +96,8 @@ It is organized to support three goals:
   - how an implementation agent should choose work, sequence phases, and keep docs aligned
 - `docs/development/current-execution-state.md`
   - the current active phase, current status, and where the next implementation session should start
+- `docs/dev-log/progress.md`
+  - compact release and multi-session handoff notes backed by retained evidence
 
 ### Quality and security docs
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2Icon,
+  BotIcon,
   ChevronDownIcon,
   CircleDashedIcon,
   CircleXIcon,
@@ -355,6 +356,9 @@ function ResultFacts({ item }: { item: AssistantExecutionItem }) {
 interface ActivityTurn {
   id: string;
   items: AssistantExecutionItem[];
+  runtimeRunId?: string;
+  parentRuntimeRunId?: string;
+  childTurns?: ActivityTurn[];
 }
 
 function groupActivityTurns(items: AssistantExecutionItem[]): ActivityTurn[] {
@@ -365,7 +369,26 @@ function groupActivityTurns(items: AssistantExecutionItem[]): ActivityTurn[] {
     group.push(item);
     grouped.set(id, group);
   }
-  return [...grouped.entries()].map(([id, groupedItems]) => ({ id, items: groupedItems }));
+  const turns: ActivityTurn[] = [...grouped.entries()].map(([id, groupedItems]) => ({
+    id,
+    items: [...groupedItems].sort((left, right) => left.timestamp - right.timestamp),
+    runtimeRunId: groupedItems.find((item) => item.runtimeRunId)?.runtimeRunId,
+    parentRuntimeRunId: groupedItems.find((item) => item.parentRuntimeRunId)?.parentRuntimeRunId,
+    childTurns: [] as ActivityTurn[],
+  }));
+  const byRuntimeRunId = new Map(
+    turns.filter((turn) => turn.runtimeRunId).map((turn) => [turn.runtimeRunId!, turn]),
+  );
+  const roots: ActivityTurn[] = [];
+  for (const turn of turns) {
+    const parent = turn.parentRuntimeRunId ? byRuntimeRunId.get(turn.parentRuntimeRunId) : undefined;
+    if (parent && parent !== turn) {
+      parent.childTurns?.push(turn);
+    } else {
+      roots.push(turn);
+    }
+  }
+  return roots;
 }
 
 function StepSymbol({ item }: { item: AssistantExecutionItem }) {
@@ -685,6 +708,7 @@ function ToolStep({
   const [renderDetail, setRenderDetail] = useState(false);
   const detailCloseTimer = useRef<number | null>(null);
   const Icon: LucideIcon = getAssistantToolIcon(item);
+  const StepIcon = item.kind === "subagent" ? BotIcon : Icon;
   const label = item.toolName
     ? getAssistantToolLabel(item.toolName, t)
     : t("activity.workflow.default", { defaultValue: "Workflow" });
@@ -721,7 +745,7 @@ function ToolStep({
           onClick={toggleDetail}
         >
           <span>
-            <Icon className="cr-step-icon" size={13} />
+            <StepIcon className="cr-step-icon" size={13} />
             {label}
             <em className={`cr-step-status is-${item.status}`}>{statusText(item.status, t)}</em>
           </span>
@@ -754,6 +778,7 @@ function TaskTurn({
   onConfigureProvider,
   onOpenWorkflowCanvas,
   cancellingRunId,
+  childTurns = [],
 }: {
   turn: ActivityTurn;
   title?: string;
@@ -762,12 +787,14 @@ function TaskTurn({
   onConfigureProvider?: () => void;
   onOpenWorkflowCanvas?: (projectId: string) => void;
   cancellingRunId: string | null;
+  childTurns?: ActivityTurn[];
 }) {
   const tone = aggregateStatus(turn.items);
   const active = statusIsActive(tone);
   const [open, setOpen] = useState(false);
   const summary = displayGroupSummary(turn.items, t);
-  const actionTitle = title || summary;
+  const firstItem = turn.items[0];
+  const actionTitle = title || (firstItem?.kind === "subagent" ? firstItem.title : summary);
   const secondarySummary = title ? summary : "";
 
   return (
@@ -803,6 +830,22 @@ function TaskTurn({
               />
             ))}
           </div>
+          {childTurns.length > 0 && (
+            <div className="cr-subagent-turns" aria-label="子 Agent 执行记录">
+              {childTurns.map((childTurn) => (
+                <TaskTurn
+                  key={childTurn.id}
+                  turn={childTurn}
+                  t={t}
+                  onCancelWorkflow={onCancelWorkflow}
+                  onConfigureProvider={onConfigureProvider}
+                  onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+                  cancellingRunId={cancellingRunId}
+                  childTurns={childTurn.childTurns}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -851,6 +894,7 @@ export function ClaudeActivityTimeline({
             onConfigureProvider={onConfigureProvider}
             onOpenWorkflowCanvas={onOpenWorkflowCanvas}
             cancellingRunId={cancellingRunId}
+            childTurns={turn.childTurns}
           />
         ))}
       </div>

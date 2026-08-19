@@ -16,7 +16,7 @@ from app.retrieval.evidence_sets import EvidenceSetItemSnapshot, EvidenceSetSnap
 def test_draft_prompt_forbids_reasoning_transcript():
     prompt = llm_module._build_prompt("exec-summary", ["evidence"])
 
-    assert llm_module._MAX_DRAFT_OUTPUT_TOKENS == 4_096
+    assert llm_module._MAX_DRAFT_OUTPUT_TOKENS == 16_000
     assert "Output only the final markdown section" in prompt
     assert "chain-of-thought" in prompt
 

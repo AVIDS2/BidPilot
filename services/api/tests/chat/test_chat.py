@@ -157,6 +157,7 @@ class TestChatConversationsEndpoint:
         """Assistant sessions should still reuse the conversation title generation flow."""
         from app.chat.service import get_conversation
 
+        monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "pi")
         monkeypatch.setattr("app.chat.service._generate_conversation_title", lambda *_args, **_kwargs: "平台概览")
 
         response = client.post("/assistant/stream", json={"message": "给我一个平台状态和最近活动的概览"})

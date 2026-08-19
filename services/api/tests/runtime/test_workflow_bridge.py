@@ -421,3 +421,64 @@ def test_durable_workflow_wake_is_consumed_once_by_the_next_assistant_turn(
     assert second_delivery == []
     test_db.refresh(notification)
     assert notification.read is True
+
+
+def test_durable_subagent_wake_returns_to_parent_conversation(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    conversation = ChatConversation(user_id=default_user_id, title="Parent agent")
+    test_db.add(conversation)
+    test_db.commit()
+    user = _user(default_org_id, default_user_id)
+    parent = create_runtime_run(
+        test_db,
+        user,
+        kind="assistant_turn",
+        engine="pi",
+        conversation_id=conversation.id,
+    )
+    child = create_runtime_run(
+        test_db,
+        user,
+        kind="subagent",
+        engine="pi_subagent_worker",
+        parent_run_id=parent.id,
+    )
+    complete_runtime_run(
+        test_db,
+        child.id,
+        "子 Agent 已完成。",
+        result_json={"summary": "已核实两份公告，第二份已过截止时间。"},
+    )
+    notification = Notification(
+        user_id=user.id,
+        type="agent_task",
+        title="后台任务已完成",
+        body="已核实两份公告，第二份已过截止时间。",
+        link=f"/agent?conversation={conversation.id}&wake={child.id}",
+    )
+    test_db.add(notification)
+    test_db.commit()
+
+    updates = collect_completed_notifications(
+        test_db,
+        conversation_id=conversation.id,
+        user_id=user.id,
+    )
+
+    assert updates == [
+        {
+            "task_id": notification.id,
+            "kind": "subagent",
+            "status": "succeeded",
+            "title": "后台任务已完成",
+            "detail": {
+                "runtime_run_id": child.id,
+                "workflow_run_id": None,
+                "project_id": None,
+                "summary": "已核实两份公告，第二份已过截止时间。",
+            },
+        }
+    ]

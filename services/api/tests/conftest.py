@@ -59,7 +59,9 @@ for _provider_env_name in (
 ):
     os.environ.pop(_provider_env_name, None)
 
-os.environ["DOCPILOT_ASSISTANT_ENGINE"] = "deterministic"
+# New assistant turns always use the Pi sidecar. Tests that exercise the
+# stream mock the sidecar boundary or assert its fail-safe SSE response.
+os.environ["DOCPILOT_ASSISTANT_ENGINE"] = "pi"
 os.environ["DOCPILOT_ASSISTANT_API_KEY"] = "test-assistant-key"
 os.environ["DOCPILOT_ASSISTANT_PROTOCOL"] = "openai"
 os.environ["DOCPILOT_ASSISTANT_PROVIDER_ID"] = "test"

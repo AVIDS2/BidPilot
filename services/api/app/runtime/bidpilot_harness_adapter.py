@@ -463,9 +463,11 @@ class BidPilotToolExecutor:
         if not isinstance(outcome, Mapping):
             outcome = {}
         if prepared.public_tool_name == "web_search":
-            from .harness_loop import _mcp_search_payload
+            from .mcp_client import normalize_mcp_search_payload
 
-            return _mcp_search_payload(dict(outcome), dict(arguments), prepared.server_name)
+            return normalize_mcp_search_payload(
+                dict(outcome), dict(arguments), prepared.server_name
+            )
         content = outcome.get("content")
         structured = outcome.get("structured_content")
         payload: dict[str, Any] = {

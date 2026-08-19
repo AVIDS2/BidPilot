@@ -214,3 +214,53 @@ def test_runtime_run_list_endpoint_exposes_only_public_fields(
     assert "input_json" not in item
     assert "result_json" not in item
     assert "policy_snapshot_json" not in item
+
+
+def test_runtime_child_runs_endpoint_exposes_safe_timeline_projection(
+    client,
+    test_db: Session,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = CurrentUser(
+        id=default_user_id,
+        email="dev@docpilot.local",
+        display_name="Dev User",
+        role="admin",
+        org_id=default_org_id,
+    )
+    parent = create_runtime_run(
+        test_db,
+        user,
+        kind="assistant_turn",
+        engine="pi",
+    )
+    child = create_runtime_run(
+        test_db,
+        user,
+        kind="subagent",
+        engine="pi_subagent_worker",
+        parent_run_id=parent.id,
+        input_json={
+            "subagent": {
+                "profile": "researcher",
+                "mode": "parallel",
+                "prompt": "这段私有委派提示不得暴露。",
+            },
+        },
+    )
+
+    response = client.get(f"/runtime/runs/{parent.id}/children")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    item = response.json()[0]
+    assert item["id"] == child.id
+    assert item["parent_run_id"] == parent.id
+    assert item["kind"] == "subagent"
+    assert item["status"] == "running"
+    assert item["profile"] == "researcher"
+    assert item["mode"] == "parallel"
+    assert item["latest_event_summary"] == "任务已开始。"
+    assert "prompt" not in response.text
+    assert "trace_id" not in response.text

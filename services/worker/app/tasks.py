@@ -1,5 +1,9 @@
 import logging
 import os
+import asyncio
+import json
+import httpx
+from celery.exceptions import Retry
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -42,7 +46,9 @@ from app.runtime.events import (
     publish_node_succeeded,
 )
 from contracts.document_ingestion import MAX_SOURCE_DOCUMENT_BYTES, canonical_source_document_mime_type, source_document_is_parseable
-from contracts.runtime import RuntimeEventType
+from contracts.pi_runtime import pi_model_api, pi_thinking_level
+from contracts.pi_bridge import encode_pi_bridge_token
+from contracts.runtime import RuntimeEventType, RuntimeRunStatus
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +79,211 @@ def _retry_transient_bundle_index(task, bundle_id: str) -> bool:
 @celery_app.task(name="worker.ping")
 def ping() -> str:
     return "pong"
+
+
+@celery_app.task(name="worker.run_subagent", bind=True, max_retries=120)
+def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = None) -> dict[str, object]:
+    """Execute one durable Pi child through the governed sidecar."""
+    db = SessionLocal()
+    try:
+        runtime_run = db.scalar(select(RuntimeRun).where(RuntimeRun.id == runtime_run_id))
+        if runtime_run is None:
+            if not claim_workflow_task_delivery(outbox_event_id):
+                return {"status": "duplicate", "runtime_run_id": runtime_run_id}
+            complete_workflow_task_delivery(outbox_event_id)
+            return {"status": "missing", "runtime_run_id": runtime_run_id}
+        subagent = (runtime_run.input_json or {}).get("subagent") or {}
+        previous_id = subagent.get("previous_child_run_id")
+        if previous_id:
+            previous = db.scalar(select(RuntimeRun).where(RuntimeRun.id == previous_id))
+            if previous is None:
+                if not claim_workflow_task_delivery(outbox_event_id):
+                    return {"status": "duplicate", "runtime_run_id": runtime_run_id}
+                fail_runtime_run(runtime_run_id, "链式子 Agent 的前置步骤不存在。", error_code="subagent_dependency_missing")
+                complete_workflow_task_delivery(outbox_event_id)
+                return {"status": "failed", "runtime_run_id": runtime_run_id}
+            if previous is not None and previous.status not in {"succeeded", "failed", "cancelled", "expired"}:
+                # Do not claim the outbox lease until the dependency is terminal.
+                # Celery owns this bounded wait; the model is not polled or charged.
+                raise self.retry(countdown=5, max_retries=120)
+        if not claim_workflow_task_delivery(outbox_event_id):
+            return {"status": "duplicate", "runtime_run_id": runtime_run_id}
+        if previous_id:
+            if previous.status != "succeeded":
+                fail_runtime_run(runtime_run_id, "链式子 Agent 的前置步骤未成功。", error_code="subagent_dependency_failed")
+                complete_workflow_task_delivery(outbox_event_id)
+                return {"status": "failed", "runtime_run_id": runtime_run_id}
+
+        user_row = db.get(User, runtime_run.user_id)
+        if user_row is None:
+            fail_runtime_run(runtime_run_id, "子 Agent 所属用户不存在。", error_code="subagent_user_missing")
+            complete_workflow_task_delivery(outbox_event_id)
+            return {"status": "failed", "runtime_run_id": runtime_run_id}
+
+        from app.agent.llm import resolve_agent_model
+        from app.chat.service import save_message
+        from app.providers.service import get_provider_config
+        from app.security.secrets import decrypt_secret
+
+        user = CurrentUser(
+            id=user_row.id,
+            email=user_row.email,
+            display_name=user_row.display_name,
+            role=user_row.role,
+            plan=user_row.subscription.plan if user_row.subscription is not None else "starter",
+            email_verified=user_row.email_verified,
+            disabled=user_row.disabled,
+            org_id=user_row.org_id,
+            org_slug=user_row.organization.slug if user_row.organization is not None else "",
+        )
+        config = get_provider_config(db, runtime_run.provider_config_id, user.id) if runtime_run.provider_config_id else None
+        if config is not None:
+            resolved = resolve_agent_model(
+                provider_type=config.provider_type,
+                provider_id=config.provider_id,
+                api_key=decrypt_secret(config.api_key),
+                base_url=config.api_url,
+                model=runtime_run.model or config.model,
+            )
+        else:
+            resolved = resolve_agent_model()
+        profile = str(subagent.get("profile") or "general")
+        prompt = str(subagent.get("prompt") or "").strip()
+        pi_runtime = subagent.get("pi_runtime")
+        if not isinstance(pi_runtime, dict) or pi_runtime.get("version") != "1":
+            fail_runtime_run(runtime_run_id, "子 Agent 缺少受信任的执行契约。", error_code="subagent_runtime_contract_missing")
+            complete_workflow_task_delivery(outbox_event_id)
+            return {"status": "failed", "runtime_run_id": runtime_run_id}
+        if previous_id and previous is not None:
+            previous_summary = str((previous.result_json or {}).get("summary") or "").strip()[:4000]
+            if previous_summary:
+                if "{previous}" in prompt:
+                    prompt = prompt.replace("{previous}", previous_summary)
+                else:
+                    prompt = f"{prompt}\n\nPrevious verified step result:\n{previous_summary}"
+        system_prompt = (
+            "You are a governed BidPilot child agent. Work only on the delegated task. "
+            "Inspect tool observations, report uncertainty, and stop when the task is verified or blocked. "
+            f"Specialist profile: {profile}."
+        )
+        callback_url = os.getenv("DOCPILOT_PI_TOOL_BRIDGE_URL", "http://api:8000/internal/pi/tools/execute")
+        sidecar_url = os.getenv("DOCPILOT_PI_AGENT_URL", "http://pi-agent:8787").rstrip("/")
+        bridge_secret = os.getenv("DOCPILOT_PI_INTERNAL_SECRET") or os.getenv("DOCPILOT_JWT_SECRET")
+        if not bridge_secret:
+            fail_runtime_run(runtime_run_id, "Pi 工具桥接密钥未配置。", error_code="pi_bridge_secret_missing")
+            complete_workflow_task_delivery(outbox_event_id)
+            return {"status": "failed", "runtime_run_id": runtime_run_id}
+        runtime_run.status = RuntimeRunStatus.RUNNING.value
+        runtime_run.started_at = runtime_run.started_at or datetime.now(UTC)
+        db.commit()
+        request = {
+            "runId": runtime_run.id,
+            "sessionId": f"bidpilot:subagent:{runtime_run.id}",
+            "systemPrompt": system_prompt,
+            "userMessage": prompt,
+            "model": {
+                "provider": resolved.provider_id or resolved.provider_type,
+                "id": resolved.model,
+                "name": resolved.model,
+                "api": pi_model_api(resolved.provider_type, resolved.provider_id),
+                "baseUrl": (resolved.base_url or "").rstrip("/"),
+                "apiKey": resolved.api_key,
+                "reasoning": runtime_run.reasoning_effort not in {None, "off"},
+                "thinkingLevel": pi_thinking_level(runtime_run.reasoning_effort),
+            },
+            "tools": pi_runtime.get("tools") or [],
+            "resources": pi_runtime.get("resources") or {},
+            "sandbox": pi_runtime.get("sandbox") or {},
+            "toolCallback": {
+                "url": callback_url,
+                "token": encode_pi_bridge_token(
+                    run_id=runtime_run.id,
+                    user_id=user.id,
+                    org_id=user.org_id,
+                    email=user.email,
+                    display_name=user.display_name,
+                    role=user.role,
+                    plan=user.plan,
+                    org_slug=user.org_slug,
+                    secret=bridge_secret,
+                ),
+            },
+            "maxTurns": int(subagent.get("max_steps") or 8),
+        }
+        publish_runtime_event(runtime_run_id, RuntimeEventType.CAPABILITY_STARTED, "子 Agent 已启动，正在执行委派任务。", {"capability": "subagent", "profile": profile})
+
+        async def consume() -> tuple[str, str | None]:
+            text_parts: list[str] = []
+            terminal: str | None = None
+            timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=30.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream("POST", f"{sidecar_url}/v1/runs", json=request) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        event = json.loads(line)
+                        event_type = str(event.get("type") or "")
+                        if event_type == "text.delta":
+                            text_parts.append(str(event.get("delta") or ""))
+                        elif event_type == "tool.started":
+                            publish_runtime_event(
+                                runtime_run_id,
+                                RuntimeEventType.CAPABILITY_PROGRESSED,
+                                f"子 Agent 正在调用 {event.get('name') or '工具'}。",
+                                {
+                                    "capability": "subagent",
+                                    "phase": "tool_started",
+                                    "tool": event.get("name"),
+                                    "tool_call_id": event.get("tool_call_id"),
+                                },
+                            )
+                        elif event_type == "tool.completed":
+                            failed = bool(event.get("is_error"))
+                            publish_runtime_event(
+                                runtime_run_id,
+                                RuntimeEventType.CAPABILITY_PROGRESSED,
+                                (
+                                    f"子 Agent 调用 {event.get('name') or '工具'} 失败。"
+                                    if failed
+                                    else f"子 Agent 已完成 {event.get('name') or '工具'}。"
+                                ),
+                                {
+                                    "capability": "subagent",
+                                    "phase": "tool_failed" if failed else "tool_completed",
+                                    "tool": event.get("name"),
+                                    "tool_call_id": event.get("tool_call_id"),
+                                },
+                            )
+                        elif event_type == "agent.failed":
+                            terminal = "failed"
+                        elif event_type == "agent.completed":
+                            terminal = "completed"
+            return "".join(text_parts).strip(), terminal
+
+        text, terminal = asyncio.run(consume())
+        if terminal != "completed":
+            fail_runtime_run(runtime_run_id, "子 Agent 未能安全完成。", error_code="subagent_stream_incomplete")
+            complete_workflow_task_delivery(outbox_event_id)
+            return {"status": "failed", "runtime_run_id": runtime_run_id}
+        save_message(db, runtime_run.conversation_id or "", "assistant", text or "子 Agent 完成但没有生成文字结果。", runtime_run_id=runtime_run_id)
+        result = {"status": "succeeded", "runtime_run_id": runtime_run_id, "profile": profile, "summary": text[:4000]}
+        publish_runtime_event(runtime_run_id, RuntimeEventType.CAPABILITY_SUCCEEDED, "子 Agent 已完成委派任务。", {"capability": "subagent", "profile": profile})
+        complete_runtime_run(runtime_run_id, result=result)
+        complete_workflow_task_delivery(outbox_event_id)
+        return result
+    except Retry:
+        raise
+    except Exception:
+        logger.exception("Subagent execution failed", extra={"runtime_run_id": runtime_run_id})
+        try:
+            fail_runtime_run(runtime_run_id, "子 Agent 执行失败，请查看运行记录后重试。", error_code="subagent_execution_failed")
+            fail_workflow_task_delivery(outbox_event_id, "subagent_execution_failed")
+        except Exception:
+            logger.exception("Subagent failure reconciliation failed", extra={"runtime_run_id": runtime_run_id})
+        return {"status": "failed", "runtime_run_id": runtime_run_id}
+    finally:
+        db.close()
 
 
 @celery_app.task(name="worker.import_remote_document", bind=True)

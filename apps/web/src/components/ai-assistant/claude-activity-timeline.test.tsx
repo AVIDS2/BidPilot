@@ -244,4 +244,54 @@ describe("ClaudeActivityTimeline", () => {
     fireEvent.click(screen.getByRole("button", { name: "打开响应工作流" }));
     expect(onOpenWorkflowCanvas).toHaveBeenCalledWith("project-1");
   });
+
+  it("renders child agents inside their parent run and keeps every level closed", () => {
+    const parent: AssistantExecutionItem = {
+      id: "spawn-agents",
+      kind: "tool",
+      toolName: "spawn_subagents",
+      runtimeRunId: "parent-run",
+      turnId: "run:parent-run",
+      status: "succeeded",
+      title: "委派并行调研",
+      timestamp: 1,
+    };
+    const child: AssistantExecutionItem = {
+      id: "subagent-child",
+      kind: "subagent",
+      toolName: "subagent",
+      runtimeRunId: "child-run",
+      parentRuntimeRunId: "parent-run",
+      turnId: "run:child-run",
+      agentProfile: "researcher",
+      status: "running",
+      title: "researcher 子 Agent",
+      timestamp: 2,
+    };
+    const childTool: AssistantExecutionItem = {
+      id: "subagent-search",
+      kind: "tool",
+      toolName: "web_search",
+      toolCallId: "child-call-1",
+      runtimeRunId: "child-run",
+      parentRuntimeRunId: "parent-run",
+      turnId: "run:child-run",
+      status: "running",
+      title: "联网搜索",
+      timestamp: 3,
+    };
+    const { container } = renderTimeline([parent, child, childTool]);
+
+    expect(container.querySelectorAll(":scope .cr-task-turns > .cr-task-turn")).toHaveLength(1);
+    expect(container.querySelector(".cr-task-turn > .cr-command-grid")).not.toHaveClass("is-open");
+
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
+    expect(container.querySelector(".cr-task-turn > .cr-command-grid")).toHaveClass("is-open");
+    expect(container.querySelector(".cr-subagent-turns")).toBeInTheDocument();
+    expect(screen.getByText("researcher 子 Agent")).toBeInTheDocument();
+    expect(container.querySelector(".cr-subagent-turns .cr-task-turn-summary")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
 });

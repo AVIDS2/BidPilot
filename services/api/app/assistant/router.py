@@ -44,14 +44,6 @@ from app.runtime.operator_adapter import stream_existing_assistant_run, stream_o
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 logger = logging.getLogger(__name__)
 
-# These names are accepted only so an already deployed environment can move to
-# the canonical value without splitting the public assistant behavior.
-LEGACY_ASSISTANT_ENGINE_ALIASES = {
-    "operator": "pi",
-    "harness": "pi",
-    "streaming_harness": "pi",
-}
-LEGACY_ASSISTANT_ENGINE_ALIAS_RETIREMENT_DATE = "2026-09-30"
 SSE_HEARTBEAT_SECONDS = max(5, int(os.getenv("DOCPILOT_ASSISTANT_SSE_HEARTBEAT_SECONDS", "12")))
 
 
@@ -105,16 +97,6 @@ def _assistant_sse_response(stream: AsyncIterator[str]) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
-
-
-def _assistant_engine() -> str:
-    """Return the one supported production assistant runtime.
-
-    ``operator`` and ``streaming_harness`` remain accepted environment aliases
-    during migration, but both resolve to the same governed Harness path.
-    """
-    configured = os.getenv("DOCPILOT_ASSISTANT_ENGINE", "pi").lower()
-    return LEGACY_ASSISTANT_ENGINE_ALIASES.get(configured, configured)
 
 
 @router.post("/attachments", response_model=AssistantAttachmentUploadResponse)
@@ -207,24 +189,18 @@ async def assistant_stream(
     except UsageLimitExceeded as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
 
-    assistant_engine = _assistant_engine()
-    if assistant_engine == "pi":
-        return _assistant_sse_response(
-            stream_operator_assistant_response(
-                db,
-                user,
-                payload,
-                provider_type=provider_type,
-                provider_id=provider_id,
-                provider_source=provider_source,
-                api_key=api_key,
-                base_url=base_url,
-                model=model,
-            )
+    return _assistant_sse_response(
+        stream_operator_assistant_response(
+            db,
+            user,
+            payload,
+            provider_type=provider_type,
+            provider_id=provider_id,
+            provider_source=provider_source,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
         )
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=f"Unsupported assistant runtime: {assistant_engine}",
     )
 
 

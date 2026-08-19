@@ -43,19 +43,12 @@ from contracts.usage_ledger import (
 from .assistant_adapter import (
     _approval_capability,
     _ensure_conversation,
-    _is_cancellation_followup,
-    _is_confirmation_followup,
     _matches_typed_confirmation,
     _pending_approval_status_reply,
     _render_runtime_events,
     _sse,
 )
 from .events import latest_event_sequence
-from .harness_loop import (
-    StreamingHarness,
-    classify_model_failure,
-    stream_harness_assistant_response,
-)
 from .pi_adapter import stream_pi_assistant_response
 from .operator_graph import (
     OperatorPlanningContext,
@@ -149,28 +142,6 @@ async def stream_operator_assistant_response(
         return
 
     pending = find_pending_approval_for_conversation(db, user, conversation_id)
-    if pending is not None and _is_confirmation_followup(payload.message):
-        save_message(db, conversation_id, "user", payload.message)
-        async for event in _resume_operator_approval(
-            db,
-            user,
-            conversation_id,
-            AssistantConfirmation(
-                approved=not _is_cancellation_followup(payload.message),
-                tool_name=_approval_capability(db, pending),
-                approval_id=pending.id,
-            ),
-            provider_type=provider_type,
-            provider_id=provider_id,
-            provider_source=provider_source,
-            api_key=api_key,
-            base_url=base_url,
-            model=model,
-            reasoning_effort=payload.reasoning_effort,
-        ):
-            yield event
-        return
-
     # Typed delete confirmation: user retyped the exact project name.
     if pending is not None and _matches_typed_confirmation(pending, payload.message):
         save_message(db, conversation_id, "user", payload.message)
@@ -236,14 +207,11 @@ async def stream_operator_assistant_response(
     conversation_window = _bounded_conversation_context(db, conversation_id)
     pending_input = pending_input_context(db, conversation_id)
     memory_context = _load_authorized_memory_context(db, user, payload, project_id=active_project_id)
-    # One public turn has one runtime. Do not let a deployment-only flag switch
-    # between two incompatible loops after the client has started streaming.
-    engine = "pi"
     creation = create_or_get_runtime_run(
         db,
         user,
         kind="assistant_turn",
-        engine=engine,
+        engine="pi",
         project_id=active_project_id,
         conversation_id=conversation_id,
         provider_config_id=payload.provider_config_id,
@@ -284,56 +252,34 @@ async def stream_operator_assistant_response(
             "state": "thinking",
         },
     )
-    if engine == "pi":
-        memory_records = []
-        if memory_context is not None:
-            from .operator_graph import _memory_context_records
+    memory_records = []
+    if memory_context is not None:
+        from .operator_graph import _memory_context_records
 
-            memory_records = _memory_context_records(memory_context)
-        async for event in stream_pi_assistant_response(
-            db,
-            user,
-            run=run,
-            conversation_id=conversation_id,
-            provider_type=provider_type,
-            provider_id=provider_id,
-            api_key=api_key,
-            base_url=base_url,
-            model=model,
-            user_message=payload.message,
-            conversation_window=conversation_window,
-            memory_context_records=memory_records,
-            memory_context_version=memory_context.memory_version if memory_context is not None else None,
-            available_attachments=attachment_planner_context(payload.attachments),
-            attachment_context=build_attachment_context("", payload.attachments),
-            active_project_id=active_project_id,
-            pending_input=pending_input,
-            approval_mode=payload.approval_mode,
-            reasoning_effort=payload.reasoning_effort,
-        ):
-            yield event
-        return
-
-    async for event in _invoke_operator_graph(
+        memory_records = _memory_context_records(memory_context)
+    async for event in stream_pi_assistant_response(
         db,
         user,
-        run,
-        conversation_id,
-        user_message=build_attachment_context(payload.message, payload.attachments),
+        run=run,
+        conversation_id=conversation_id,
         provider_type=provider_type,
         provider_id=provider_id,
-        provider_source=provider_source,
         api_key=api_key,
         base_url=base_url,
         model=model,
-        reasoning_effort=payload.reasoning_effort,
-        conversation_context=list(conversation_window.recent_turns),
-        memory_context=memory_context,
+        user_message=payload.message,
+        conversation_window=conversation_window,
+        memory_context_records=memory_records,
+        memory_context_version=memory_context.memory_version if memory_context is not None else None,
         available_attachments=attachment_planner_context(payload.attachments),
+        attachment_context=build_attachment_context("", payload.attachments),
         active_project_id=active_project_id,
         pending_input=pending_input,
+        approval_mode=payload.approval_mode,
+        reasoning_effort=payload.reasoning_effort,
     ):
         yield event
+    return
 
 
 async def _replay_existing_run(
@@ -473,6 +419,8 @@ async def _resume_operator_approval(
             yield event
         return
     if run.engine == "streaming_harness":
+        from .harness_loop import StreamingHarness
+
         harness = StreamingHarness(
             db=db,
             user=user,
@@ -688,6 +636,8 @@ async def _invoke_operator_graph(
         return
     except Exception as exc:
         mark_active_reservations_uncertain()
+        from .harness_loop import classify_model_failure
+
         failure = classify_model_failure(exc)
         message = f"执行失败：{failure.message}"
         try:

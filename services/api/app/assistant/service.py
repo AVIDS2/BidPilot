@@ -14,7 +14,6 @@ from app.auth.schemas import CurrentUser
 from app.chat.service import (
     create_conversation,
     get_conversation,
-    get_conversation_messages,
     resolve_conversation_project_context,
     save_message,
 )
@@ -73,31 +72,16 @@ async def stream_assistant_response(
         _clear_task_state(db, conversation_id)
         task_state = None
     if _is_pending_confirmation(task_state):
-        assert task_state is not None
-        if _is_cancel_followup(payload.message):
-            async for event in _handle_confirmation(
-                db,
-                user,
-                AssistantConfirmation(approved=False, tool_name=task_state.tool_name or "", arguments=task_state.arguments_json or {}),
-                conversation_id,
-            ):
-                yield event
-            _clear_task_state(db, conversation_id)
-            return
-        if _is_confirm_followup(payload.message):
-            async for event in _handle_confirmation(
-                db,
-                user,
-                AssistantConfirmation(approved=True, tool_name=task_state.tool_name or "", arguments=task_state.arguments_json or {}),
-                conversation_id,
-            ):
-                yield event
-            _clear_task_state(db, conversation_id)
-            return
+        message = "上一步操作仍在等待确认，尚未执行。请使用页面中的确认或取消控件。"
+        save_message(db, conversation_id, "assistant", message)
+        yield _sse("assistant.message", {"content": message, "state": "needs_confirmation"})
+        yield _sse(
+            "assistant.end",
+            {"conversation_id": conversation_id, "state": "needs_confirmation"},
+        )
+        return
 
     intent = _resume_pending_intent(db, conversation_id, payload.message, task_state)
-    if intent is None:
-        intent = _attachment_ingestion_intent(payload)
     if intent is None:
         intent = await runtime.classify(payload.message, payload.project_id)
     yield _sse(
@@ -434,15 +418,10 @@ def _resume_pending_intent(
         missing_fields = task_state.missing_fields_json or {}
         if "name" not in (missing_fields.get("fields") or []):
             return None
-    elif not _last_assistant_asked_for_project_name(db, conversation_id):
+    else:
         return None
 
-    text = message.strip()
-    name: str | None
-    if _is_delegate_followup(text):
-        name = _default_project_name()
-    else:
-        name = _extract_followup_project_name(text)
+    name = _extract_followup_project_name(message)
     if not name:
         return None
 
@@ -453,41 +432,9 @@ def _resume_pending_intent(
     )
 
 
-def _last_assistant_asked_for_project_name(db: Session, conversation_id: str) -> bool:
-    conversation_messages = get_conversation_messages(db, conversation_id)
-    if len(conversation_messages) < 2:
-        return False
-
-    last_assistant = next(
-        (entry for entry in reversed(conversation_messages[:-1]) if entry.role == "assistant"),
-        None,
-    )
-    if last_assistant is None:
-        return False
-    return "项目名称" in last_assistant.content or "项目名" in last_assistant.content
-
-
-def _is_delegate_followup(text: str) -> bool:
-    normalized = re.sub(r"[。！!?？\s]+", "", text)
-    delegate_phrases = {
-        "你来",
-        "你定",
-        "你决定",
-        "随便",
-        "都行",
-        "默认",
-        "开始吧",
-        "继续",
-        "可以",
-        "行",
-        "好",
-    }
-    return normalized in delegate_phrases or any(phrase in normalized for phrase in ("你来", "你定", "随便", "默认"))
-
-
 def _extract_followup_project_name(text: str) -> str | None:
     stripped = text.strip().strip("。！!?？")
-    if not stripped or stripped in {"项目", "创建一个新项目", "开始吧", "你来", "随便", "都行", "可以", "行"}:
+    if not stripped:
         return None
     if len(stripped) > 80:
         stripped = stripped[:80]
@@ -500,39 +447,6 @@ def _extract_uuid(text: str) -> str | None:
         text,
     )
     return match.group(0) if match else None
-
-
-def _default_project_name() -> str:
-    return f"新建投标项目 {datetime.now(UTC).strftime('%m%d')}"
-
-
-def _attachment_ingestion_intent(payload: AssistantRequest) -> AssistantIntent | None:
-    attachment_ids = [
-        attachment.id
-        for attachment in payload.attachments
-        if attachment.id and not attachment.document_id
-    ]
-    if not attachment_ids:
-        return None
-    text = payload.message.lower()
-    if not any(token in text for token in ("上传", "加入", "入库", "资料包", "导入", "attach", "upload", "ingest")):
-        return None
-    if not payload.project_id:
-        return AssistantIntent(
-            mode="needs_input",
-            tool_name="attach_uploaded_documents",
-            missing_fields=["project_id"],
-            response="附件已安全暂存。请先打开或告诉我目标项目，我再将它们加入资料包并解析。",
-        )
-    return AssistantIntent(
-        mode="tool_action",
-        tool_name="attach_uploaded_documents",
-        arguments={
-            "project_id": payload.project_id,
-            "attachment_ids": attachment_ids,
-            "bundle_label": "Agent 上传资料",
-        },
-    )
 
 
 def _get_task_state(db: Session, conversation_id: str) -> ChatTaskState | None:
@@ -568,13 +482,3 @@ def _is_pending_confirmation(task_state: ChatTaskState | None) -> bool:
 
 def _is_stale_task_state(task_state: ChatTaskState | None) -> bool:
     return is_task_state_stale(task_state)
-
-
-def _is_confirm_followup(message: str) -> bool:
-    normalized = re.sub(r"[。！!?？\s]+", "", message.strip())
-    return normalized in {"确认", "同意", "可以", "行", "好", "开始", "开始吧", "执行", "继续", "确定"}
-
-
-def _is_cancel_followup(message: str) -> bool:
-    normalized = re.sub(r"[。！!?？\s]+", "", message.strip())
-    return normalized in {"取消", "算了", "不要", "别", "停止", "先不", "不创建", "不用了"}

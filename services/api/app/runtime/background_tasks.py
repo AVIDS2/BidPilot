@@ -55,11 +55,17 @@ def collect_completed_notifications(
             select(RuntimeRun).where(
                 RuntimeRun.id == runtime_run_id,
                 RuntimeRun.user_id == user_id,
-                RuntimeRun.conversation_id == conversation_id,
-                RuntimeRun.kind == "workflow_bridge",
+                RuntimeRun.kind.in_(("workflow_bridge", "subagent")),
             )
         )
         if runtime_run is None or runtime_run.status not in _TERMINAL_WORKFLOW_STATUSES:
+            continue
+        if runtime_run.kind == "workflow_bridge":
+            belongs_to_conversation = runtime_run.conversation_id == conversation_id
+        else:
+            parent = db.get(RuntimeRun, runtime_run.parent_run_id) if runtime_run.parent_run_id else None
+            belongs_to_conversation = parent is not None and parent.conversation_id == conversation_id
+        if not belongs_to_conversation:
             continue
         terminal_event = db.scalar(
             select(RuntimeEvent)
@@ -70,7 +76,7 @@ def collect_completed_notifications(
         updates.append(
             {
                 "task_id": notification.id,
-                "kind": "workflow",
+                "kind": "subagent" if runtime_run.kind == "subagent" else "workflow",
                 "status": runtime_run.status,
                 "title": notification.title,
                 "detail": {
@@ -78,6 +84,10 @@ def collect_completed_notifications(
                     "workflow_run_id": runtime_run.execution_run_id,
                     "project_id": runtime_run.project_id,
                     "summary": (
+                        str((runtime_run.result_json or {}).get("summary") or "").strip()
+                        if runtime_run.kind == "subagent"
+                        else ""
+                    ) or (
                         terminal_event.public_summary
                         if terminal_event is not None
                         else notification.body or "后台工作流已更新。"

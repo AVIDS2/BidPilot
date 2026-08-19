@@ -18,6 +18,7 @@ RUNTIME_EVENT_SCHEMA_VERSION = "1.2"
 
 class RuntimeRunKind(StrEnum):
     ASSISTANT_TURN = "assistant_turn"
+    SUBAGENT = "subagent"
     WORKFLOW_BRIDGE = "workflow_bridge"
     REMOTE_IMPORT = "remote_import"
     SYSTEM_RECOVERY = "system_recovery"

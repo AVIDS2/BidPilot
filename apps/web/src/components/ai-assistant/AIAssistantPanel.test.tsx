@@ -16,6 +16,7 @@ vi.mock("@/lib/api", () => ({
   uploadAssistantAttachment: vi.fn(),
   downloadAssistantArtifact: vi.fn(),
   listRuntimeRuns: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
+  listRuntimeChildRuns: vi.fn().mockResolvedValue([]),
   listRuntimeEvents: vi.fn().mockResolvedValue({ items: [] }),
   cancelRuntimeWorkflow: vi.fn(),
 }));

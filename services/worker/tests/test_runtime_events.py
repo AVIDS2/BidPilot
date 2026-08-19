@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from contracts.models import Notification, Organization, RuntimeEvent, RuntimeRun, User
+from contracts.models import ChatConversation, Notification, Organization, RuntimeEvent, RuntimeRun, User
 from contracts.runtime import RuntimeEventType
 
 from app.db import SessionLocal
@@ -104,6 +104,69 @@ def test_worker_terminal_transition_commits_one_durable_wake_notification() -> N
         assert notifications[0].link == f"/agent?wake={run.id}"
         assert notifications[0].body == "工作流已完成。\n章节：technical-approach"
         assert db.query(RuntimeEvent).filter(RuntimeEvent.run_id == run.id).count() == 1
+    finally:
+        db.close()
+
+
+def test_worker_subagent_terminal_wake_targets_parent_conversation() -> None:
+    db = SessionLocal()
+    try:
+        suffix = uuid.uuid4().hex[:10]
+        org = Organization(slug=f"worker-subagent-{suffix}", name="Worker Subagent Test")
+        db.add(org)
+        db.flush()
+        user = User(
+            org_id=org.id,
+            email=f"worker-subagent-{suffix}@example.test",
+            display_name="Worker Subagent",
+            role="admin",
+            password_hash="test-only",
+        )
+        db.add(user)
+        db.flush()
+        conversation = ChatConversation(user_id=user.id, title="Parent")
+        db.add(conversation)
+        db.flush()
+        parent = RuntimeRun(
+            kind="assistant_turn",
+            status="succeeded",
+            org_id=org.id,
+            user_id=user.id,
+            conversation_id=conversation.id,
+            engine="pi",
+            trace_id=f"parent-{suffix}",
+            policy_snapshot_json={},
+        )
+        db.add(parent)
+        db.flush()
+        child = RuntimeRun(
+            kind="subagent",
+            status="running",
+            org_id=org.id,
+            user_id=user.id,
+            parent_run_id=parent.id,
+            engine="pi_subagent_worker",
+            trace_id=f"child-{suffix}",
+            policy_snapshot_json={},
+        )
+        db.add(child)
+        db.commit()
+        child_id = child.id
+        user_id = user.id
+        conversation_id = conversation.id
+    finally:
+        db.close()
+
+    complete_runtime_run(child_id, result={"summary": "已完成并核实两份来源。"})
+
+    db = SessionLocal()
+    try:
+        notification = db.query(Notification).filter(
+            Notification.user_id == user_id,
+            Notification.type == "agent_task",
+        ).one()
+        assert notification.link == f"/agent?conversation={conversation_id}&wake={child_id}"
+        assert notification.body == "已完成并核实两份来源。"
     finally:
         db.close()
 

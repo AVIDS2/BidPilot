@@ -9,7 +9,6 @@ durable events so the web client can migrate independently.
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -49,26 +48,6 @@ from .service import (
 
 _runtime = AssistantRuntime()
 
-_LEGACY_GENERATED_NARRATION = re.compile(
-    r"^为推进当前任务，我先.+，再根据真实结果决定下一步。$"
-)
-_LEGACY_GENERATED_NARRATIONS = {
-    "我已核对当前会话中的已知信息，正在整理可以直接回答的结论。",
-    "当前项目范围还没有明确。我先查询可访问项目；若有同名项目，会用 short_id 请你确认目标。",
-    "这个问题需要核对最新公开信息。我先检索相关来源，再根据结果组织可靠结论。",
-    "目标范围已经确定。我先读取项目结构和现有资料，确认后续操作有足够依据。",
-    "我先核对项目结构和现有资料，避免在信息不足时直接开始后续操作。",
-    "起草前需要把目标章节和依据对齐。我会按已确认的范围推进，并将结果写入对应工作区。",
-}
-
-
-def _is_legacy_generated_narration(content: str) -> bool:
-    """Hide only the retired template copy; keep natural historical trace text."""
-    return content in _LEGACY_GENERATED_NARRATIONS or bool(
-        _LEGACY_GENERATED_NARRATION.fullmatch(content)
-    )
-
-
 async def stream_runtime_assistant_response(
     db: Session,
     user: CurrentUser,
@@ -105,21 +84,6 @@ async def stream_runtime_assistant_response(
         return
 
     pending = find_pending_approval_for_conversation(db, user, conversation_id)
-    if pending is not None and _is_confirmation_followup(payload.message):
-        save_message(db, conversation_id, "user", payload.message)
-        async for event in _resume_approval(
-            db,
-            user,
-            conversation_id,
-            AssistantConfirmation(
-                approved=not _is_cancellation_followup(payload.message),
-                tool_name=_approval_capability(db, pending),
-                approval_id=pending.id,
-            ),
-        ):
-            yield event
-        return
-
     if pending is not None and _matches_typed_confirmation(pending, payload.message):
         save_message(db, conversation_id, "user", payload.message)
         payload_json = pending.payload_json if isinstance(pending.payload_json, dict) else {}
@@ -673,8 +637,6 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
         # Harness-filtered public narration may enter the visible trace.
         if payload.get("source") != "harness":
             return []
-        if _is_legacy_generated_narration(event.public_summary):
-            return []
         return [
             _sse(
                 "assistant.reasoning",
@@ -810,39 +772,6 @@ def _approval_capability(db: Session, approval: RuntimeApproval) -> str:
     return action.capability_name if action is not None else "unknown"
 
 
-def _is_confirmation_followup(message: str) -> bool:
-    normalized = re.sub(r"[。！!?？\s]+", "", message.strip())
-    return normalized in {
-        "确认",
-        "同意",
-        "可以",
-        "行",
-        "好",
-        "好的",
-        "开始",
-        "开始吧",
-        "执行",
-        "继续",
-        "确定",
-        "确认执行",
-        "确认删除",
-        "删除",
-        "删掉",
-        "取消",
-        "算了",
-        "不要",
-        "别",
-        "停止",
-        "先不",
-        "不用了",
-    }
-
-
-def _is_cancellation_followup(message: str) -> bool:
-    normalized = re.sub(r"[。！!?？\s]+", "", message.strip())
-    return normalized in {"取消", "算了", "不要", "别", "停止", "先不", "不用了", "先别删", "不要删"}
-
-
 def _pending_expected_text(approval: RuntimeApproval) -> str | None:
     payload = approval.payload_json if isinstance(approval.payload_json, dict) else {}
     expected = payload.get("expected_text")
@@ -866,9 +795,9 @@ def _pending_approval_status_reply(approval: RuntimeApproval) -> str:
     if capability == "delete_project":
         base = "还没有删除。删除操作仍在等待你的确认，不会自动执行。"
         if expected:
-            return f"{base}请在确认框输入完整项目名称「{expected}」并点确认，或回复「取消」。"
-        return f"{base}请在确认框点确认，或回复「取消」。"
-    return f"上一步操作仍在等待确认，尚未执行。\n\n{message}"
+            return f"{base}请在确认框输入完整项目名称「{expected}」并点击确认或取消。"
+        return f"{base}请使用确认框中的确认或取消按钮。"
+    return f"上一步操作仍在等待确认，尚未执行。\n\n{message}\n请使用页面中的确认或取消控件。"
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:

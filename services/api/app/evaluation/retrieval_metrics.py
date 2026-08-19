@@ -179,7 +179,8 @@ def load_retrieval_benchmark_dataset(path: Path) -> RetrievalBenchmarkDataset:
             raise ValueError(f"retrieval source path escapes dataset directory: {source.path}")
         if not source_path.is_file():
             raise ValueError(f"retrieval source file not found: {source.path}")
-        actual_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
+        canonical = source_path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        actual_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         if actual_hash.casefold() != source.sha256.casefold():
             raise ValueError(f"retrieval source sha256 mismatch for {source.id}")
     return dataset

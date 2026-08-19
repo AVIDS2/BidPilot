@@ -19,7 +19,12 @@ from contracts.task_outbox import (
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_TASKS = {"worker.draft_section", "worker.extract_memory_graph", "worker.resume_draft"}
+_ALLOWED_TASKS = {
+    "worker.draft_section",
+    "worker.extract_memory_graph",
+    "worker.resume_draft",
+    "worker.run_subagent",
+}
 _PUBLISH_RETRY_DELAY = timedelta(minutes=1)
 
 

@@ -136,6 +136,7 @@ services:
       DOCPILOT_PI_AGENT_URL: http://pi-agent:8787
       DOCPILOT_PI_TOOL_BRIDGE_URL: http://api:8000/internal/pi/tools/execute
       DOCPILOT_PI_INTERNAL_SECRET: ${DOCPILOT_PI_INTERNAL_SECRET:?DOCPILOT_PI_INTERNAL_SECRET is required}
+      DOCPILOT_INTERNAL_UNLIMITED_USAGE: ${DOCPILOT_INTERNAL_UNLIMITED_USAGE:-false}
     depends_on:
       checkpoints:
         condition: service_completed_successfully
@@ -174,6 +175,7 @@ services:
       DOCPILOT_LANGGRAPH_CHECKPOINTER: postgres
       DOCPILOT_AGENT_CHECKPOINTER: postgres
       USE_LANGGRAPH: "true"
+      DOCPILOT_INTERNAL_UNLIMITED_USAGE: ${DOCPILOT_INTERNAL_UNLIMITED_USAGE:-false}
     depends_on:
       checkpoints:
         condition: service_completed_successfully
@@ -197,6 +199,7 @@ services:
       DOCPILOT_AUTH_REQUIRED: "true"
       DOCPILOT_LANGGRAPH_CHECKPOINTER: postgres
       DOCPILOT_AGENT_CHECKPOINTER: postgres
+      DOCPILOT_INTERNAL_UNLIMITED_USAGE: ${DOCPILOT_INTERNAL_UNLIMITED_USAGE:-false}
     command: ["/app/.venv/bin/celery", "-A", "app.celery_app", "beat", "--loglevel=info"]
     depends_on:
       checkpoints:

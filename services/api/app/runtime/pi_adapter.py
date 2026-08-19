@@ -18,86 +18,29 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.chat.service import save_message
 from app.models import RuntimeRun
-from contracts.runtime import RuntimeRiskLevel
+from contracts.pi_runtime import pi_model_api, pi_thinking_level
 
 from .assistant_adapter import _render_runtime_events, _sse
 from .events import latest_event_sequence
-from .harness_loop import _READ_SKILL_TOOL_SPEC, _TOOL_PARAMETER_SCHEMAS, build_capability_tool_specs
 from .pi_bridge import create_pi_bridge_token
+from .pi_config import pi_resources as _pi_resources
+from .pi_config import pi_sandbox as _pi_sandbox
+from .pi_config import pi_tools as _pi_tools
 from .prompt_assembly import ConversationContextWindow, assemble_harness_prompt
-from .registry import CAPABILITY_REGISTRY
 from .service import complete_runtime_run, fail_runtime_run, get_previous_terminal_action_context
-from .skills import build_skill_index
 
 
 logger = logging.getLogger(__name__)
 
 
-def _thinking_level(reasoning_effort: str | None) -> str:
-    return {
-        None: "off",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "extra": "high",
-        "max": "xhigh",
-    }.get(reasoning_effort, "off")
-
-
-def _pi_api(provider_type: str, provider_id: str | None) -> str:
-    value = f"{provider_type} {provider_id or ''}".casefold()
-    return "anthropic-messages" if "anthropic" in value else "openai-completions"
+_thinking_level = pi_thinking_level
+_pi_api = pi_model_api
 
 
 def _content(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False)
-
-
-def _pi_tools() -> list[dict[str, Any]]:
-    result: list[dict[str, Any]] = []
-    for spec in [*build_capability_tool_specs(), _READ_SKILL_TOOL_SPEC]:
-        function = spec.get("function") if isinstance(spec, dict) else None
-        if not isinstance(function, dict):
-            continue
-        name = str(function.get("name") or "")
-        if not name:
-            continue
-        definition = CAPABILITY_REGISTRY.get(name)
-        read_only = definition is not None and definition.risk_level is RuntimeRiskLevel.READ
-        result.append(
-            {
-                "name": name,
-                "label": (definition.label_zh if definition else name),
-                "description": str(function.get("description") or name),
-                "parameters": function.get("parameters") or _TOOL_PARAMETER_SCHEMAS.get(name, {}),
-                "executionMode": "parallel" if read_only else "sequential",
-            }
-        )
-    return result
-
-
-def _pi_resources() -> dict[str, Any]:
-    """Trusted Pi resources selected by the server, never by browser input."""
-    return {
-        "extensions": ["bidpilot-governance", "bidpilot-skills"],
-        "skills": [
-            {"name": skill.name, "description": skill.description}
-            for skill in build_skill_index()
-        ],
-    }
-
-
-def _pi_sandbox() -> dict[str, Any]:
-    """Cloud Pi is capability-only; full_access affects business approval, not host access."""
-    return {
-        "profile": "governed_cloud",
-        "hostTools": "disabled",
-        "network": "bridge_only",
-        "maxToolInputBytes": 128 * 1024,
-        "maxToolObservationBytes": 512 * 1024,
-    }
 
 
 def _assembled_prompt(
@@ -217,6 +160,28 @@ async def stream_pi_assistant_response(
 
     callback_url = os.getenv("DOCPILOT_PI_TOOL_BRIDGE_URL", "http://api:8000/internal/pi/tools/execute")
     sidecar_url = os.getenv("DOCPILOT_PI_AGENT_URL", "http://pi-agent:8787").rstrip("/")
+    try:
+        bridge_token = create_pi_bridge_token(run=run, user=user)
+    except RuntimeError:
+        logger.exception("Pi tool bridge configuration is unavailable: run=%s", run.id)
+        message = "执行服务配置不完整，暂时无法安全调用业务工具。请联系管理员检查运行环境。"
+        fail_runtime_run(db, run.id, message, error_code="pi_bridge_configuration_missing")
+        save_message(db, conversation_id, "assistant", message)
+        yield _sse(
+            "assistant.message",
+            {"runtime_run_id": run.id, "content": message, "state": "failed"},
+        )
+        yield _sse(
+            "assistant.end",
+            {
+                "conversation_id": conversation_id,
+                "runtime_run_id": run.id,
+                "state": "failed",
+                "error_code": "pi_bridge_configuration_missing",
+            },
+        )
+        return
+
     request = {
         "runId": run.id,
         "sessionId": f"bidpilot:{user.id}:{conversation_id}",
@@ -235,7 +200,7 @@ async def stream_pi_assistant_response(
         "tools": _pi_tools(),
         "resources": _pi_resources(),
         "sandbox": _pi_sandbox(),
-        "toolCallback": {"url": callback_url, "token": create_pi_bridge_token(run=run, user=user)},
+        "toolCallback": {"url": callback_url, "token": bridge_token},
         "maxTurns": 24,
     }
 
@@ -244,12 +209,27 @@ async def stream_pi_assistant_response(
     terminal_type: str | None = None
     terminal_error: str | None = None
     terminal_tool_failure: dict[str, Any] | None = None
+    projected_terminal = False
 
     def flush_events() -> list[str]:
-        nonlocal cursor
+        nonlocal cursor, projected_terminal
         rendered = list(_render_runtime_events(db, run.id, after_sequence=cursor, conversation_id=conversation_id))
+        if any(event.startswith("event: assistant.end") for event in rendered):
+            projected_terminal = True
         cursor = latest_event_sequence(db, run.id)
         return rendered
+
+    def terminal_event(state: str, *, error_code: str | None = None) -> str | None:
+        if projected_terminal:
+            return None
+        payload: dict[str, Any] = {
+            "conversation_id": conversation_id,
+            "runtime_run_id": run.id,
+            "state": state,
+        }
+        if error_code:
+            payload["error_code"] = error_code
+        return _sse("assistant.end", payload)
 
     try:
         timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=30.0)
@@ -322,14 +302,8 @@ async def stream_pi_assistant_response(
                 save_message(db, conversation_id, "assistant", final_text)
             for rendered in flush_events():
                 yield rendered
-            yield _sse(
-                "assistant.end",
-                {
-                    "conversation_id": conversation_id,
-                    "runtime_run_id": run.id,
-                    "state": "needs_confirmation",
-                },
-            )
+            if rendered_terminal := terminal_event("needs_confirmation"):
+                yield rendered_terminal
             return
         if terminal_tool_failure is not None:
             summary = str(terminal_tool_failure.get("publicSummary") or "本轮操作未能完成。")
@@ -343,10 +317,8 @@ async def stream_pi_assistant_response(
             )
             for rendered in flush_events():
                 yield rendered
-            yield _sse(
-                "assistant.end",
-                {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "failed"},
-            )
+            if rendered_terminal := terminal_event("failed"):
+                yield rendered_terminal
             return
         if not final_text:
             final_text = (
@@ -364,7 +336,8 @@ async def stream_pi_assistant_response(
             state = "completed"
         for rendered in flush_events():
             yield rendered
-        yield _sse("assistant.end", {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": state})
+        if rendered_terminal := terminal_event(state):
+            yield rendered_terminal
     except Exception as exc:  # noqa: BLE001 - public boundary classifies details
         logger.exception("Pi assistant stream failed: run=%s error_type=%s", run.id, type(exc).__name__)
         message = "助手连接中断，运行未能安全完成。请稍后重试或查看运行记录。"
@@ -375,10 +348,8 @@ async def stream_pi_assistant_response(
             db.rollback()
         for rendered in flush_events():
             yield rendered
-        yield _sse(
-            "assistant.end",
-            {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "failed", "error_code": "assistant_stream_incomplete"},
-        )
+        if rendered_terminal := terminal_event("failed", error_code="assistant_stream_incomplete"):
+            yield rendered_terminal
 
 
 __all__ = ["stream_pi_assistant_response"]

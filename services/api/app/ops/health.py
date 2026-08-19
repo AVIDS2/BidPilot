@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from urllib.request import urlopen
 
 import structlog
 from sqlalchemy import text
@@ -40,6 +41,20 @@ def collect_dependency_checks(db: Session, *, include_worker: bool = False) -> d
     except Exception:
         logger.warning("dependency_health_check_failed", dependency="minio")
         checks["minio"] = "unavailable"
+
+    bridge_secret = os.environ.get("DOCPILOT_PI_INTERNAL_SECRET") or os.environ.get(
+        "DOCPILOT_JWT_SECRET"
+    )
+    checks["pi_bridge_config"] = "ok" if bridge_secret else "unavailable"
+    try:
+        sidecar_url = os.environ.get(
+            "DOCPILOT_PI_AGENT_URL", "http://pi-agent:8787"
+        ).rstrip("/")
+        with urlopen(f"{sidecar_url}/health", timeout=2) as response:  # noqa: S310
+            checks["pi_agent"] = "ok" if response.status == 200 else "unavailable"
+    except Exception:
+        logger.warning("dependency_health_check_failed", dependency="pi_agent")
+        checks["pi_agent"] = "unavailable"
 
     if include_worker:
         try:

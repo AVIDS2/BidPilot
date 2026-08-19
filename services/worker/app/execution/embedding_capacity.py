@@ -24,6 +24,7 @@ from contracts.embedding_metering import (
 )
 from contracts.usage_budget_policy import (
     OfficialTokenCeilingConfigurationError,
+    internal_unlimited_usage_enabled,
     require_official_monthly_token_ceiling,
 )
 from contracts.usage_ledger import ModelUsageBudgetExceeded
@@ -136,6 +137,8 @@ def generate_metered_embeddings_batch(
     """Send one metered embedding batch, retaining capacity for ambiguous outcomes."""
     if not texts:
         return []
+    if internal_unlimited_usage_enabled():
+        return generate_embeddings_batch(list(texts))
     profile = get_embedding_profile()
     if profile is None:
         return generate_embeddings_batch(list(texts))

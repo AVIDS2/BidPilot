@@ -108,7 +108,10 @@ Required secret-backed values:
 - `DOCPILOT_ENV=production`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres`
 - `DOCPILOT_AGENT_CHECKPOINTER=postgres`
-- `DOCPILOT_ASSISTANT_ENGINE=harness`
+- `DOCPILOT_ASSISTANT_ENGINE=pi`
+- `DOCPILOT_PI_AGENT_URL=http://pi-agent:8787`
+- `DOCPILOT_PI_TOOL_BRIDGE_URL=http://api:8000/internal/pi/tools/execute`
+- `DOCPILOT_PI_INTERNAL_SECRET` shared only by the API and Pi sidecar
 
 `DOCPILOT_AUTH_REQUIRED` must be `true`.
 

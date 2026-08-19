@@ -1,7 +1,16 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import json
 from uuid import uuid4
+
+import pytest
+
+pytest.skip(
+    "retired lexical memory-router tests; public assistant is Pi-only",
+    allow_module_level=True,
+)
 
 from app.auth.schemas import CurrentUser
 from app.assistant.runtime import classify_locally

@@ -50,6 +50,21 @@ class RuntimeRunListItem(BaseModel):
     latest_event_summary: str | None = None
 
 
+class RuntimeChildRunRead(BaseModel):
+    """A safe child-run projection for nested user-facing timelines."""
+
+    id: str
+    parent_run_id: str
+    kind: str
+    status: str
+    profile: str | None = None
+    mode: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    latest_event_summary: str | None = None
+
+
 class RuntimeEventRead(BaseModel):
     event_id: str
     run_id: str

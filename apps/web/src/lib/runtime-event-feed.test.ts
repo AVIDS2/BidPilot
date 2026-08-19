@@ -414,4 +414,53 @@ describe("runtime event feed", () => {
       },
     ]);
   });
+
+  it("maps Pi subagent tool lifecycle without exposing arguments or raw results", () => {
+    const started = runtimeEventToAssistantEvents(runtimeEvent({
+      type: "capability.progressed",
+      public_summary: "子 Agent 正在调用 web_search。",
+      payload: {
+        capability: "subagent",
+        phase: "tool_started",
+        tool: "web_search",
+        tool_call_id: "child-call-1",
+        arguments: { query: "不得进入 UI" },
+      },
+    }));
+    const completed = runtimeEventToAssistantEvents(runtimeEvent({
+      sequence: 3,
+      type: "capability.progressed",
+      public_summary: "子 Agent 已完成 web_search。",
+      payload: {
+        capability: "subagent",
+        phase: "tool_completed",
+        tool: "web_search",
+        tool_call_id: "child-call-1",
+        result: { items: ["不得进入 UI"] },
+      },
+    }));
+
+    expect(started).toEqual([{
+      eventType: "assistant.tool_started",
+      data: {
+        runtime_run_id: "runtime-1",
+        runtime_sequence: 2,
+        tool_name: "web_search",
+        tool_call_id: "child-call-1",
+        title: "子 Agent 正在调用 web_search。",
+        state: "executing_tool",
+      },
+    }]);
+    expect(completed).toEqual([{
+      eventType: "assistant.tool_succeeded",
+      data: {
+        runtime_run_id: "runtime-1",
+        runtime_sequence: 3,
+        tool_name: "web_search",
+        tool_call_id: "child-call-1",
+        summary: "子 Agent 已完成 web_search。",
+        state: "completed",
+      },
+    }]);
+  });
 });

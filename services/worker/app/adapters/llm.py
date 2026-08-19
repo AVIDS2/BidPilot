@@ -24,7 +24,11 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_URL = "https://api.openai.com/v1/chat/completions"
 _DEFAULT_MODEL = "gpt-4o-mini"
-_MAX_DRAFT_OUTPUT_TOKENS = 4_096
+# Bid response sections need enough room for both provider-side reasoning and
+# the user-visible draft.  Some OpenAI-compatible providers account for both
+# against the same completion budget, so the former 4K ceiling could end a
+# valid request before any draft text was emitted.
+_MAX_DRAFT_OUTPUT_TOKENS = 16_000
 ReasoningEffort = Literal["low", "medium", "high", "extra", "max", "ultra"]
 _MAX_REVIEW_FEEDBACK_CHARACTERS = 4_000
 _MAX_SYSTEM_PROMPT_CHARACTERS = 4_000

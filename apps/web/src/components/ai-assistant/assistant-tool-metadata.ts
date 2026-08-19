@@ -1,5 +1,6 @@
 import {
   BookOpenCheckIcon,
+  BotIcon,
   FileSearchIcon,
   FilePenLineIcon,
   FolderOpenIcon,
@@ -58,6 +59,8 @@ const TOOL_FALLBACK_LABELS: Record<string, string> = {
   open_page: "打开页面",
   upload_document: "上传文档",
   delete_project: "删除项目",
+  spawn_subagents: "委派子 Agent",
+  subagent: "执行委派任务",
 };
 
 const TOOL_ICONS: Record<string, LucideIcon> = {
@@ -100,6 +103,8 @@ const TOOL_ICONS: Record<string, LucideIcon> = {
   forget_memory: Trash2Icon,
   upload_document: UploadCloudIcon,
   delete_project: Trash2Icon,
+  spawn_subagents: BotIcon,
+  subagent: BotIcon,
 };
 
 export function getAssistantToolLabel(toolName: string | undefined, t: Translate) {
