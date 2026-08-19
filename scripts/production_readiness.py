@@ -37,6 +37,7 @@ REQUIRED_PRODUCTION_VARIABLES = [
     "DOCPILOT_LANGGRAPH_CHECKPOINTER",
     "DOCPILOT_AGENT_CHECKPOINTER",
     "DOCPILOT_ASSISTANT_ENGINE",
+    "DOCPILOT_PI_INTERNAL_SECRET",
     "USE_LANGGRAPH",
     "DOCPILOT_POSTGRES_DB",
     "DOCPILOT_POSTGRES_USER",
@@ -84,7 +85,7 @@ _WEAK_POSTGRES_PASSWORDS = {"bidpilot", "bidpilot123", "docpilot", "docpilot123"
 _WEAK_REDIS_PASSWORDS = {"redis", "redis123", "bidpilot", "bidpilot123", "docpilot", "docpilot123"}
 _RATE_LIMIT_PATTERN = re.compile(r"^(?P<count>[1-9][0-9]*)/(?P<window>second|seconds|minute|minutes|hour|hours|day|days)$")
 _NON_NEGATIVE_INTEGER_PATTERN = re.compile(r"^(0|[1-9][0-9]*)$")
-_CANONICAL_ASSISTANT_ENGINE = "harness"
+_CANONICAL_ASSISTANT_ENGINE = "pi"
 
 
 class ReadinessResult(NamedTuple):
@@ -227,7 +228,11 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
 
     assistant_engine = (env.get("DOCPILOT_ASSISTANT_ENGINE") or "").lower()
     if assistant_engine != _CANONICAL_ASSISTANT_ENGINE:
-        errors.append("DOCPILOT_ASSISTANT_ENGINE must be harness for production")
+        errors.append("DOCPILOT_ASSISTANT_ENGINE must be pi for production")
+
+    pi_internal_secret = env.get("DOCPILOT_PI_INTERNAL_SECRET")
+    if pi_internal_secret and len(pi_internal_secret) < 32:
+        errors.append("DOCPILOT_PI_INTERNAL_SECRET must be at least 32 characters")
 
     if env.get("USE_LANGGRAPH", "").lower() not in {"1", "true", "yes"}:
         errors.append("USE_LANGGRAPH must be true for production workflows")
@@ -275,10 +280,6 @@ def validate_environment(env: Mapping[str, str], target: str) -> ReadinessResult
     )
     resend_sender = env.get("DOCPILOT_RESEND_FROM", RESEND_DEFAULT_FROM)
     resend_sender_valid = not _is_missing(resend_sender) and not _is_placeholder(resend_sender)
-    smtp_configured = all(
-        not _is_missing(env.get(name)) and not _is_placeholder(env[name])
-        for name in SMTP_PRODUCTION_VARIABLES
-    )
 
     for name in RESEND_PRODUCTION_KEY_VARIABLES:
         value = env.get(name)

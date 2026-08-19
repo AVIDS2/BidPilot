@@ -26,6 +26,7 @@ def test_validate_environment_reports_missing_required_variables() -> None:
     assert "DOCPILOT_AGENT_CHECKPOINTER is required" in result.errors
     assert "DOCPILOT_ENV is required" in result.errors
     assert "DOCPILOT_ASSISTANT_ENGINE is required" in result.errors
+    assert "DOCPILOT_PI_INTERNAL_SECRET is required" in result.errors
     assert "USE_LANGGRAPH is required" in result.errors
     assert "DOCPILOT_POSTGRES_DB is required" in result.errors
     assert "DOCPILOT_POSTGRES_USER is required" in result.errors
@@ -76,7 +77,7 @@ def test_validate_environment_rejects_development_defaults() -> None:
     assert "DOCPILOT_LANGGRAPH_CHECKPOINTER must be postgres for production" in result.errors
     assert "DOCPILOT_AGENT_CHECKPOINTER must be postgres for production" in result.errors
     assert "DOCPILOT_ENV must be production for production deployment" in result.errors
-    assert "DOCPILOT_ASSISTANT_ENGINE must be harness for production" in result.errors
+    assert "DOCPILOT_ASSISTANT_ENGINE must be pi for production" in result.errors
     assert "USE_LANGGRAPH must be true for production workflows" in result.errors
     assert "DOCPILOT_SMTP_HOST is required for production email" in result.errors
     assert "DOCPILOT_SMTP_USER is required for production email" in result.errors
@@ -104,7 +105,8 @@ def test_validate_environment_accepts_production_ready_shape() -> None:
         "DOCPILOT_LANGGRAPH_CHECKPOINTER": "postgres",
         "DOCPILOT_AGENT_CHECKPOINTER": "postgres",
         "DOCPILOT_ENV": "production",
-        "DOCPILOT_ASSISTANT_ENGINE": "harness",
+        "DOCPILOT_ASSISTANT_ENGINE": "pi",
+        "DOCPILOT_PI_INTERNAL_SECRET": "production-pi-bridge-secret-at-least-32-bytes",
         "USE_LANGGRAPH": "true",
         "DOCPILOT_POSTGRES_DB": "bidpilot",
         "DOCPILOT_POSTGRES_USER": "bidpilot",
@@ -180,7 +182,7 @@ def test_validate_environment_rejects_legacy_assistant_engine_aliases() -> None:
         result = production_readiness.validate_environment(env, target="production")
 
         assert result.ok is False
-        assert "DOCPILOT_ASSISTANT_ENGINE must be harness for production" in result.errors
+        assert "DOCPILOT_ASSISTANT_ENGINE must be pi for production" in result.errors
 
 
 def test_validate_environment_accepts_the_supported_deepseek_default_model() -> None:
@@ -199,7 +201,8 @@ def test_validate_environment_accepts_the_supported_deepseek_default_model() -> 
         "DOCPILOT_LANGGRAPH_CHECKPOINTER": "postgres",
         "DOCPILOT_AGENT_CHECKPOINTER": "postgres",
         "DOCPILOT_ENV": "production",
-        "DOCPILOT_ASSISTANT_ENGINE": "harness",
+        "DOCPILOT_ASSISTANT_ENGINE": "pi",
+        "DOCPILOT_PI_INTERNAL_SECRET": "production-pi-bridge-secret-at-least-32-bytes",
         "USE_LANGGRAPH": "true",
         "DOCPILOT_POSTGRES_DB": "bidpilot",
         "DOCPILOT_POSTGRES_USER": "bidpilot",
@@ -234,7 +237,8 @@ def test_validate_environment_accepts_the_supported_opencode_go_default_model() 
         "DOCPILOT_LANGGRAPH_CHECKPOINTER": "postgres",
         "DOCPILOT_AGENT_CHECKPOINTER": "postgres",
         "DOCPILOT_ENV": "production",
-        "DOCPILOT_ASSISTANT_ENGINE": "harness",
+        "DOCPILOT_ASSISTANT_ENGINE": "pi",
+        "DOCPILOT_PI_INTERNAL_SECRET": "production-pi-bridge-secret-at-least-32-bytes",
         "USE_LANGGRAPH": "true",
         "DOCPILOT_POSTGRES_DB": "bidpilot",
         "DOCPILOT_POSTGRES_USER": "bidpilot",
@@ -269,7 +273,8 @@ def test_validate_environment_rejects_invalid_trusted_proxy_and_rate_limit() -> 
         "DOCPILOT_LANGGRAPH_CHECKPOINTER": "postgres",
         "DOCPILOT_AGENT_CHECKPOINTER": "postgres",
         "DOCPILOT_ENV": "production",
-        "DOCPILOT_ASSISTANT_ENGINE": "harness",
+        "DOCPILOT_ASSISTANT_ENGINE": "pi",
+        "DOCPILOT_PI_INTERNAL_SECRET": "production-pi-bridge-secret-at-least-32-bytes",
         "DOCPILOT_POSTGRES_DB": "bidpilot",
         "DOCPILOT_POSTGRES_USER": "bidpilot",
         "DOCPILOT_POSTGRES_PASSWORD": "long-random-postgres-password",
@@ -305,7 +310,8 @@ def test_validate_environment_rejects_partial_stripe_billing_configuration() -> 
         "DOCPILOT_LANGGRAPH_CHECKPOINTER": "postgres",
         "DOCPILOT_AGENT_CHECKPOINTER": "postgres",
         "DOCPILOT_ENV": "production",
-        "DOCPILOT_ASSISTANT_ENGINE": "harness",
+        "DOCPILOT_ASSISTANT_ENGINE": "pi",
+        "DOCPILOT_PI_INTERNAL_SECRET": "production-pi-bridge-secret-at-least-32-bytes",
         "DOCPILOT_POSTGRES_DB": "bidpilot",
         "DOCPILOT_POSTGRES_USER": "bidpilot",
         "DOCPILOT_POSTGRES_PASSWORD": "long-random-postgres-password",
@@ -343,7 +349,8 @@ def test_validate_environment_rejects_placeholder_values() -> None:
         "DOCPILOT_LANGGRAPH_CHECKPOINTER": "postgres",
         "DOCPILOT_AGENT_CHECKPOINTER": "postgres",
         "DOCPILOT_ENV": "production",
-        "DOCPILOT_ASSISTANT_ENGINE": "harness",
+        "DOCPILOT_ASSISTANT_ENGINE": "pi",
+        "DOCPILOT_PI_INTERNAL_SECRET": "production-pi-bridge-secret-at-least-32-bytes",
         "DOCPILOT_POSTGRES_DB": "bidpilot",
         "DOCPILOT_POSTGRES_USER": "bidpilot",
         "DOCPILOT_POSTGRES_PASSWORD": "long-random-postgres-password",

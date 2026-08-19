@@ -22,3 +22,6 @@
   now fail-closed for Pi: it requires the complete versioned production Compose
   and the dedicated internal bridge secret instead of partially replacing API,
   Worker, and Web against an incomplete topology.
+- The production-readiness contract itself now recognizes only `pi` as the
+  canonical Assistant engine and validates the bridge secret length; the stale
+  Harness-only release assertion and its fixtures were removed.
