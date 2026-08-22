@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/runtime.test.ts src/sandbox.test.ts"
+    "test": "tsx --test src/runtime.test.ts src/sandbox.test.ts src/catalog.test.ts"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.84.2",

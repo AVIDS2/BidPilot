@@ -55,7 +55,7 @@ def test_pi_bridge_queues_tenant_scoped_subagent(
     assert child.status == "queued"
 
 
-def test_pi_bridge_foreground_delegation_returns_child_results(
+def test_pi_bridge_delegation_never_waits_inside_the_model_stream(
     test_db,
     default_org_id: str,
     default_user_id: str,
@@ -63,25 +63,6 @@ def test_pi_bridge_foreground_delegation_returns_child_results(
 ) -> None:
     monkeypatch.setenv("DOCPILOT_PI_INTERNAL_SECRET", "test-only-pi-bridge-secret-at-least-32-bytes")
     monkeypatch.setattr("app.runtime.subagent_control.request_task_outbox_dispatch", lambda *_args: True)
-    monkeypatch.setattr(
-        "app.runtime.pi_bridge.wait_for_subagent_results",
-        lambda *_args, **_kwargs: {
-            "status": "completed",
-            "completed": True,
-            "children": [
-                {
-                    "run_id": "child-finished",
-                    "task_id": "research",
-                    "profile": "researcher",
-                    "status": "succeeded",
-                    "summary": "已核查公告原文。",
-                    "error_code": None,
-                }
-            ],
-            "resumable": False,
-            "next_step": "synthesize_child_results",
-        },
-    )
     user = _user(default_org_id, default_user_id)
     parent = create_runtime_run(test_db, user, kind="assistant_turn", engine="pi")
     token = create_pi_bridge_token(run=parent, user=user)
@@ -97,12 +78,10 @@ def test_pi_bridge_foreground_delegation_returns_child_results(
     )
 
     assert result["kind"] == "succeeded"
-    assert result["recoverable"] is False
-    assert result["modelPayload"]["completed"] is True
-    assert result["modelPayload"]["children"][0]["summary"] == "已核查公告原文。"
-    assert result["publicPayload"]["children"] == [
-        {"run_id": "child-finished", "status": "succeeded"}
-    ]
+    assert result["recoverable"] is True
+    assert result["modelPayload"]["status"] == "queued"
+    child_id = result["modelPayload"]["children"][0]["run_id"]
+    assert result["publicPayload"]["children"] == [{"run_id": child_id, "status": "queued"}]
 
 
 def test_pi_bridge_rejects_subagent_run_scope_mismatch(

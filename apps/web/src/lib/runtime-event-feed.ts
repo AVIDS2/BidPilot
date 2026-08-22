@@ -27,20 +27,6 @@ const WORKFLOW_CAPABILITIES = new Set([
   "run_section_campaign",
 ]);
 
-const LEGACY_GENERATED_NARRATION = /^为推进当前任务，我先.+，再根据真实结果决定下一步。$/;
-const LEGACY_GENERATED_NARRATIONS = new Set([
-  "我已核对当前会话中的已知信息，正在整理可以直接回答的结论。",
-  "当前项目范围还没有明确。我先查询可访问项目；若有同名项目，会用 short_id 请你确认目标。",
-  "这个问题需要核对最新公开信息。我先检索相关来源，再根据结果组织可靠结论。",
-  "目标范围已经确定。我先读取项目结构和现有资料，确认后续操作有足够依据。",
-  "我先核对项目结构和现有资料，避免在信息不足时直接开始后续操作。",
-  "起草前需要把目标章节和依据对齐。我会按已确认的范围推进，并将结果写入对应工作区。",
-]);
-
-function isLegacyGeneratedNarration(content: string): boolean {
-  return LEGACY_GENERATED_NARRATIONS.has(content) || LEGACY_GENERATED_NARRATION.test(content);
-}
-
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -59,6 +45,17 @@ function runtimeMetadata(event: RuntimeEventRead): Record<string, unknown> {
   };
   if (event.event_id) metadata.runtime_event_id = event.event_id;
   if (event.parent_event_id) metadata.runtime_parent_event_id = event.parent_event_id;
+  return metadata;
+}
+
+function presentationMetadata(payload: Record<string, unknown>): Record<string, unknown> {
+  const metadata: Record<string, unknown> = {};
+  const kind = asString(payload.presentation_kind);
+  const sessionId = asString(payload.presentation_session_id);
+  const title = asString(payload.presentation_title);
+  if (kind) metadata.presentation_kind = kind;
+  if (sessionId) metadata.presentation_session_id = sessionId;
+  if (title) metadata.presentation_title = title;
   return metadata;
 }
 
@@ -144,7 +141,7 @@ export function runtimeEventToAssistantEvents(
   const turnId = asString(payload.turn_id);
   const toolCallId = asString(payload.tool_call_id) ?? actionId;
   const title = asString(payload.title);
-  const metadata = runtimeMetadata(event);
+  const metadata = { ...runtimeMetadata(event), ...presentationMetadata(payload) };
 
   switch (event.type) {
     case "plan.proposed":
@@ -178,6 +175,9 @@ export function runtimeEventToAssistantEvents(
             title: asString(payload.title) || event.public_summary,
             summary: event.public_summary,
             skill_name: asString(payload.skill_name),
+            presentation_kind: asString(payload.presentation_kind),
+            presentation_session_id: asString(payload.presentation_session_id) ?? event.event_id,
+            presentation_title: asString(payload.presentation_title) ?? asString(payload.title),
             state: "thinking",
           },
         }];
@@ -259,6 +259,17 @@ export function runtimeEventToAssistantEvents(
       return events;
     }
     case "capability.progressed": {
+      if (capability === "subagent" && payload.phase === "children_spawned") {
+        return [{
+          eventType: "assistant.subagents_spawned",
+          data: {
+            ...metadata,
+            turn_id: turnId,
+            children: payload.children ?? [],
+            state: "running_workflow",
+          },
+        }];
+      }
       if (capability === "subagent" && typeof payload.tool === "string") {
         const childTool = asString(payload.tool) ?? "tool";
         const childToolCallId = asString(payload.tool_call_id) ?? toolCallId;
@@ -384,7 +395,6 @@ export function runtimeEventToAssistantEvents(
       // Provider thinking streams are private, model-specific CoT. The
       // product trace renders only Harness-authored public narration.
       if (asString(payload.source) !== "harness") return [];
-      if (isLegacyGeneratedNarration(event.public_summary)) return [];
       return [{
         eventType: "assistant.reasoning",
         data: {

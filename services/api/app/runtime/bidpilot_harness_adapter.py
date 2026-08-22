@@ -36,7 +36,7 @@ from .registry import (
     missing_required_capability_arguments,
 )
 from .service import execute_prepared_capability, prepare_capability_execution
-from .skills import read_skill
+from .skills import read_skill, skill_metadata
 from contracts.runtime import RuntimeEventType
 from contracts.runtime import RuntimeRiskLevel
 
@@ -68,6 +68,8 @@ class _PreparedMcpTool:
 class _PreparedSkill:
     name: str
     body: str
+    presentation: str | None = None
+    presentation_title: str | None = None
 
 
 class BidPilotToolExecutor:
@@ -139,7 +141,13 @@ class BidPilotToolExecutor:
                     error_code="skill_not_found",
                     recoverable=True,
                 )
-            self._prepared[call.id] = _PreparedSkill(name=name, body=body)
+            metadata = skill_metadata(name)
+            self._prepared[call.id] = _PreparedSkill(
+                name=name,
+                body=body,
+                presentation=metadata.presentation if metadata else None,
+                presentation_title=metadata.presentation_title if metadata else None,
+            )
             return None
 
         mcp_route = self._mcp_route(call.name)
@@ -164,6 +172,7 @@ class BidPilotToolExecutor:
                         "tool_call_id": call.id,
                         "turn_id": context.turn_id,
                         "provider": f"mcp:{server_name}",
+                        **self._presentation_payload(),
                     },
                 ),
             )
@@ -302,6 +311,31 @@ class BidPilotToolExecutor:
         if isinstance(prepared, _PreparedMcpTool):
             return await self._execute_mcp(call, prepared, _context)
         if isinstance(prepared, _PreparedSkill):
+            if prepared.presentation:
+                task_event = publish_event(
+                    self.db,
+                    self.runtime_run.id,
+                    RuntimeEventDraft(
+                        type=RuntimeEventType.PLAN_UPDATED,
+                        public_summary=prepared.presentation_title or prepared.name,
+                        payload={
+                            "stage": "task_started",
+                            "title": prepared.presentation_title or prepared.name,
+                            "skill_name": prepared.name,
+                            "presentation_kind": prepared.presentation,
+                            "turn_id": _context.turn_id,
+                        },
+                    ),
+                )
+                run_input = dict(self.runtime_run.input_json or {})
+                run_input["active_presentation"] = {
+                    "kind": prepared.presentation,
+                    "session_id": task_event.id,
+                    "title": prepared.presentation_title or prepared.name,
+                }
+                self.runtime_run.input_json = run_input
+                self.db.commit()
+                self.db.refresh(self.runtime_run)
             return HarnessToolOutcome.succeeded(
                 f"已加载流程技能：{prepared.name}。",
                 {
@@ -540,10 +574,29 @@ class BidPilotToolExecutor:
                     "title": prepared.title,
                     "tool_call_id": tool_call_id,
                     "turn_id": context.turn_id,
+                    **self._presentation_payload(),
                     **dict(payload),
                 },
             ),
         )
+
+    def _presentation_payload(self) -> dict[str, str]:
+        """Project the active skill's UI contract without inspecting chat text."""
+        value = (self.runtime_run.input_json or {}).get("active_presentation")
+        if not isinstance(value, Mapping):
+            return {}
+        kind = str(value.get("kind") or "").strip()
+        session_id = str(value.get("session_id") or "").strip()
+        if not kind or not session_id:
+            return {}
+        payload = {
+            "presentation_kind": kind,
+            "presentation_session_id": session_id,
+        }
+        title = str(value.get("title") or "").strip()
+        if title:
+            payload["presentation_title"] = title
+        return payload
 
     def _normalize_arguments(self, capability_name: str, raw_arguments: Mapping[str, Any]) -> dict[str, Any]:
         arguments = dict(raw_arguments)

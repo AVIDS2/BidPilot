@@ -1980,6 +1980,47 @@ export interface ProviderModelsResult {
   message?: string | null;
 }
 
+export interface PiCatalogProvider {
+  id: string;
+  name: string;
+  base_url?: string | null;
+}
+
+export interface PiCatalogModel {
+  id: string;
+  name: string;
+  provider: string;
+  api: string;
+  base_url?: string | null;
+  reasoning: boolean;
+  input: string[];
+  context_window: number;
+  max_tokens: number;
+  cost: Record<string, number>;
+}
+
+export interface PiModelCatalog {
+  source: "pi-ai" | string;
+  version: string;
+  providers: PiCatalogProvider[];
+  models: PiCatalogModel[];
+}
+
+export interface PiRuntimeContract {
+  version: string;
+  sandbox: {
+    profile: string;
+    hostTools: string;
+    network: string;
+    maxToolInputBytes: number;
+    maxToolObservationBytes: number;
+  };
+  extensions: string[];
+  skills: Array<{ name: string; description: string }>;
+  tool_count: number;
+  parallel_tool_count: number;
+}
+
 // Chat
 export interface ChatMessageRead {
   id: string;
@@ -2059,6 +2100,14 @@ export function deleteChatConversation(conversationId: string) {
 
 export function listProviderConfigs() {
   return request<{ data: ProviderConfig[] }>("/auth/me/providers");
+}
+
+export function getPiModelCatalog() {
+  return request<{ data: PiModelCatalog }>("/auth/me/providers/catalog");
+}
+
+export function getPiRuntimeContract() {
+  return request<{ data: PiRuntimeContract }>("/auth/me/providers/runtime");
 }
 
 export function createProviderConfig(payload: ProviderConfigCreate) {

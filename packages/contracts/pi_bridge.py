@@ -40,4 +40,24 @@ def encode_pi_bridge_token(
     )
 
 
-__all__ = ["encode_pi_bridge_token"]
+def encode_agent_wake_token(
+    *,
+    wake_run_id: str,
+    secret: str,
+    ttl_seconds: int = 300,
+) -> str:
+    """Authorize one worker-originated, idempotent Agent continuation."""
+    now = datetime.now(UTC)
+    return jwt.encode(
+        {
+            "purpose": "agent-system-wake",
+            "wake_run_id": wake_run_id,
+            "exp": now + timedelta(seconds=ttl_seconds),
+            "iat": now,
+        },
+        secret,
+        algorithm="HS256",
+    )
+
+
+__all__ = ["encode_agent_wake_token", "encode_pi_bridge_token"]

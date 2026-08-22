@@ -89,6 +89,7 @@ import FadeContent from "@/components/FadeContent";
 import { AssistantConfirmationCard } from "./assistant-confirmation-card";
 import { AssistantInputRequestForm } from "./assistant-input-request";
 import { ClaudeActivityTimeline } from "./claude-activity-timeline";
+import { projectExecutionItemsOntoTranscript } from "@/lib/assistant-transcript";
 
 /* ─── Date grouping helpers ─── */
 
@@ -565,31 +566,9 @@ function MessageBubble({
   const parts = msg.transcriptParts ?? EMPTY_TRANSCRIPT_PARTS;
   const hasTurnParts = parts.some((part) => part.kind === "turn");
   const hasNarrativePart = parts.some((part) => part.kind === "narrative" && part.text);
-  const turnIds = useMemo(
-    () =>
-      new Set(
-        parts.filter((part) => part.kind === "turn").map((part) => part.turnId),
-      ),
-    [parts],
-  );
-  const toolsByTurn = useMemo(() => {
-    const map = new Map<string, AssistantExecutionItem[]>();
-    for (const item of activityItems) {
-      if (!item.turnId) continue;
-      const list = map.get(item.turnId) ?? [];
-      list.push(item);
-      map.set(item.turnId, list);
-    }
-    return map;
-  }, [activityItems]);
-  // Events without turn_id (durable CAPABILITY_*) must still render.
-  const orphanTools = useMemo(
-    () =>
-      activityItems.filter((item) => {
-        if (!item.turnId) return true;
-        return !turnIds.has(item.turnId);
-      }),
-    [activityItems, turnIds],
+  const executionProjection = useMemo(
+    () => projectExecutionItemsOntoTranscript(parts, activityItems),
+    [activityItems, parts],
   );
 
   if (isUser) {
@@ -683,7 +662,7 @@ function MessageBubble({
               if (part.kind === "reasoning") {
                 return renderNarrative(part.text, part.id);
               }
-              const items = toolsByTurn.get(part.turnId) ?? [];
+              const items = executionProjection.itemsByPartId.get(part.id) ?? [];
               if (items.length === 0) return null;
               return (
                 <ClaudeActivityTimeline
@@ -694,19 +673,15 @@ function MessageBubble({
                 />
               );
             })}
-            {orphanTools.length > 0 && (
+            {executionProjection.orphanItems.length > 0 && (
               <ClaudeActivityTimeline
-                items={orphanTools}
+                items={executionProjection.orphanItems}
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
               />
             )}
             {msg.content && !hasNarrativePart && renderNarrative(msg.content, `${msg.id}-durable`)}
-            {!msg.content &&
-              parts.every((part) => part.kind !== "narrative") &&
-              activityItems.length === 0 &&
-              isStreaming &&
-              thinkingDots}
+            {activityItems.length === 0 && isStreaming && thinkingDots}
           </>
         ) : (
           <>

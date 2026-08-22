@@ -1,6 +1,8 @@
 ---
 name: opportunity-deep-research
 description: Use for a bounded, read-only investigation of public tender opportunities that must cite traceable official sources, verify dates and eligibility, deduplicate candidates, and end with a short decision-ready shortlist. Do not use for creating projects, downloading files, or running response workflows.
+presentation: deep_research
+presentation_title: 招标机会深度调研
 ---
 
 # 招标机会深度调研

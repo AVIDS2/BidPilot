@@ -71,3 +71,29 @@ class ProviderModelsResponse(BaseModel):
     models: list[ProviderModelInfo]
     discovery_mode: str = "supported"
     message: str | None = None
+
+
+class PiCatalogProvider(BaseModel):
+    id: str
+    name: str
+    base_url: str | None = Field(default=None, validation_alias="baseUrl")
+
+
+class PiCatalogModel(BaseModel):
+    id: str
+    name: str
+    provider: str
+    api: str
+    base_url: str | None = Field(default=None, validation_alias="baseUrl")
+    reasoning: bool = False
+    input: list[str] = Field(default_factory=list)
+    context_window: int = Field(default=0, validation_alias="contextWindow")
+    max_tokens: int = Field(default=0, validation_alias="maxTokens")
+    cost: dict[str, float] = Field(default_factory=dict)
+
+
+class PiModelCatalogResponse(BaseModel):
+    source: str
+    version: str
+    providers: list[PiCatalogProvider]
+    models: list[PiCatalogModel]

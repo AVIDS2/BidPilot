@@ -30,6 +30,8 @@ from app.db import SessionLocal
 from app.models import (
     BidRequirementProfile,
     Bundle,
+    Deliverable,
+    DeliverableSection,
     Evidence,
     KnowledgeChunk,
     NoticeItem,
@@ -42,6 +44,7 @@ from app.models import (
     RequirementItem,
     RuntimeEvent,
     RuntimeRun,
+    SectionVersion,
     SourceDocument,
     User,
 )
@@ -49,6 +52,7 @@ from app.organizations.service import (
     ensure_personal_workspace_for_user_command,
     switch_user_org_command,
 )
+from app.entitlements.service import upsert_organization_subscription_command
 from app.projects.demo import create_demo_project_command
 from app.projects.demo_data import BUILTIN_DEMO_STORAGE_PREFIX, DEMO_DOCUMENTS
 from app.projects.schemas import ProjectCreate
@@ -60,6 +64,7 @@ COMPLETED_PROJECT_NAME = "演示 · 园区综合能源管理平台响应"
 ACTIVE_PROJECT_NAME = "演示 · 区域医疗数据治理服务"
 RADAR_SOURCE_NAME = "演示数据 · 本地招采信号"
 RADAR_SUBSCRIPTION_NAME = "华东政务 AI 与数据治理"
+DELIVERABLE_TITLE = "区域医疗数据治理服务投标响应文件"
 
 
 def utcnow() -> datetime:
@@ -72,7 +77,7 @@ def current_user(user: User, org_id: str, org_slug: str) -> CurrentUser:
         email=user.email,
         display_name=user.display_name,
         role=user.role,
-        plan="starter",
+        plan="enterprise",
         email_verified=user.email_verified,
         disabled=user.disabled,
         org_id=org_id,
@@ -263,7 +268,12 @@ def seed_runtime_runs(db: Session, *, user: User, org_id: str, project: Project)
         )
 
     completed_key = "workspace-demo-completed-v1"
-    if db.scalar(select(RuntimeRun).where(RuntimeRun.org_id == org_id, RuntimeRun.idempotency_key == completed_key)) is None:
+    if db.scalar(
+        select(RuntimeRun).where(
+            RuntimeRun.org_id == org_id,
+            RuntimeRun.idempotency_key == completed_key,
+        )
+    ) is None:
         db.add(
             RuntimeRun(
                 kind="assistant_turn",
@@ -282,6 +292,87 @@ def seed_runtime_runs(db: Session, *, user: User, org_id: str, project: Project)
                 finished_at=utcnow() - timedelta(hours=2) + timedelta(minutes=3),
             )
         )
+
+
+def seed_deliverable(db: Session, *, project: Project) -> Deliverable:
+    deliverable = db.scalar(
+        select(Deliverable).where(
+            Deliverable.project_id == project.id,
+            Deliverable.title == DELIVERABLE_TITLE,
+        )
+    )
+    if deliverable is None:
+        deliverable = Deliverable(
+            project_id=project.id,
+            type="proposal",
+            title=DELIVERABLE_TITLE,
+            status="in_review",
+            export_status="not_exported",
+        )
+        db.add(deliverable)
+        db.flush()
+
+    sections = [
+        (
+            "executive-summary",
+            "项目理解与总体响应",
+            "本项目以区域医疗数据治理为主线，建立标准、质量、安全和运营一体化体系。投标人将以可追溯的数据目录为基础，分阶段完成现状调研、标准落地、系统对接与试点验收。",
+        ),
+        (
+            "technical-approach",
+            "技术方案与实施路径",
+            "技术路线覆盖医疗数据目录、主数据管理、质量规则、交换共享与安全审计。实施采用小步验证方式，先完成重点系统接入与指标校验，再逐步扩展到区域协同场景。",
+        ),
+        (
+            "delivery-plan",
+            "交付计划与质量保障",
+            "交付分为启动与调研、方案设计、平台实施、联调试运行、验收移交五个阶段。每个阶段均保留评审记录、问题清单和验收证据，确保交付过程可审计、可恢复。",
+        ),
+        (
+            "service-commitment",
+            "运维服务与风险控制",
+            "项目建立分级响应、持续监测和应急演练机制。对接口变更、数据质量波动及安全事件设置负责人、处置时限和复盘要求，并通过月度服务报告持续改进。",
+        ),
+    ]
+    for sort_order, (section_key, title, content) in enumerate(sections):
+        section = db.scalar(
+            select(DeliverableSection).where(
+                DeliverableSection.deliverable_id == deliverable.id,
+                DeliverableSection.section_key == section_key,
+            )
+        )
+        if section is None:
+            section = DeliverableSection(
+                deliverable_id=deliverable.id,
+                section_key=section_key,
+                title=title,
+                status="approved",
+                assignee_type="ai",
+                sort_order=sort_order,
+            )
+            db.add(section)
+            db.flush()
+        version = db.scalar(
+            select(SectionVersion).where(
+                SectionVersion.deliverable_section_id == section.id,
+                SectionVersion.version_number == 1,
+            )
+        )
+        if version is None:
+            version = SectionVersion(
+                deliverable_section_id=section.id,
+                version_number=1,
+                content_json={"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": content}]}]},
+                content_markdown=content,
+                created_by_actor="ai",
+                generation_iteration=1,
+            )
+            db.add(version)
+            db.flush()
+        section.approved_version_id = version.id
+        section.status = "approved"
+    db.flush()
+    return deliverable
 
 
 def seed_radar(db: Session, *, user: User, org_id: str) -> None:
@@ -399,6 +490,17 @@ def seed(email: str) -> dict[str, object]:
         db.refresh(user)
         db.refresh(workspace)
 
+        upsert_organization_subscription_command(
+            db,
+            org_id=workspace.id,
+            billing_owner_user_id=user.id,
+            plan="enterprise",
+            status="active",
+            seat_limit=10,
+            billable_seat_count=1,
+            commit=False,
+        )
+
         actor = current_user(user, workspace.id, workspace.slug)
         demo_project, _created_demo = create_demo_project_command(db, actor)
         completed_project = seed_project_fixture(
@@ -429,6 +531,7 @@ def seed(email: str) -> dict[str, object]:
             ],
         )
         seed_runtime_runs(db, user=user, org_id=workspace.id, project=active_project)
+        deliverable = seed_deliverable(db, project=active_project)
         seed_radar(db, user=user, org_id=workspace.id)
         db.commit()
 
@@ -437,6 +540,8 @@ def seed(email: str) -> dict[str, object]:
             "workspace_slug": workspace.slug,
             "projects": [demo_project.name, completed_project.name, active_project.name],
             "radar_source": RADAR_SOURCE_NAME,
+            "deliverable_id": deliverable.id,
+            "plan": "enterprise",
         }
     except Exception:
         db.rollback()
@@ -456,6 +561,8 @@ def main() -> None:
     for project_name in result["projects"]:
         print(f"- {project_name}")
     print(f"radar source: {result['radar_source']}")
+    print(f"deliverable: {result['deliverable_id']}")
+    print(f"plan: {result['plan']}")
 
 
 if __name__ == "__main__":

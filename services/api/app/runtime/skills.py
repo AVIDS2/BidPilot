@@ -40,6 +40,8 @@ class SkillMetadata:
     name: str
     description: str
     path: Path
+    presentation: str | None = None
+    presentation_title: str | None = None
 
     def to_index_line(self) -> str:
         return f"- {self.name}: {self.description}"
@@ -68,7 +70,7 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
             continue
         key = m.group(1).strip()
         value = m.group(2).strip().strip("\"'")
-        if key in {"name", "description"} and value:
+        if key in {"name", "description", "presentation", "presentation_title"} and value:
             fields[key] = value
     return fields
 
@@ -92,7 +94,13 @@ def build_skill_index() -> list[SkillMetadata]:
         fm = _parse_frontmatter(text)
         name = fm.get("name") or entry.name
         description = fm.get("description") or "No description provided."
-        index.append(SkillMetadata(name=name, description=description, path=skill_md))
+        index.append(SkillMetadata(
+            name=name,
+            description=description,
+            path=skill_md,
+            presentation=fm.get("presentation"),
+            presentation_title=fm.get("presentation_title"),
+        ))
     return index
 
 
@@ -171,6 +179,11 @@ def read_skill(skill_name: str) -> str:
     return _read_skill_body(names[0]) if names else ""
 
 
+def skill_metadata(skill_name: str) -> SkillMetadata | None:
+    """Return trusted metadata for an explicitly loaded skill."""
+    return next((skill for skill in build_skill_index() if skill.name == skill_name), None)
+
+
 def build_skill_prompt_block(skill_names: list[str] | tuple[str, ...] | None = None) -> str:
     """Return bodies only for explicit names; retained for tests and replay."""
     names = select_skill_names(skill_names)
@@ -199,5 +212,6 @@ __all__ = [
     "clear_skill_cache",
     "list_skill_names",
     "read_skill",
+    "skill_metadata",
     "select_skill_names",
 ]

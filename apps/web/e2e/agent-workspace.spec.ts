@@ -256,3 +256,415 @@ test("opens a structured canvas action beside the current Agent conversation", a
     fullPage: true,
   });
 });
+
+test("restores parallel subagents as a paged execution view", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem("bidpilot_token", "visual-test-token");
+    localStorage.setItem("bidpilot_lang", "zh");
+    localStorage.setItem("theme", "light");
+    localStorage.setItem("bidpilot_last_assistant_conversation_id", "subagent-conversation");
+  });
+
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "visual-user",
+        email: "visual@example.com",
+        display_name: "Visual User",
+        role: "admin",
+        plan: "free",
+        email_verified: true,
+        org_id: "visual-org",
+        org_slug: "visual-org",
+      }),
+    });
+  });
+  await page.route("**/auth/me/providers", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: [] }) });
+  });
+  await page.route("**/notifications", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
+  });
+  await page.route("**/chat/conversations**", async (route) => {
+    if (route.request().url().includes("/subagent-conversation/messages")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          total: 2,
+          items: [
+            {
+              id: "subagent-user-message",
+              role: "user",
+              content: "并行核验三个公开来源",
+              created_at: "2026-08-19T06:00:00Z",
+            },
+            {
+              id: "subagent-assistant-message",
+              role: "assistant",
+              content: "三个核验任务已经汇总。",
+              runtime_run_id: "parent-run",
+              created_at: "2026-08-19T06:00:01Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "subagent-conversation",
+          project_id: null,
+          title: "并行来源核验",
+          is_pinned: false,
+          created_at: "2026-08-19T06:00:00Z",
+        },
+      ]),
+    });
+  });
+  await page.route("**/runtime/runs/parent-run/children?**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(["researcher", "reviewer", "analyst"].map((profile, index) => ({
+        id: `child-${index + 1}`,
+        parent_run_id: "parent-run",
+        kind: "assistant_subagent",
+        status: "completed",
+        profile,
+        mode: "read_only",
+        created_at: `2026-08-19T06:00:0${index + 2}Z`,
+        started_at: `2026-08-19T06:00:0${index + 2}Z`,
+        finished_at: `2026-08-19T06:00:0${index + 3}Z`,
+        latest_event_summary: `${profile} 已完成核验。`,
+      }))),
+    });
+  });
+  await page.route("**/runtime/runs/parent-run/events?**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            event_id: "parent-start",
+            run_id: "parent-run",
+            sequence: 1,
+            type: "capability.started",
+            public_summary: "正在委派三项独立核验。",
+            payload: {
+              capability: "spawn_subagents",
+              tool_call_id: "spawn-call",
+              turn_id: "parent-turn",
+              title: "并行核验公开来源",
+            },
+            schema_version: "1.0",
+            timestamp: "2026-08-19T06:00:01Z",
+          },
+          {
+            event_id: "parent-complete",
+            run_id: "parent-run",
+            sequence: 2,
+            type: "capability.succeeded",
+            public_summary: "三个子 Agent 已完成核验。",
+            payload: {
+              capability: "spawn_subagents",
+              tool_call_id: "spawn-call",
+              turn_id: "parent-turn",
+              title: "并行核验公开来源",
+            },
+            schema_version: "1.0",
+            timestamp: "2026-08-19T06:00:05Z",
+          },
+          {
+            event_id: "parent-run-complete",
+            run_id: "parent-run",
+            sequence: 3,
+            type: "run.completed",
+            public_summary: "并行核验完成。",
+            payload: {},
+            schema_version: "1.0",
+            timestamp: "2026-08-19T06:00:06Z",
+          },
+        ],
+      }),
+    });
+  });
+  await page.route("**/runtime/runs/child-*/events?**", async (route) => {
+    const childId = new URL(route.request().url()).pathname.split("/").at(-2) ?? "child-1";
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            event_id: `${childId}-tool-start`,
+            run_id: childId,
+            sequence: 1,
+            type: "capability.started",
+            public_summary: "正在核验公开来源。",
+            payload: {
+              capability: "web_search",
+              tool_call_id: `${childId}-search`,
+              turn_id: `${childId}-turn`,
+              title: "核验公开来源",
+            },
+            schema_version: "1.0",
+            timestamp: "2026-08-19T06:00:03Z",
+          },
+          {
+            event_id: `${childId}-tool-complete`,
+            run_id: childId,
+            sequence: 2,
+            type: "capability.succeeded",
+            public_summary: "公开来源核验完成。",
+            payload: {
+              capability: "web_search",
+              tool_call_id: `${childId}-search`,
+              turn_id: `${childId}-turn`,
+              title: "核验公开来源",
+            },
+            schema_version: "1.0",
+            timestamp: "2026-08-19T06:00:04Z",
+          },
+          {
+            event_id: `${childId}-complete`,
+            run_id: childId,
+            sequence: 3,
+            type: "run.completed",
+            public_summary: "子 Agent 已完成核验。",
+            payload: {},
+            schema_version: "1.0",
+            timestamp: "2026-08-19T06:00:05Z",
+          },
+        ],
+      }),
+    });
+  });
+  await page.route("**/runtime/runs?**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "parent-run",
+          kind: "assistant_turn",
+          status: "completed",
+          project_id: null,
+          project_name: null,
+          engine: "pi",
+          created_at: "2026-08-19T06:00:01Z",
+          started_at: "2026-08-19T06:00:01Z",
+          finished_at: "2026-08-19T06:00:06Z",
+          latest_event_summary: "并行核验完成。",
+        },
+      ]),
+    });
+  });
+
+  await page.goto("/agent?conversation=subagent-conversation");
+  await expect(page.getByText("三个核验任务已经汇总。", { exact: true })).toBeVisible();
+
+  const parentGroup = page.locator(".cr-task-turn").first();
+  await expect(parentGroup.locator(":scope > .cr-command-grid")).not.toHaveClass(/is-open/);
+  await parentGroup.locator(":scope > .cr-task-turn-summary").click();
+
+  const viewer = page.getByRole("region", { name: "子 Agent 执行记录" });
+  await expect(viewer).toBeVisible();
+  await expect(viewer.getByText("1 / 3", { exact: true })).toBeVisible();
+  await expect(viewer.getByText("researcher 子 Agent", { exact: true }).first()).toBeVisible();
+  await expect(viewer.getByText("reviewer 子 Agent", { exact: true })).toHaveCount(0);
+
+  await viewer.getByRole("button", { name: "查看下一个子 Agent" }).click();
+  await expect(viewer.getByText("2 / 3", { exact: true })).toBeVisible();
+  await expect(viewer.getByText("reviewer 子 Agent", { exact: true }).first()).toBeVisible();
+
+  const viewerBox = await viewer.boundingBox();
+  expect(viewerBox).not.toBeNull();
+  expect(viewerBox!.x).toBeGreaterThanOrEqual(0);
+  expect(viewerBox!.x + viewerBox!.width).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+
+  await page.screenshot({
+    path: testInfo.outputPath(`agent-workspace-${testInfo.project.name}-subagents.png`),
+    fullPage: true,
+  });
+});
+
+test("projects deep research as one specialized runtime", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem("bidpilot_token", "visual-test-token");
+    localStorage.setItem("bidpilot_lang", "zh");
+    localStorage.setItem("theme", "light");
+    localStorage.setItem("bidpilot_last_assistant_conversation_id", "research-conversation");
+  });
+
+  await page.route("**/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "visual-user",
+        email: "visual@example.com",
+        display_name: "Visual User",
+        role: "admin",
+        plan: "free",
+        email_verified: true,
+        org_id: "visual-org",
+        org_slug: "visual-org",
+      }),
+    });
+  });
+  await page.route("**/auth/me/providers", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ data: [] }) });
+  });
+  await page.route("**/notifications", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
+  });
+  await page.route("**/chat/conversations**", async (route) => {
+    if (route.request().url().includes("/research-conversation/messages")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          total: 2,
+          items: [
+            {
+              id: "research-user-message",
+              role: "user",
+              content: "调研常州近期的医疗信息化招标机会",
+              created_at: "2026-08-19T07:00:00Z",
+            },
+            {
+              id: "research-assistant-message",
+              role: "assistant",
+              content: "已完成候选机会筛选，并保留可追溯来源。",
+              runtime_run_id: "research-run",
+              created_at: "2026-08-19T07:00:05Z",
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([{
+        id: "research-conversation",
+        project_id: null,
+        title: "常州招标机会调研",
+        is_pinned: false,
+        created_at: "2026-08-19T07:00:00Z",
+      }]),
+    });
+  });
+  await page.route("**/runtime/runs/research-run/children?**", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
+  });
+  await page.route("**/runtime/runs/research-run/events?**", async (route) => {
+    const presentation = {
+      presentation_kind: "deep_research",
+      presentation_session_id: "research-session",
+      presentation_title: "招标机会深度调研",
+    };
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          {
+            event_id: "research-start",
+            run_id: "research-run",
+            sequence: 1,
+            type: "plan.updated",
+            public_summary: "正在核对公开来源。",
+            payload: {
+              stage: "task_started",
+              title: "招标机会深度调研",
+              skill_name: "opportunity-deep-research",
+              ...presentation,
+            },
+            schema_version: "1.0",
+            timestamp: "2026-08-19T07:00:01Z",
+          },
+          ...[1, 2, 3].flatMap((index) => ([
+            {
+              event_id: `search-${index}-start`,
+              run_id: "research-run",
+              sequence: index * 2,
+              type: "capability.started",
+              public_summary: "正在核对公开来源。",
+              payload: {
+                capability: "web_search",
+                tool_call_id: `search-${index}`,
+                title: "联网搜索",
+                ...presentation,
+              },
+              schema_version: "1.0",
+              timestamp: `2026-08-19T07:00:0${index + 1}Z`,
+            },
+            {
+              event_id: `search-${index}-complete`,
+              run_id: "research-run",
+              sequence: index * 2 + 1,
+              type: "capability.succeeded",
+              public_summary: "公开来源核对完成。",
+              payload: {
+                capability: "web_search",
+                tool_call_id: `search-${index}`,
+                title: "联网搜索",
+                items: [{
+                  title: `公开来源 ${index}`,
+                  url: `https://example.test/source-${index}`,
+                  snippet: "可追溯的公开公告摘要。",
+                }],
+                ...presentation,
+              },
+              schema_version: "1.0",
+              timestamp: `2026-08-19T07:00:0${index + 2}Z`,
+            },
+          ])),
+          {
+            event_id: "research-complete",
+            run_id: "research-run",
+            sequence: 8,
+            type: "run.completed",
+            public_summary: "候选机会调研完成。",
+            payload: {},
+            schema_version: "1.0",
+            timestamp: "2026-08-19T07:00:06Z",
+          },
+        ],
+      }),
+    });
+  });
+  await page.route("**/runtime/runs?**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([{
+        id: "research-run",
+        kind: "assistant_turn",
+        status: "completed",
+        project_id: null,
+        project_name: null,
+        engine: "pi",
+        created_at: "2026-08-19T07:00:01Z",
+        started_at: "2026-08-19T07:00:01Z",
+        finished_at: "2026-08-19T07:00:06Z",
+        latest_event_summary: "候选机会调研完成。",
+      }]),
+    });
+  });
+
+  await page.goto("/agent?conversation=research-conversation");
+  await expect(page.getByText("已完成候选机会筛选，并保留可追溯来源。", { exact: true })).toBeVisible();
+  await expect(page.getByText("招标机会深度调研", { exact: true })).toHaveCount(1);
+
+  const parentGroup = page.locator(".cr-task-turn").first();
+  await parentGroup.locator(":scope > .cr-task-turn-summary").click();
+  await expect(page.getByLabel("深度调研运行状态")).toBeVisible();
+  await expect(parentGroup.locator(".cr-deep-research-process > summary")).toContainText("查看调研过程");
+  await expect(page.getByText("3 个可追溯来源", { exact: true })).toBeVisible();
+  await expect(parentGroup.locator(".cr-tool-step")).toHaveCount(0);
+
+  await page.screenshot({
+    path: testInfo.outputPath(`agent-workspace-${testInfo.project.name}-deep-research.png`),
+    fullPage: true,
+  });
+});

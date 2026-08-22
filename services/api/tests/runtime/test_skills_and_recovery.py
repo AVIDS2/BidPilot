@@ -99,3 +99,13 @@ def test_select_skill_names_only_validates_explicit_names() -> None:
     assert select_skill_names("bid-outline-first") == ["bid-outline-first"]
     assert select_skill_names(["opportunity-deep-research"]) == ["opportunity-deep-research"]
     assert select_skill_names("请起草执行摘要全部章节") == []
+
+
+def test_deep_research_skill_declares_its_runtime_presentation() -> None:
+    """The UI contract comes from Skill metadata, never message keywords."""
+    from app.runtime.skills import skill_metadata
+
+    metadata = skill_metadata("opportunity-deep-research")
+    assert metadata is not None
+    assert metadata.presentation == "deep_research"
+    assert metadata.presentation_title == "招标机会深度调研"

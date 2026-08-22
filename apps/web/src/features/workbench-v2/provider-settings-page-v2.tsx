@@ -6,8 +6,10 @@ import {
   ExternalLinkIcon,
   KeyRoundIcon,
   ListRestartIcon,
+  NetworkIcon,
   PlusIcon,
   RefreshCwIcon,
+  ShieldCheckIcon,
   Trash2Icon,
   WifiIcon,
 } from "lucide-react";
@@ -17,6 +19,8 @@ import { toast } from "sonner";
 import {
   createProviderConfig,
   deleteProviderConfig,
+  getPiModelCatalog,
+  getPiRuntimeContract,
   listProviderConfigs,
   listProviderModels,
   testProviderConnection,
@@ -24,6 +28,7 @@ import {
   type ProviderConfig,
   type ProviderConfigCreate,
   type ProviderModelInfo,
+  type PiCatalogModel,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ProviderBrandMark, type ProviderBrandId } from "@/features/settings/provider-brand-mark";
@@ -58,6 +63,7 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   { id: "minimax", label: "MiniMax", providerType: "openai", apiUrl: "https://api.minimax.io/v1", model: "MiniMax-M3", brand: "minimax" },
   { id: "siliconflow", label: "SiliconFlow", providerType: "openai", apiUrl: "https://api.siliconflow.cn/v1", model: "deepseek-ai/DeepSeek-V3", brand: "siliconflow" },
   { id: "openrouter", label: "OpenRouter", providerType: "openai", apiUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-4o-mini", brand: "openrouter" },
+  { id: "opencode-go", label: "OpenCode Go", providerType: "openai", apiUrl: "https://opencode.ai/zen/go/v1", model: "deepseek-v4-flash", brand: "custom-openai" },
   { id: "mimo", label: "Xiaomi MiMo", providerType: "openai", apiUrl: "https://api.xiaomimimo.com/v1", model: "mimo-v2.5-pro", brand: "mimo" },
   { id: "custom-anthropic", label: "Custom Claude Messages", providerType: "anthropic", apiUrl: "", model: "claude-sonnet-4-20250514", brand: "custom-anthropic" },
 ];
@@ -104,6 +110,8 @@ function protocolLabel(value: ProviderProtocol) {
 export function ProviderSettingsPageV2() {
   const queryClient = useQueryClient();
   const providersQuery = useQuery({ queryKey: ["provider-configs"], queryFn: listProviderConfigs });
+  const piCatalogQuery = useQuery({ queryKey: ["pi-model-catalog"], queryFn: getPiModelCatalog, staleTime: 60 * 60 * 1000 });
+  const piRuntimeQuery = useQuery({ queryKey: ["pi-runtime-contract"], queryFn: getPiRuntimeContract, staleTime: 5 * 60 * 1000 });
   const providers = providersQuery.data?.data ?? EMPTY_PROVIDERS;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<ProviderForm>(defaultForm);
@@ -115,6 +123,17 @@ export function ProviderSettingsPageV2() {
     () => findPreset(form.providerId, form.providerType),
     [form.providerId, form.providerType],
   );
+  const piModels = useMemo(() => {
+    const catalog = piCatalogQuery.data?.data;
+    if (!catalog) return [];
+    const providerAliases: Record<string, string[]> = {
+      mimo: ["mimo", "xiaomi"],
+      "custom-openai": [],
+      "custom-anthropic": [],
+    };
+    const providerIds = providerAliases[form.providerId] ?? [form.providerId];
+    return catalog.models.filter((model) => providerIds.includes(model.provider));
+  }, [form.providerId, piCatalogQuery.data]);
 
   const replaceForm = (provider: ProviderConfig | null) => {
     if (!provider) {
@@ -332,6 +351,10 @@ export function ProviderSettingsPageV2() {
           </div>
         </section>
 
+        {piRuntimeQuery.data?.data ? (
+          <PiRuntimeSummary contract={piRuntimeQuery.data.data} />
+        ) : null}
+
         <article className="wb-provider-editor">
           <header className="wb-provider-editor-head">
             <div className="wb-provider-editor-title">
@@ -361,6 +384,13 @@ export function ProviderSettingsPageV2() {
               <Field><FieldLabel htmlFor="provider-label">配置名称</FieldLabel><Input id="provider-label" onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} placeholder="例如：团队 DeepSeek" value={form.label} /></Field>
               <Field><FieldLabel htmlFor="provider-model">模型名称 / Endpoint ID</FieldLabel><Input id="provider-model" list="wb-provider-models" onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))} value={form.model} /><datalist id="wb-provider-models">{availableModels.map((model) => <option key={model.id} value={model.id}>{model.name ?? model.owned_by ?? model.id}</option>)}</datalist></Field>
             </div>
+            <PiCatalogPicker
+              loading={piCatalogQuery.isLoading}
+              models={piModels}
+              onSelect={(model) => setForm((current) => ({ ...current, model: model.id, apiUrl: current.apiUrl || model.base_url || "" }))}
+              providerId={form.providerId}
+              version={piCatalogQuery.data?.data.version}
+            />
             <Field><FieldLabel htmlFor="provider-url">Base URL / endpoint</FieldLabel><Input id="provider-url" onChange={(event) => setForm((current) => ({ ...current, apiUrl: event.target.value }))} placeholder="由预设带入，也可填写自定义网关地址" value={form.apiUrl} /></Field>
             <Field><FieldLabel htmlFor="provider-api-key">{selectedProvider ? "替换 API Key" : "API Key"}</FieldLabel><Input autoComplete="off" id="provider-api-key" onChange={(event) => setForm((current) => ({ ...current, apiKey: event.target.value }))} placeholder={selectedProvider ? "已加密保存；仅在需要更换时填写" : "仅用于本次保存，不会显示或写入浏览器存储"} type="password" value={form.apiKey} /><FieldDescription>{selectedProvider ? "留空会保留现有密钥。" : "新建配置时需要提供密钥。"}</FieldDescription></Field>
           </FieldGroup>
@@ -387,6 +417,71 @@ export function ProviderSettingsPageV2() {
         </article>
       </div>
       </main>
+    </section>
+  );
+}
+
+function PiRuntimeSummary({
+  contract,
+}: {
+  contract: Awaited<ReturnType<typeof getPiRuntimeContract>>["data"];
+}) {
+  const sandbox = contract.sandbox;
+  return (
+    <section className="wb-pi-runtime" aria-label="Pi Agent 运行边界">
+      <div className="wb-pi-runtime-heading">
+        <ShieldCheckIcon aria-hidden="true" />
+        <span><strong>Pi Agent 运行边界</strong><small>由服务端托管，浏览器无法扩大权限</small></span>
+      </div>
+      <dl>
+        <div><dt>沙箱</dt><dd>{sandbox.profile === "governed_cloud" ? "受治理云环境" : sandbox.profile}</dd></div>
+        <div><dt>主机工具</dt><dd>{sandbox.hostTools === "disabled" ? "关闭" : sandbox.hostTools}</dd></div>
+        <div><dt>网络</dt><dd><NetworkIcon aria-hidden="true" />{sandbox.network === "bridge_only" ? "仅业务桥接" : sandbox.network}</dd></div>
+        <div><dt>能力</dt><dd>{contract.tool_count} 个工具 · {contract.skills.length} 个技能</dd></div>
+      </dl>
+      <p>{contract.extensions.join(" · ")}</p>
+    </section>
+  );
+}
+
+function PiCatalogPicker({
+  loading,
+  models,
+  onSelect,
+  providerId,
+  version,
+}: {
+  loading: boolean;
+  models: PiCatalogModel[];
+  onSelect: (model: PiCatalogModel) => void;
+  providerId: string;
+  version?: string;
+}) {
+  if (loading) return <p className="wb-provider-catalog-note">正在读取 Pi 原生模型目录…</p>;
+  if (models.length === 0) {
+    return (
+      <p className="wb-provider-catalog-note">
+        {providerId.startsWith("custom-") ? "自定义网关使用手动模型名称。" : "Pi 目录未列出该提供商的模型，仍可手动填写。"}
+      </p>
+    );
+  }
+  return (
+    <section className="wb-provider-catalog" aria-label="Pi 原生模型目录">
+      <div><strong>Pi 原生模型目录</strong><small>pi-ai {version} · {models.length} 个模型</small></div>
+      <div className="wb-provider-catalog-list">
+        {models.slice(0, 12).map((model) => (
+          <Button
+            key={`${model.provider}:${model.id}`}
+            onClick={() => onSelect(model)}
+            title={`${model.name} · ${model.context_window.toLocaleString()} context${model.reasoning ? " · reasoning" : ""}`}
+            type="button"
+            variant="ghost"
+          >
+            <span>{model.name}</span>
+            <small>{model.reasoning ? "推理" : model.api}</small>
+          </Button>
+        ))}
+      </div>
     </section>
   );
 }

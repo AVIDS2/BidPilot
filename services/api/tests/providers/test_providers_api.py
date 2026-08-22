@@ -1,6 +1,7 @@
 """Test provider configuration CRUD API."""
 from app.models import ProviderConfig
 from app.security.secrets import decrypt_secret, is_encrypted_secret
+from app.providers.schemas import PiModelCatalogResponse
 
 
 def test_create_provider_config(client, default_org_id, default_user_id):
@@ -55,6 +56,52 @@ def test_list_provider_configs(client, default_org_id, default_user_id):
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert len(data) >= 1
+
+
+def test_pi_model_catalog_route_precedes_dynamic_config_route(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.providers.router.list_pi_model_catalog",
+        lambda: PiModelCatalogResponse.model_validate(
+            {
+                "source": "pi-ai",
+                "version": "0.84.2",
+                "providers": [{"id": "deepseek", "name": "DeepSeek"}],
+                "models": [
+                    {
+                        "id": "deepseek-chat",
+                        "name": "DeepSeek Chat",
+                        "provider": "deepseek",
+                        "api": "openai-completions",
+                        "reasoning": False,
+                        "input": ["text"],
+                        "contextWindow": 64000,
+                        "maxTokens": 8192,
+                        "cost": {},
+                    }
+                ],
+            }
+        ),
+    )
+
+    response = client.get("/auth/me/providers/catalog")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["source"] == "pi-ai"
+    assert response.json()["data"]["models"][0]["id"] == "deepseek-chat"
+
+
+def test_pi_runtime_contract_exposes_governed_server_boundary(client):
+    response = client.get("/auth/me/providers/runtime")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["sandbox"]["profile"] == "governed_cloud"
+    assert data["sandbox"]["hostTools"] == "disabled"
+    assert data["sandbox"]["network"] == "bridge_only"
+    assert data["tool_count"] > 0
+    assert data["parallel_tool_count"] > 0
+    assert "bidpilot-subagents" in data["extensions"]
+    assert data["skills"]
 
 
 def test_delete_provider_config(client, default_org_id, default_user_id):

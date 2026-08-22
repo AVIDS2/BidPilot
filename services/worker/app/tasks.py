@@ -5,6 +5,7 @@ import json
 import httpx
 from celery.exceptions import Retry
 from datetime import UTC, datetime
+from urllib.parse import parse_qs, urlparse
 
 from sqlalchemy import select
 
@@ -28,7 +29,7 @@ from app.execution.task_outbox import (
     recover_pending_task_outbox_events,
 )
 from app.models import ExecutionRun
-from app.models import Bundle, RuntimeRun, User
+from app.models import Bundle, Notification, RuntimeRun, User
 from app.auth.schemas import CurrentUser
 from app.documents.web_import import download_remote_artifact_to_tempfile
 from app.documents.service import upload_artifact_file_command, upload_document_command
@@ -47,7 +48,7 @@ from app.runtime.events import (
 )
 from contracts.document_ingestion import MAX_SOURCE_DOCUMENT_BYTES, canonical_source_document_mime_type, source_document_is_parseable
 from contracts.pi_runtime import pi_model_api, pi_thinking_level
-from contracts.pi_bridge import encode_pi_bridge_token
+from contracts.pi_bridge import encode_agent_wake_token, encode_pi_bridge_token
 from contracts.runtime import RuntimeEventType, RuntimeRunStatus
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,62 @@ def _retry_transient_bundle_index(task, bundle_id: str) -> bool:
 @celery_app.task(name="worker.ping")
 def ping() -> str:
     return "pong"
+
+
+def _wake_run_id(link: str | None) -> str | None:
+    if not link:
+        return None
+    parsed = urlparse(link)
+    if not parsed.path.startswith("/agent"):
+        return None
+    value = parse_qs(parsed.query).get("wake", [None])[0]
+    return value if isinstance(value, str) and value else None
+
+
+@celery_app.task(name="worker.resume_agent_wake", bind=True, max_retries=5)
+def resume_agent_wake(self, wake_run_id: str) -> dict[str, object]:
+    """Deliver one durable completion observation to the parent Pi session."""
+    secret = os.getenv("DOCPILOT_PI_INTERNAL_SECRET") or os.getenv("DOCPILOT_JWT_SECRET")
+    if not secret:
+        raise RuntimeError("Pi internal wake secret is not configured")
+    token = encode_agent_wake_token(wake_run_id=wake_run_id, secret=secret)
+    api_url = os.getenv("DOCPILOT_INTERNAL_API_URL", "http://api:8000").rstrip("/")
+    try:
+        response = httpx.post(
+            f"{api_url}/internal/pi/wakes/resume",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"wake_run_id": wake_run_id},
+            timeout=httpx.Timeout(connect=10.0, read=900.0, write=30.0, pool=30.0),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {"status": "completed"}
+    except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
+        status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        if status is not None and status < 500:
+            return {"status": "rejected", "wake_run_id": wake_run_id, "http_status": status}
+        raise self.retry(exc=exc, countdown=min(60, 2 ** int(self.request.retries)))
+
+
+@celery_app.task(name="worker.recover_agent_wakes")
+def recover_agent_wakes() -> dict[str, object]:
+    """Redispatch unread wakes; the API idempotency key absorbs duplicates."""
+    db = SessionLocal()
+    try:
+        notifications = list(
+            db.scalars(
+                select(Notification)
+                .where(Notification.type == "agent_task", Notification.read.is_(False))
+                .order_by(Notification.created_at.asc())
+                .limit(50)
+            )
+        )
+        wake_ids = [wake_id for item in notifications if (wake_id := _wake_run_id(item.link))]
+    finally:
+        db.close()
+    for wake_id in dict.fromkeys(wake_ids):
+        celery_app.send_task("worker.resume_agent_wake", args=[wake_id])
+    return {"status": "dispatched", "count": len(set(wake_ids))}
 
 
 @celery_app.task(name="worker.run_subagent", bind=True, max_retries=120)

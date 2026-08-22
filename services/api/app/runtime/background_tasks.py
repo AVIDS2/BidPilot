@@ -26,6 +26,7 @@ def collect_completed_notifications(
     conversation_id: str,
     user_id: str,
     limit: int = 20,
+    wake_runtime_run_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Consume durable workflow wakes for one conversation.
 
@@ -50,6 +51,8 @@ def collect_completed_notifications(
     for notification in notifications:
         runtime_run_id = _runtime_run_id_from_wake_link(notification.link, conversation_id)
         if runtime_run_id is None:
+            continue
+        if wake_runtime_run_id is not None and runtime_run_id != wake_runtime_run_id:
             continue
         runtime_run = db.scalar(
             select(RuntimeRun).where(

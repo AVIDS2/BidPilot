@@ -1,6 +1,6 @@
 # Assistant Harness Runtime Boundary
 
-> Status: Pi `AgentSession`, trusted dynamic resources, governed cloud sandbox, foreground/background subagent delegation, and browser-verified parent/child closure implemented locally, 2026-08-19
+> Status: Pi `AgentSession`, trusted dynamic resources, governed cloud sandbox, asynchronous subagent delegation, durable system wake, and browser-verified parent/child projection implemented locally, 2026-08-19
 
 ## Purpose
 
@@ -148,16 +148,41 @@ The model receives child run IDs, profiles, queue state and the resumable next
 step; the browser can render the parent/child relationship from durable
 runtime events instead of a synthetic progress card.
 
-Foreground delegation is the default: after the API enqueues children, the
-bridge briefly joins their durable terminal observations back into the same Pi
-tool result. The parent therefore continues reasoning in the current turn and
-can summarize real child output without a second user message. The wait is
-bounded; if a child is still running, the model receives `waiting` plus durable
-run IDs and the normal wake notification path remains available. `background`
-is only an explicit asynchronous choice. Raw child prompts, bridge tokens,
-private thinking and tool payloads are never projected to the user. Chain
-workers wait for their dependency before claiming the outbox lease, so a normal
-long-running predecessor cannot turn the successor into a duplicate delivery.
+Delegation is always asynchronous at the HTTP bridge boundary. After the API
+creates the durable children and outbox records, it immediately returns their
+run IDs and queued state to Pi. The request handler never polls or joins child
+results, because doing so would block sidecar streaming and prevent the browser
+from observing the children while they run.
+
+When a child reaches a terminal state, Worker writes a durable notification for
+the exact parent conversation and source run. A signed, idempotent system-wake
+task resumes Pi with that trusted terminal observation. This is a system event,
+not a synthetic user message: no text such as "continue the background task" is
+inserted into chat history and no browser-side keyword triggers a follow-up.
+The browser may refresh an already open conversation after receiving the same
+notification, but it is not responsible for continuing the model loop. Raw
+child prompts, bridge tokens, private thinking and tool payloads are never
+projected to the user. Chain workers wait for their dependency before claiming
+the outbox lease, so a normal long-running predecessor cannot turn the successor
+into a duplicate delivery.
+
+### Browser execution projection
+
+The browser projects durable runtime events; it does not infer product modes
+from assistant prose, user wording, or tool-name substring matching. Ordinary
+tool calls remain chronological execution rows. A Skill may additionally
+declare a trusted `presentation` contract. The API copies that metadata and a
+stable presentation-session ID onto related runtime events so the browser can
+render one purpose-built runtime surface across multiple tool bursts.
+
+`opportunity-deep-research`, for example, declares `presentation=deep_research`.
+Its searches, source checks, evidence extraction and synthesis render as one
+collapsible research runtime with stages and source progress, rather than a
+flat wall of identical search rows. An ordinary standalone web search keeps the
+standard row. Parallel subagents render as a paged parent/child viewer with
+live child status and expandable public steps. Presentation metadata affects
+only UI projection; it does not select a Skill, invoke a tool, or alter Pi's
+decision loop.
 
 Market packages such as `nicobailon/pi-subagents` and `tintinweb/pi-subagents`
 were reviewed for interaction ideas (async delegation, parallel reviewers,
@@ -278,6 +303,30 @@ workflow execution traces. Each event has:
 
 - `event_id`, `run_id`, optional `parent_event_id`
 - monotonic `sequence` within one run
+
+### Browser event projection
+
+The browser projects the durable event stream; it does not infer intent from
+message text, capability names, or business keywords.
+
+- Public narration and execution groups remain in their original chronology:
+  `narration -> execution group -> narration -> execution group`. A Pi model
+  turn may therefore produce more than one visual execution group when public
+  narration occurs between tool bursts.
+- `executionGroupId` is a frontend projection identity. It separates visual
+  tool bursts without changing Pi turns or the runtime event schema. Persisted
+  legacy traces without this identity fall back to `turn_id` once.
+- Parent and child execution are linked only by durable `run_id` and
+  `parent_run_id`. Child runs inherit the parent message and visual execution
+  group, while retaining their own runtime identity for nested status and tool
+  lifecycle rendering.
+- Parallel child runs use a flat, paged subagent viewer inside the parent
+  execution group. Each page exposes one child's current state and expandable
+  public tool steps. It never exposes private reasoning, raw tool envelopes, or
+  bridge credentials.
+- Every execution level is collapsed by default. Running states remain visible
+  in the summary row, and a live response retains a visible activity indicator
+  while waiting for the next durable event.
 - `created_at`, `type`, `public_summary`, and redacted `payload`
 
 Core events are `run.started`, `plan.updated`, `capability.*`,

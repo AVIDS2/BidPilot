@@ -291,7 +291,7 @@ describe("runtime event feed", () => {
     expect(events).toEqual([]);
   });
 
-  it("does not replay retired generic Harness narration", () => {
+  it("preserves Harness-authored narration without matching its text", () => {
     const events = runtimeEventToAssistantEvents(
       runtimeEvent({
         type: "reasoning.delta",
@@ -301,7 +301,17 @@ describe("runtime event feed", () => {
       "conversation-1",
     );
 
-    expect(events).toEqual([]);
+    expect(events).toEqual([
+      {
+        eventType: "assistant.reasoning",
+        data: expect.objectContaining({
+          content: "为推进当前任务，我先导出交付物，再根据真实结果决定下一步。",
+          runtime_run_id: "runtime-1",
+          runtime_sequence: 2,
+          turn_id: "turn-1",
+        }),
+      },
+    ]);
   });
 
   it("treats an entity-relation proposal as a workflow without exposing source details", () => {
@@ -461,6 +471,55 @@ describe("runtime event feed", () => {
         summary: "子 Agent 已完成 web_search。",
         state: "completed",
       },
+    }]);
+  });
+
+  it("maps a structured deep-research session without inspecting narration", () => {
+    const [started] = runtimeEventToAssistantEvents(runtimeEvent({
+      type: "plan.updated",
+      public_summary: "已加载调研方法。",
+      payload: {
+        stage: "task_started",
+        task_title: "招标机会深度调研",
+        presentation_kind: "deep_research",
+        presentation_session_id: "research-session-1",
+        presentation_title: "招标机会深度调研",
+      },
+    }));
+
+    expect(started).toEqual({
+      eventType: "assistant.task_started",
+      data: expect.objectContaining({
+        presentation_kind: "deep_research",
+        presentation_session_id: "research-session-1",
+        presentation_title: "招标机会深度调研",
+      }),
+    });
+  });
+
+  it("maps child identities as soon as durable subagents are created", () => {
+    const events = runtimeEventToAssistantEvents(runtimeEvent({
+      type: "capability.progressed",
+      public_summary: "已派生 2 个子 Agent。",
+      payload: {
+        capability: "subagent",
+        phase: "children_spawned",
+        children: [
+          { run_id: "child-1", profile: "researcher", status: "queued" },
+          { run_id: "child-2", profile: "reviewer", status: "queued" },
+        ],
+      },
+    }));
+
+    expect(events).toEqual([{
+      eventType: "assistant.subagents_spawned",
+      data: expect.objectContaining({
+        runtime_run_id: "runtime-1",
+        children: expect.arrayContaining([
+          expect.objectContaining({ run_id: "child-1" }),
+          expect.objectContaining({ run_id: "child-2" }),
+        ]),
+      }),
     }]);
   });
 });

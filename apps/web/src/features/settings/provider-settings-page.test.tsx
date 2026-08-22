@@ -12,6 +12,7 @@ vi.mock("@/lib/api", () => ({
   deleteProviderConfig: vi.fn(),
   testProviderConnection: vi.fn(),
   listProviderModels: vi.fn(),
+  getPiModelCatalog: vi.fn().mockResolvedValue({ data: { source: "pi-ai", version: "0.84.2", providers: [], models: [] } }),
 }));
 
 function renderWithProviders(ui: React.ReactElement) {

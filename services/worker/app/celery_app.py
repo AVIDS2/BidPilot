@@ -44,6 +44,10 @@ celery_app.conf.update(
 )
 
 celery_app.conf.beat_schedule = {
+    "recover-agent-wakes-every-10-seconds": {
+        "task": "worker.recover_agent_wakes",
+        "schedule": 10.0,
+    },
     "deliver-business-webhooks-every-30-seconds": {
         "task": "worker.deliver_due_webhooks",
         "schedule": 30.0,

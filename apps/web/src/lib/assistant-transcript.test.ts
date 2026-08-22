@@ -6,6 +6,7 @@ import {
   buildTranscriptTurns,
   ensureTurnPart,
   narrativeTextFromParts,
+  projectExecutionItemsOntoTranscript,
 } from "@/lib/assistant-transcript";
 
 function item(partial: Partial<AssistantExecutionItem> & Pick<AssistantExecutionItem, "id" | "title">): AssistantExecutionItem {
@@ -78,6 +79,71 @@ describe("interleaved transcript parts", () => {
     let parts = ensureTurnPart(undefined, "turn-1");
     parts = ensureTurnPart(parts, "turn-1");
     expect(parts).toHaveLength(1);
+  });
+
+  it("opens a new execution group after public narration even when Pi keeps the same turn id", () => {
+    let parts = ensureTurnPart(undefined, "turn-1", 1, 1);
+    parts = appendNarrativePart(parts, "第一批工具完成，我继续核对。", 2);
+    parts = ensureTurnPart(parts, "turn-1", 3, 3);
+
+    expect(parts.map((part) => part.kind)).toEqual(["turn", "narrative", "turn"]);
+    const turns = parts.filter((part) => part.kind === "turn");
+    expect(turns[0].executionGroupId).not.toBe(turns[1].executionGroupId);
+  });
+
+  it("projects tools onto chronological groups without inspecting message text", () => {
+    const parts = [
+      { id: "group-1", kind: "turn" as const, turnId: "same-turn", executionGroupId: "group-1", timestamp: 1 },
+      { id: "narrative", kind: "narrative" as const, text: "继续下一阶段。", timestamp: 2 },
+      { id: "group-2", kind: "turn" as const, turnId: "same-turn", executionGroupId: "group-2", timestamp: 3 },
+    ];
+    const projection = projectExecutionItemsOntoTranscript(parts, [
+      item({ id: "first", title: "第一次执行", executionGroupId: "group-1", turnId: "same-turn" }),
+      item({ id: "second", title: "第二次执行", executionGroupId: "group-2", turnId: "same-turn" }),
+      item({ id: "orphan", title: "未归属执行" }),
+    ]);
+
+    expect(projection.itemsByPartId.get("group-1")?.map((entry) => entry.id)).toEqual(["first"]);
+    expect(projection.itemsByPartId.get("group-2")?.map((entry) => entry.id)).toEqual(["second"]);
+    expect(projection.orphanItems.map((entry) => entry.id)).toEqual(["orphan"]);
+  });
+
+  it("keeps one structured research runtime across public progress narration", () => {
+    const parts = [
+      { id: "group-1", kind: "turn" as const, turnId: "turn-1", executionGroupId: "group-1", timestamp: 1 },
+      { id: "narrative", kind: "narrative" as const, text: "已经找到第一批来源。", timestamp: 2 },
+      { id: "group-2", kind: "turn" as const, turnId: "turn-1", executionGroupId: "group-2", timestamp: 3 },
+    ];
+    const projection = projectExecutionItemsOntoTranscript(parts, [
+      item({
+        id: "research-runtime",
+        title: "招标机会深度调研",
+        executionGroupId: "group-1",
+        presentationKind: "deep_research",
+        presentationSessionId: "research-1",
+      }),
+      item({
+        id: "search-1",
+        title: "联网搜索",
+        executionGroupId: "group-1",
+        presentationKind: "deep_research",
+        presentationSessionId: "research-1",
+      }),
+      item({
+        id: "search-2",
+        title: "联网搜索",
+        executionGroupId: "group-2",
+        presentationKind: "deep_research",
+        presentationSessionId: "research-1",
+      }),
+    ]);
+
+    expect(projection.itemsByPartId.get("group-1")?.map((entry) => entry.id)).toEqual([
+      "research-runtime",
+      "search-1",
+      "search-2",
+    ]);
+    expect(projection.itemsByPartId.get("group-2")).toBeUndefined();
   });
 
   it("uses the server-provided completion summary for a completed tool", () => {

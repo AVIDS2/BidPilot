@@ -13,7 +13,9 @@ from .service import (
     list_provider_configs, get_provider_config, create_provider_config,
     update_provider_config, delete_provider_config, test_connection,
     list_provider_models, mask_read_config,
+    list_pi_model_catalog,
 )
+from app.runtime.pi_config import pi_execution_contract
 
 router = APIRouter(prefix="/auth/me/providers", tags=["providers"], dependencies=[Depends(require_auth)])
 
@@ -33,6 +35,37 @@ def create_provider(payload: ProviderConfigCreate, user=Depends(require_auth), d
     except (SecretConfigurationError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"data": mask_read_config(config)}
+
+
+@router.get("/catalog")
+def get_pi_model_catalog(user=Depends(require_auth)):
+    """Return pi-ai's built-in provider/model directory, with no credentials."""
+    try:
+        result = list_pi_model_catalog()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"data": result.model_dump()}
+
+
+@router.get("/runtime")
+def get_pi_runtime_contract(user=Depends(require_auth)):
+    """Expose the server-owned Pi execution boundary without credentials or secrets."""
+    contract = pi_execution_contract()
+    resources = contract.get("resources") or {}
+    sandbox = contract.get("sandbox") or {}
+    tools = contract.get("tools") or []
+    return {
+        "data": {
+            "version": contract.get("version"),
+            "sandbox": sandbox,
+            "extensions": resources.get("extensions") or [],
+            "skills": resources.get("skills") or [],
+            "tool_count": len(tools),
+            "parallel_tool_count": sum(
+                1 for tool in tools if tool.get("executionMode") == "parallel"
+            ),
+        }
+    }
 
 
 @router.get("/{config_id}")

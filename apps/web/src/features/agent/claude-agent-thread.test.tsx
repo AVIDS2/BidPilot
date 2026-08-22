@@ -184,7 +184,7 @@ describe("ClaudeAgentThread", () => {
     expect(screen.getAllByText(/先确认项目范围，再读取大纲。/)).toHaveLength(1);
   });
 
-  it("groups multiple model turns under one parent task timeline", () => {
+  it("renders report, execution group, report, execution group in event order", () => {
     const state = createState();
     state.messages[1] = {
       ...state.messages[1],
@@ -200,13 +200,14 @@ describe("ClaudeAgentThread", () => {
           completed: true,
           timestamp: 2,
         },
-        { id: "turn-1", kind: "turn", turnId: "turn-search-1", timestamp: 3 },
-        { id: "turn-2", kind: "turn", turnId: "turn-search-2", timestamp: 4 },
+        { id: "group-1", kind: "turn", turnId: "turn-search", executionGroupId: "group-1", timestamp: 3 },
+        { id: "progress-report", kind: "narrative", text: "第一批来源已核对，继续检查公告。", timestamp: 4 },
+        { id: "group-2", kind: "turn", turnId: "turn-search", executionGroupId: "group-2", timestamp: 5 },
       ],
     };
     state.executionItems = [
-      { ...state.executionItems[0], id: "search-1", turnId: "turn-search-1", toolName: "web_search" },
-      { ...state.executionItems[0], id: "search-2", turnId: "turn-search-2", toolName: "web_search" },
+      { ...state.executionItems[0], id: "search-1", turnId: "turn-search", executionGroupId: "group-1", toolName: "first_search" },
+      { ...state.executionItems[0], id: "search-2", turnId: "turn-search", executionGroupId: "group-2", toolName: "second_search" },
     ];
 
     render(
@@ -219,8 +220,32 @@ describe("ClaudeAgentThread", () => {
       />,
     );
 
-    expect(screen.getAllByTestId("assistant-timeline")).toHaveLength(1);
-    expect(screen.getByText("招标机会调研: web_search,web_search")).toBeInTheDocument();
+    const blocks = screen.getByLabelText("任务执行轨迹").children;
+    expect(screen.getAllByTestId("assistant-timeline")).toHaveLength(2);
+    expect(Array.from(blocks).map((node) => node.textContent).filter(Boolean)).toEqual([
+      "招标机会调研: first_search",
+      "第一批来源已核对，继续检查公告。",
+      "second_search",
+    ]);
+  });
+
+  it("keeps a visible live indicator after narration while the next event is pending", () => {
+    const state = createState();
+    state.isStreaming = true;
+    state.activeAssistantMessageId = "assistant-1";
+    state.executionItems = [];
+
+    render(
+      <ClaudeAgentThread
+        state={state}
+        onCancelWorkflow={vi.fn().mockResolvedValue(undefined)}
+        onConfigureProvider={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancelConfirmation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Thinking")).toBeInTheDocument();
   });
 
   it("sends user retry through the durable checkpoint action", () => {

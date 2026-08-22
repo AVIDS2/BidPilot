@@ -32,7 +32,23 @@ export type AssistantTranscriptPart =
       completed: boolean;
       timestamp: number;
     }
-  | { id: string; kind: "turn"; turnId: string; timestamp: number };
+  | {
+      id: string;
+      kind: "turn";
+      turnId: string;
+      /**
+       * Frontend-only projection identity for one continuous tool burst.
+       * A single Pi model turn may contain several tool bursts separated by
+       * public narration, so turnId alone is not a visual grouping key.
+       */
+      executionGroupId?: string;
+      timestamp: number;
+    };
+
+export interface TranscriptExecutionProjection {
+  itemsByPartId: Map<string, AssistantExecutionItem[]>;
+  orphanItems: AssistantExecutionItem[];
+}
 
 /**
  * Aggregate flat execution items into L1 turns.
@@ -50,6 +66,7 @@ export function buildTranscriptTurns(items: AssistantExecutionItem[]): Transcrip
 
   for (const item of items) {
     const key =
+      item.executionGroupId ||
       item.turnId ||
       (item.runtimeRunId ? `run:${item.runtimeRunId}` : undefined) ||
       item.toolCallId ||
@@ -179,22 +196,110 @@ export function completeReasoningPart(
   return next;
 }
 
-/** Ensure a turn block exists after the current narrative so tools render mid-stream. */
+/**
+ * Ensure a visual execution group exists at the current chronological
+ * position. Consecutive tools reuse the open group; any narrative/reasoning
+ * part closes that visual position, so the next tool opens a new group even
+ * when Pi keeps the same model turnId.
+ */
 export function ensureTurnPart(
   parts: AssistantTranscriptPart[] | undefined,
   turnId: string,
   now = Date.now(),
+  identitySeed?: string | number,
 ): AssistantTranscriptPart[] {
   const next = parts ? [...parts] : [];
-  const existing = next.find((part) => part.kind === "turn" && part.turnId === turnId);
-  if (existing) return next;
+  const last = next[next.length - 1];
+  if (last?.kind === "turn" && last.turnId === turnId) return next;
+  const seed = identitySeed === undefined ? `${now}-${next.length}` : String(identitySeed);
+  const executionGroupId = `execution-group-${turnId}-${seed}`;
   next.push({
-    id: `turn-${turnId}`,
+    id: executionGroupId,
     kind: "turn",
     turnId,
+    executionGroupId,
     timestamp: now,
   });
   return next;
+}
+
+/**
+ * Project execution items onto chronological transcript positions without
+ * inspecting user or model text. New events use executionGroupId; persisted
+ * legacy messages fall back to turnId exactly once.
+ */
+export function projectExecutionItemsOntoTranscript(
+  parts: AssistantTranscriptPart[] | undefined,
+  items: AssistantExecutionItem[],
+): TranscriptExecutionProjection {
+  // A feature runtime is one visual unit even when Pi narrates between its
+  // tool calls. The server-issued presentation session, not chat text or tool
+  // names, identifies which later events belong under its first timeline row.
+  const presentationGroups = new Map<string, string>();
+  for (const item of items) {
+    if (
+      item.presentationSessionId &&
+      item.presentationKind &&
+      item.executionGroupId &&
+      !presentationGroups.has(item.presentationSessionId)
+    ) {
+      presentationGroups.set(item.presentationSessionId, item.executionGroupId);
+    }
+  }
+  const projectedItems = items.map((item) => {
+    const presentationGroup = item.presentationSessionId
+      ? presentationGroups.get(item.presentationSessionId)
+      : undefined;
+    return presentationGroup && item.executionGroupId !== presentationGroup
+      ? { ...item, executionGroupId: presentationGroup }
+      : item;
+  });
+  const itemsByPartId = new Map<string, AssistantExecutionItem[]>();
+  const itemsByGroup = new Map<string, AssistantExecutionItem[]>();
+  const legacyItemsByTurn = new Map<string, AssistantExecutionItem[]>();
+
+  for (const item of projectedItems) {
+    if (item.executionGroupId) {
+      const grouped = itemsByGroup.get(item.executionGroupId) ?? [];
+      grouped.push(item);
+      itemsByGroup.set(item.executionGroupId, grouped);
+      continue;
+    }
+    if (item.turnId) {
+      const grouped = legacyItemsByTurn.get(item.turnId) ?? [];
+      grouped.push(item);
+      legacyItemsByTurn.set(item.turnId, grouped);
+    }
+  }
+
+  const consumedGroups = new Set<string>();
+  const consumedLegacyTurns = new Set<string>();
+  for (const part of parts ?? []) {
+    if (part.kind !== "turn") continue;
+    if (part.executionGroupId) {
+      const grouped = itemsByGroup.get(part.executionGroupId) ?? [];
+      if (grouped.length > 0) {
+        itemsByPartId.set(part.id, grouped);
+        consumedGroups.add(part.executionGroupId);
+      }
+      continue;
+    }
+    if (consumedLegacyTurns.has(part.turnId)) continue;
+    const grouped = legacyItemsByTurn.get(part.turnId) ?? [];
+    if (grouped.length > 0) {
+      itemsByPartId.set(part.id, grouped);
+      consumedLegacyTurns.add(part.turnId);
+    }
+  }
+
+  return {
+    itemsByPartId,
+    orphanItems: projectedItems.filter((item) => {
+      if (item.executionGroupId) return !consumedGroups.has(item.executionGroupId);
+      if (item.turnId) return !consumedLegacyTurns.has(item.turnId);
+      return true;
+    }),
+  };
 }
 
 export function narrativeTextFromParts(parts: AssistantTranscriptPart[] | undefined): string {

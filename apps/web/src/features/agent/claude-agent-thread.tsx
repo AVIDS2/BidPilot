@@ -201,9 +201,16 @@ function ClaudeUserMessage({
   );
 }
 
-function ThinkingIndicator() {
+function ThinkingIndicator({ started = false }: { started?: boolean }) {
+  if (started) {
+    return (
+      <span className="cr-thinking-copy" aria-label="正在思考">
+        正在思考
+      </span>
+    );
+  }
   return (
-    <span className="cr-thinking-indicator" aria-label="Thinking">
+    <span className="cr-thinking-indicator" aria-label="等待首个响应">
       <i />
       <i />
       <i />
@@ -213,24 +220,27 @@ function ThinkingIndicator() {
 
 function ClaudeReasoning({
   part,
+  forceCompleted = false,
 }: {
   part: Extract<AssistantTranscriptPart, { kind: "reasoning" }>;
+  forceCompleted?: boolean;
 }) {
-  const [open, setOpen] = useState(() => !part.completed);
+  const completed = part.completed || forceCompleted;
+  const [open, setOpen] = useState(() => !completed);
   // A live stream stays open while reasoning; the moment it completes the
   // block collapses. After that the reader is free to expand/collapse.
-  const wasCompleted = useRef(part.completed);
+  const wasCompleted = useRef(completed);
   useEffect(() => {
-    if (part.completed && !wasCompleted.current) {
+    if (completed && !wasCompleted.current) {
       setOpen(false);
     }
-    wasCompleted.current = part.completed;
-  }, [part.completed]);
+    wasCompleted.current = completed;
+  }, [completed]);
 
   return (
     <section
-      className={`cr-reasoning${part.completed ? " is-complete" : ""}${open ? " is-open" : ""}`}
-      aria-label={part.completed ? "已完成推理" : "正在推理"}
+      className={`cr-reasoning${completed ? " is-complete" : ""}${open ? " is-open" : ""}`}
+      aria-label={completed ? "思考过程" : "正在思考"}
     >
       <button
         type="button"
@@ -239,7 +249,9 @@ function ClaudeReasoning({
         onClick={() => setOpen((current) => !current)}
       >
         <span className="cr-reasoning-status" aria-hidden="true"><i /></span>
-        <span>{part.title || (part.completed ? "已完成推理" : "正在推理")}</span>
+        <span className={completed ? undefined : "cr-thinking-copy"}>
+          {part.title || (completed ? "思考过程" : "正在思考")}
+        </span>
         <ChevronDownIcon size={12} className="cr-reasoning-chevron" />
       </button>
       <div className="cr-reasoning-collapse">
@@ -319,10 +331,32 @@ function ClaudeAssistantMessage({
   const hasNarrativePart = parts.some((part) => part.kind === "narrative" && part.text);
   const isTimelineTitle = (part: Extract<AssistantTranscriptPart, { kind: "reasoning" }>) =>
     Boolean(part.turnId && part.title && part.title.trim() === part.text.trim());
-  const firstTurnPartId = useMemo(
-    () => parts.find((part) => part.kind === "turn")?.id,
+  const turnIds = useMemo(
+    () => new Set(parts.flatMap((part) => (part.kind === "turn" ? [part.turnId] : []))),
     [parts],
   );
+  const toolsByTurn = useMemo(() => {
+    const groups = new Map<string, AssistantExecutionItem[]>();
+    for (const item of activityItems) {
+      if (!item.turnId) continue;
+      const items = groups.get(item.turnId) ?? [];
+      items.push(item);
+      groups.set(item.turnId, items);
+    }
+    return groups;
+  }, [activityItems]);
+  const orphanTools = useMemo(
+    () => activityItems.filter((item) => !item.turnId || !turnIds.has(item.turnId)),
+    [activityItems, turnIds],
+  );
+  const titlesByTurn = useMemo(() => {
+    const titles = new Map<string, string>();
+    for (const part of parts) {
+      if (part.kind !== "reasoning" || !part.turnId || !part.title) continue;
+      titles.set(part.turnId, part.title);
+    }
+    return titles;
+  }, [parts]);
   const orphanTaskTitle = useMemo(
     () => parts.find(
       (part): part is Extract<AssistantTranscriptPart, { kind: "reasoning" }> =>
@@ -330,6 +364,16 @@ function ClaudeAssistantMessage({
     )?.title,
     [parts],
   );
+  const hasLiveTrace =
+    activityItems.some((item) => item.status === "pending" || item.status === "running") ||
+    parts.some(
+      (part) =>
+        part.kind === "reasoning" && !part.completed,
+    );
+  const hasActiveExecution = activityItems.some(
+    (item) => item.status === "pending" || item.status === "running",
+  );
+  const hasAssistantOutput = Boolean(message.content || hasNarrativePart);
 
   const copyResponse = () => {
     const value = message.content || parts
@@ -372,14 +416,20 @@ function ClaudeAssistantMessage({
             // owns that title, so rendering it here as well creates a duplicate
             // trace row. Untitled or explanatory narration remains visible.
             if (part.kind === "reasoning") {
-              return isTimelineTitle(part) ? null : <ClaudeReasoning key={part.id} part={part} />;
+              return isTimelineTitle(part) ? null : (
+                <ClaudeReasoning
+                  key={part.id}
+                  part={part}
+                  forceCompleted={hasActiveExecution}
+                />
+              );
             }
-            if (part.id !== firstTurnPartId) return null;
-            return activityItems.length ? (
-              <ClaudeActivityTimeline
-                key={part.id}
-                items={activityItems}
-                taskTitle={orphanTaskTitle}
+            const items = toolsByTurn.get(part.turnId) ?? [];
+            return items.length ? (
+                <ClaudeActivityTimeline
+                  key={part.id}
+                  items={items}
+                  taskTitle={titlesByTurn.get(part.turnId)}
                 nested
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
@@ -387,9 +437,9 @@ function ClaudeAssistantMessage({
               />
             ) : null;
           })}
-          {!firstTurnPartId && activityItems.length > 0 && (
+          {orphanTools.length > 0 && (
             <ClaudeActivityTimeline
-              items={activityItems}
+              items={orphanTools}
               taskTitle={orphanTaskTitle}
               nested
               onCancelWorkflow={onCancelWorkflow}
@@ -398,7 +448,7 @@ function ClaudeAssistantMessage({
             />
           )}
           {message.content && !hasNarrativePart && renderNarrative(message.content, `${message.id}-durable`) }
-          {!message.content && parts.every((part) => part.kind !== "narrative") && isStreaming && <ThinkingIndicator />}
+          {isStreaming && !hasLiveTrace && <ThinkingIndicator started={hasAssistantOutput} />}
         </>
       ) : (
         <>
@@ -410,7 +460,8 @@ function ClaudeAssistantMessage({
               onOpenWorkflowCanvas={onOpenWorkflowCanvas}
             />
           )}
-          {message.content ? renderNarrative(message.content, message.id) : isStreaming ? <ThinkingIndicator /> : null}
+          {message.content ? renderNarrative(message.content, message.id) : null}
+          {isStreaming && !hasLiveTrace ? <ThinkingIndicator started={hasAssistantOutput} /> : null}
         </>
       )}
       {!isStreaming && (message.content || parts.some((part) => part.kind === "narrative" && part.text)) && (

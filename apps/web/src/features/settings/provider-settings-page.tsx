@@ -8,9 +8,11 @@ import {
   deleteProviderConfig,
   testProviderConnection,
   listProviderModels,
+  getPiModelCatalog,
   type ProviderConfig,
   type ProviderConfigCreate,
   type ProviderModelInfo,
+  type PiCatalogModel,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -81,6 +83,17 @@ type ProviderPreset = {
 };
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
+  {
+    id: "opencode-go",
+    label: "OpenCode Go",
+    providerType: "openai",
+    apiUrl: "https://opencode.ai/zen/go/v1",
+    model: "deepseek-v4-flash",
+    description: "由 pi-ai 原生识别的 OpenCode Go 套餐，模型协议和能力元数据由 Pi 目录提供。",
+    brand: "custom-openai",
+    docsUrl: "https://opencode.ai/go",
+    recommended: true,
+  },
   {
     id: "custom-openai",
     label: "自定义配置",
@@ -218,6 +231,10 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   },
 ];
 
+const PI_PROVIDER_ALIASES: Record<string, string> = {
+  mimo: "xiaomi",
+};
+
 function maskApiKey(key: string): string {
   if (key.length <= 8) return "****";
   return key.slice(0, 3) + "****" + key.slice(-4);
@@ -279,6 +296,13 @@ export function ProviderSettingsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["provider-configs"],
     queryFn: () => listProviderConfigs(),
+  });
+  const piCatalogQuery = useQuery({
+    queryKey: ["pi-model-catalog"],
+    queryFn: getPiModelCatalog,
+    enabled: isDialogOpen,
+    staleTime: 15 * 60_000,
+    retry: false,
   });
 
   const createMut = useMutation({
@@ -365,6 +389,10 @@ export function ProviderSettingsPage() {
   });
 
   const providers = data?.data ?? [];
+  const piProviderId = PI_PROVIDER_ALIASES[formProviderId] ?? formProviderId;
+  const piCatalogModels = (piCatalogQuery.data?.data.models ?? []).filter(
+    (model: PiCatalogModel) => model.provider === piProviderId,
+  );
   const isSaving = createMut.isPending || updateMut.isPending;
   const visibleProviderPresets = PROVIDER_PRESETS.filter((preset) => {
     const query = providerPresetQuery.trim().toLowerCase();
@@ -862,6 +890,42 @@ export function ProviderSettingsPage() {
                   ? "deepseek-v4-flash, gpt-4o, qwen-plus, glm-4-flash"
                   : "claude-sonnet-4-20250514, claude-3-5-sonnet-20241022"}
               </p>
+              {piCatalogModels.length > 0 && (
+                <div className="rounded-xl border bg-muted/20 p-3" style={{ borderColor: "var(--border)" }}>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-medium text-foreground">Pi 原生模型目录</span>
+                    <span className="text-muted-foreground">
+                      pi-ai {piCatalogQuery.data?.data.version} · {piCatalogModels.length} 个模型
+                    </span>
+                  </div>
+                  <p className="mb-3 text-xs leading-5 text-muted-foreground">
+                    选择后，Agent 运行时直接使用 Pi 维护的模型协议、推理与上下文能力元数据；密钥仍只保存在服务端加密配置中。
+                  </p>
+                  <div className="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto">
+                    {piCatalogModels.map((model) => (
+                      <button
+                        key={`${model.provider}:${model.id}`}
+                        type="button"
+                        onClick={() => setFormModel(model.id)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs transition hover:border-primary hover:bg-primary/10",
+                          formModel === model.id
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-background text-muted-foreground",
+                        )}
+                        title={`${model.name} · ${Math.round(model.context_window / 1000)}K context${model.reasoning ? " · reasoning" : ""}`}
+                      >
+                        {model.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {isDialogOpen && piCatalogQuery.isError && (
+                <p className="text-xs text-muted-foreground">
+                  Pi 模型目录暂时不可用，仍可手动填写模型名或从供应商读取。
+                </p>
+              )}
               {availableModels.length > 0 && (
                 <div className="rounded-xl border bg-muted/30 p-2" style={{ borderColor: "var(--border)" }}>
                   <div className="mb-2 flex items-center justify-between px-1 text-xs text-muted-foreground">

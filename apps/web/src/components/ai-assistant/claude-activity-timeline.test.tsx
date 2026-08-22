@@ -288,10 +288,83 @@ describe("ClaudeActivityTimeline", () => {
     fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
     expect(container.querySelector(".cr-task-turn > .cr-command-grid")).toHaveClass("is-open");
     expect(container.querySelector(".cr-subagent-turns")).toBeInTheDocument();
-    expect(screen.getByText("researcher 子 Agent")).toBeInTheDocument();
+    expect(screen.getAllByText("researcher 子 Agent").length).toBeGreaterThan(0);
     expect(container.querySelector(".cr-subagent-turns .cr-task-turn-summary")).toHaveAttribute(
       "aria-expanded",
       "false",
     );
+  });
+
+  it("paginates parallel subagents inside the parent run", () => {
+    const parent: AssistantExecutionItem = {
+      id: "spawn-agents",
+      kind: "tool",
+      toolName: "spawn_subagents",
+      runtimeRunId: "parent-run",
+      turnId: "run:parent-run",
+      status: "running",
+      title: "并行核验",
+      timestamp: 1,
+    };
+    const children: AssistantExecutionItem[] = ["researcher", "reviewer", "analyst"].map((profile, index) => ({
+      id: `subagent-${profile}`,
+      kind: "subagent",
+      toolName: "subagent",
+      runtimeRunId: `child-${index}`,
+      parentRuntimeRunId: "parent-run",
+      turnId: `run:child-${index}`,
+      agentProfile: profile,
+      status: "running",
+      title: `${profile} 子 Agent`,
+      timestamp: index + 2,
+    }));
+    const { container } = renderTimeline([parent, ...children]);
+
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
+    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    expect(screen.getAllByText("researcher 子 Agent").length).toBeGreaterThan(0);
+    expect(screen.queryByText("reviewer 子 Agent")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "查看下一个子 Agent" }));
+    expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    expect(screen.getAllByText("reviewer 子 Agent").length).toBeGreaterThan(0);
+    expect(screen.queryByText("researcher 子 Agent")).not.toBeInTheDocument();
+  });
+
+  it("renders deep research as one specialized runtime instead of flat search rows", () => {
+    const items: AssistantExecutionItem[] = [
+      {
+        id: "research-runtime",
+        kind: "intent",
+        toolName: "skill_runtime",
+        status: "running",
+        title: "招标机会深度调研",
+        presentationKind: "deep_research",
+        presentationSessionId: "research-1",
+        presentationTitle: "招标机会深度调研",
+        runtimeRunId: "research-run-1",
+        timestamp: 1,
+      },
+      ...[1, 2, 3].map((index): AssistantExecutionItem => ({
+        id: `search-${index}`,
+        kind: "tool",
+        toolName: "web_search",
+        toolCallId: `search-call-${index}`,
+        status: index === 3 ? "running" : "succeeded",
+        title: "联网搜索",
+        presentationKind: "deep_research",
+        presentationSessionId: "research-1",
+        presentationTitle: "招标机会深度调研",
+        runtimeRunId: "research-run-1",
+        timestamp: index + 1,
+      })),
+    ];
+    const { container } = renderTimeline(items);
+
+    expect(screen.getAllByText("招标机会深度调研")).toHaveLength(1);
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
+    expect(screen.getByLabelText("深度调研运行状态")).toBeInTheDocument();
+    expect(screen.getByText("查看调研过程")).toBeInTheDocument();
+    expect(container.querySelectorAll(".cr-tool-step")).toHaveLength(0);
   });
 });

@@ -156,24 +156,20 @@
   }
 }
 
-@keyframes claude-timeline-status-breathe {
-  0%, 100% { background-position: 100% 50%; opacity: 0.64; }
-  50% { background-position: 0 50%; opacity: 1; }
+/* The event itself carries the live signal. Keep generic status words out of
+   the chronology and animate only the label belonging to the active row. */
+@keyframes claude-timeline-live-label {
+  0%, 100% { background-position: 100% 50%; }
+  50% { background-position: 0% 50%; }
 }
 
-.assistant-claude-timeline .cr-group-status.is-running .cr-status-copy,
-.assistant-claude-timeline .cr-group-status.is-pending .cr-status-copy,
-.assistant-claude-timeline .cr-step-status.is-running,
-.assistant-claude-timeline .cr-step-status.is-pending,
-.assistant-claude-timeline .cr-runtime-status.is-running,
-.assistant-claude-timeline .cr-runtime-status.is-pending {
-  color: transparent;
-  background-image: linear-gradient(90deg, #8b8983 12%, #2f6fed 48%, #8b8983 84%);
+.assistant-claude-timeline .cr-live-label {
+  background: linear-gradient(100deg, #5e5c57 12%, #8ea34c 48%, #5e5c57 84%);
   background-size: 220% 100%;
   background-clip: text;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: claude-timeline-status-breathe 2.1s ease-in-out infinite;
+  color: transparent;
+  animation: claude-timeline-live-label 2.4s ease-in-out infinite;
 }
 
 .assistant-claude-timeline .cr-tool-grid,
@@ -237,28 +233,6 @@
 .assistant-claude-timeline .cr-task-turn {
   position: relative;
   min-width: 0;
-}
-
-.assistant-claude-timeline .cr-subagent-turns {
-  position: relative;
-  display: grid;
-  gap: 2px;
-  margin: 6px 0 9px 11px;
-  padding-left: 18px;
-}
-
-.assistant-claude-timeline .cr-subagent-turns::before {
-  position: absolute;
-  top: 7px;
-  bottom: 10px;
-  left: 3px;
-  width: 1px;
-  background: #dfded9;
-  content: "";
-}
-
-.assistant-claude-timeline .cr-subagent-turns .cr-task-turn-summary {
-  font-size: 12px;
 }
 
 .assistant-claude-timeline .cr-task-turn-summary {
@@ -348,6 +322,10 @@
   color: #777570;
   font-size: 14px;
   line-height: 20px;
+}
+
+.assistant-claude-timeline .cr-run-step.is-live .cr-run-step-button {
+  color: #5e5c57;
 }
 
 .assistant-claude-timeline .cr-result-facts,
@@ -551,12 +529,6 @@
   color: #a2a09b;
   font-size: 12px;
   font-style: normal;
-}
-
-.assistant-claude-timeline .cr-runtime-status {
-  color: #8d8b85;
-  font-size: 11px;
-  font-weight: 520;
 }
 
 .assistant-claude-timeline .cr-run-step[data-status="succeeded"] .cr-step-status {
@@ -988,16 +960,8 @@
     animation: none;
   }
 
-  .assistant-claude-timeline .cr-group-status.is-running .cr-status-copy,
-  .assistant-claude-timeline .cr-group-status.is-pending .cr-status-copy,
-  .assistant-claude-timeline .cr-step-status.is-running,
-  .assistant-claude-timeline .cr-step-status.is-pending,
-  .assistant-claude-timeline .cr-runtime-status.is-running,
-  .assistant-claude-timeline .cr-runtime-status.is-pending {
+  .assistant-claude-timeline .cr-live-label {
     animation: none;
-    background: none;
-    color: #696761;
-    -webkit-text-fill-color: currentColor;
   }
 
   .assistant-claude-timeline .cr-task-turn.is-running .cr-task-turn-summary,

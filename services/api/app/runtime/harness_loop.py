@@ -51,7 +51,7 @@ from .registry import (
 )
 from .prompt_assembly import ConversationContextWindow, assemble_harness_prompt
 from .mcp_client import normalize_mcp_search_payload, parse_mcp_tool_name
-from .skills import read_skill
+from .skills import read_skill, skill_metadata
 from .tool_catalog import (
     _READ_SKILL_TOOL_SPEC,
     _TOOL_PARAMETER_SCHEMAS,
@@ -1315,7 +1315,14 @@ class StreamingHarness:
     def _public_parent_event_id(self) -> str | None:
         return self._active_task_event_id or self._active_turn_event_id
 
-    def _publish_task_started(self, *, title: str, skill_name: str, turn_id: str) -> None:
+    def _publish_task_started(
+        self,
+        *,
+        title: str,
+        skill_name: str,
+        turn_id: str,
+        presentation_kind: str | None = None,
+    ) -> None:
         if self._active_task_event_id is not None or not self._event_store_available():
             return
         event = publish_event(
@@ -1329,6 +1336,7 @@ class StreamingHarness:
                     "title": title,
                     "skill_name": skill_name,
                     "turn_id": turn_id,
+                    **({"presentation_kind": presentation_kind} if presentation_kind else {}),
                 },
             ),
         )
@@ -1631,8 +1639,14 @@ class StreamingHarness:
                 return
             if skill_name not in self._active_skill_names:
                 self._active_skill_names.append(skill_name)
-            title = "招标机会调研" if skill_name == "opportunity-deep-research" else skill_name
-            self._publish_task_started(title=title, skill_name=skill_name, turn_id=turn_id)
+            metadata = skill_metadata(skill_name)
+            title = metadata.presentation_title if metadata and metadata.presentation_title else skill_name
+            self._publish_task_started(
+                title=title,
+                skill_name=skill_name,
+                turn_id=turn_id,
+                presentation_kind=metadata.presentation if metadata else None,
+            )
             if self._event_store_available():
                 async for event in self._flush_new_events():
                     yield event

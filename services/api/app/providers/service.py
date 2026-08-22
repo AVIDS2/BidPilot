@@ -2,6 +2,7 @@
 from datetime import UTC, datetime
 
 import httpx
+import os
 from sqlalchemy.orm import Session
 
 from app.models import ProviderConfig
@@ -28,6 +29,7 @@ from .schemas import (
     ProviderModelsResponse,
     TestConnectionRequest,
     TestConnectionResponse,
+    PiModelCatalogResponse,
 )
 
 
@@ -219,6 +221,21 @@ def list_provider_models(
         raise ValueError("Provider returned invalid JSON") from exc
 
     return ProviderModelsResponse(models=_parse_model_list(data), discovery_mode="supported")
+
+
+def list_pi_model_catalog() -> PiModelCatalogResponse:
+    """Read the sidecar's native pi-ai catalog without forwarding user keys."""
+    sidecar_url = os.environ.get("DOCPILOT_PI_AGENT_URL", "http://pi-agent:8787").rstrip("/")
+    try:
+        response = httpx.get(f"{sidecar_url}/v1/models/catalog", timeout=4.0)
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        raise ValueError("Pi model catalog is temporarily unavailable") from exc
+    if response.status_code >= 400:
+        raise ValueError("Pi model catalog is temporarily unavailable")
+    try:
+        return PiModelCatalogResponse.model_validate(response.json())
+    except ValueError as exc:
+        raise ValueError("Pi model catalog returned invalid data") from exc
 
 
 def _resolve_model_list_credentials(

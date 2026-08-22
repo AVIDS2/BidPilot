@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2Icon,
-  BotIcon,
   ChevronDownIcon,
   CircleDashedIcon,
   CircleXIcon,
@@ -49,10 +48,6 @@ function aggregateStatus(items: AssistantExecutionItem[]): ActivityStatus {
   if (items.some((item) => statusIsActive(item.status))) return "running";
   if (items.some((item) => item.status === "cancelled")) return "cancelled";
   return "succeeded";
-}
-
-function statusText(status: ActivityStatus, t: Translate) {
-  return t(`activity.status.${status}`, { defaultValue: status });
 }
 
 function publicText(value: string | undefined) {
@@ -114,6 +109,8 @@ function WebSearchSources({ item, t }: { item: AssistantExecutionItem; t: Transl
   const sources = searchSources(item);
   if (sources.length === 0) return null;
 
+  const query = typeof item.result?.query === "string" ? item.result.query : "";
+
   return (
     <section
       className="cr-search-evidence"
@@ -122,7 +119,12 @@ function WebSearchSources({ item, t }: { item: AssistantExecutionItem; t: Transl
       <header className="cr-search-evidence-header">
         <span>
           <Globe2Icon size={14} />
-          {t("activity.verifiedPublicSources", { defaultValue: "已核对的公开来源" })}
+          {query
+            ? t("activity.searchSourcesFor", {
+              query,
+              defaultValue: `Search results for "${query}"`,
+            })
+            : t("activity.searchSources", { defaultValue: "Search sources" })}
         </span>
       </header>
       <div className="cr-search-source-list">
@@ -265,7 +267,7 @@ function displayGroupSummary(items: AssistantExecutionItem[], t: Translate) {
       // leaks into the collapsed chronology and turns it into a status card.
       return label;
     }
-    return `${label} ${statusText(active, t).toLowerCase()}`;
+    return label;
   }
   if (active === "succeeded") {
     const latestSummary = [...items]
@@ -274,10 +276,10 @@ function displayGroupSummary(items: AssistantExecutionItem[], t: Translate) {
       .find(Boolean);
     return latestSummary || t("activity.countTools", { count: items.length, tools: items.length });
   }
-  return t("activity.groupSummary", {
+  return t("activity.countTools", {
     count: items.length,
-    status: statusText(active, t).toLowerCase(),
-    defaultValue: `${items.length} operations ${statusText(active, t).toLowerCase()}`,
+    tools: items.length,
+    defaultValue: `${items.length} actions`,
   });
 }
 
@@ -356,9 +358,6 @@ function ResultFacts({ item }: { item: AssistantExecutionItem }) {
 interface ActivityTurn {
   id: string;
   items: AssistantExecutionItem[];
-  runtimeRunId?: string;
-  parentRuntimeRunId?: string;
-  childTurns?: ActivityTurn[];
 }
 
 function groupActivityTurns(items: AssistantExecutionItem[]): ActivityTurn[] {
@@ -369,26 +368,7 @@ function groupActivityTurns(items: AssistantExecutionItem[]): ActivityTurn[] {
     group.push(item);
     grouped.set(id, group);
   }
-  const turns: ActivityTurn[] = [...grouped.entries()].map(([id, groupedItems]) => ({
-    id,
-    items: [...groupedItems].sort((left, right) => left.timestamp - right.timestamp),
-    runtimeRunId: groupedItems.find((item) => item.runtimeRunId)?.runtimeRunId,
-    parentRuntimeRunId: groupedItems.find((item) => item.parentRuntimeRunId)?.parentRuntimeRunId,
-    childTurns: [] as ActivityTurn[],
-  }));
-  const byRuntimeRunId = new Map(
-    turns.filter((turn) => turn.runtimeRunId).map((turn) => [turn.runtimeRunId!, turn]),
-  );
-  const roots: ActivityTurn[] = [];
-  for (const turn of turns) {
-    const parent = turn.parentRuntimeRunId ? byRuntimeRunId.get(turn.parentRuntimeRunId) : undefined;
-    if (parent && parent !== turn) {
-      parent.childTurns?.push(turn);
-    } else {
-      roots.push(turn);
-    }
-  }
-  return roots;
+  return [...grouped.entries()].map(([id, groupedItems]) => ({ id, items: groupedItems }));
 }
 
 function StepSymbol({ item }: { item: AssistantExecutionItem }) {
@@ -444,9 +424,13 @@ function RuntimeTimeline({
 }) {
   const hasRunningNode = nodes.some((node) => node.status === "running");
   const active = statusIsActive(item.status) || hasRunningNode;
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => active || item.status === "failed");
   const completed = nodes.filter((node) => node.status === "completed").length;
   const summary = t("activity.workflowProgress", { defaultValue: "Workflow steps" });
+
+  useEffect(() => {
+    if (active || item.status === "failed") setOpen(true);
+  }, [active, item.status]);
 
   if (nodes.length === 0) return null;
 
@@ -464,16 +448,6 @@ function RuntimeTimeline({
           <small className="cr-runtime-count">
             {completed}/{nodes.length}
           </small>
-          <small className={`cr-runtime-status is-${active ? "running" : item.status}`}>
-            {statusText(active ? "running" : item.status, t)}
-          </small>
-          <small className="cr-runtime-completion">
-            {t("execution.nodesCompleted", {
-              completed,
-              total: nodes.length,
-              defaultValue: `${completed} of ${nodes.length} steps completed`,
-            })}
-          </small>
         </span>
         <ChevronDownIcon size={14} />
       </button>
@@ -487,7 +461,6 @@ function RuntimeTimeline({
                   <div className="cr-thought-copy">
                     <p>
                       <span>{nodeLabel(node, t)}</span>
-                      <small>{statusText(node.status === "completed" ? "succeeded" : node.status === "failed" ? "failed" : node.status, t)}</small>
                     </p>
                   </div>
                 </div>
@@ -704,22 +677,30 @@ function ToolStep({
   onOpenWorkflowCanvas?: (projectId: string) => void;
   isCancelling: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [renderDetail, setRenderDetail] = useState(false);
+  const [open, setOpen] = useState(() => statusIsActive(item.status) || item.status === "failed");
+  const [renderDetail, setRenderDetail] = useState(() => statusIsActive(item.status) || item.status === "failed");
   const detailCloseTimer = useRef<number | null>(null);
+  const previousStatus = useRef(item.status);
   const Icon: LucideIcon = getAssistantToolIcon(item);
-  const StepIcon = item.kind === "subagent" ? BotIcon : Icon;
   const label = item.toolName
     ? getAssistantToolLabel(item.toolName, t)
     : t("activity.workflow.default", { defaultValue: "Workflow" });
   const active = statusIsActive(item.status);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    if (active || item.status === "failed") {
       if (detailCloseTimer.current !== null) window.clearTimeout(detailCloseTimer.current);
-    },
-    [],
-  );
+      setRenderDetail(true);
+      setOpen(true);
+    } else if (statusIsActive(previousStatus.current)) {
+      setOpen(false);
+      detailCloseTimer.current = window.setTimeout(() => setRenderDetail(false), 320);
+    }
+    previousStatus.current = item.status;
+    return () => {
+      if (detailCloseTimer.current !== null) window.clearTimeout(detailCloseTimer.current);
+    };
+  }, [active, item.status]);
 
   const toggleDetail = () => {
     if (!open) {
@@ -733,7 +714,7 @@ function ToolStep({
   };
 
   return (
-    <div className={`cr-run-step${open ? " is-expanded" : ""}`} data-testid={`assistant-activity-step-${item.toolCallId || item.id}`} data-status={item.status}>
+    <div className={`cr-run-step${open ? " is-expanded" : ""}${active ? " is-live" : ""}`} data-testid={`assistant-activity-step-${item.toolCallId || item.id}`} data-status={item.status}>
       <div className="cr-run-step-row">
         <StepSymbol item={item} />
         <button
@@ -745,9 +726,8 @@ function ToolStep({
           onClick={toggleDetail}
         >
           <span>
-            <StepIcon className="cr-step-icon" size={13} />
-            {label}
-            <em className={`cr-step-status is-${item.status}`}>{statusText(item.status, t)}</em>
+            <Icon className="cr-step-icon" size={13} />
+            <span className={active ? "cr-live-label" : undefined}>{label}</span>
           </span>
           <ChevronDownIcon size={14} />
         </button>
@@ -778,7 +758,6 @@ function TaskTurn({
   onConfigureProvider,
   onOpenWorkflowCanvas,
   cancellingRunId,
-  childTurns = [],
 }: {
   turn: ActivityTurn;
   title?: string;
@@ -787,31 +766,36 @@ function TaskTurn({
   onConfigureProvider?: () => void;
   onOpenWorkflowCanvas?: (projectId: string) => void;
   cancellingRunId: string | null;
-  childTurns?: ActivityTurn[];
 }) {
   const tone = aggregateStatus(turn.items);
   const active = statusIsActive(tone);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => active || tone === "failed");
+  const previousTone = useRef(tone);
   const summary = displayGroupSummary(turn.items, t);
-  const firstItem = turn.items[0];
-  const actionTitle = title || (firstItem?.kind === "subagent" ? firstItem.title : summary);
+  const actionTitle = title || summary;
   const secondarySummary = title ? summary : "";
 
+  useEffect(() => {
+    if (active || tone === "failed") setOpen(true);
+    else if (statusIsActive(previousTone.current)) setOpen(false);
+    previousTone.current = tone;
+  }, [active, tone]);
+
   return (
-    <section className={`cr-task-turn is-${tone}`}>
+    <section className={`cr-task-turn is-${tone}${active ? " is-live" : ""}`} data-status={tone}>
       <button
         type="button"
-        className="cr-task-turn-summary"
+        className={`cr-task-turn-summary${active ? " is-live" : ""}`}
         aria-expanded={open}
+        aria-busy={active || undefined}
         onClick={() => setOpen((current) => !current)}
-      >
+        >
         <span>
-          {actionTitle}
+          <span className={active ? "cr-live-label" : undefined}>{actionTitle}</span>
           {secondarySummary && <small>{secondarySummary}</small>}
         </span>
         <span className={`cr-group-status is-${tone}`}>
           {active && <Loader2Icon className="cr-group-spinner" size={13} />}
-          <span className="cr-status-copy">{statusText(tone, t)}</span>
           <ChevronDownIcon size={14} />
         </span>
       </button>
@@ -830,22 +814,6 @@ function TaskTurn({
               />
             ))}
           </div>
-          {childTurns.length > 0 && (
-            <div className="cr-subagent-turns" aria-label="子 Agent 执行记录">
-              {childTurns.map((childTurn) => (
-                <TaskTurn
-                  key={childTurn.id}
-                  turn={childTurn}
-                  t={t}
-                  onCancelWorkflow={onCancelWorkflow}
-                  onConfigureProvider={onConfigureProvider}
-                  onOpenWorkflowCanvas={onOpenWorkflowCanvas}
-                  cancellingRunId={cancellingRunId}
-                  childTurns={childTurn.childTurns}
-                />
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </section>
@@ -894,7 +862,6 @@ export function ClaudeActivityTimeline({
             onConfigureProvider={onConfigureProvider}
             onOpenWorkflowCanvas={onOpenWorkflowCanvas}
             cancellingRunId={cancellingRunId}
-            childTurns={turn.childTurns}
           />
         ))}
       </div>

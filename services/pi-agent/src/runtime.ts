@@ -31,6 +31,11 @@ async function createModelRuntime(request: PiRunRequest): Promise<{ runtime: Mod
     modelsPath: null,
     refreshOnCreate: false,
   });
+  const nativeModel = runtime.getModel(request.model.provider, request.model.id) as Model<PiApi> | undefined;
+  if (nativeModel) {
+    await runtime.setRuntimeApiKey(request.model.provider, request.model.apiKey);
+    return { runtime, model: nativeModel };
+  }
   runtime.registerProvider(request.model.provider, {
     name: request.model.provider,
     baseUrl: request.model.baseUrl.replace(/\/$/, ""),

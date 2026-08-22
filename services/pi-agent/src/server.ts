@@ -1,6 +1,7 @@
 import { createServer, type ServerResponse } from "node:http";
 import { runPiAgent } from "./runtime.js";
 import type { PiRunRequest, PiRuntimeEvent } from "./contracts.js";
+import { createPiModelCatalog } from "./catalog.js";
 
 const port = Number.parseInt(process.env.DOCPILOT_PI_AGENT_PORT ?? "8787", 10);
 const host = process.env.DOCPILOT_PI_AGENT_HOST ?? "0.0.0.0";
@@ -27,6 +28,17 @@ const server = createServer(async (request, response) => {
         trusted_extensions: ["bidpilot-governance", "bidpilot-skills"],
       }),
     );
+    return;
+  }
+  if (request.method === "GET" && request.url === "/v1/models/catalog") {
+    try {
+      const catalog = await createPiModelCatalog();
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(catalog));
+    } catch (error) {
+      response.writeHead(503, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: error instanceof Error ? error.message : "Pi model catalog unavailable" }));
+    }
     return;
   }
   if (request.method !== "POST" || request.url !== "/v1/runs") {

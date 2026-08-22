@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { isAssistantBusy, useAIAssistant } from "@/lib/ai-assistant-store";
+import { useAIAssistant } from "@/lib/ai-assistant-store";
 import { LinearAgentWorkspace } from "./linear-agent-workspace";
 
 const HANDLED_WAKE_KEY = "bidpilot:handled-agent-wakes";
@@ -34,7 +34,7 @@ function wasWakeHandled(wakeKey: string) {
  */
 export function AgentWorkspacePage() {
   const [params] = useSearchParams();
-  const { dispatch, loadConversation, sendMessage, state } = useAIAssistant();
+  const { dispatch, loadConversation, state } = useAIAssistant();
   const handledWakeRef = useRef<string | null>(null);
   const projectId = params.get("project_id") || undefined;
   const conversationId = params.get("conversation");
@@ -51,36 +51,29 @@ export function AgentWorkspacePage() {
     const alreadyLoaded =
       state.currentConversationId === conversationId && state.messages.length > 0;
 
-    const resumeIfNeeded = () => {
+    const rememberWake = () => {
       if (!wakeKey || handledWakeRef.current === wakeKey) return;
       if (wasWakeHandled(wakeKey)) {
         handledWakeRef.current = wakeKey;
         return;
       }
-      if (isAssistantBusy(state.status)) return;
       handledWakeRef.current = wakeKey;
       rememberWakeKey(wakeKey);
-      void sendMessage(
-        "后台长任务已更新。请根据最新结果继续推进未完成步骤；不要重复发起同一个已完成任务。",
-        { displayContent: "继续后台任务" },
-      );
     };
 
     if (alreadyLoaded) {
-      resumeIfNeeded();
+      rememberWake();
       return;
     }
 
     void loadConversation(conversationId).then(() => {
-      resumeIfNeeded();
+      rememberWake();
     });
   }, [
     loadConversation,
-    sendMessage,
     conversationId,
     state.currentConversationId,
     state.messages.length,
-    state.status,
     wake,
   ]);
 

@@ -2,6 +2,61 @@
 
 ## 2026-08-19
 
+- Promoted the Pi timeline, passive wake, subagent paging, specialized deep
+  research projection, and pi-ai model catalog release candidate to
+  `bidpilot.rglens.com`. Production readiness, migrations, and LangGraph
+  checkpoint initialization passed before the API, Worker, Pi sidecar, and Web
+  containers were replaced; the public Web and API health endpoints returned
+  HTTP 200 afterward.
+- Provisioned an isolated Enterprise demo workspace for `ztlh788@gmail.com`
+  (`leho`) with one real member, three projects, five source documents, five
+  knowledge chunks, fifteen requirements, one radar source and subscription,
+  nine notices and matches, four deliverables, approval/runtime history, and an
+  immutable exported artifact. The seed is idempotent and does not copy another
+  user's model credentials.
+- Production pi-ai catalog acceptance returned 40 providers and 1,267 models.
+  The account can use the platform DeepSeek V4 Flash runtime immediately and
+  may configure its own provider through the same native catalog.
+- Executed one real read-only Pi Assistant turn through the public SSE endpoint
+  for the seeded medical-data project. The run (`25453320-cf66-417e-9c1c-4979afa6f6e7`)
+  persisted 21 runtime events, completed successfully, and produced a concrete
+  readiness assessment from project documents, requirements, evidence, and
+  deliverables. The public export API then generated and downloaded a 37,353
+  byte DOCX successfully.
+
+- Removed the visible synthetic "continue background task" turn. Background
+  completion now resumes Pi through an exact-source, signed and idempotent
+  system wake; the browser only refreshes the already open conversation.
+- Subagent delegation no longer waits inside the Pi bridge request. It returns
+  durable child run IDs immediately so SSE can expose queued/running/terminal
+  children while Worker executes them.
+- Skill-authored presentation metadata now groups deep research into one
+  specialized staged runtime without tool-name or message keyword matching.
+  Ordinary web searches remain chronological rows, while parallel subagents
+  use the paged child-run projection.
+- Focused API runtime acceptance passed 22 tests and Worker wake/outbox/subagent
+  acceptance passed 12 tests against the dedicated local PostgreSQL test
+  database.
+- Agent-workspace Playwright regression passed 8/8 across desktop Chromium and
+  Pixel 7, covering the composer boundary, structured canvas, paged subagents,
+  and the single deep-research runtime projection.
+- Assistant frontend projection now preserves Pi event chronology across
+  multiple tool bursts in one model turn instead of attaching all execution to
+  the first timeline group.
+- Durable subagent runs now inherit their parent message/execution group in live
+  and replayed conversations. Parallel children render through a responsive
+  paged viewer with live status and expandable tool steps; all levels remain
+  collapsed by default.
+- Removed legacy public-narration phrase filtering from the event adapter. UI
+  projection is based on event IDs, sequence, and parent/child run relations,
+  never content keyword matching.
+- Focused web regressions cover chronological grouping, live waiting feedback,
+  nested child runs, and three-child pagination.
+- Agent-workspace Playwright acceptance passed on desktop Chromium and Pixel 7:
+  the parent run is collapsed initially, child pages switch from `1 / 3` to
+  `2 / 3`, the selected child exposes its expandable public execution steps,
+  and the viewer stays within the mobile viewport.
+
 - Formal-release candidate uses Pi for all new Assistant turns; lexical routing
   and the retired Python Harness are not production fallbacks.
 - Golden bid-response path passed 10/10 with company-evidence separation,

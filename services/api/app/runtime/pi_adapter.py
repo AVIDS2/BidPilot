@@ -57,6 +57,7 @@ def _assembled_prompt(
     memory_context_version: str | None,
     background_notifications: list[dict[str, Any]],
     approval_mode: str,
+    system_wake: bool = False,
 ) -> tuple[str, str, dict[str, Any]]:
     previous = get_previous_terminal_action_context(
         db,
@@ -76,6 +77,12 @@ def _assembled_prompt(
         "a changed plan while continuing. Do not narrate trivial calls or use a fixed progress phrase. Keep public "
         "updates concise and factual."
     )
+    if system_wake:
+        policy += (
+            " This turn was resumed by a trusted background completion event, not by a new user message. "
+            "Read background_task_notifications, continue only work that is now actionable, and report the "
+            "meaningful result to the user. Do not ask the user to repeat the prior request."
+        )
     assembly = assemble_harness_prompt(
         system_policy=policy,
         actor_id=user.id,
@@ -122,6 +129,8 @@ async def stream_pi_assistant_response(
     pending_input: dict[str, Any],
     approval_mode: str,
     reasoning_effort: str | None,
+    wake_runtime_run_id: str | None = None,
+    system_wake: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Run one Pi turn and project only user-safe events to SSE."""
     from .background_tasks import collect_completed_notifications
@@ -134,7 +143,12 @@ async def stream_pi_assistant_response(
         yield _sse("assistant.end", {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "failed"})
         return
 
-    notifications = collect_completed_notifications(db, conversation_id=conversation_id, user_id=user.id)
+    notifications = collect_completed_notifications(
+        db,
+        conversation_id=conversation_id,
+        user_id=user.id,
+        wake_runtime_run_id=wake_runtime_run_id,
+    )
     # The prompt is assembled by the API, but the sidecar never receives DB
     # credentials or the raw SQLAlchemy session.
     prompt_system, prompt_user, trace = _assembled_prompt(
@@ -150,6 +164,7 @@ async def stream_pi_assistant_response(
         memory_context_version=memory_context_version,
         background_notifications=notifications,
         approval_mode=approval_mode,
+        system_wake=system_wake,
     )
     # ``_assembled_prompt`` is pure in normal use; record the redacted trace
     # directly here so the Pi run has the same context observability contract.

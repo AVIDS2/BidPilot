@@ -1,14 +1,10 @@
 import { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 
 import { useNotifications } from "@/hooks/use-notifications";
-import { isAssistantBusy, useAIAssistant } from "@/lib/ai-assistant-store";
+import { useAIAssistant } from "@/lib/ai-assistant-store";
 import { useAuth } from "@/lib/auth";
 
 const HANDLED_WAKE_KEY = "bidpilot:handled-agent-wakes";
-const RESUME_PROMPT =
-  "后台长任务已更新。请根据最新结果继续推进未完成步骤；不要重复发起同一个已完成任务。";
-
 function readHandledWakeIds(): Set<string> {
   try {
     const raw = sessionStorage.getItem(HANDLED_WAKE_KEY);
@@ -48,17 +44,16 @@ function parseAgentWakeLink(link: string | undefined): {
 }
 
 /**
- * Global wake consumer: when a durable agent_task notification arrives,
- * resume the bound conversation without requiring the user to open /agent.
+ * A background completion is a system observation, never a user message.
+ * The server resumes the Agent run. This listener only refreshes an open
+ * conversation so the persisted continuation becomes visible.
  *
  * Mounted inside AIAssistantProvider + authenticated platform shell.
  */
 export function AgentWakeResume() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { loadConversation, sendMessage, state } = useAIAssistant();
-  const { notifications, markAsRead } = useNotifications({
+  const { loadConversation, state } = useAIAssistant();
+  const { notifications } = useNotifications({
     enabled: Boolean(user),
     // SSE is primary; poll is backup (60s when SSE healthy, 12s fallback).
     pollIntervalMs: 12_000,
@@ -68,7 +63,7 @@ export function AgentWakeResume() {
   const handledRef = useRef<Set<string>>(readHandledWakeIds());
 
   useEffect(() => {
-    if (!user || isAssistantBusy(state.status)) return;
+    if (!user) return;
     if (inFlightRef.current) return;
 
     const candidate = notifications.find((item) => {
@@ -93,25 +88,11 @@ export function AgentWakeResume() {
 
     void (async () => {
       try {
-        if (state.currentConversationId !== conversationId) {
+        if (state.currentConversationId === conversationId) {
           await loadConversation(conversationId);
         }
-        await sendMessage(RESUME_PROMPT, {
-          displayContent: "继续后台任务",
-        });
-        await markAsRead(candidate.id);
-
-        // Keep the operator surface in sync when user is already browsing the app,
-        // without forcing a hard navigation away from project detail unless helpful.
-        const onAgentPage = location.pathname.startsWith("/agent");
-        if (onAgentPage) {
-          const next = `/agent?conversation=${encodeURIComponent(conversationId)}&wake=${encodeURIComponent(wakeId)}`;
-          if (`${location.pathname}${location.search}` !== next) {
-            navigate(next, { replace: true });
-          }
-        }
       } catch {
-        // Allow retry on a later poll if resume failed.
+        // Allow a later notification poll to retry the passive refresh.
         handledRef.current.delete(candidate.id);
         handledRef.current.delete(wakeKey);
         writeHandledWakeIds(handledRef.current);
@@ -121,14 +102,8 @@ export function AgentWakeResume() {
     })();
   }, [
     loadConversation,
-    location.pathname,
-    location.search,
-    markAsRead,
-    navigate,
     notifications,
-    sendMessage,
     state.currentConversationId,
-    state.status,
     user,
   ]);
 
