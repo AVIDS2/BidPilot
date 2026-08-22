@@ -2,6 +2,19 @@
 
 ## 2026-08-22
 
+- Final acceptance pass for the memory/runtime release: API PostgreSQL suite
+  `828 passed / 60 skipped`, Web `36 files / 163 tests` (single worker), Pi
+  sidecar `13 passed`, Worker/LangGraph memory and subagent checks `11 passed`,
+  TypeScript/Vite build and Ruff checks passed. A real OpenCode Go -> Pi
+  sidecar smoke returned native `text.delta`, `turn.completed`, and
+  `agent.completed` events without a tool call.
+- Deployed the release to `bidpilot.rglens.com` at commit `0973ff3`; public API
+  and Web returned HTTP 200 and all readiness checks (PostgreSQL, Redis,
+  MinIO, Pi bridge, Pi agent) were healthy. Mem0 remains intentionally
+  disabled because the VPS secret store has no Mem0 key; the image now
+  includes `scripts/mem0_smoke.py` so the real cloud smoke can be run after
+  secure injection.
+
 - Added the official `mem0ai==2.0.18` adapter for optional long-term user
   profile memory. The adapter uses Context7-verified `MemoryClient` APIs,
   organization-scoped filters, bounded timeout/fail-open recall, asynchronous
