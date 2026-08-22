@@ -60,7 +60,7 @@ def test_pi_bridge_configuration_failure_stays_inside_sse_contract(
     test_db,
     monkeypatch,
 ) -> None:
-    """A missing internal bridge secret terminalizes Pi without breaking SSE."""
+    """A missing bridge secret is handled by the queued worker boundary, not SSE."""
     monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "pi")
     monkeypatch.delenv("DOCPILOT_PI_INTERNAL_SECRET", raising=False)
     monkeypatch.delenv("DOCPILOT_JWT_SECRET", raising=False)
@@ -80,14 +80,8 @@ def test_pi_bridge_configuration_failure_stays_inside_sse_contract(
     assert response.status_code == 200
     assert "DOCPILOT_PI_INTERNAL_SECRET" not in response.text
     events = _sse_events(response.text)
-    assert any(
-        event_type == "assistant.message" and "执行服务配置不完整" in payload.get("content", "")
-        for event_type, payload in events
-    )
-    event_type, payload = events[-1]
-    assert event_type == "assistant.end"
-    assert payload["state"] == "failed"
-    assert payload["error_code"] == "pi_bridge_configuration_missing"
+    assert [event_type for event_type, _payload in events] == ["assistant.start", "assistant.runtime_state"]
+    assert events[-1][1]["state"] == "queued"
     runtime_run_id = next(
         payload["runtime_run_id"]
         for event, payload in events
@@ -95,11 +89,10 @@ def test_pi_bridge_configuration_failure_stays_inside_sse_contract(
     )
     run = test_db.get(RuntimeRun, runtime_run_id)
     assert run is not None
-    assert run.status == "failed"
-    assert run.error_code == "pi_bridge_configuration_missing"
+    assert run.status == "queued"
 
 
-def test_pi_completed_run_projects_exactly_one_terminal_event(
+def test_pi_turn_returns_one_queued_projection_before_worker_execution(
     client,
     monkeypatch,
 ) -> None:
@@ -127,9 +120,8 @@ def test_pi_completed_run_projects_exactly_one_terminal_event(
 
     assert response.status_code == 200
     events = _sse_events(response.text)
-    assert [event for event, _payload in events].count("assistant.end") == 1
-    assert events[-1][0] == "assistant.end"
-    assert events[-1][1]["state"] == "completed"
+    assert [event for event, _payload in events] == ["assistant.start", "assistant.runtime_state"]
+    assert events[-1][1]["state"] == "queued"
 
 
 def test_public_assistant_ignores_retired_engine_selector_and_intent_classifier(
@@ -164,5 +156,5 @@ def test_public_assistant_ignores_retired_engine_selector_and_intent_classifier(
 
     assert response.status_code == 200
     events = _sse_events(response.text)
-    assert events[-1][0] == "assistant.end"
-    assert events[-1][1]["state"] == "completed"
+    assert [event for event, _payload in events] == ["assistant.start", "assistant.runtime_state"]
+    assert events[-1][1]["state"] == "queued"

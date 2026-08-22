@@ -12,7 +12,7 @@ def test_assistant_request_accepts_reasoning_effort() -> None:
 
 
 def test_agent_llm_maps_openai_reasoning_effort(monkeypatch) -> None:
-    from app.agent import llm as agent_llm
+    from app.runtime import model_impl as agent_llm
 
     captured: dict[str, object] = {}
 
@@ -35,7 +35,7 @@ def test_agent_llm_maps_openai_reasoning_effort(monkeypatch) -> None:
 
 
 def test_agent_llm_does_not_send_openai_reasoning_to_compatible_gateways(monkeypatch) -> None:
-    from app.agent import llm as agent_llm
+    from app.runtime import model_impl as agent_llm
 
     captured: dict[str, object] = {}
 
@@ -58,7 +58,7 @@ def test_agent_llm_does_not_send_openai_reasoning_to_compatible_gateways(monkeyp
 
 
 def test_agent_llm_enables_deepseek_v4_thinking_with_documented_controls(monkeypatch) -> None:
-    from app.agent import llm as agent_llm
+    from app.runtime import model_impl as agent_llm
 
     captured: dict[str, object] = {}
 
@@ -82,7 +82,7 @@ def test_agent_llm_enables_deepseek_v4_thinking_with_documented_controls(monkeyp
 
 
 def test_agent_llm_uses_only_the_stable_thinking_switch_for_opencode_go_deepseek_v4(monkeypatch) -> None:
-    from app.agent import llm as agent_llm
+    from app.runtime import model_impl as agent_llm
 
     captured: dict[str, object] = {}
 
@@ -107,7 +107,7 @@ def test_agent_llm_uses_only_the_stable_thinking_switch_for_opencode_go_deepseek
 
 
 def test_required_tool_choice_client_disables_deepseek_v4_thinking(monkeypatch) -> None:
-    from app.agent import llm as agent_llm
+    from app.runtime import model_impl as agent_llm
 
     created: list[dict[str, object]] = []
 
@@ -139,7 +139,7 @@ def test_required_tool_choice_client_disables_deepseek_v4_thinking(monkeypatch) 
 
 
 def test_required_tool_choice_client_disables_opencode_go_thinking(monkeypatch) -> None:
-    from app.agent import llm as agent_llm
+    from app.runtime import model_impl as agent_llm
 
     created: list[dict[str, object]] = []
 
@@ -170,7 +170,7 @@ def test_required_tool_choice_client_disables_opencode_go_thinking(monkeypatch) 
 
 
 def test_agent_llm_maps_anthropic_reasoning_effort(monkeypatch) -> None:
-    from app.agent import llm as agent_llm
+    from app.runtime import model_impl as agent_llm
 
     captured: dict[str, object] = {}
 
@@ -193,7 +193,7 @@ def test_agent_llm_maps_anthropic_reasoning_effort(monkeypatch) -> None:
 
 
 def test_agent_llm_uses_adaptive_thinking_for_current_official_claude(monkeypatch) -> None:
-    from app.agent import llm as agent_llm
+    from app.runtime import model_impl as agent_llm
 
     captured: dict[str, object] = {}
 

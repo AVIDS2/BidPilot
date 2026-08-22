@@ -54,7 +54,9 @@ def test_pi_production_path_has_no_lexical_router_or_retired_loop_dependency() -
     for marker in forbidden:
         assert marker not in public_turn_source, f"operator public turn contains retired routing marker {marker}"
     assert 'engine="pi"' in public_turn_source
-    assert "stream_pi_assistant_response(" in public_turn_source
+    # The public Pi path queues a durable run before returning SSE. The old
+    # synchronous stream helper is intentionally absent from this boundary.
+    assert "enqueue_assistant_run(" in public_turn_source
 
 
 def test_skill_catalog_descriptions_are_semantic_scopes_not_phrase_triggers() -> None:

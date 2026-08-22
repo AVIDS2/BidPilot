@@ -153,8 +153,8 @@ class TestChatConversationsEndpoint:
         created = next(item for item in items if item["id"] == conversation_id)
         assert created["title"] == "请帮我创建一个新项目"
 
-    def test_assistant_stream_can_generate_auto_title(self, client, test_db, clear_dev_user_chat_state, monkeypatch):
-        """Assistant sessions should still reuse the conversation title generation flow."""
+    def test_assistant_stream_uses_durable_fallback_title_before_worker_replay(self, client, test_db, clear_dev_user_chat_state, monkeypatch):
+        """The queued assistant path returns a durable fallback title immediately."""
         from app.chat.service import get_conversation
 
         monkeypatch.setenv("DOCPILOT_ASSISTANT_ENGINE", "pi")
@@ -167,7 +167,7 @@ class TestChatConversationsEndpoint:
         start = next(json.loads(line[6:]) for part in events for line in part.splitlines() if line.startswith("data: ") and "assistant.start" in part)
         conversation = get_conversation(test_db, start["conversation_id"], "dev-user")
         assert conversation is not None
-        assert conversation.title == "平台概览"
+        assert conversation.title == "给我一个平台状态和最近活动的概览"
 
     def test_rename_conversation(self, client, clear_dev_user_chat_state):
         response = client.post("/chat/stream", json={"message": "请帮我创建一个新项目"})

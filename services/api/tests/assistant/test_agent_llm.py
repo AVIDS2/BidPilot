@@ -36,7 +36,7 @@ def test_agent_llm_uses_anthropic_messages_provider() -> None:
 
 
 def test_agent_llm_adds_profile_header_for_mimo(monkeypatch) -> None:
-    from app.agent import llm as agent_llm
+    from app.runtime import model_impl as agent_llm
 
     captured: dict[str, object] = {}
 

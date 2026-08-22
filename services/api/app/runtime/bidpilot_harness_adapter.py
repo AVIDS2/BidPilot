@@ -582,7 +582,8 @@ class BidPilotToolExecutor:
 
     def _presentation_payload(self) -> dict[str, str]:
         """Project the active skill's UI contract without inspecting chat text."""
-        value = (self.runtime_run.input_json or {}).get("active_presentation")
+        input_json = getattr(self.runtime_run, "input_json", None)
+        value = (input_json or {}).get("active_presentation") if isinstance(input_json, Mapping) else None
         if not isinstance(value, Mapping):
             return {}
         kind = str(value.get("kind") or "").strip()
