@@ -21,6 +21,7 @@ COPY sample-data/bidpilot-demo /app/sample-data/bidpilot-demo
 COPY docs/agent-skills /app/docs/agent-skills
 COPY scripts/setup_langgraph_checkpoints.py /app/scripts/setup_langgraph_checkpoints.py
 COPY scripts/production_readiness.py /app/scripts/production_readiness.py
+COPY scripts/mem0_smoke.py /app/scripts/mem0_smoke.py
 
 RUN uv sync --frozen --no-dev --package docpilot-api
 

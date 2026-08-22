@@ -51,8 +51,8 @@ artifact for each production-promotion item.
 - rollback path and release owner confirmed
 - secrets and environment config reviewed
 - when Mem0 is enabled, run the isolated smoke without exposing its key:
-  `uv run --directory services/api python ../../scripts/mem0_smoke.py`; the
-  result must show `capture_status=queued`, `search_visible=True`, and
+  `docker exec bidpilot-api /app/.venv/bin/python /app/scripts/mem0_smoke.py`;
+  the result must show `capture_status=queued`, `search_visible=True`, and
   `cleanup_status=deleted`
 - SLO and alert coverage checked
 - error budget is not already exhausted
