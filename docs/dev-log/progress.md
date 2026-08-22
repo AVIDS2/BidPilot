@@ -7,6 +7,11 @@
   organization-scoped filters, bounded timeout/fail-open recall, asynchronous
   Worker capture, local idempotency ledger, and scoped account deletion. It is
   disabled by default until the deployment injects `DOCPILOT_MEM0_API_KEY`.
+  The adapter now follows the official OR semantics for user/agent entity
+  reads, deletes the two scopes separately, and omits Platform-only `app_id`
+  when configured for a compatible OSS endpoint. Added the isolated
+  `scripts/mem0_smoke.py` for a redacted real-cloud verification after secret
+  injection.
   BidPilot `MemoryRecord` remains the evidence-backed business memory source;
   Pi `SessionManager.inMemory()` remains per-attempt working memory.
   The implementation was deployed in `04cf11e`; production health remained
