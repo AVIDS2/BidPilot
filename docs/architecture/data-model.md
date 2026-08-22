@@ -27,6 +27,8 @@ All tables use UUID string primary keys (VARCHAR(36)). The 19 tables are grouped
 - **KnowledgeChunk** -- text chunk with pgvector embedding for semantic search
 - **RequirementItem** -- structured requirement extracted from source materials
 - **Evidence** -- source-backed citation record linking sections to source documents
+- **MemoryRecord** -- evidence-backed project, organization, or user memory; the business truth used by BidPilot retrieval
+- **Mem0ProfileSync** -- local idempotency and privacy ledger for optional external user-profile memory capture; it stores no message body
 
 ### Delivery & Review
 - **Deliverable** -- logical output artifact (e.g., a proposal document)

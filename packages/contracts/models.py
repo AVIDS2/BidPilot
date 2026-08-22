@@ -2566,6 +2566,42 @@ class MemoryEvent(Base):
     )
 
 
+class Mem0ProfileSync(Base):
+    """Local idempotency/audit ledger for optional Mem0 profile capture."""
+
+    __tablename__ = "mem0_profile_sync"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(String(36), ForeignKey("organization.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id"), nullable=False)
+    runtime_run_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("runtime_run.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    conversation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("chat_conversation.id", ondelete="SET NULL"),
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False, default="mem0_platform")
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="queued")
+    external_event_id: Mapped[str | None] = mapped_column(String(160))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("runtime_run_id", "provider", name="uq_mem0_profile_sync_run_provider"),
+        Index("ix_mem0_profile_sync_user_status_created", "org_id", "user_id", "status", "created_at"),
+    )
+
+
 class MemoryGraphReviewDecision(Base):
     """One auditable decision for one item in a graph proposal."""
 

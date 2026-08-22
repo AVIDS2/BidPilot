@@ -54,6 +54,14 @@ x-docpilot-env: &docpilot-env
   DOCPILOT_MCP_SERVERS: ${DOCPILOT_MCP_SERVERS:-}
   # API key for the built-in web_search capability (Tavily) and MCP servers.
   TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+  # Optional Mem0 Platform profile memory. The key stays server-side and is
+  # intentionally disabled unless the deployment opts in explicitly.
+  DOCPILOT_MEM0_ENABLED: ${DOCPILOT_MEM0_ENABLED:-false}
+  DOCPILOT_MEM0_API_KEY: ${DOCPILOT_MEM0_API_KEY:-}
+  DOCPILOT_MEM0_HOST: ${DOCPILOT_MEM0_HOST:-https://api.mem0.ai}
+  DOCPILOT_MEM0_AGENT_ID: ${DOCPILOT_MEM0_AGENT_ID:-bidpilot-assistant}
+  DOCPILOT_MEM0_APP_SCOPE: ${DOCPILOT_MEM0_APP_SCOPE:-true}
+  DOCPILOT_MEM0_TIMEOUT_SECONDS: ${DOCPILOT_MEM0_TIMEOUT_SECONDS:-1.5}
 
 services:
   postgres:

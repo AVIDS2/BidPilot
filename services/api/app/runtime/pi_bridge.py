@@ -381,9 +381,14 @@ async def resume_pi_from_system_wake(
             )
         except Exception:
             memory = None
-        from .conversation import load_conversation_context, memory_context_records
+        from .conversation import load_conversation_context, load_mem0_profile_context, memory_context_records
 
         memory_records = memory_context_records(memory)
+        profile_records = await load_mem0_profile_context(
+            user_id=user.id,
+            org_id=user.org_id,
+            query=summary or "后台任务状态更新",
+        )
 
         # Keep the internal bridge import direction one-way. The public Pi
         # adapter already imports this module to mint capability tokens, so
@@ -402,7 +407,7 @@ async def resume_pi_from_system_wake(
             model=resolved.model,
             user_message="",
             conversation_window=load_conversation_context(db, conversation_id),
-            memory_context_records=memory_records,
+            memory_context_records=memory_records + profile_records,
             memory_context_version=memory.memory_version if memory is not None else None,
             available_attachments=[],
             attachment_context="",

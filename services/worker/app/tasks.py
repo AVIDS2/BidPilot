@@ -17,6 +17,7 @@ from app.execution.ingest import bundle_has_retryable_embedding_failure, mark_bu
 from app.execution.assistant_attachments import purge_expired_assistant_attachments
 from app.execution.memory import index_memory_records, run_compile_bid_wiki
 from app.execution.memory_graph import run_extract_memory_graph
+from app.execution.mem0_profile import capture_mem0_profile_for_run, delete_mem0_profile_for_user
 from app.execution.model_usage import finalize_workflow_model_reservation_failure
 from app.execution.review_resume import resolve_durable_review_resume
 from app.radar.service import poll_due_notice_sources
@@ -389,6 +390,10 @@ def run_assistant_turn(self, runtime_run_id: str, *, outbox_event_id: str | None
         except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
             retry_workflow_task_delivery(outbox_event_id, "assistant_task_transport_retry")
             raise self.retry(exc=exc, countdown=min(120, 2 ** int(self.request.retries)))
+        try:
+            capture_mem0_profile.delay(runtime_run_id)
+        except Exception:  # noqa: BLE001 - optional profile capture is fail-open
+            logger.warning("Could not enqueue Mem0 profile capture: run=%s", runtime_run_id, exc_info=True)
         complete_workflow_task_delivery(outbox_event_id)
         return result if isinstance(result, dict) else {"status": "completed", "runtime_run_id": runtime_run_id}
     except Retry:
@@ -399,6 +404,26 @@ def run_assistant_turn(self, runtime_run_id: str, *, outbox_event_id: str | None
         raise
     finally:
         db.close()
+
+
+@celery_app.task(name="worker.capture_mem0_profile", bind=True, max_retries=3)
+def capture_mem0_profile(self, runtime_run_id: str) -> dict[str, object]:
+    """Persist only low-risk profile signals through the official Mem0 SDK."""
+
+    result = capture_mem0_profile_for_run(runtime_run_id)
+    if result.get("status") == "failed" and int(getattr(self.request, "retries", 0) or 0) < 3:
+        raise self.retry(countdown=min(120, 2 ** int(self.request.retries)))
+    return result
+
+
+@celery_app.task(name="worker.delete_mem0_profile", bind=True, max_retries=5)
+def delete_mem0_profile(self, user_id: str, org_ids: list[str]) -> dict[str, object]:
+    """Complete a scoped Mem0 deletion after a BidPilot account is removed."""
+
+    result = delete_mem0_profile_for_user(user_id=user_id, org_ids=org_ids)
+    if result.get("status") == "failed" and int(getattr(self.request, "retries", 0) or 0) < 5:
+        raise self.retry(countdown=min(300, 2 ** int(self.request.retries)))
+    return result
 
 
 @celery_app.task(name="worker.import_remote_document", bind=True)

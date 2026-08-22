@@ -8,6 +8,7 @@ the chat and memory domains; this is an adapter, not a second store.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from app.auth.schemas import CurrentUser
 from app.chat.service import get_recent_conversation_messages
 from app.memory.schemas import MemoryContextRead
 from app.memory.service import memory_context_for_agent
+from app.memory.mem0_provider import profile_context_records, search_profile_memory
 from app.models import RuntimeEvent, RuntimeRun
 
 from .model_limits import (
@@ -136,6 +138,24 @@ def memory_context_records(memory_context: MemoryContextRead | None) -> list[dic
     ]
 
 
+async def load_mem0_profile_context(
+    *,
+    user_id: str,
+    org_id: str,
+    query: str,
+) -> list[dict[str, Any]]:
+    """Recall low-risk profile memory without blocking the Pi event loop."""
+
+    memories = await asyncio.to_thread(
+        search_profile_memory,
+        user_id=user_id,
+        org_id=org_id,
+        query=query,
+        top_k=4,
+    )
+    return profile_context_records(memories)
+
+
 def _message_with_attachment_context(message: object) -> str:
     content = str(getattr(message, "content", "")).strip()
     attachments = getattr(message, "attachments", ()) or ()
@@ -153,5 +173,6 @@ __all__ = [
     "MAX_CONVERSATION_SOURCE_MESSAGES",
     "load_authorized_memory",
     "load_conversation_context",
+    "load_mem0_profile_context",
     "memory_context_records",
 ]

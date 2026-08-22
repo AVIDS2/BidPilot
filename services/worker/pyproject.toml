@@ -24,6 +24,7 @@ dependencies = [
   "sqlalchemy>=2.0.39",
   "tenacity>=9.0.0",
   "trafilatura>=2.0.0",
+  "mem0ai==2.0.18",
 ]
 
 [dependency-groups]

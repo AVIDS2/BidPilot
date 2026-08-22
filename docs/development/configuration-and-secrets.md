@@ -80,6 +80,12 @@ These names are the preferred starting point for implementation.
 - `DOCPILOT_AGENT_CHECKPOINTER`
 - `DOCPILOT_ASSISTANT_ENGINE`
 - `DOCPILOT_AGENT_MEMORY_EMBEDDING_TIMEOUT_SECONDS`
+- `DOCPILOT_MEM0_ENABLED`
+- `DOCPILOT_MEM0_API_KEY`
+- `DOCPILOT_MEM0_HOST`
+- `DOCPILOT_MEM0_AGENT_ID`
+- `DOCPILOT_MEM0_APP_SCOPE`
+- `DOCPILOT_MEM0_TIMEOUT_SECONDS`
 
 ### Telemetry
 
@@ -203,6 +209,17 @@ password; a personal mailbox is suitable only for a short pilot and does not
 provide the domain authentication needed for reliable production delivery.
 
 `DOCPILOT_AGENT_MEMORY_EMBEDDING_TIMEOUT_SECONDS` defaults to `2.5` and is capped at five seconds. It applies only to optional automatic memory recall during an Agent turn: when no authorized memory exists, no embedding request is sent; when the provider is slow or unavailable, the Agent continues with lexical recall and explicit degraded state rather than blocking the conversation.
+
+Mem0 is an optional long-term **user profile** provider, not a replacement for
+BidPilot's PostgreSQL business memory. `DOCPILOT_MEM0_ENABLED` must be set to
+`true` explicitly. `DOCPILOT_MEM0_API_KEY` is server-only and is consumed by
+API/Worker through the official `mem0ai` SDK. Recall is scoped by the current
+user, BidPilot agent id, and organization `app_id`; the timeout is bounded and
+Mem0 failures are fail-open. Only low-risk preferences and communication
+style may be captured. Tender files, evidence, qualifications, deadlines,
+hidden reasoning, tokens, and tool payloads must remain in BidPilot's own
+authorized stores. Account deletion must call the provider's scoped
+`delete_all` operation as part of the privacy workflow.
 
 Before API or Worker starts in staging or production, apply Alembic migrations and run `python scripts/setup_langgraph_checkpoints.py` once against the target database. The production Compose file performs both as ordered one-shot services: `migrate` upgrades the business schema, then `checkpoints` creates or upgrades LangGraph checkpoint tables without logging the connection URL. Runtime services only open prepared storage; they do not create business or checkpoint tables lazily.
 

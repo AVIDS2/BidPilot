@@ -25,6 +25,7 @@ from app.models import (
     Project,
     ProjectMember,
     RefreshToken,
+    Mem0ProfileSync,
     Subscription,
     Team,
     TeamMember,
@@ -361,6 +362,16 @@ def delete_user_account_command(db: Session, user_id: str) -> str:
 
     email = user.email
     try:
+        mem0_org_ids = [
+            str(row[0])
+            for row in db.query(OrganizationMembership.org_id)
+            .filter(
+                OrganizationMembership.user_id == user.id,
+                OrganizationMembership.status == "active",
+            )
+            .all()
+            if row[0]
+        ]
         team_owner_membership = (
             db.query(OrganizationMembership)
             .join(Organization)
@@ -458,6 +469,7 @@ def delete_user_account_command(db: Session, user_id: str) -> str:
                 )
 
         personal_workspace_ids = [workspace.id for workspace in personal_workspaces]
+        db.query(Mem0ProfileSync).filter(Mem0ProfileSync.user_id == user.id).delete(synchronize_session=False)
         db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
         db.query(TeamMember).filter(TeamMember.user_id == user.id).delete()
         db.query(ProjectMember).filter(ProjectMember.user_id == user.id).delete()
@@ -471,6 +483,23 @@ def delete_user_account_command(db: Session, user_id: str) -> str:
         for workspace in personal_workspaces:
             db.delete(workspace)
         db.commit()
+        try:
+            from app.celery_client import celery
+
+            celery.send_task(
+                "worker.delete_mem0_profile",
+                args=[user_id, mem0_org_ids],
+            )
+        except Exception:
+            # Account deletion is already committed. The Worker task is
+            # retried by operations if the optional external provider is down.
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Could not enqueue Mem0 profile deletion for deleted user",
+                extra={"user_id": user_id},
+                exc_info=True,
+            )
     except IntegrityError as exc:
         db.rollback()
         raise ValueError(

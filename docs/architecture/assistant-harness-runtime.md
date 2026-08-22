@@ -393,6 +393,30 @@ level and are never opened or closed by incoming events; only the user changes
 disclosure state. Running/thinking aggregate labels may use a restrained
 motion treatment, while completed or failed labels remain static.
 
+### Memory boundary
+
+Memory is split by lifecycle and authority:
+
+| Layer | Owner | Purpose |
+| --- | --- | --- |
+| Pi `AgentSession` | Pi sidecar, in memory | One Worker attempt's active model/tool context, queue, retry and compaction state |
+| Conversation/runtime | PostgreSQL | Exact ChatMessage history, RuntimeRun/Event, approvals, waits and recovery |
+| Profile memory | Optional Mem0 Platform adapter | Low-risk user preferences and communication style across conversations |
+| Business memory | BidPilot PostgreSQL `MemoryRecord` | Evidence-backed tender facts, requirements, risks, decisions and citations |
+
+Mem0 is enabled only by explicit server configuration and is called through the
+official `mem0ai` SDK. API recalls profiles before a Pi turn; Worker captures a
+bounded user/assistant exchange asynchronously after a successful turn. Calls
+are scoped with the current `user_id`, `agent_id` and organization `app_id`.
+The local `Mem0ProfileSync` ledger makes capture idempotent without storing
+provider payloads or conversation text. Mem0 failures are fail-open for the
+assistant path. Account deletion schedules a scoped provider `delete_all`.
+
+Mem0 never receives tender files, evidence payloads, hidden model reasoning,
+credentials or tool envelopes, and it cannot authorize or mutate BidPilot
+business state. A private deployment may replace the adapter with self-hosted
+Mem0 OSS; the Pi and control-plane contracts remain unchanged.
+
 ## Non-goals of this baseline
 
 - The cloud sidecar is not given a tenant's raw server shell. A future local or

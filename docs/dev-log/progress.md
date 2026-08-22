@@ -2,6 +2,14 @@
 
 ## 2026-08-22
 
+- Added the official `mem0ai==2.0.18` adapter for optional long-term user
+  profile memory. The adapter uses Context7-verified `MemoryClient` APIs,
+  organization-scoped filters, bounded timeout/fail-open recall, asynchronous
+  Worker capture, local idempotency ledger, and scoped account deletion. It is
+  disabled by default until the deployment injects `DOCPILOT_MEM0_API_KEY`.
+  BidPilot `MemoryRecord` remains the evidence-backed business memory source;
+  Pi `SessionManager.inMemory()` remains per-attempt working memory.
+
 - Fixed conversation isolation in the web Agent projection. The selected
   conversation is tab-scoped, active run/cancel targets are keyed by
   conversation ID, and stale watcher events cannot update the newly selected
