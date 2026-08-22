@@ -131,6 +131,7 @@ async def stream_pi_assistant_response(
     reasoning_effort: str | None,
     wake_runtime_run_id: str | None = None,
     system_wake: bool = False,
+    detached_execution: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Run one Pi turn and project only user-safe events to SSE."""
     from .background_tasks import collect_completed_notifications
@@ -347,7 +348,14 @@ async def stream_pi_assistant_response(
             fail_runtime_run(db, run.id, final_text, error_code="pi_agent_failed")
             state = "failed"
         else:
-            complete_runtime_run(db, run.id, final_text, message_delta_emitted=bool(text_parts))
+            complete_runtime_run(
+                db,
+                run.id,
+                final_text,
+                # A Worker-owned turn has no live browser consumer. Keep the
+                # terminal message replayable even if Pi streamed deltas.
+                message_delta_emitted=bool(text_parts) and not detached_execution,
+            )
             state = "completed"
         for rendered in flush_events():
             yield rendered

@@ -15,9 +15,8 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.assistant.audit import redact_arguments
-from app.assistant.attachments import attachment_planner_context, build_attachment_context
 from app.assistant.schemas import AssistantConfirmation, AssistantRequest
-from app.assistant.task_state import clear_task_state, pending_input_context, set_task_state
+from app.assistant.task_state import clear_task_state, set_task_state
 from app.auth.schemas import CurrentUser
 from app.chat.service import (
     bind_conversation_project_context,
@@ -41,8 +40,8 @@ from .assistant_adapter import (
     _sse,
 )
 from .events import latest_event_sequence
-from .pi_adapter import stream_pi_assistant_response
 from .prompt_assembly import ConversationContextWindow, compact_conversation_context
+from .queue import enqueue_assistant_run
 from .service import (
     assistant_turn_idempotency_key,
     complete_runtime_run,
@@ -186,16 +185,6 @@ async def stream_operator_assistant_response(
         )
         return
 
-    from .conversation import load_authorized_memory, load_conversation_context, memory_context_records
-
-    conversation_window = load_conversation_context(db, conversation_id)
-    pending_input = pending_input_context(db, conversation_id)
-    memory_context = load_authorized_memory(
-        db,
-        user,
-        project_id=active_project_id,
-        query=payload.message,
-    )
     creation = create_or_get_runtime_run(
         db,
         user,
@@ -208,6 +197,7 @@ async def stream_operator_assistant_response(
         reasoning_effort=payload.reasoning_effort,
         approval_mode=payload.approval_mode,
         idempotency_key=idempotency_key,
+        initial_status="queued",
         input_json={
             "message": payload.message,
             "client_request_id": payload.client_request_id,
@@ -232,38 +222,28 @@ async def stream_operator_assistant_response(
         payload.message,
         attachments=payload.attachments,
     )
+    run.input_json = {**(run.input_json or {}), "user_message_id": user_message.id}
+    db.commit()
+    # The browser is only a projection channel. Queue the Pi turn before
+    # returning so closing a tab cannot cancel model execution.
+    enqueue_assistant_run(db, user, run)
     yield _sse(
         "assistant.start",
         {
             "conversation_id": conversation_id,
             "runtime_run_id": run.id,
             "user_message_id": user_message.id,
-            "state": "thinking",
+            "state": "queued",
         },
     )
-    memory_records = memory_context_records(memory_context)
-    async for event in stream_pi_assistant_response(
-        db,
-        user,
-        run=run,
-        conversation_id=conversation_id,
-        provider_type=provider_type,
-        provider_id=provider_id,
-        api_key=api_key,
-        base_url=base_url,
-        model=model,
-        user_message=payload.message,
-        conversation_window=conversation_window,
-        memory_context_records=memory_records,
-        memory_context_version=memory_context.memory_version if memory_context is not None else None,
-        available_attachments=attachment_planner_context(payload.attachments),
-        attachment_context=build_attachment_context("", payload.attachments),
-        active_project_id=active_project_id,
-        pending_input=pending_input,
-        approval_mode=payload.approval_mode,
-        reasoning_effort=payload.reasoning_effort,
-    ):
-        yield event
+    yield _sse(
+        "assistant.runtime_state",
+        {
+            "runtime_run_id": run.id,
+            "phase": "queued",
+            "state": "queued",
+        },
+    )
     return
 
 
@@ -276,6 +256,8 @@ async def _replay_existing_run(
     """Replay a durable run after a client retry without re-entering the loop."""
     run = reconcile_runtime_run_for_replay(db, run.id)
     state_by_status = {
+        "queued": "queued",
+        "running": "thinking",
         "awaiting_approval": "needs_confirmation",
         "failed": "failed",
         "expired": "failed",
@@ -302,12 +284,23 @@ async def _replay_existing_run(
         if event.startswith("event: assistant.end"):
             emitted_end = True
         yield event
-    if not emitted_end:
+    if not emitted_end and run.status in {"succeeded", "failed", "cancelled", "expired"}:
         yield _sse(
             "assistant.end",
             {
                 "conversation_id": conversation_id,
                 "runtime_run_id": run.id,
+                "state": state,
+                "replayed": True,
+            },
+        )
+    elif not emitted_end:
+        yield _sse(
+            "assistant.runtime_state",
+            {
+                "conversation_id": conversation_id,
+                "runtime_run_id": run.id,
+                "phase": state,
                 "state": state,
                 "replayed": True,
             },

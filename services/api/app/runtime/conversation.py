@@ -28,7 +28,12 @@ from .prompt_assembly import ConversationContextWindow, compact_conversation_con
 MAX_CONVERSATION_SOURCE_MESSAGES = 24
 
 
-def load_conversation_context(db: Session, conversation_id: str) -> ConversationContextWindow:
+def load_conversation_context(
+    db: Session,
+    conversation_id: str,
+    *,
+    exclude_message_id: str | None = None,
+) -> ConversationContextWindow:
     """Load a bounded, redacted transcript plus durable terminal replies."""
 
     messages, history_window_truncated = get_recent_conversation_messages(
@@ -43,6 +48,7 @@ def load_conversation_context(db: Session, conversation_id: str) -> Conversation
             _message_with_attachment_context(message),
         )
         for message in messages
+        if not exclude_message_id or message.id != exclude_message_id
     ]
     known_contents = {content.strip() for _, _, content in source if content.strip()}
     runtime_messages = (

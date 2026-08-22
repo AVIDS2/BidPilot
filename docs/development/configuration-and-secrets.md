@@ -175,6 +175,7 @@ Pi runtime variables:
 - `DOCPILOT_PI_AGENT_URL` — internal Pi sidecar URL, for example `http://pi-agent:8787`.
 - `DOCPILOT_PI_TOOL_BRIDGE_URL` — API-only callback URL for governed tool execution.
 - `DOCPILOT_PI_INTERNAL_SECRET` — dedicated short-lived bridge-token signing secret; production must not reuse `DOCPILOT_JWT_SECRET`.
+- `DOCPILOT_INTERNAL_API_URL` — Worker-to-API internal URL for queued assistant execution and system wakes; defaults to `http://api:8000` inside Compose.
 
 The production Pi sidecar currently accepts only the server-authored
 `governed_cloud` sandbox snapshot. It loads the compiled trusted extensions

@@ -24,6 +24,7 @@ _ALLOWED_TASKS = {
     "worker.extract_memory_graph",
     "worker.resume_draft",
     "worker.run_subagent",
+    "worker.run_assistant_turn",
 }
 _PUBLISH_RETRY_DELAY = timedelta(minutes=1)
 
@@ -163,6 +164,33 @@ def fail_workflow_task_delivery(event_id: str | None, error_code: str) -> None:
     except Exception:
         db.rollback()
         logger.exception("Task outbox failure write failed: event=%s", event_id)
+        raise
+    finally:
+        db.close()
+
+
+def retry_workflow_task_delivery(
+    event_id: str | None,
+    error_code: str,
+    *,
+    delay_seconds: int = 30,
+) -> None:
+    """Release a claimed task before Celery schedules a transient retry."""
+
+    if not event_id:
+        return
+    db = SessionLocal()
+    try:
+        return_task_outbox_to_pending(
+            db,
+            event_id=event_id,
+            error_code=error_code,
+            retry_after=timedelta(seconds=max(1, delay_seconds)),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Task outbox retry release failed: event=%s", event_id)
         raise
     finally:
         db.close()

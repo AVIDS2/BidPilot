@@ -2,6 +2,17 @@
 
 ## 2026-08-22
 
+- Fixed the browser-owned Assistant execution gap exposed by public testing.
+  New Pi assistant turns now persist a `worker.run_assistant_turn` outbox task
+  and execute through Celery/Redis plus a signed API internal endpoint. The
+  initial SSE is only a queued projection; closing the browser no longer
+  cancels the model loop. Web history restore and the live watcher replay
+  PostgreSQL runtime events by sequence cursor and merge the terminal chat row.
+- Official Pi SDK review confirmed that `SessionManager` persistence is a
+  local session-store API, not a distributed cloud queue. We kept Pi unchanged
+  and use PostgreSQL RuntimeRun/RuntimeEvent + the existing Celery outbox for
+  cloud durability.
+
 - Completed the repository ownership baseline for clean development. The
   canonical interactive path is `apps/web` -> FastAPI control plane
   (`services/api`) -> signed `services/pi-agent` sidecar -> API capability

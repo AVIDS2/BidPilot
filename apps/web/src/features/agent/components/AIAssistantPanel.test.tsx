@@ -528,7 +528,7 @@ describe("AIAssistantPanel", () => {
     expect(screen.queryByText(/助手连接已结束/)).not.toBeInTheDocument();
   });
 
-  it("releases a queued prompt when an SSE response closes without a terminal event", async () => {
+  it("keeps a queued prompt recoverable when an SSE response closes without a terminal event", async () => {
     const { listRuntimeEvents } = await import("@/lib/api");
     vi.mocked(listRuntimeEvents).mockResolvedValue({ items: [] });
     vi.stubGlobal(
@@ -536,7 +536,7 @@ describe("AIAssistantPanel", () => {
       vi.fn().mockResolvedValue({
         ok: true,
         body: streamFrom(
-          'event: assistant.start\ndata: {"conversation_id":"c-incomplete","state":"thinking"}\n\n',
+          'event: assistant.start\ndata: {"conversation_id":"c-incomplete","runtime_run_id":"run-incomplete","state":"queued"}\n\n',
         ),
       }),
     );
@@ -548,11 +548,8 @@ describe("AIAssistantPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    await expandAllActivityDetails();
-    expect(
-      await screen.findByText("助手连接已结束，但运行记录未报告终态。已解除待发送队列，请重试或查看运行记录。"),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+    expect(screen.queryByText(/助手连接已结束/)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument());
   });
 
   it("keeps the composer editable while the assistant is responding", async () => {

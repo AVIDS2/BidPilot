@@ -14,6 +14,7 @@ AssistantReasoningEffort = Literal["low", "medium", "high", "extra", "max"]
 AssistantApprovalMode = Literal["request_approval", "risky_only", "full_access", "custom"]
 AssistantState = Literal[
     "idle",
+    "queued",
     "thinking",
     "needs_input",
     "needs_confirmation",

@@ -201,6 +201,7 @@ def create_or_get_runtime_run(
     approval_mode: str = "risky_only",
     idempotency_key: str | None = None,
     input_json: dict[str, Any] | None = None,
+    initial_status: str = "running",
     commit: bool = True,
 ) -> RuntimeRunCreation:
     """Atomically create one runtime run or return the prior idempotent run.
@@ -211,6 +212,8 @@ def create_or_get_runtime_run(
     """
     if approval_mode not in {"request_approval", "risky_only", "full_access", "custom"}:
         raise ValueError(f"Invalid approval mode: {approval_mode}")
+    if initial_status not in {"queued", "running"}:
+        raise ValueError(f"Invalid initial runtime status: {initial_status}")
     if project_id is not None:
         require_project_capability(
             db,
@@ -228,7 +231,7 @@ def create_or_get_runtime_run(
 
     run = RuntimeRun(
         kind=kind,
-        status="running",
+        status=initial_status,
         org_id=user.org_id,
         user_id=user.id,
         project_id=project_id,
@@ -293,6 +296,7 @@ def create_runtime_run(
     approval_mode: str = "risky_only",
     idempotency_key: str | None = None,
     input_json: dict[str, Any] | None = None,
+    initial_status: str = "running",
     commit: bool = True,
 ) -> RuntimeRun:
     """Compatibility wrapper for callers that do not need creation state."""
@@ -311,6 +315,7 @@ def create_runtime_run(
         approval_mode=approval_mode,
         idempotency_key=idempotency_key,
         input_json=input_json,
+        initial_status=initial_status,
         commit=commit,
     ).run
 

@@ -27,6 +27,7 @@ from app.execution.task_outbox import (
     dispatch_task_outbox_event,
     fail_workflow_task_delivery,
     recover_pending_task_outbox_events,
+    retry_workflow_task_delivery,
 )
 from app.models import ExecutionRun
 from app.models import Bundle, Notification, RuntimeRun, User
@@ -48,7 +49,7 @@ from app.runtime.events import (
 )
 from contracts.document_ingestion import MAX_SOURCE_DOCUMENT_BYTES, canonical_source_document_mime_type, source_document_is_parseable
 from contracts.pi_runtime import pi_model_api, pi_thinking_level
-from contracts.pi_bridge import encode_agent_wake_token, encode_pi_bridge_token
+from contracts.pi_bridge import encode_agent_wake_token, encode_assistant_task_token, encode_pi_bridge_token
 from contracts.runtime import RuntimeEventType, RuntimeRunStatus
 
 logger = logging.getLogger(__name__)
@@ -339,6 +340,63 @@ def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = Non
         except Exception:
             logger.exception("Subagent failure reconciliation failed", extra={"runtime_run_id": runtime_run_id})
         return {"status": "failed", "runtime_run_id": runtime_run_id}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="worker.run_assistant_turn", bind=True, max_retries=8)
+def run_assistant_turn(self, runtime_run_id: str, *, outbox_event_id: str | None = None) -> dict[str, object]:
+    """Drive one queued Pi assistant turn without a browser connection."""
+
+    db = SessionLocal()
+    try:
+        runtime_run = db.scalar(select(RuntimeRun).where(RuntimeRun.id == runtime_run_id))
+        if runtime_run is None:
+            if claim_workflow_task_delivery(outbox_event_id):
+                complete_workflow_task_delivery(outbox_event_id)
+            return {"status": "missing", "runtime_run_id": runtime_run_id}
+        if runtime_run.status in {"succeeded", "failed", "cancelled", "expired"}:
+            if claim_workflow_task_delivery(outbox_event_id):
+                complete_workflow_task_delivery(outbox_event_id)
+            return {"status": runtime_run.status, "runtime_run_id": runtime_run_id}
+        if not claim_workflow_task_delivery(outbox_event_id):
+            return {"status": "duplicate", "runtime_run_id": runtime_run_id}
+        secret = os.getenv("DOCPILOT_PI_INTERNAL_SECRET") or os.getenv("DOCPILOT_JWT_SECRET")
+        if not secret:
+            fail_runtime_run(runtime_run_id, "执行服务配置不完整。", error_code="assistant_task_secret_missing")
+            fail_workflow_task_delivery(outbox_event_id, "assistant_task_secret_missing")
+            return {"status": "failed", "runtime_run_id": runtime_run_id}
+        token = encode_assistant_task_token(
+            run_id=runtime_run.id,
+            user_id=runtime_run.user_id,
+            org_id=runtime_run.org_id,
+            secret=secret,
+        )
+        api_url = os.getenv("DOCPILOT_INTERNAL_API_URL", "http://api:8000").rstrip("/")
+        try:
+            response = httpx.post(
+                f"{api_url}/internal/pi/runs/{runtime_run.id}/execute",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=httpx.Timeout(connect=10, read=900, write=30, pool=30),
+            )
+            if response.status_code == 409:
+                retry_workflow_task_delivery(outbox_event_id, "assistant_task_busy", delay_seconds=15)
+                raise self.retry(countdown=15, max_retries=8)
+            response.raise_for_status()
+            result = response.json()
+        except Retry:
+            raise
+        except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
+            retry_workflow_task_delivery(outbox_event_id, "assistant_task_transport_retry")
+            raise self.retry(exc=exc, countdown=min(120, 2 ** int(self.request.retries)))
+        complete_workflow_task_delivery(outbox_event_id)
+        return result if isinstance(result, dict) else {"status": "completed", "runtime_run_id": runtime_run_id}
+    except Retry:
+        raise
+    except Exception:
+        logger.exception("Assistant task execution failed", extra={"runtime_run_id": runtime_run_id})
+        fail_workflow_task_delivery(outbox_event_id, "assistant_task_failed")
+        raise
     finally:
         db.close()
 

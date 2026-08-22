@@ -134,14 +134,14 @@ async def assistant_stream(
     user: CurrentUser = Depends(require_auth),
     db: Session = Depends(get_db),
 ):
-    """Stream one governed Harness turn via Server-Sent Events.
+    """Queue one governed Pi turn and project its durable events over SSE.
 
     The Harness owns conversational tool selection and durable execution
     records. Long-running bid pipelines remain separate LangGraph workflows
     linked from the resulting runtime run.
 
     SSE event types:
-    - ``assistant.start``: agent begins processing
+    - ``assistant.start``: runtime run created (usually ``queued``)
     - ``assistant.message``: incremental token from LLM (streamed)
     - ``assistant.tool_started``: a tool is being executed
     - ``assistant.tool_succeeded``: tool completed with result

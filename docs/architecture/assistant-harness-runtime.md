@@ -48,24 +48,51 @@ inventory is the current authority.
 1. The browser sends a new `client_request_id` for each submit.
 2. The API resolves the project boundary, staged attachments, and a complete
    server-side or encrypted BYOK model configuration.
-3. A `RuntimeRun(kind=assistant_turn)` is created before any capability runs.
-4. Pi streams native model text/tool events. Independent read-only calls may
+3. A `RuntimeRun(kind=assistant_turn, status=queued)` and a transactional
+   `TaskOutboxEvent(task_name=worker.run_assistant_turn)` are created before
+   any capability runs. The broker wake-up is best effort; Worker Beat
+   rediscovers pending or expired outbox rows.
+4. Worker claims the outbox delivery and invokes the API's signed internal
+   execution entrypoint. The API loads the durable run context and starts Pi.
+   Independent read-only calls may
    execute in parallel; mutating calls are sequential and each goes through the
    internal bridge. Campaign work uses the dedicated `run_section_campaign`
    tool rather than a burst of independent writes.
 5. Every capability goes through authorization, policy, audit, and durable
    runtime events. The model never bypasses a product service.
 6. The assistant response, terminal state, and public event summaries are
-   persisted in PostgreSQL. SSE is a live projection of that durable trace.
+   persisted in PostgreSQL. SSE is only a short-lived projection of that
+   durable trace; closing the browser does not cancel the Worker task.
+
+### Queue and reconnect contract
+
+The browser must never be the owner of an assistant turn. The initial
+`POST /assistant/stream` returns the conversation ID and queued runtime ID,
+then may close immediately. The Web client keeps a per-run event cursor and
+polls `GET /runtime/runs/{run_id}/events?after_sequence=N` while the run is
+`queued`, `running`, `awaiting_approval` or `cancel_requested`. On a reload it
+loads the conversation messages, lists the conversation's runtime runs, and
+replays every run from sequence zero before continuing active runs from their
+last cursor. Terminal status is taken from `RuntimeRun`, not inferred from a
+closed socket.
+
+The Worker task is idempotent through the outbox delivery lease and the run
+ID. A transient API/Pi transport failure releases the outbox row for retry;
+the internal execution endpoint rejects a second active loop for the same
+run. Pi remains unchanged: its AgentSession is created by the Worker-owned
+execution attempt, while PostgreSQL `RuntimeRun`/`RuntimeEvent` remains the
+cloud source of truth.
 
 ### Pi integration boundary
 
-Each HTTP assistant turn creates a real Pi `AgentSession` with an in-memory Pi
-session manager. This is deliberate: Pi owns the active model/tool loop, while
-PostgreSQL owns the durable conversation, business state, approvals, runtime
-events and cross-request recovery. Reusing Pi's local JSONL session files as a
-second source of truth would violate the control-plane boundary and make
-horizontal deployment inconsistent.
+Each Worker-delivered assistant turn creates a real Pi `AgentSession` with an
+in-memory session manager for that attempt. This is deliberate: Pi owns the
+active model/tool loop, while PostgreSQL owns the durable conversation,
+business state, approvals, runtime events and cross-request recovery. Pi's
+official `SessionManager.create/continueRecent/open` APIs can persist JSONL
+sessions for local/desktop use, but they are not a cloud queue or a distributed
+lease. Reusing those local files as a second source of truth would violate the
+control-plane boundary and make horizontal deployment inconsistent.
 
 The sidecar uses Pi's native `ModelRuntime`, `SettingsManager`, resource loader,
 extension hooks, retry/compaction lifecycle and `agent_settled` terminal signal.

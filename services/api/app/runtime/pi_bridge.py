@@ -234,6 +234,36 @@ def execute_pi_tool(
         db.close()
 
 
+@router.post("/runs/{run_id}/execute")
+async def execute_queued_pi_run(
+    run_id: str,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Run one queued assistant turn from Worker, independent of the browser."""
+
+    claims = _decode_token(authorization, purpose="assistant-task")
+    if claims.get("run_id") != run_id:
+        raise HTTPException(status_code=403, detail="Assistant task run scope mismatch")
+    db: Session = SessionLocal()
+    try:
+        run = db.get(RuntimeRun, run_id)
+        if run is None or run.user_id != claims.get("user_id") or run.org_id != claims.get("org_id"):
+            raise HTTPException(status_code=404, detail="Assistant runtime run not found")
+        if run.kind != "assistant_turn" or run.engine != "pi":
+            raise HTTPException(status_code=409, detail="Runtime run is not a queued Pi assistant turn")
+        if run.status in {"succeeded", "failed", "cancelled", "expired"}:
+            return {"status": run.status, "run_id": run.id}
+        if run.status == "running":
+            # A duplicate broker delivery must not start a second model loop.
+            raise HTTPException(status_code=409, detail="Assistant runtime run is already executing")
+        from .assistant_execution import execute_queued_assistant_run
+
+        status = await execute_queued_assistant_run(db, run)
+        return {"status": status, "run_id": run.id}
+    finally:
+        db.close()
+
+
 def _runtime_user(db: Session, row: User) -> CurrentUser:
     return CurrentUser(
         id=row.id,

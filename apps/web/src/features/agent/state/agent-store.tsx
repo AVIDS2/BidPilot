@@ -17,6 +17,7 @@ import {
   listChatConversations,
   type ChatConversationRead,
   type ChatMessageRead,
+  type RuntimeRunListItem,
 } from "@/lib/api";
 import {
   getStoredValue,
@@ -48,6 +49,7 @@ export type AssistantReasoningEffort = "low" | "medium" | "high" | "extra" | "ma
 export type AssistantApprovalMode = "request_approval" | "risky_only" | "full_access" | "custom";
 export type AssistantStatus =
   | "idle"
+  | "queued"
   | "thinking"
   | "needs_input"
   | "needs_confirmation"
@@ -232,6 +234,7 @@ type Action =
   | { type: "SET_CONVERSATIONS"; conversations: ChatConversationRead[] }
   | { type: "UPDATE_CONVERSATION_TITLE"; conversationId: string; title: string }
   | { type: "ADD_MESSAGE"; message: ChatMessage }
+  | { type: "MERGE_MESSAGES"; messages: ChatMessage[] }
   | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
   | { type: "SET_LAST_USER_DURABLE_ID"; durableId: string }
   | { type: "UPDATE_LAST_ASSISTANT"; content: string }
@@ -524,6 +527,29 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       };
     case "ADD_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
+    case "MERGE_MESSAGES": {
+      const messages = [...state.messages];
+      for (const incoming of action.messages) {
+        const index = messages.findIndex(
+          (message) =>
+            message.id === incoming.id ||
+            (message.role === incoming.role &&
+              Boolean(message.runtimeRunId) &&
+              message.runtimeRunId === incoming.runtimeRunId),
+        );
+        if (index < 0) {
+          messages.push(incoming);
+        } else {
+          messages[index] = {
+            ...messages[index],
+            ...incoming,
+            transcriptParts: messages[index].transcriptParts ?? incoming.transcriptParts,
+          };
+        }
+      }
+      messages.sort((left, right) => left.timestamp - right.timestamp);
+      return { ...state, messages };
+    }
     case "REPLACE_MESSAGES":
       return {
         ...state,
@@ -1239,6 +1265,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 function asAssistantStatus(value: unknown): AssistantStatus | undefined {
   if (
     value === "idle" ||
+    value === "queued" ||
     value === "thinking" ||
     value === "needs_input" ||
     value === "needs_confirmation" ||
@@ -1538,9 +1565,57 @@ async function replayRuntimeEvents(
   return { replayed, terminal };
 }
 
+function isActiveRuntimeRun(run: RuntimeRunListItem): boolean {
+  return ["queued", "running", "awaiting_approval", "cancel_requested"].includes(run.status);
+}
+
+function normalizeRuntimeRuns(value: unknown): RuntimeRunListItem[] {
+  if (Array.isArray(value)) return value as RuntimeRunListItem[];
+  if (value && typeof value === "object" && Array.isArray((value as { items?: unknown }).items)) {
+    return (value as { items: RuntimeRunListItem[] }).items;
+  }
+  return [];
+}
+
+function assistantStatusForRuntimeRun(run: RuntimeRunListItem): AssistantStatus {
+  switch (run.status) {
+    case "queued":
+      return "queued";
+    case "running":
+      return "thinking";
+    case "awaiting_approval":
+      return "needs_confirmation";
+    case "cancel_requested":
+      return "thinking";
+    case "succeeded":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "cancelled":
+    case "expired":
+      return "completed";
+    default:
+      return "thinking";
+  }
+}
+
+function waitForAssistantRuntimePoll(signal: AbortSignal, milliseconds = 1000): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timeout = window.setTimeout(resolve, milliseconds);
+    signal.addEventListener("abort", () => {
+      window.clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+  });
+}
+
 
 export function isAssistantBusy(status: AssistantStatus) {
-  return ["thinking", "executing_tool", "running_workflow"].includes(status);
+  return ["queued", "thinking", "executing_tool", "running_workflow"].includes(status);
 }
 
 function toStoredChatMessages(items: ChatMessageRead[]): ChatMessage[] {
@@ -1636,7 +1711,9 @@ export function AIAssistantProvider({
   navigateRef.current = navigate;
   const runtimeEventCursorsRef = useRef<RuntimeEventCursor>({});
   const activeStreamAbortRef = useRef<AbortController | null>(null);
+  const runtimeWatchAbortRef = useRef<AbortController | null>(null);
   const activeAssistantRuntimeRunRef = useRef<string | null>(null);
+  const watchedRuntimeRunRef = useRef<string | null>(null);
   // A previous history request may resolve after the user has picked another
   // conversation. Only the newest request is allowed to project server state.
   const conversationLoadVersionRef = useRef(0);
@@ -1660,6 +1737,71 @@ export function AIAssistantProvider({
     );
     return true;
   }, []);
+
+  const watchConversationRuntime = useCallback(async (
+    conversationId: string,
+    options?: AssistantSseHandlingOptions,
+  ) => {
+    runtimeWatchAbortRef.current?.abort();
+    const controller = new AbortController();
+    runtimeWatchAbortRef.current = controller;
+    const watchOptions: AssistantSseHandlingOptions = {
+      ...options,
+      shouldHandleRuntimeEvent,
+      onRuntimeRun: (runId) => {
+        watchedRuntimeRunRef.current = runId;
+        options?.onRuntimeRun?.(runId);
+      },
+    };
+    try {
+      for (let attempt = 0; attempt < 900 && !controller.signal.aborted; attempt += 1) {
+        let runs: RuntimeRunListItem[] = [];
+        try {
+          runs = normalizeRuntimeRuns(await listRuntimeRuns(20, conversationId));
+        } catch {
+          // A transient reconnect failure must not turn a durable run into a
+          // client-visible failure. The next poll retries from the same cursor.
+          await waitForAssistantRuntimePoll(controller.signal, Math.min(5000, 1000 + attempt * 100));
+          continue;
+        }
+        const activeRuns = runs.filter(isActiveRuntimeRun);
+        const candidates = activeRuns.length > 0 ? [...activeRuns].reverse() : runs.slice(0, 1);
+        for (const run of candidates) {
+          if (controller.signal.aborted) return;
+          await replayRuntimeEvents(
+            run.id,
+            runtimeEventCursorsRef.current,
+            conversationId,
+            dispatch,
+            watchOptions,
+          );
+        }
+        const active = activeRuns[0];
+        if (!active) {
+          try {
+            const history = await getChatConversationMessages(conversationId);
+            dispatch({ type: "MERGE_MESSAGES", messages: toStoredChatMessages(history.items) });
+          } catch {
+            // Runtime events remain the source of truth for the visible trace;
+            // a transient chat-history refresh can be retried on next mount.
+          }
+          const latest = runs[0];
+          dispatch({ type: "SET_STREAMING", streaming: false });
+          dispatch({ type: "SET_STATUS", status: latest ? assistantStatusForRuntimeRun(latest) : "idle" });
+          watchedRuntimeRunRef.current = null;
+          return;
+        }
+        watchedRuntimeRunRef.current = active.id;
+        dispatch({ type: "SET_STATUS", status: assistantStatusForRuntimeRun(active) });
+        dispatch({ type: "SET_STREAMING", streaming: true });
+        await waitForAssistantRuntimePoll(controller.signal);
+      }
+    } finally {
+      if (runtimeWatchAbortRef.current === controller) {
+        runtimeWatchAbortRef.current = null;
+      }
+    }
+  }, [dispatch, shouldHandleRuntimeEvent]);
 
   const open = useCallback(
     (mode?: AssistantMode) => dispatch({ type: "OPEN", mode }),
@@ -1710,8 +1852,22 @@ export function AIAssistantProvider({
         events: Awaited<ReturnType<typeof listRuntimeEvents>>["items"];
       }> = [];
       try {
-        const runs = await listRuntimeRuns(12, conversationId);
+        const runs = normalizeRuntimeRuns(await listRuntimeRuns(12, conversationId));
         if (!isCurrentLoad()) return;
+        for (const activeRun of runs.filter(isActiveRuntimeRun)) {
+          if (!restoredMessages.some((message) => message.runtimeRunId === activeRun.id)) {
+            restoredMessages = [
+              ...restoredMessages,
+              {
+                id: `runtime-${activeRun.id}-assistant-message`,
+                runtimeRunId: activeRun.id,
+                role: "assistant",
+                content: "",
+                timestamp: Date.parse(activeRun.created_at) || Date.now(),
+              },
+            ];
+          }
+        }
         // Replay oldest→newest so tool order matches conversation flow.
         for (const run of [...runs].reverse()) {
           const response = await listRuntimeEvents(run.id, 0);
@@ -1772,8 +1928,20 @@ export function AIAssistantProvider({
       }
 
       if (!isCurrentLoad()) return;
-      // History is complete — never leave restored tools stuck in "running".
-      dispatch({ type: "FINALIZE_OPEN_EXECUTION_ITEMS" });
+      // Terminal history must not leave stale live rows. Active queued/running
+      // runs remain open and are completed by the durable poller below.
+      for (const run of normalizeRuntimeRuns(await listRuntimeRuns(12, conversationId)).filter((item) => !isActiveRuntimeRun(item))) {
+        dispatch({ type: "FINALIZE_OPEN_EXECUTION_ITEMS", runtimeRunId: run.id, failed: run.status === "failed" });
+      }
+      const currentRuns = normalizeRuntimeRuns(await listRuntimeRuns(12, conversationId));
+      const activeRun = currentRuns.find(isActiveRuntimeRun);
+      if (activeRun) {
+        dispatch({ type: "SET_STATUS", status: assistantStatusForRuntimeRun(activeRun) });
+        dispatch({ type: "SET_STREAMING", streaming: true });
+        void watchConversationRuntime(conversationId);
+      } else {
+        dispatch({ type: "SET_STATUS", status: "idle" });
+      }
       dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: null });
       dispatch({ type: "OPEN", mode: "panel" });
     } catch (error) {
@@ -1794,11 +1962,10 @@ export function AIAssistantProvider({
         ],
       });
     } finally {
-      if (isCurrentLoad()) {
-        dispatch({ type: "SET_STATUS", status: "idle" });
-      }
+      // The loaded run status (or its watcher) owns the final UI state. Do not
+      // blindly reset it to idle after restoring a queued/running run.
     }
-  }, []);
+  }, [watchConversationRuntime]);
 
   const updateConversationTitle = useCallback((conversationId: string, title: string) => {
     dispatch({ type: "UPDATE_CONVERSATION_TITLE", conversationId, title });
@@ -1845,28 +2012,30 @@ export function AIAssistantProvider({
 
   const stopAssistantResponse = useCallback(() => {
     const controller = activeStreamAbortRef.current;
-    if (!controller || controller.signal.aborted) return;
-    const runtimeRunId = activeAssistantRuntimeRunRef.current;
+    const runtimeRunId = activeAssistantRuntimeRunRef.current ?? watchedRuntimeRunRef.current;
     if (!runtimeRunId) {
       // The request has not exposed a durable run ID yet.
-      controller.abort();
+      if (controller && !controller.signal.aborted) controller.abort();
       return;
     }
     void cancelRuntimeWorkflow(runtimeRunId).catch((error: unknown) => {
       console.error("Failed to cancel assistant runtime:", error);
-      controller.abort();
+      controller?.abort();
     });
   }, []);
 
   useEffect(
     () => () => {
       activeStreamAbortRef.current?.abort();
+      runtimeWatchAbortRef.current?.abort();
     },
     [],
   );
 
   const startNewConversation = useCallback(() => {
     conversationLoadVersionRef.current += 1;
+    runtimeWatchAbortRef.current?.abort();
+    watchedRuntimeRunRef.current = null;
     didAutoRestoreRef.current = true;
     removeStoredValue("lastAssistantConversationId");
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: null });
@@ -2053,11 +2222,17 @@ export function AIAssistantProvider({
 
         const recovered = await recoverDurableTimeline();
         if (!receivedTerminalEvent && !recovered.terminal) {
-          dispatch({
-            type: "SET_SESSION_ERROR",
-            message: "助手连接已结束，但运行记录未报告终态。已解除待发送队列，请重试或查看运行记录。",
-            errorCode: "assistant_stream_incomplete",
-          });
+          if (activeRuntimeRunId && activeConversationId) {
+            // The request is intentionally short-lived now that the Worker
+            // owns execution. Continue from the same durable event cursor.
+            void watchConversationRuntime(activeConversationId, sseOptions);
+          } else {
+            dispatch({
+              type: "SET_SESSION_ERROR",
+              message: "助手连接已结束，暂时没有拿到可恢复的运行记录。请稍后重试。",
+              errorCode: "assistant_stream_incomplete",
+            });
+          }
         }
       } catch (err) {
         if (abortController.signal.aborted) {
@@ -2066,7 +2241,11 @@ export function AIAssistantProvider({
         }
         try {
           const recovered = await recoverDurableTimeline();
-          if (recovered.replayed || recovered.terminal) return;
+          if (recovered.terminal) return;
+          if (recovered.replayed && activeRuntimeRunId && activeConversationId) {
+            void watchConversationRuntime(activeConversationId, sseOptions);
+            return;
+          }
         } catch (recoveryError) {
           console.warn("Failed to replay assistant runtime events:", recoveryError);
         }
@@ -2105,6 +2284,7 @@ export function AIAssistantProvider({
       state.approvalMode,
       state.selectedProviderConfigId,
       state.status,
+      watchConversationRuntime,
       shouldHandleRuntimeEvent,
     ],
   );
