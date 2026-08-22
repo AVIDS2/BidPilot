@@ -423,14 +423,9 @@ function RuntimeTimeline({
   t: Translate;
 }) {
   const hasRunningNode = nodes.some((node) => node.status === "running");
-  const active = statusIsActive(item.status) || hasRunningNode;
-  const [open, setOpen] = useState(() => active || item.status === "failed");
+  const [open, setOpen] = useState(false);
   const completed = nodes.filter((node) => node.status === "completed").length;
   const summary = t("activity.workflowProgress", { defaultValue: "Workflow steps" });
-
-  useEffect(() => {
-    if (active || item.status === "failed") setOpen(true);
-  }, [active, item.status]);
 
   if (nodes.length === 0) return null;
 
@@ -677,8 +672,8 @@ function ToolStep({
   onOpenWorkflowCanvas?: (projectId: string) => void;
   isCancelling: boolean;
 }) {
-  const [open, setOpen] = useState(() => statusIsActive(item.status) || item.status === "failed");
-  const [renderDetail, setRenderDetail] = useState(() => statusIsActive(item.status) || item.status === "failed");
+  const [open, setOpen] = useState(false);
+  const [renderDetail, setRenderDetail] = useState(false);
   const detailCloseTimer = useRef<number | null>(null);
   const previousStatus = useRef(item.status);
   const Icon: LucideIcon = getAssistantToolIcon(item);
@@ -688,11 +683,7 @@ function ToolStep({
   const active = statusIsActive(item.status);
 
   useEffect(() => {
-    if (active || item.status === "failed") {
-      if (detailCloseTimer.current !== null) window.clearTimeout(detailCloseTimer.current);
-      setRenderDetail(true);
-      setOpen(true);
-    } else if (statusIsActive(previousStatus.current)) {
+    if (!active && statusIsActive(previousStatus.current)) {
       setOpen(false);
       detailCloseTimer.current = window.setTimeout(() => setRenderDetail(false), 320);
     }
@@ -750,6 +741,32 @@ function ToolStep({
   );
 }
 
+function DeepResearchRuntime({ items }: { items: AssistantExecutionItem[] }) {
+  const [open, setOpen] = useState(false);
+  const searches = items.filter((item) => item.toolName === "web_search");
+  const completed = searches.filter((item) => item.status === "succeeded").length;
+  const active = searches.some((item) => statusIsActive(item.status));
+
+  return (
+    <section className={`cr-deep-research-runtime${active ? " is-live" : ""}`} aria-label="深度调研运行状态">
+      <header>
+        <span className={active ? "cr-live-label" : undefined}>深度调研运行状态</span>
+        <small>{completed}/{searches.length || 0} 个来源已核验</small>
+      </header>
+      <button type="button" className="cr-inline-action" onClick={() => setOpen((value) => !value)}>
+        {open ? "收起调研过程" : "查看调研过程"}
+      </button>
+      {open && (
+        <ol className="cr-deep-research-stages">
+          <li className={searches.length ? "is-active" : undefined}>来源发现</li>
+          <li className={completed === searches.length && searches.length > 0 ? "is-complete" : undefined}>来源核验</li>
+          <li>候选结果汇总</li>
+        </ol>
+      )}
+    </section>
+  );
+}
+
 function TaskTurn({
   turn,
   title,
@@ -769,17 +786,12 @@ function TaskTurn({
 }) {
   const tone = aggregateStatus(turn.items);
   const active = statusIsActive(tone);
-  const [open, setOpen] = useState(() => active || tone === "failed");
-  const previousTone = useRef(tone);
+  const [open, setOpen] = useState(false);
   const summary = displayGroupSummary(turn.items, t);
-  const actionTitle = title || summary;
-  const secondarySummary = title ? summary : "";
-
-  useEffect(() => {
-    if (active || tone === "failed") setOpen(true);
-    else if (statusIsActive(previousTone.current)) setOpen(false);
-    previousTone.current = tone;
-  }, [active, tone]);
+  const presentation = turn.items.find((item) => item.presentationKind);
+  const deepResearch = presentation?.presentationKind === "deep_research";
+  const actionTitle = title || presentation?.presentationTitle || summary;
+  const secondarySummary = title || presentation?.presentationTitle ? summary : "";
 
   return (
     <section className={`cr-task-turn is-${tone}${active ? " is-live" : ""}`} data-status={tone}>
@@ -802,7 +814,9 @@ function TaskTurn({
       <div className={`cr-command-grid${open ? " is-open" : ""}`}>
         <div className="cr-command-grid-inner">
           <div className="cr-run-detail">
-            {turn.items.map((item) => (
+            {deepResearch ? (
+              <DeepResearchRuntime items={turn.items} />
+            ) : turn.items.map((item) => (
               <ToolStep
                 key={item.toolCallId || item.id}
                 item={item}
@@ -829,11 +843,18 @@ export function ClaudeActivityTimeline({
   onOpenWorkflowCanvas,
 }: ClaudeActivityTimelineProps) {
   const { t } = useTranslation("ai-assistant");
-  const tone = aggregateStatus(items);
+  // Child runs have their own environment surface. Keeping them out of the
+  // parent chronology prevents parallel work from becoming a second flattened
+  // conversation inside the same timeline.
+  const timelineItems = useMemo(
+    () => (nested ? items : items.filter((item) => !item.parentRuntimeRunId)),
+    [items, nested],
+  );
+  const tone = aggregateStatus(timelineItems);
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
-  const turns = useMemo(() => groupActivityTurns(items), [items]);
+  const turns = useMemo(() => groupActivityTurns(timelineItems), [timelineItems]);
 
-  if (items.length === 0) return null;
+  if (timelineItems.length === 0) return null;
 
   const requestCancellation = async (runtimeRunId: string) => {
     if (!onCancelWorkflow || cancellingRunId) return;

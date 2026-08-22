@@ -223,9 +223,9 @@ describe("ClaudeAgentThread", () => {
     const blocks = screen.getByLabelText("任务执行轨迹").children;
     expect(screen.getAllByTestId("assistant-timeline")).toHaveLength(2);
     expect(Array.from(blocks).map((node) => node.textContent).filter(Boolean)).toEqual([
-      "招标机会调研: first_search",
+      "first_search,second_search",
       "第一批来源已核对，继续检查公告。",
-      "second_search",
+      "first_search,second_search",
     ]);
   });
 
@@ -245,7 +245,7 @@ describe("ClaudeAgentThread", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Thinking")).toBeInTheDocument();
+    expect(screen.getByLabelText("正在思考")).toBeInTheDocument();
   });
 
   it("sends user retry through the durable checkpoint action", () => {

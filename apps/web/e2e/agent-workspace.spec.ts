@@ -392,7 +392,8 @@ test("restores parallel subagents as a paged execution view", async ({ page }, t
     });
   });
   await page.route("**/runtime/runs/child-*/events?**", async (route) => {
-    const childId = new URL(route.request().url()).pathname.split("/").at(-2) ?? "child-1";
+    const pathParts = new URL(route.request().url()).pathname.split("/");
+    const childId = pathParts[pathParts.length - 2] ?? "child-1";
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({

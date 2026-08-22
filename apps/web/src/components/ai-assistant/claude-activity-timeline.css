@@ -932,6 +932,43 @@
   background: #f6f5f1;
 }
 
+.assistant-claude-timeline .cr-deep-research-runtime {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border-left: 2px solid #d8d5ce;
+  background: #fafaf8;
+}
+
+.assistant-claude-timeline .cr-deep-research-runtime header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: #4c4a45;
+  font-size: 13px;
+}
+
+.assistant-claude-timeline .cr-deep-research-runtime header small {
+  color: #8a8881;
+  font-size: 11px;
+}
+
+.assistant-claude-timeline .cr-deep-research-runtime.is-live header > span {
+  animation: claude-timeline-live-label 2.4s ease-in-out infinite;
+}
+
+.assistant-claude-timeline .cr-deep-research-stages {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0 0 0 18px;
+  color: #777570;
+  font-size: 12px;
+}
+
+.assistant-claude-timeline .cr-deep-research-stages li.is-active { color: #4b70d8; }
+.assistant-claude-timeline .cr-deep-research-stages li.is-complete { color: #35845c; }
+
 @media (max-width: 520px) {
   .assistant-claude-timeline .cr-tool-summary,
   .assistant-claude-timeline .cr-run-step,

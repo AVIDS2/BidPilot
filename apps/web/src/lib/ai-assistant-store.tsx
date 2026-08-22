@@ -126,12 +126,18 @@ export interface AssistantInputRequest {
 export interface AssistantExecutionItem {
   id: string;
   messageId?: string;
-  kind: "intent" | "tool" | "workflow";
+  kind: "intent" | "tool" | "workflow" | "subagent";
   toolName?: string;
   toolCallId?: string;
   turnId?: string;
   runId?: string;
   runtimeRunId?: string;
+  parentRuntimeRunId?: string;
+  executionGroupId?: string;
+  agentProfile?: string;
+  presentationKind?: string;
+  presentationSessionId?: string;
+  presentationTitle?: string;
   status: "pending" | "running" | "succeeded" | "failed" | "cancelled";
   title: string;
   summary?: string;

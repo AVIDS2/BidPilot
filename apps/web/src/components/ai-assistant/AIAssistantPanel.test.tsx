@@ -336,7 +336,7 @@ describe("AIAssistantPanel", () => {
     });
     expect(collapsedLiveTool).toHaveAttribute("aria-busy", "true");
     expect(collapsedLiveTool).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getAllByText("running").length).toBeGreaterThan(0);
+    expect(timeline.querySelector(".cr-live-label")).toBeTruthy();
 
     await expandActivityDetails();
     await expandToolDetails("Search projects");
@@ -524,7 +524,7 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(fetch).toHaveBeenCalled());
-    expect(listRuntimeEvents).not.toHaveBeenCalled();
+    expect(listRuntimeEvents).toHaveBeenCalledWith("run-terminal-sequence", 14);
     expect(screen.queryByText(/助手连接已结束/)).not.toBeInTheDocument();
   });
 
@@ -864,7 +864,10 @@ describe("AIAssistantPanel", () => {
       expect(screen.getAllByText("已打开项目页。").length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText("Open page").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("done").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("assistant-activity-timeline")).toHaveAttribute(
+      "data-status",
+      "succeeded",
+    );
     expect(
       screen.queryByText("raw detail should be hidden until expanded"),
     ).not.toBeInTheDocument();
@@ -1442,7 +1445,7 @@ describe("AIAssistantPanel", () => {
       expect(screen.getByText("Workflow steps")).toBeInTheDocument();
       expect(screen.getByText("Draft section")).toBeInTheDocument();
     });
-    expect(screen.getByText("1 of 1 steps completed")).toBeInTheDocument();
+    expect(screen.getByText("Workflow steps").closest("section")).toHaveTextContent("1/1");
   });
 
   it("offers authenticated downloads for Agent-generated artifacts", async () => {
