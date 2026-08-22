@@ -506,19 +506,18 @@ unverified visual changes merely to iterate in production.
   `POST /assistant/attachments` is its companion upload boundary; Runtime
   routes only replay, approve, cancel, or inspect already-created durable
   runs and do not create a second Assistant execution path.
-- New turns use the Streaming Harness. Historical `operator` and
-  `streaming_harness` configuration values are parser-level aliases that
-  resolve to `harness`; they no longer select separate business logic.
+- Superseded historical note: this entry described the pre-Pi Streaming
+  Harness and its parser aliases. Since 2026-08-19, new turns use the native
+  Pi AgentSession path; the old aliases remain only for historical replay.
 - The legacy LangGraph operator planner remains isolated solely to complete or
   resume historical `langgraph_operator` runs. The legacy ReAct graph has no
   remaining production import and is retained only for bounded compatibility
   coverage. Both are explicitly scheduled for removal by `2026-09-30` unless
   a documented migration dependency remains.
-- Production configuration guidance, readiness checks, environment examples,
-  and the runtime architecture inventory now consistently require
-  `DOCPILOT_ASSISTANT_ENGINE=harness`. No public environment or deployment was
-  changed in this closure.
-- Verification on the dedicated local `docpilot_test` database: focused
+- Superseded historical note: the old production examples required
+  `DOCPILOT_ASSISTANT_ENGINE=harness`. Current production uses Pi with the
+  `pi-agent` sidecar, and the public deployment was rebuilt on 2026-08-22.
+- Historical verification on the dedicated local `docpilot_test` database: focused
   runtime/OpenAPI/checkpoint/readiness regression `43 passed`; complete
   runtime + Assistant + OpenAPI/checkpoint/readiness regression `198 passed`;
   targeted Ruff and Python compilation passed. No public deployment was
@@ -1587,3 +1586,20 @@ unverified visual changes merely to iterate in production.
   model observations are rejected. `Auto-run` remains a business approval mode,
   not host access. Sidecar tests passed 9/9, API resource/prompt regressions
   passed 10/10, and Web SSE/timeline regressions passed 47/47.
+
+## Public Pi release (2026-08-22)
+
+- Published `master` at `d0aceab` and rebuilt the VPS stack from that exact
+  commit. The VPS working tree is clean; the previous local production commit
+  remains recoverable as `backup/production-pre-sync-30ecd02`.
+- Production readiness, Alembic migration, LangGraph checkpoint setup, Pi
+  sidecar, API, Worker, Worker Beat and web containers all completed. Public
+  checks returned `200` for `https://bidpilot-api.rglens.com/health` and
+  `https://bidpilot.rglens.com/`.
+- The API container is explicitly configured with `DOCPILOT_ASSISTANT_ENGINE=pi`
+  and the private `pi-agent` bridge. No public production selector points to
+  the historical Python Harness.
+- The release web suite passed `36` test files / `163` tests; Pi Agent passed
+  `13` native runtime/sandbox/extension tests; TypeScript and Python Ruff
+  checks passed. The production web build completed with only the existing
+  large-chunk advisory.
