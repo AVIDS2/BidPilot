@@ -219,7 +219,10 @@ Mem0 failures are fail-open. Only low-risk preferences and communication
 style may be captured. Tender files, evidence, qualifications, deadlines,
 hidden reasoning, tokens, and tool payloads must remain in BidPilot's own
 authorized stores. Account deletion must call the provider's scoped
-`delete_all` operation as part of the privacy workflow.
+`delete_all` operation as part of the privacy workflow. Mem0 user and agent
+entities are separate; reads use the official OR scope filter and deletion
+issues one request per entity. When `DOCPILOT_MEM0_APP_SCOPE=false`, Platform-
+only `app_id` is omitted for compatible OSS/self-hosted endpoints.
 
 Before API or Worker starts in staging or production, apply Alembic migrations and run `python scripts/setup_langgraph_checkpoints.py` once against the target database. The production Compose file performs both as ordered one-shot services: `migrate` upgrades the business schema, then `checkpoints` creates or upgrades LangGraph checkpoint tables without logging the connection URL. Runtime services only open prepared storage; they do not create business or checkpoint tables lazily.
 

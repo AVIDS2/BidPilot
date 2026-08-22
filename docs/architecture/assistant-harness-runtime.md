@@ -112,6 +112,29 @@ disabled in the cloud sidecar. Private deployments may add a separately
 governed workspace companion, but tenant business writes must continue to pass
 through the internal tool bridge.
 
+### Profile memory provider boundary
+
+Mem0 Platform is an optional personalization provider behind
+`services/api/app/memory/mem0_provider.py`. It receives only bounded user and
+assistant messages from successful turns and is instructed to retain low-risk
+preferences such as language and response format. Tender facts, deadlines,
+budgets, qualifications, source documents, tool payloads and credentials remain
+in PostgreSQL-backed BidPilot records and are never delegated to the profile
+provider.
+
+The adapter follows Mem0's entity-scoping semantics: facts extracted from user
+and assistant messages are stored under separate `user_id` and `agent_id`
+records, so reads combine those scopes with `OR` while retaining `app_id` as a
+tenant boundary. Account deletion removes the two entity scopes in separate
+requests. `DOCPILOT_MEM0_APP_SCOPE=false` omits Platform-only `app_id` fields
+for compatible OSS/self-hosted endpoints. The provider is fail-open for normal
+assistant turns, but account deletion retries failures through the Worker.
+
+Production enablement is intentionally explicit: both
+`DOCPILOT_MEM0_ENABLED=true` and a server-side Mem0 key are required. The key
+must be injected through the deployment secret store; it must not enter Git,
+the browser, runtime events or logs.
+
 ### Trusted runtime resources and cloud sandbox
 
 The API sends a server-authored resource and sandbox snapshot with every Pi

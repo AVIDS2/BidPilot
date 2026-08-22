@@ -111,15 +111,32 @@ def _configured_client() -> MemoryClient | None:
 
 
 def _scope_filters(*, user_id: str, org_id: str) -> dict[str, Any]:
-    filters: list[dict[str, Any]] = [
-        {"user_id": user_id},
-        {"agent_id": mem0_agent_id()},
-    ]
+    # Mem0 stores facts extracted from user and assistant messages under
+    # separate entities. Combining user_id and agent_id in one AND filter
+    # therefore returns no results. Keep the tenant boundary as AND and query
+    # the two entity scopes with OR, as documented by the official API.
+    entity_filter: dict[str, Any] = {
+        "OR": [
+            {"user_id": user_id},
+            {"agent_id": mem0_agent_id()},
+        ]
+    }
     # Mem0 Platform supports app_id for tenant/project separation. OSS
     # deployments can turn this off because their API does not expose app_id.
     if os.getenv("DOCPILOT_MEM0_APP_SCOPE", "true").strip().lower() in {"1", "true", "yes"}:
-        filters.append({"app_id": org_id})
-    return {"AND": filters}
+        return {"AND": [{"app_id": org_id}], "OR": entity_filter["OR"]}
+    return entity_filter
+
+
+def _entity_scope_kwargs(*, user_id: str | None = None, org_id: str | None = None) -> dict[str, str]:
+    """Build SDK entity kwargs without sending Platform-only app_id to OSS hosts."""
+
+    values: dict[str, str] = {}
+    if user_id:
+        values["user_id"] = user_id
+    if org_id and os.getenv("DOCPILOT_MEM0_APP_SCOPE", "true").strip().lower() in {"1", "true", "yes"}:
+        values["app_id"] = org_id
+    return values
 
 
 def search_profile_memory(
@@ -195,16 +212,16 @@ def capture_profile_memory(
     if not bounded_messages:
         return {"status": "skipped", "reason": "empty_messages"}
     try:
+        scope_kwargs = _entity_scope_kwargs(user_id=user_id, org_id=org_id)
         response = client.add(
             bounded_messages,
             options=AddMemoryOptions(
                 custom_instructions=_PROFILE_INSTRUCTIONS,
                 metadata={"source": "bidpilot_assistant", "profile_version": "v1"},
             ),
-            user_id=user_id,
             agent_id=mem0_agent_id(),
-            app_id=org_id,
             run_id=run_id,
+            **scope_kwargs,
         )
     except Exception:  # noqa: BLE001 - profile capture cannot fail an Agent run
         logger.warning("Mem0 profile capture failed; assistant run remains successful", exc_info=True)
@@ -220,15 +237,21 @@ def delete_profile_memory(*, user_id: str, org_id: str) -> dict[str, Any]:
     if client is None:
         return {"status": "disabled"}
     try:
-        response = client.delete_all(
-            user_id=user_id,
-            agent_id=mem0_agent_id(),
-            app_id=org_id,
-        )
+        # User and agent facts are separate records. Delete each scope in its
+        # own request so account deletion cannot leave assistant-extracted
+        # profile facts behind or rely on an impossible AND filter.
+        app_scope = _entity_scope_kwargs(org_id=org_id)
+        responses = [
+            client.delete_all(user_id=user_id, **app_scope),
+            client.delete_all(agent_id=mem0_agent_id(), **app_scope),
+        ]
     except Exception:  # noqa: BLE001 - deletion is retried by the caller
         logger.warning("Mem0 profile deletion failed", exc_info=True)
         return {"status": "failed"}
-    return {"status": "deleted", "provider_response": response if isinstance(response, dict) else {}}
+    return {
+        "status": "deleted",
+        "provider_response": [response if isinstance(response, dict) else {} for response in responses],
+    }
 
 
 def profile_context_records(memories: Sequence[Mem0ProfileMemory]) -> list[dict[str, Any]]:

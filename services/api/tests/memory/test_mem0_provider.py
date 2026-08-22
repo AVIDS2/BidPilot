@@ -63,13 +63,16 @@ def test_mem0_profile_provider_uses_official_scoped_operations(monkeypatch) -> N
     )
     assert memories[0].text == "用户偏好中文、先给结论。"
     filters = fake.search_calls[0]["options"].filters
-    assert {"user_id": "user-1"} in filters["AND"]
-    assert {"agent_id": "bidpilot-assistant"} in filters["AND"]
-    assert {"app_id": "org-1"} in filters["AND"]
+    assert {"user_id": "user-1"} in filters["OR"]
+    assert {"agent_id": "bidpilot-assistant"} in filters["OR"]
+    assert filters["AND"] == [{"app_id": "org-1"}]
 
     deleted = mem0_provider.delete_profile_memory(user_id="user-1", org_id="org-1")
     assert deleted["status"] == "deleted"
-    assert fake.delete_calls == [{"user_id": "user-1", "agent_id": "bidpilot-assistant", "app_id": "org-1"}]
+    assert fake.delete_calls == [
+        {"user_id": "user-1", "app_id": "org-1"},
+        {"agent_id": "bidpilot-assistant", "app_id": "org-1"},
+    ]
 
 
 def test_mem0_profile_provider_fails_open_when_disabled(monkeypatch) -> None:
@@ -77,3 +80,22 @@ def test_mem0_profile_provider_fails_open_when_disabled(monkeypatch) -> None:
     monkeypatch.delenv("DOCPILOT_MEM0_API_KEY", raising=False)
     assert mem0_provider.search_profile_memory(user_id="u", org_id="o", query="x") == []
     assert mem0_provider.capture_profile_memory(user_id="u", org_id="o", run_id="r", messages=[{"role": "user", "content": "x"}]) == {"status": "disabled"}
+
+
+def test_mem0_profile_provider_omits_platform_app_scope_for_oss_hosts(monkeypatch) -> None:
+    fake = FakeMem0Client()
+    monkeypatch.setenv("DOCPILOT_MEM0_ENABLED", "true")
+    monkeypatch.setenv("DOCPILOT_MEM0_API_KEY", "test-key")
+    monkeypatch.setenv("DOCPILOT_MEM0_APP_SCOPE", "false")
+    monkeypatch.setattr(mem0_provider, "_client", lambda *_args: fake)
+
+    result = mem0_provider.capture_profile_memory(
+        user_id="user-1",
+        org_id="org-1",
+        run_id="run-1",
+        messages=[{"role": "user", "content": "请用中文回答。"}],
+    )
+
+    assert result["status"] == "queued"
+    assert fake.add_calls[0]["user_id"] == "user-1"
+    assert "app_id" not in fake.add_calls[0]
