@@ -114,6 +114,11 @@ It is organized to support three goals:
 - `docs/security/security-and-governance.md`
   - auth, RBAC, audit, secrets, and data handling rules
 
+### Research
+
+- `docs/research/ai-tender-platform-competitive-scan.md`
+  - public capability scan of domestic AI tender/proposal products and BidPilot gap matrix
+
 ### Implementation plans
 
 - `docs/superpowers/plans/2026-04-18-docpilot-phase-0-foundation.md`

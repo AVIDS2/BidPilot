@@ -417,6 +417,20 @@ credentials or tool envelopes, and it cannot authorize or mutate BidPilot
 business state. A private deployment may replace the adapter with self-hosted
 Mem0 OSS; the Pi and control-plane contracts remain unchanged.
 
+### Cross-session design reference
+
+Claude Code's public memory design separates user-authored instructions from
+agent-authored learnings: `CLAUDE.md` is loaded every session, while an
+auto-memory directory keeps a small `MEMORY.md` index and topic files loaded on
+demand. Its automatic memory is machine-local, so it is not a cloud durability
+model. BidPilot maps the same idea to server primitives: project/org policy and
+skills are authoritative instructions; PostgreSQL ChatMessage/RuntimeRun are
+exact cross-session history; Mem0 is the searchable user-profile layer; and
+BidPilot MemoryRecord is the reviewed business knowledge layer. We do not copy
+local Markdown memory files into the shared cloud control plane.
+
+Reference: [Claude Code memory documentation](https://code.claude.com/docs/en/memory).
+
 ## Non-goals of this baseline
 
 - The cloud sidecar is not given a tenant's raw server shell. A future local or

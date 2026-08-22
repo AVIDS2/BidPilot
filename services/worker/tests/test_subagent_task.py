@@ -135,7 +135,7 @@ def test_chain_subagent_receives_previous_result_and_persists_terminal_state(mon
     )
     monkeypatch.setattr(task_module, "fail_workflow_task_delivery", lambda *_args: None)
     monkeypatch.setattr(
-        "app.agent.llm.resolve_agent_model",
+        "app.runtime.model_impl.resolve_agent_model",
         lambda **_kwargs: SimpleNamespace(
             provider_id="test",
             provider_type="openai",

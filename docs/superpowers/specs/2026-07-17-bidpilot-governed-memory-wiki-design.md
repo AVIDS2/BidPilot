@@ -185,6 +185,18 @@ every displayed node back to a source.
 - organization-wide automatic knowledge propagation;
 - using semantic similarity as authorization or factual verification.
 
+## Profile-memory provider decision (2026-08-22)
+
+The reviewed implementation adds the official `mem0ai==2.0.18` Platform SDK as
+an optional adapter for low-risk user-profile preferences. It does not replace
+this document's PostgreSQL memory ledger. API recalls profile context before a
+Pi turn; Worker captures a bounded successful exchange asynchronously; a local
+`Mem0ProfileSync` row provides idempotency and account-deletion tracking.
+Mem0 is scoped with `user_id`, `agent_id`, and organization `app_id`, and all
+provider calls fail open. Tender facts, requirements, evidence, decisions and
+graph proposals remain in the reviewed BidPilot tables. See
+`docs/architecture/assistant-harness-runtime.md` for the runtime boundary.
+
 ## Sources
 
 - LangGraph persistence and Stores:
