@@ -15,7 +15,7 @@ vi.mock("./features/agent/agent-workspace-page", () => ({
   AgentWorkspacePage: () => <div data-testid="source-migrated-agent-workspace" />,
 }));
 
-vi.mock("@/components/ai-assistant/AgentWakeResume", () => ({
+vi.mock("@/features/agent/components/AgentWakeResume", () => ({
   AgentWakeResume: () => null,
 }));
 
@@ -23,7 +23,7 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children: unknown }) => children,
 }));
 
-vi.mock("@/lib/ai-assistant-store", () => ({
+vi.mock("@/features/agent/state/agent-store", () => ({
   AIAssistantProvider: ({ children }: { children: unknown }) => children,
 }));
 

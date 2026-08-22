@@ -1,5 +1,24 @@
 # Progress Log
 
+## 2026-08-22
+
+- Completed the repository ownership baseline for clean development. The
+  canonical interactive path is `apps/web` -> FastAPI control plane
+  (`services/api`) -> signed `services/pi-agent` sidecar -> API capability
+  bridge. Long-running ingestion, drafting, review and export remain in
+  `services/worker` with LangGraph as an execution detail.
+- Updated the root README, documentation map, repository blueprint, service
+  boundaries, backend/frontend architecture references, engineering standards,
+  capability matrix, runtime ownership README, and interview demo script so
+  they describe the same boundaries.
+- Explicitly quarantined the old Python Harness/ReAct/operator modules as
+  historical replay compatibility. They are not a public entry point,
+  production fallback, or destination for new features. No `temple/` reference
+  material or user data was removed.
+- Ran `git diff --check`; no whitespace errors were reported. This was a
+  documentation/architecture baseline pass and did not claim that the full
+  application test suite was rerun.
+
 ## 2026-08-19
 
 - Promoted the Pi timeline, passive wake, subagent paging, specialized deep
@@ -80,3 +99,39 @@
 - The production-readiness contract itself now recognizes only `pi` as the
   canonical Assistant engine and validates the bridge secret length; the stale
   Harness-only release assertion and its fixtures were removed.
+
+## 2026-08-22
+
+- Reorganized the active web application boundaries without changing API
+  behavior: product screens now live under `apps/web/src/features/workbench`,
+  while Pi Agent state, runtime event projection, transcript mapping, and UI
+  live under `apps/web/src/features/agent/{state,runtime,components}`.
+- Quarantined the unused assistant-ui experiment under
+  `apps/web/src/features/agent/legacy`; it is not imported by the active
+  routes or production shell. This is a frontend-only compatibility boundary,
+  not a second Assistant runtime.
+- Removed `v2` from active workbench filenames, exports, CSS class names, and
+  route imports. The UI consumes the public runtime event contract and uses
+  event identity/sequence/parent relations for projection; no message text or
+  tool-name substring is used to infer execution state.
+- Verification after the move: TypeScript `--noEmit` passed, Web Vitest passed
+  (`36` files, `163` tests), and the Vite production build passed. The build
+  still reports existing large-chunk warnings; this cleanup did not change
+  bundling policy.
+
+## 2026-08-22 backend runtime boundary cleanup
+
+- Added `app.runtime.model` as the canonical provider boundary for API,
+  Worker, scripts, and the signed Pi bridge. `app.agent.llm` remains a
+  compatibility implementation during the migration window; new runtime-owned
+  code does not import it directly.
+- Added `app.runtime.conversation` for bounded authorized transcript, memory,
+  and attachment projection. The Pi wake path no longer imports the old
+  Operator graph or `operator_adapter` to build context.
+- Made historical Operator/LangGraph imports lazy inside the compatibility
+  branch of `operator_adapter.py`. Importing the production Pi adapter and
+  bridge no longer initializes `operator_graph` or `harness_loop`.
+- Verification: API/Worker Ruff checks, API compileall, and a Python import
+  isolation probe passed. Runtime pytest remained gated because the repository
+  requires an explicitly configured dedicated PostgreSQL database ending in
+  `_test`; no business database was substituted.

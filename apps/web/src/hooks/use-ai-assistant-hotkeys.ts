@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useAIAssistant } from "@/lib/ai-assistant-store";
+import { useAIAssistant } from "@/features/agent/state/agent-store";
 
 /**
  * Global hotkeys for the AI assistant platform.

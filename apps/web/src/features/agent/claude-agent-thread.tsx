@@ -2,15 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, CopyIcon, FileIcon, ImageIcon, PencilIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { MessageContent } from "@/components/ui/message";
-import { ClaudeActivityTimeline } from "@/components/ai-assistant/claude-activity-timeline";
-import { AssistantInputRequestForm } from "@/components/ai-assistant/assistant-input-request";
+import { ClaudeActivityTimeline } from "@/features/agent/components/claude-activity-timeline";
+import { AssistantInputRequestForm } from "@/features/agent/components/assistant-input-request";
 import type {
   AIAssistantState,
   AssistantConfirmationRequest,
   AssistantExecutionItem,
   ChatMessage,
-} from "@/lib/ai-assistant-store";
-import type { AssistantTranscriptPart } from "@/lib/assistant-transcript";
+} from "@/features/agent/state/agent-store";
+import type { AssistantTranscriptPart } from "@/features/agent/runtime/assistant-transcript";
 import "./claude-agent-thread.css";
 
 const EMPTY_TRANSCRIPT_PARTS: NonNullable<ChatMessage["transcriptParts"]> = [];

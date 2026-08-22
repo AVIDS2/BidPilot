@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.agent.policy import ApprovalMode, tool_requires_approval
+from app.runtime.policy import ApprovalMode, tool_requires_approval
 
 
 def requires_confirmation(tool_name: str, approval_mode: ApprovalMode = "risky_only") -> bool:

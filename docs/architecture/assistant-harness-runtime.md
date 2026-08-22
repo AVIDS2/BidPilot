@@ -23,10 +23,12 @@ sidecar produces a durable, diagnosable failure.
 | --- | --- | --- |
 | `/assistant/stream` -> Pi sidecar | Supported public Assistant path | The only endpoint allowed to create a new `assistant_turn`; it projects Pi events onto the durable runtime trace. |
 | `/assistant/attachments` | Supported companion API | Stages private attachment metadata; it cannot execute tools or start an agent loop. |
-| `runtime/operator_adapter.py` | Internal compatibility facade | It owns preflight/idempotency and dispatches new turns to Pi; it is not a second HTTP entry point. |
 | `services/pi-agent` | Supported model loop | The official `@earendil-works/pi-coding-agent` `createAgentSession` runtime owns model turns, provider streaming, retry, compaction, queue lifecycle, parallel independent read tools, tool lifecycle, and bounded continuation. It has no database credentials. |
 | `/internal/pi/tools/execute` | Internal bridge | Run-scoped token only. The existing BidPilot adapter remains authoritative for permissions, approvals, idempotency, audit and business writes. |
 | `runtime/operator_graph.py` | Historical-run compatibility only | New public turns never create `langgraph_operator` runs. Retain only to finish/resume historical durable runs, then remove after **2026-09-30**. |
+| `runtime/operator_adapter.py` | API compatibility facade | It preserves idempotency/replay plumbing while dispatching current turns to Pi. It is not a model loop and must not grow new behavior. |
+| `services/api/app/agent/graph.py` | Historical ReAct compatibility only | No production route imports it; remove or move to an explicit replay package after migration gates pass. |
+| Worker LangGraph graphs | Supported workflow engine | These are not Assistant routes. They execute durable `ExecutionRun` workflows for ingestion, drafting, validation and review resume. |
 
 User text is data for the model, never server-side control flow. Production
 code must not select a Skill, tool, retry policy, execution budget, or runtime
@@ -34,8 +36,6 @@ by substring/regex matching against the message. Pi selects tools through
 provider-native tool calls; the API validates the structured call. The exact
 project-name comparison used for destructive deletion is a typed confirmation
 protocol, not an intent router.
-| `agent/graph.py` | Legacy ReAct compatibility only | No production route imports it. Retain only for temporary checkpoint-policy coverage; remove after **2026-09-30** unless a migration dependency is recorded. |
-| Worker LangGraph graphs | Supported workflow engine | These are not Assistant routes. They execute durable `ExecutionRun` workflows for ingestion, drafting, validation and review resume. |
 
 Production configuration must set `DOCPILOT_ASSISTANT_ENGINE=pi` and provide
 `DOCPILOT_PI_AGENT_URL`, `DOCPILOT_PI_TOOL_BRIDGE_URL`, and a dedicated

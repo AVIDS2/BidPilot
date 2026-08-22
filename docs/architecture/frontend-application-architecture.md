@@ -57,12 +57,28 @@ Use Storybook as a standard part of frontend development, not an optional nicety
 Preferred structure:
 
 - `apps/web/src/app`
-- `apps/web/src/routes`
 - `apps/web/src/features`
 - `apps/web/src/components`
 - `apps/web/src/lib`
-- `apps/web/src/styles`
-- `apps/web/src/test`
+- `apps/web/src/hooks`
+
+The current Vite application keeps the route composition in `src/app.tsx`
+until a route-file migration is justified. The active feature boundaries are:
+
+```text
+apps/web/src/
+  app.tsx                         # providers and route composition
+  features/
+    agent/                        # Pi runtime projection and Agent workbench
+      state/agent-store.tsx       # client state fed by API/SSE contracts
+      runtime/                     # event projection and transcript mapping
+      components/                  # Agent timeline, approvals, actions, panels
+      legacy/                      # unused assistant-ui experiment only
+    workbench/                    # authenticated product shell and screens
+  components/ui/                  # shadcn primitives
+  components/                    # shell primitives shared by routes
+  lib/                            # transport, auth, i18n, browser utilities
+```
 
 ## Layer responsibilities
 
@@ -133,6 +149,18 @@ Owns shared technical utilities:
 - formatting utilities
 
 Do not turn `lib` into a dumping ground for feature logic.
+
+Agent event projection is deliberately not in `lib`: `RuntimeEvent` to
+assistant-event mapping, transcript grouping, and Agent client state belong to
+`features/agent`. The UI consumes the public runtime event contract (event id,
+sequence, parent/child run relation, status and redacted summary); it never
+infers execution from user message text or tool-name substrings.
+
+The former `components/assistant` assistant-ui experiment is quarantined under
+`features/agent/legacy`. It is not imported by the active routes, does not own
+the production runtime, and may only be revived for an explicit compatibility
+experiment. The production Agent surface is `features/agent` and the product
+shell is `features/workbench`.
 
 ## State strategy
 

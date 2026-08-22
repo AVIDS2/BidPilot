@@ -21,9 +21,9 @@ is synthetic and public-safe. Do not use a real procurement in an interview.
 Show the diagram in the root [README](../../README.md), then state the two
 runtime boundaries:
 
-1. **StreamingHarness** owns interactive product actions. A model can choose
-   only registered capabilities and every call crosses capability policy,
-   authorization, audit and event persistence.
+1. **Pi Agent sidecar + API control plane** own interactive product actions.
+   Pi chooses provider-native tool calls; every call crosses API capability
+   policy, authorization, audit and event persistence.
 2. **Celery + LangGraph** owns long-running bid work. It starts from durable
    IDs and version snapshots, pauses at human review, and resumes using the
    same `ExecutionRun` checkpoint scope.

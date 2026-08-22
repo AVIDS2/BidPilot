@@ -45,10 +45,23 @@ flowchart LR
 
 | Surface | Owner | Purpose |
 | --- | --- | --- |
-| Interactive product operation | `StreamingHarness` | One bounded, auditable tool-calling turn at a time. |
+| Interactive product operation | Pi Agent sidecar (`services/pi-agent`) | Provider-native tool calls and streaming for one bounded, auditable conversation turn. |
+| Assistant control plane | FastAPI (`services/api`) | Auth, capability schemas, policy, approvals, idempotency, audit, durable runtime events, and the signed Pi bridge. |
 | Durable bid workflow | Celery Worker + LangGraph | Parse, retrieve, plan, draft, validate, pause for review, and resume. |
 | Business truth | PostgreSQL | Projects, source versions, requirements, evidence, approval, audit and runs. |
 | Browser | React application | Renders API/SSE projections; it never receives platform or BYOK secrets. |
+
+Pi owns the model/tool loop. The API remains the control-plane owner for every
+business observation and mutation; Pi has no database or object-storage
+credentials. The Worker owns durable long-running workflows and uses LangGraph
+as an execution detail. The browser consumes the API's public event projection
+and never calls Pi or LangGraph directly.
+
+The Python modules under `services/api/app/runtime/` that predate the Pi
+sidecar are compatibility and historical-replay code only. They are not a
+second public Assistant path, are not selected by user wording, and must not be
+used as a new deployment default. See the [runtime ownership map](docs/architecture/assistant-harness-runtime.md)
+before changing them.
 
 The Assistant is deliberately not an unrestricted shell or coding agent. It
 cannot run arbitrary commands, access the server filesystem, or bypass product
@@ -92,6 +105,7 @@ drill.
 - [Interview golden-path script](docs/product/interview-demo-script.md)
 - [Operations and deployment runbook](docs/ops/deployment-and-runbook.md)
 - [Six-stream product closeout and acceptance](docs/quality/2026-08-14-six-stream-closeout.md)
+- [Repository blueprint and ownership rules](docs/architecture/repository-blueprint.md)
 
 ## Honest scope
 

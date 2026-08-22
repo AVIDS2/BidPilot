@@ -12,7 +12,6 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from langgraph.types import Command
 from sqlalchemy.orm import Session
 
 from app.assistant.audit import redact_arguments
@@ -26,19 +25,12 @@ from app.chat.service import (
     resolve_conversation_project_context,
     save_message,
 )
-from app.memory.schemas import MemoryContextRead
 from app.memory.service import memory_context_for_agent
+from app.memory.schemas import MemoryContextRead
 from app.models import RuntimeAction, RuntimeApproval, RuntimeEvent, RuntimeRun
-from app.agent.llm import get_agent_llm
 from app.usage.schemas import ProviderSource
-from app.usage.service import UsageLimitExceeded, reserve_assistant_model_tokens
-from contracts.model_usage import ProviderUsageMeasurement
+from app.usage.service import UsageLimitExceeded
 from contracts.runtime import RuntimeApprovalDecisionType
-from contracts.usage_ledger import (
-    mark_model_reservation_uncertain,
-    record_model_usage,
-    settle_model_reservation,
-)
 
 from .assistant_adapter import (
     _approval_capability,
@@ -50,16 +42,6 @@ from .assistant_adapter import (
 )
 from .events import latest_event_sequence
 from .pi_adapter import stream_pi_assistant_response
-from .operator_graph import (
-    OperatorPlanningContext,
-    OperatorPlan,
-    build_langchain_planner,
-    build_operator_graph,
-    get_operator_checkpointer,
-)
-from .model_limits import (
-    OPERATOR_PLANNER_MAX_MEMORY_CONTEXT_CHARACTERS,
-)
 from .prompt_assembly import ConversationContextWindow, compact_conversation_context
 from .service import (
     assistant_turn_idempotency_key,
@@ -204,9 +186,16 @@ async def stream_operator_assistant_response(
         )
         return
 
-    conversation_window = _bounded_conversation_context(db, conversation_id)
+    from .conversation import load_authorized_memory, load_conversation_context, memory_context_records
+
+    conversation_window = load_conversation_context(db, conversation_id)
     pending_input = pending_input_context(db, conversation_id)
-    memory_context = _load_authorized_memory_context(db, user, payload, project_id=active_project_id)
+    memory_context = load_authorized_memory(
+        db,
+        user,
+        project_id=active_project_id,
+        query=payload.message,
+    )
     creation = create_or_get_runtime_run(
         db,
         user,
@@ -252,11 +241,7 @@ async def stream_operator_assistant_response(
             "state": "thinking",
         },
     )
-    memory_records = []
-    if memory_context is not None:
-        from .operator_graph import _memory_context_records
-
-        memory_records = _memory_context_records(memory_context)
+    memory_records = memory_context_records(memory_context)
     async for event in stream_pi_assistant_response(
         db,
         user,
@@ -489,6 +474,26 @@ async def _invoke_operator_graph(
     resume_value: dict[str, Any] | None = None,
     after_sequence: int = 1,
 ) -> AsyncGenerator[str, None]:
+    # The old LangGraph operator is replay-only. Lazy imports keep the Pi
+    # production path from initializing its planner/checkpointer stack.
+    from langgraph.types import Command
+
+    from app.usage.service import reserve_assistant_model_tokens
+    from .model import get_agent_llm
+    from contracts.model_usage import ProviderUsageMeasurement
+    from contracts.usage_ledger import (
+        mark_model_reservation_uncertain,
+        record_model_usage,
+        settle_model_reservation,
+    )
+
+    from .operator_graph import (
+        OperatorPlanningContext,
+        build_langchain_planner,
+        build_operator_graph,
+        get_operator_checkpointer,
+    )
+
     active_reservation_keys: list[str] = []
 
     def reserve_planner_capacity(_context: OperatorPlanningContext) -> None:
@@ -767,6 +772,8 @@ def _load_authorized_memory_context(
     project_id: str | None,
 ) -> MemoryContextRead | None:
     """Memory retrieval is additive and cannot make an Operator turn fail."""
+    from .model_limits import OPERATOR_PLANNER_MAX_MEMORY_CONTEXT_CHARACTERS
+
     try:
         return memory_context_for_agent(
             db,
@@ -846,6 +853,8 @@ def _sync_pending_input_state(
     result: dict[str, Any],
 ) -> None:
     """Persist the planner's structured continuation boundary, not its prose."""
+    from .operator_graph import OperatorPlan
+
     try:
         plan = OperatorPlan.model_validate(result.get("plan") or {})
     except ValueError:

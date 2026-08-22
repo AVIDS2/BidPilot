@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.llm import AgentModelConfigurationError, resolve_agent_model
+from .model import AgentModelConfigurationError, resolve_agent_model
 from app.assistant.task_state import pending_input_context
 from app.auth.schemas import CurrentUser
 from app.db import SessionLocal
@@ -351,16 +351,13 @@ async def resume_pi_from_system_wake(
             )
         except Exception:
             memory = None
-        memory_records: list[dict[str, Any]] = []
-        if memory is not None:
-            from .operator_graph import _memory_context_records
+        from .conversation import load_conversation_context, memory_context_records
 
-            memory_records = _memory_context_records(memory)
+        memory_records = memory_context_records(memory)
 
         # Keep the internal bridge import direction one-way. The public Pi
         # adapter already imports this module to mint capability tokens, so
         # importing it at module load time here would form a cycle.
-        from .operator_adapter import _bounded_conversation_context
         from .pi_adapter import stream_pi_assistant_response
 
         async for _event in stream_pi_assistant_response(
@@ -374,7 +371,7 @@ async def resume_pi_from_system_wake(
             base_url=resolved.base_url,
             model=resolved.model,
             user_message="",
-            conversation_window=_bounded_conversation_context(db, conversation_id),
+            conversation_window=load_conversation_context(db, conversation_id),
             memory_context_records=memory_records,
             memory_context_version=memory.memory_version if memory is not None else None,
             available_attachments=[],

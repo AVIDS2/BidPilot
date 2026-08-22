@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const dispatch = vi.fn();
 
-vi.mock("@/lib/ai-assistant-store", () => ({
+vi.mock("@/features/agent/state/agent-store", () => ({
   isAssistantBusy: () => false,
   useAIAssistant: () => ({
     dispatch,

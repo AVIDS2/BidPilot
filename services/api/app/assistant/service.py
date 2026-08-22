@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.agent.policy import get_tool_policy
+from app.runtime.policy import get_tool_policy
 from app.auth.schemas import CurrentUser
 from app.chat.service import (
     create_conversation,

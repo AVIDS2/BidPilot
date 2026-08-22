@@ -20,11 +20,11 @@ authorized it, and which source materials support the result.
 | Workflow execution plane | Parsing, indexing, retrieval, drafting, validation, and retryable long-running work | User-facing authorization or final business state without persistence |
 | Human security plane | Team membership, organization security, billing, provider-key administration, destructive confirmation | None |
 
-The LangGraph Operator is deliberately bounded to registered capabilities. A
-model cannot invent a tool, execute arbitrary code, read a local filesystem,
-or bypass `execute_capability`. LangGraph checkpoint state is resumable
-execution context only; it is never the record of a project, approval, review,
-or export.
+The Pi sidecar is deliberately bounded to registered capabilities through the
+signed API bridge. A model cannot invent a tool, execute arbitrary code, read a
+local filesystem, or bypass `execute_capability`. LangGraph checkpoint state
+is resumable execution context only; it is never the record of a project,
+approval, review, or export.
 
 ## Bid Lifecycle Coverage
 
@@ -116,8 +116,10 @@ produces high-quality bid content. A release/pilot claim still requires:
 
 - Capability metadata and public-result redaction: `services/api/app/runtime/registry.py`
 - Authorization, policy, idempotency, approval, and events: `services/api/app/runtime/service.py`
-- Bounded LangGraph Operator: `services/api/app/runtime/operator_graph.py`
-- SSE/runtime replay adapter: `services/api/app/runtime/operator_adapter.py`
+- Pi sidecar adapter and public projection: `services/api/app/runtime/pi_adapter.py`
+- Signed Pi capability bridge: `services/api/app/runtime/pi_bridge.py`
+- Capability registry and execution policy: `services/api/app/runtime/registry.py`, `services/api/app/runtime/service.py`
+- Historical operator replay only: `services/api/app/runtime/operator_adapter.py`, `services/api/app/runtime/operator_graph.py`
 - Product tools: `services/api/app/assistant/tools.py`
 - Durable attachment staging: `services/api/app/assistant/attachments.py`
 - User-facing activity and downloads: `apps/web/src/components/ai-assistant/assistant-activity-timeline.tsx`

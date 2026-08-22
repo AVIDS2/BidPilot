@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useAIAssistant } from "@/lib/ai-assistant-store";
+import { useAIAssistant } from "@/features/agent/state/agent-store";
 import { LinearAgentWorkspace } from "./linear-agent-workspace";
 
 const HANDLED_WAKE_KEY = "bidpilot:handled-agent-wakes";

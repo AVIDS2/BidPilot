@@ -19,15 +19,15 @@ vi.mock("@/lib/auth", () => ({
   useAuth: () => authState,
 }));
 
-vi.mock("@/components/ai-assistant/AIAssistantPanel", () => ({
+vi.mock("@/features/agent/components/AIAssistantPanel", () => ({
   AIAssistantPanel: () => null,
 }));
 
-vi.mock("@/components/ai-assistant/CommandPalette", () => ({
+vi.mock("@/features/agent/components/CommandPalette", () => ({
   CommandPalette: () => null,
 }));
 
-vi.mock("@/components/ai-assistant/FloatingAssistant", () => ({
+vi.mock("@/features/agent/components/FloatingAssistant", () => ({
   FloatingAssistant: () => null,
 }));
 
@@ -35,7 +35,7 @@ vi.mock("@/components/notification-bell", () => ({
   NotificationBell: () => null,
 }));
 
-vi.mock("@/components/ai-assistant/InlineSuggestion", () => ({
+vi.mock("@/features/agent/components/InlineSuggestion", () => ({
   InlineSuggestionBar: () => null,
 }));
 
@@ -43,7 +43,7 @@ vi.mock("@/hooks/use-ai-assistant-hotkeys", () => ({
   useAIAssistantHotkeys: () => undefined,
 }));
 
-vi.mock("@/lib/ai-assistant-store", () => ({
+vi.mock("@/features/agent/state/agent-store", () => ({
   AIAssistantProvider: ({ children }: { children: unknown }) => children,
   isAssistantBusy: () => false,
   useAIAssistant: () => ({

@@ -42,6 +42,18 @@ Owns:
 - drafting execution
 - export jobs
 
+### `services/pi-agent`
+
+Owns:
+
+- Pi `AgentSession` and provider-native model/tool streaming
+- compiled, allowlisted Pi extensions
+
+Does not own:
+
+- database, object-storage, tenant-key, or browser access
+- authorization, approvals, audit, or business writes
+
 ### `packages/contracts`
 
 Owns:
@@ -49,6 +61,15 @@ Owns:
 - shared schemas
 - identifiers
 - event contracts
+
+### Runtime rule
+
+The only new interactive Assistant implementation is the Pi sidecar reached
+through the API control plane. The API owns auth, capability governance,
+approval, audit, idempotency, and durable runtime events. The Worker owns
+long-running LangGraph workflows. The Web client renders the public REST/SSE
+projection. These boundaries are enforced in code review and must not be
+recreated as a second loop in a feature module.
 
 ## Coding rules
 
@@ -78,6 +99,10 @@ Owns:
 - Pydantic schemas define external API contracts
 - service layer owns orchestration between repositories and adapters
 - repository layer owns persistence only
+- Pi sidecar code must not import API ORM/domain modules; use the signed bridge
+- API routers must not import Worker graph nodes; use durable command/task IDs
+- historical `harness_*` and `operator_*` modules are replay-only and receive
+  no new features
 
 ## Job execution rules
 

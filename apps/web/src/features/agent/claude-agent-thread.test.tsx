@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { AIAssistantState } from "@/lib/ai-assistant-store";
+import type { AIAssistantState } from "@/features/agent/state/agent-store";
 import { ClaudeAgentThread } from "./claude-agent-thread";
 
 vi.mock("@/components/ui/message", () => ({
@@ -11,7 +11,7 @@ vi.mock("@/components/ui/message", () => ({
   ),
 }));
 
-vi.mock("@/components/ai-assistant/claude-activity-timeline", () => ({
+vi.mock("@/features/agent/components/claude-activity-timeline", () => ({
   ClaudeActivityTimeline: ({ items, taskTitle }: { items: Array<{ toolName?: string }>; taskTitle?: string }) => (
     <div data-testid="assistant-timeline">
       {taskTitle ? `${taskTitle}: ` : ""}{items.map((item) => item.toolName).join(",")}

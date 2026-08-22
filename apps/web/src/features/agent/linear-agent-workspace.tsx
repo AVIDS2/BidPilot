@@ -24,10 +24,10 @@ import { useNavigate } from "react-router-dom";
 import {
   AIAssistantPanel,
   type AttachmentPreviewSelection,
-} from "@/components/ai-assistant/AIAssistantPanel";
+} from "@/features/agent/components/AIAssistantPanel";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { ClaudeAgentThread } from "./claude-agent-thread";
-import { useAIAssistant, type AIAssistantState } from "@/lib/ai-assistant-store";
+import { useAIAssistant, type AIAssistantState } from "@/features/agent/state/agent-store";
 import {
   deleteChatConversation,
   renameChatConversation,

@@ -53,7 +53,7 @@ It is organized to support three goals:
 - `docs/architecture/api-and-event-contracts.md`
   - REST, async run, and event contract conventions for stable implementation
 - `docs/architecture/assistant-harness-runtime.md`
-  - public Assistant lifecycle, idempotency, approval, replay, and failure boundary
+  - current Pi Assistant lifecycle, idempotency, approval, replay, and failure boundary; also records the legacy compatibility boundary
 - `docs/architecture/frontend-application-architecture.md`
   - route, state, UI layer, and component architecture for the frontend application
 - `docs/architecture/document-ingestion-and-format-strategy.md`
@@ -64,8 +64,10 @@ It is organized to support three goals:
   - execution lifecycle, task boundaries, state machine rules, and scheduler behavior
 - `docs/architecture/backend-application-architecture.md`
   - backend module layout, layering rules, and service responsibilities
+- `services/api/app/runtime/README.md`
+  - API runtime ownership, Pi production boundary, and legacy Harness quarantine
 - `docs/architecture/repository-blueprint.md`
-  - target repo structure and how code should be organized as implementation grows
+  - canonical repository structure, ownership map, dependency direction, and legacy quarantine rules
 
 ### Operations docs
 
@@ -146,6 +148,33 @@ The project is intentionally designed around a long-lived stable core and short-
 - agent runtime internals
 - MCP client and server libraries
 - prompt and eval strategies
+
+## Current Runtime Authority
+
+The current implementation has one public Assistant runtime and one separate
+long-running workflow runtime:
+
+- `services/pi-agent` is the canonical Pi sidecar. It owns provider-native
+  model turns, tool-call streaming, retry/compaction lifecycle, and trusted
+  Pi extensions. It has no PostgreSQL, object-storage, or tenant credentials.
+- `services/api` is the control plane. It owns authentication, domain services,
+  capability schemas, authorization, approvals, idempotency, audit, and the
+  durable `RuntimeRun`/`RuntimeEvent` projection. The signed internal Pi bridge
+  is the only path from Pi to business capabilities.
+- `services/worker` owns asynchronous ingestion, retrieval, drafting, review,
+  validation, export, and child-run continuation. LangGraph is an execution
+  detail inside this plane; PostgreSQL remains the business source of truth.
+- `apps/web` is a projection client. It renders documented REST/SSE contracts,
+  never imports backend modules, and never infers agent intent from message
+  text or tool names.
+- `packages/contracts` contains cross-service wire contracts only. Domain
+  behavior belongs to the owning API or Worker module.
+
+The older Python Harness/ReAct/operator modules remain only for historical
+replay and compatibility during migration. They are not a public entry point,
+not a production fallback, and not a place for new features. Current code and
+deployment documentation must refer to Pi explicitly; historical plans and
+learning notes may retain the old names as historical context.
 
 ## Current project identity
 

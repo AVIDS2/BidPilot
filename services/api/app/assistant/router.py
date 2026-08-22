@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.agent.llm import AgentModelConfigurationError, resolve_agent_model
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth
 from app.chat.service import resolve_conversation_project_context
@@ -23,6 +22,7 @@ from app.runtime.service import (
     assistant_turn_idempotency_key,
     find_idempotent_runtime_run,
 )
+from app.runtime.model import AgentModelConfigurationError, resolve_agent_model
 from app.security.secrets import decrypt_secret
 from app.usage.schemas import ProviderSource
 from app.usage.service import (

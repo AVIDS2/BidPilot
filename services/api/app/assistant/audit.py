@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.policy import ApprovalMode, get_tool_policy
+from app.runtime.policy import ApprovalMode, get_tool_policy
 from app.auth.schemas import CurrentUser
 from app.models import AssistantActionAudit, AssistantApproval
 

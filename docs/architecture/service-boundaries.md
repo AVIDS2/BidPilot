@@ -30,6 +30,8 @@ Responsibilities:
 - domain commands and queries
 - validation and persistence
 - scheduling of async work
+- Assistant control plane: Pi turn creation, capability governance, approvals,
+  durable runtime events, and the signed sidecar bridge
 
 Does not own:
 
@@ -45,6 +47,8 @@ Responsibilities:
 - parser and indexing work
 - execution graph runs
 - export rendering
+- LangGraph is used here for durable workflow execution, not as the public
+  Assistant endpoint
 
 Does not own:
 
@@ -58,6 +62,22 @@ Responsibilities:
 - API request and response contracts
 - event schemas
 - shared enums and identifiers
+
+### `services/pi-agent`
+
+Responsibilities:
+
+- run the official Pi AgentSession/model loop
+- expose the internal NDJSON sidecar endpoint
+- load only compiled, allowlisted governance/skill/subagent extensions
+- stream provider-native model and tool lifecycle events back to the API
+
+Does not own:
+
+- authentication or tenant membership
+- PostgreSQL/Redis/MinIO access
+- capability authorization, approvals, audit, or business writes
+- a public browser-facing endpoint
 
 ## Internal module split inside `services/api`
 
@@ -103,3 +123,6 @@ Extract a module into a service only if at least one of these is true:
 - storing critical workflow status only in Redis
 - embedding provider-specific formats in domain tables
 - coupling frontend routes to worker internals
+- treating `services/api/app/runtime/harness_*.py` or `operator_*.py` as a
+  second production Assistant path
+- letting the Pi sidecar bypass the signed API bridge

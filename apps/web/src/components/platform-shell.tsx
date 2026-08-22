@@ -16,21 +16,21 @@ import {
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import bidpilotLogo from "@/assets/bidpilot-logo.svg";
-import { CommandPalette } from "@/components/ai-assistant/CommandPalette";
-import { FloatingAssistant } from "@/components/ai-assistant/FloatingAssistant";
-import { InlineSuggestionBar } from "@/components/ai-assistant/InlineSuggestion";
-import { AgentWakeResume } from "@/components/ai-assistant/AgentWakeResume";
+import { CommandPalette } from "@/features/agent/components/CommandPalette";
+import { FloatingAssistant } from "@/features/agent/components/FloatingAssistant";
+import { InlineSuggestionBar } from "@/features/agent/components/InlineSuggestion";
+import { AgentWakeResume } from "@/features/agent/components/AgentWakeResume";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { AIAssistantProvider, useAIAssistant } from "@/lib/ai-assistant-store";
+import { AIAssistantProvider, useAIAssistant } from "@/features/agent/state/agent-store";
 import { useAuth } from "@/lib/auth";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useAIAssistantHotkeys } from "@/hooks/use-ai-assistant-hotkeys";
 import { cn } from "@/lib/utils";
-import { assistantContextForLocation } from "@/lib/assistant-route-context";
+import { assistantContextForLocation } from "@/features/agent/runtime/assistant-route-context";
 
 const AIAssistantPanel = lazy(() =>
-  import("@/components/ai-assistant/AIAssistantPanel").then(({ AIAssistantPanel }) => ({
+  import("@/features/agent/components/AIAssistantPanel").then(({ AIAssistantPanel }) => ({
     default: AIAssistantPanel,
   })),
 );

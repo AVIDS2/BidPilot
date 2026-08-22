@@ -26,6 +26,15 @@ Owns:
 - execution scheduling endpoints
 - review and approval APIs
 - export orchestration requests
+- Assistant control plane: Pi turn orchestration, capability policy, approvals,
+  idempotency, audit, and RuntimeRun/RuntimeEvent persistence
+
+### Pi Agent sidecar
+
+Owns the provider-native Pi model/tool loop and trusted compiled extensions.
+It is an internal service with no database or object-storage credentials. It
+returns NDJSON to the API; the API validates and persists the result before
+projecting public SSE events.
 
 ### Worker application
 
@@ -36,6 +45,7 @@ Owns:
 - evidence generation jobs
 - drafting jobs
 - validation and export jobs
+- LangGraph execution graphs and durable continuation for long-running runs
 
 ### Data services
 
@@ -87,6 +97,11 @@ responsibilities. Their public boundary, event contract, retry semantics, and
 approval behavior are defined in
 [assistant-harness-runtime.md](assistant-harness-runtime.md).
 
+The word “Harness” here describes the product execution boundary, not the
+retired Python implementation. The canonical interactive implementation is
+the Pi sidecar plus the API control plane. Older Python Harness/operator code
+is replay-only compatibility code and is excluded from new request routing.
+
 ## Deployment evolution
 
 ### Initial mode
@@ -99,6 +114,7 @@ A modular single deployment with:
 - `postgres`
 - `redis`
 - `minio`
+- `pi-agent`
 
 ### Later mode
 

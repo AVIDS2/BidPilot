@@ -35,7 +35,7 @@ if str(SERVICE_ROOT) not in sys.path:
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.llm import resolve_agent_model
+from app.runtime.model import resolve_agent_model
 from app.auth.schemas import CurrentUser
 from app.db import SessionLocal
 from app.models import (

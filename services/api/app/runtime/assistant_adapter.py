@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
-from app.assistant.runtime import AssistantRuntime
 from app.assistant.schemas import AssistantConfirmation, AssistantIntent, AssistantRequest
 from app.auth.schemas import CurrentUser
 from app.chat.service import create_conversation, get_conversation, save_message
@@ -45,8 +44,22 @@ from .service import (
     resolve_approval,
 )
 
+if TYPE_CHECKING:
+    from app.assistant.runtime import AssistantRuntime
 
-_runtime = AssistantRuntime()
+
+_runtime: AssistantRuntime | None = None
+
+
+def _legacy_runtime() -> AssistantRuntime:
+    """Instantiate the retired lexical adapter only on explicit replay calls."""
+
+    from app.assistant.runtime import AssistantRuntime
+
+    global _runtime
+    if _runtime is None:
+        _runtime = AssistantRuntime()
+    return _runtime
 
 async def stream_runtime_assistant_response(
     db: Session,
@@ -167,7 +180,7 @@ async def stream_runtime_assistant_response(
     try:
         intent = intent_override or _resume_followup_intent(db, conversation_id, payload.message)
         if intent is None:
-            intent = await _runtime.classify(payload.message, payload.project_id)
+            intent = await _legacy_runtime().classify(payload.message, payload.project_id)
         yield _sse("assistant.intent_detected", {"mode": intent.mode, "tool_name": intent.tool_name})
 
         if intent.mode == "needs_input":

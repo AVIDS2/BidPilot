@@ -177,7 +177,7 @@ def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = Non
             complete_workflow_task_delivery(outbox_event_id)
             return {"status": "failed", "runtime_run_id": runtime_run_id}
 
-        from app.agent.llm import resolve_agent_model
+        from app.runtime.model import resolve_agent_model
         from app.chat.service import save_message
         from app.providers.service import get_provider_config
         from app.security.secrets import decrypt_secret
