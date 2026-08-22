@@ -2,6 +2,13 @@
 
 ## 2026-08-22
 
+- Fixed conversation isolation in the web Agent projection. The selected
+  conversation is tab-scoped, active run/cancel targets are keyed by
+  conversation ID, and stale watcher events cannot update the newly selected
+  conversation. This prevents multiple open conversations from sharing one
+  pause/cancel button or cancelling the wrong durable run. Focused Agent UI
+  regressions passed after the change.
+
 - Fixed the browser-owned Assistant execution gap exposed by public testing.
   New Pi assistant turns now persist a `worker.run_assistant_turn` outbox task
   and execute through Celery/Redis plus a signed API internal endpoint. The

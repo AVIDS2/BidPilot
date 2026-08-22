@@ -83,6 +83,15 @@ run. Pi remains unchanged: its AgentSession is created by the Worker-owned
 execution attempt, while PostgreSQL `RuntimeRun`/`RuntimeEvent` remains the
 cloud source of truth.
 
+The web projection is conversation-scoped. Each browser tab keeps its selected
+conversation in `sessionStorage`, while durable runs remain account/server
+state. The provider keeps the active run and initial stream controller keyed by
+conversation ID; changing conversations aborts only the old tab's projection
+poller, never the Worker task. The composer cancellation control resolves the
+run ID for the currently selected conversation, so two open conversations (or
+two tabs) cannot share one stop target. Late replay events from an old
+conversation are ignored by the visible projection.
+
 ### Pi integration boundary
 
 Each Worker-delivered assistant turn creates a real Pi `AgentSession` with an

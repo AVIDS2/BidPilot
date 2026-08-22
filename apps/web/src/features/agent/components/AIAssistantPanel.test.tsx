@@ -100,6 +100,7 @@ describe("AIAssistantPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   afterEach(() => {

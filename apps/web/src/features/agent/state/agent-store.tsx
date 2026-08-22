@@ -20,8 +20,11 @@ import {
   type RuntimeRunListItem,
 } from "@/lib/api";
 import {
+  getSessionStoredValue,
   getStoredValue,
+  removeSessionStoredValue,
   removeStoredValue,
+  setSessionStoredValue,
   setStoredValue,
 } from "@/lib/browser-storage";
 import {
@@ -841,7 +844,8 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
 interface AssistantSseHandlingOptions {
   shouldHandleRuntimeEvent?: (data: Record<string, unknown>) => boolean;
   onRuntimeRun?: (runId: string) => void;
-  onConversation?: (conversationId: string) => void;
+  /** Return false when a late event belongs to a conversation no longer visible. */
+  onConversation?: (conversationId: string) => boolean | void;
   onTerminal?: () => void;
   navigate?: (path: string) => void;
 }
@@ -876,8 +880,9 @@ function handleAssistantSseEvent(
   if (eventType === "assistant.start") {
     const conversationId = parsed.conversation_id;
     if (typeof conversationId === "string") {
+      const accepted = options?.onConversation?.(conversationId);
+      if (accepted === false) return;
       dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
-      options?.onConversation?.(conversationId);
     }
     const userMessageId = parsed.user_message_id;
     if (typeof userMessageId === "string") {
@@ -1240,8 +1245,9 @@ function handleAssistantSseEvent(
   if (eventType === "assistant.end") {
     const conversationId = parsed.conversation_id;
     if (typeof conversationId === "string") {
+      const accepted = options?.onConversation?.(conversationId);
+      if (accepted === false) return;
       dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
-      options?.onConversation?.(conversationId);
     }
     // Close any tool cards still "running" after the stream ends. Duplicate
     // CAPABILITY_* events previously left a ghost running card beside the
@@ -1709,11 +1715,18 @@ export function AIAssistantProvider({
   // BrowserRouter. Without it, tool-driven page transitions are a no-op.
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
+  const currentConversationIdRef = useRef<string | null>(state.currentConversationId);
+  currentConversationIdRef.current = state.currentConversationId;
   const runtimeEventCursorsRef = useRef<RuntimeEventCursor>({});
   const activeStreamAbortRef = useRef<AbortController | null>(null);
   const runtimeWatchAbortRef = useRef<AbortController | null>(null);
   const activeAssistantRuntimeRunRef = useRef<string | null>(null);
   const watchedRuntimeRunRef = useRef<string | null>(null);
+  // A conversation owns its run and its cancel affordance. The provider is
+  // shared by the shell, so a single global run id would make switching
+  // conversations cancel whichever task happened to start last.
+  const runtimeRunByConversationRef = useRef<Record<string, string>>({});
+  const streamAbortByConversationRef = useRef<Record<string, AbortController>>({});
   // A previous history request may resolve after the user has picked another
   // conversation. Only the newest request is allowed to project server state.
   const conversationLoadVersionRef = useRef(0);
@@ -1745,12 +1758,21 @@ export function AIAssistantProvider({
     runtimeWatchAbortRef.current?.abort();
     const controller = new AbortController();
     runtimeWatchAbortRef.current = controller;
+    const isVisibleConversation = () => currentConversationIdRef.current === conversationId;
+    const scopedDispatch: Dispatch<Action> = (action) => {
+      // A late poll from an old conversation must never turn the current
+      // conversation's composer into a shared stop button.
+      if (isVisibleConversation()) dispatch(action);
+    };
     const watchOptions: AssistantSseHandlingOptions = {
       ...options,
       shouldHandleRuntimeEvent,
       onRuntimeRun: (runId) => {
-        watchedRuntimeRunRef.current = runId;
-        options?.onRuntimeRun?.(runId);
+        runtimeRunByConversationRef.current[conversationId] = runId;
+        if (currentConversationIdRef.current === conversationId) {
+          watchedRuntimeRunRef.current = runId;
+          options?.onRuntimeRun?.(runId);
+        }
       },
     };
     try {
@@ -1772,28 +1794,31 @@ export function AIAssistantProvider({
             run.id,
             runtimeEventCursorsRef.current,
             conversationId,
-            dispatch,
+            scopedDispatch,
             watchOptions,
           );
         }
+        if (!isVisibleConversation()) return;
         const active = activeRuns[0];
         if (!active) {
           try {
             const history = await getChatConversationMessages(conversationId);
-            dispatch({ type: "MERGE_MESSAGES", messages: toStoredChatMessages(history.items) });
+            scopedDispatch({ type: "MERGE_MESSAGES", messages: toStoredChatMessages(history.items) });
           } catch {
             // Runtime events remain the source of truth for the visible trace;
             // a transient chat-history refresh can be retried on next mount.
           }
           const latest = runs[0];
-          dispatch({ type: "SET_STREAMING", streaming: false });
-          dispatch({ type: "SET_STATUS", status: latest ? assistantStatusForRuntimeRun(latest) : "idle" });
+          scopedDispatch({ type: "SET_STREAMING", streaming: false });
+          scopedDispatch({ type: "SET_STATUS", status: latest ? assistantStatusForRuntimeRun(latest) : "idle" });
+          delete runtimeRunByConversationRef.current[conversationId];
           watchedRuntimeRunRef.current = null;
           return;
         }
         watchedRuntimeRunRef.current = active.id;
-        dispatch({ type: "SET_STATUS", status: assistantStatusForRuntimeRun(active) });
-        dispatch({ type: "SET_STREAMING", streaming: true });
+        runtimeRunByConversationRef.current[conversationId] = active.id;
+        scopedDispatch({ type: "SET_STATUS", status: assistantStatusForRuntimeRun(active) });
+        scopedDispatch({ type: "SET_STREAMING", streaming: true });
         await waitForAssistantRuntimePoll(controller.signal);
       }
     } finally {
@@ -1827,7 +1852,16 @@ export function AIAssistantProvider({
   const loadConversation = useCallback(async (conversationId: string) => {
     const loadVersion = ++conversationLoadVersionRef.current;
     const isCurrentLoad = () => conversationLoadVersionRef.current === loadVersion;
-    setStoredValue("lastAssistantConversationId", conversationId);
+    setSessionStoredValue("lastAssistantConversationId", conversationId);
+    // The visible composer belongs to the selected conversation. Clear the
+    // previous conversation's local cancel target before loading this one.
+    runtimeWatchAbortRef.current?.abort();
+    // Stop consuming the previous conversation's short-lived SSE projection;
+    // this does not cancel its durable Worker run.
+    activeStreamAbortRef.current?.abort();
+    activeAssistantRuntimeRunRef.current = null;
+    watchedRuntimeRunRef.current = null;
+    currentConversationIdRef.current = conversationId;
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
     dispatch({ type: "CLEAR_MESSAGES" });
     // Clear previous run tool cards so restored transcript only shows this conversation.
@@ -1936,10 +1970,14 @@ export function AIAssistantProvider({
       const currentRuns = normalizeRuntimeRuns(await listRuntimeRuns(12, conversationId));
       const activeRun = currentRuns.find(isActiveRuntimeRun);
       if (activeRun) {
+        runtimeRunByConversationRef.current[conversationId] = activeRun.id;
+        activeAssistantRuntimeRunRef.current = activeRun.id;
+        watchedRuntimeRunRef.current = activeRun.id;
         dispatch({ type: "SET_STATUS", status: assistantStatusForRuntimeRun(activeRun) });
         dispatch({ type: "SET_STREAMING", streaming: true });
         void watchConversationRuntime(conversationId);
       } else {
+        delete runtimeRunByConversationRef.current[conversationId];
         dispatch({ type: "SET_STATUS", status: "idle" });
       }
       dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: null });
@@ -1947,7 +1985,7 @@ export function AIAssistantProvider({
     } catch (error) {
       if (!isCurrentLoad()) return;
       console.error("Failed to load chat history:", error);
-      removeStoredValue("lastAssistantConversationId");
+      removeSessionStoredValue("lastAssistantConversationId");
       // Keep the conversation selected but restore a visible error instead of a
       // blank transcript that looks like history was deleted.
       dispatch({
@@ -2011,8 +2049,14 @@ export function AIAssistantProvider({
   }, []);
 
   const stopAssistantResponse = useCallback(() => {
-    const controller = activeStreamAbortRef.current;
-    const runtimeRunId = activeAssistantRuntimeRunRef.current ?? watchedRuntimeRunRef.current;
+    const conversationId = currentConversationIdRef.current;
+    const controller = conversationId
+      ? streamAbortByConversationRef.current[conversationId] ?? activeStreamAbortRef.current
+      : activeStreamAbortRef.current;
+    const runtimeRunId = conversationId
+      ? runtimeRunByConversationRef.current[conversationId]
+        ?? (conversationId === currentConversationIdRef.current ? activeAssistantRuntimeRunRef.current ?? watchedRuntimeRunRef.current : undefined)
+      : activeAssistantRuntimeRunRef.current ?? watchedRuntimeRunRef.current;
     if (!runtimeRunId) {
       // The request has not exposed a durable run ID yet.
       if (controller && !controller.signal.aborted) controller.abort();
@@ -2026,6 +2070,9 @@ export function AIAssistantProvider({
 
   useEffect(
     () => () => {
+      for (const controller of Object.values(streamAbortByConversationRef.current)) {
+        controller.abort();
+      }
       activeStreamAbortRef.current?.abort();
       runtimeWatchAbortRef.current?.abort();
     },
@@ -2034,10 +2081,13 @@ export function AIAssistantProvider({
 
   const startNewConversation = useCallback(() => {
     conversationLoadVersionRef.current += 1;
+    currentConversationIdRef.current = null;
     runtimeWatchAbortRef.current?.abort();
+    activeStreamAbortRef.current?.abort();
+    activeAssistantRuntimeRunRef.current = null;
     watchedRuntimeRunRef.current = null;
     didAutoRestoreRef.current = true;
-    removeStoredValue("lastAssistantConversationId");
+    removeSessionStoredValue("lastAssistantConversationId");
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: null });
     dispatch({ type: "CLEAR_MESSAGES" });
     dispatch({ type: "CLEAR_TRANSIENT_STATE" });
@@ -2058,7 +2108,7 @@ export function AIAssistantProvider({
       didAutoRestoreRef.current = true;
       return;
     }
-    const lastId = getStoredValue("lastAssistantConversationId");
+    const lastId = getSessionStoredValue("lastAssistantConversationId");
     if (!lastId) {
       didAutoRestoreRef.current = true;
       return;
@@ -2083,11 +2133,20 @@ export function AIAssistantProvider({
           ? "确认执行"
           : "取消操作"
         : (options?.displayContent ?? content).trim();
-      if (!displayContent || isAssistantBusy(state.status) || assistantRequestInFlightRef.current) return;
-      assistantRequestInFlightRef.current = true;
       const targetConversationId = options?.conversationId ?? state.currentConversationId;
+      const targetHasKnownRun = Boolean(
+        targetConversationId && runtimeRunByConversationRef.current[targetConversationId],
+      );
+      if (
+        !displayContent ||
+        assistantRequestInFlightRef.current ||
+        (targetConversationId === state.currentConversationId && isAssistantBusy(state.status)) ||
+        targetHasKnownRun
+      ) return;
+      assistantRequestInFlightRef.current = true;
       if (targetConversationId && targetConversationId !== state.currentConversationId) {
-        setStoredValue("lastAssistantConversationId", targetConversationId);
+        setSessionStoredValue("lastAssistantConversationId", targetConversationId);
+        currentConversationIdRef.current = targetConversationId;
         dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: targetConversationId });
       }
 
@@ -2117,17 +2176,36 @@ export function AIAssistantProvider({
       let receivedTerminalEvent = false;
       const abortController = new AbortController();
       activeStreamAbortRef.current = abortController;
+      if (targetConversationId) {
+        streamAbortByConversationRef.current[targetConversationId] = abortController;
+      }
       dispatch({ type: "SET_STREAMING", streaming: true });
       const sseOptions: AssistantSseHandlingOptions = {
         shouldHandleRuntimeEvent,
         navigate: (path) => navigateRef.current?.(path),
         onRuntimeRun: (runId) => {
           activeRuntimeRunId = runId;
-          activeAssistantRuntimeRunRef.current = runId;
+          if (activeConversationId) {
+            runtimeRunByConversationRef.current[activeConversationId] = runId;
+          }
+          if (!activeConversationId || currentConversationIdRef.current === activeConversationId) {
+            activeAssistantRuntimeRunRef.current = runId;
+          }
         },
         onConversation: (conversationId) => {
           activeConversationId = conversationId;
-          setStoredValue("lastAssistantConversationId", conversationId);
+          if (activeRuntimeRunId) {
+            runtimeRunByConversationRef.current[conversationId] = activeRuntimeRunId;
+          }
+          const ownsVisibleConversation =
+            currentConversationIdRef.current === targetConversationId ||
+            currentConversationIdRef.current === activeConversationId ||
+            (!targetConversationId && currentConversationIdRef.current === null);
+          if (!ownsVisibleConversation) return false;
+          currentConversationIdRef.current = conversationId;
+          streamAbortByConversationRef.current[conversationId] = abortController;
+          setSessionStoredValue("lastAssistantConversationId", conversationId);
+          return true;
         },
         onTerminal: () => {
           receivedTerminalEvent = true;
@@ -2268,10 +2346,20 @@ export function AIAssistantProvider({
         dispatch({ type: "SET_SESSION_ERROR", message: friendly, errorCode });
       } finally {
         assistantRequestInFlightRef.current = false;
+        if (activeConversationId && receivedTerminalEvent && runtimeRunByConversationRef.current[activeConversationId] === activeRuntimeRunId) {
+          delete runtimeRunByConversationRef.current[activeConversationId];
+        }
         if (activeStreamAbortRef.current === abortController) {
           activeStreamAbortRef.current = null;
-          activeAssistantRuntimeRunRef.current = null;
-          dispatch({ type: "SET_STREAMING", streaming: false });
+          if (activeAssistantRuntimeRunRef.current === activeRuntimeRunId) {
+            activeAssistantRuntimeRunRef.current = null;
+          }
+          if (!activeConversationId || currentConversationIdRef.current === activeConversationId) {
+            dispatch({ type: "SET_STREAMING", streaming: false });
+          }
+        }
+        if (activeConversationId && streamAbortByConversationRef.current[activeConversationId] === abortController) {
+          delete streamAbortByConversationRef.current[activeConversationId];
         }
         void refreshConversations();
       }
@@ -2313,7 +2401,8 @@ export function AIAssistantProvider({
       try {
         const branch = await forkChatConversation(sourceConversationId, checkpointMessageId);
         const messages = toStoredChatMessages(branch.items);
-        setStoredValue("lastAssistantConversationId", branch.conversation.id);
+        setSessionStoredValue("lastAssistantConversationId", branch.conversation.id);
+        currentConversationIdRef.current = branch.conversation.id;
         dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: branch.conversation.id });
         dispatch({ type: "REPLACE_MESSAGES", messages });
         dispatch({ type: "SET_STATUS", status: "idle" });

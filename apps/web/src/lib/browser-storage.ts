@@ -50,3 +50,20 @@ export function removeStoredValue(key: StorageKeyName) {
   const legacyKey = LEGACY_STORAGE_KEYS[key];
   if (legacyKey) localStorage.removeItem(legacyKey);
 }
+
+/**
+ * Conversation selection is a browser-tab concern, not an account-wide
+ * preference. Keeping it in sessionStorage prevents two open agent windows
+ * from silently selecting and controlling the same conversation.
+ */
+export function getSessionStoredValue(key: StorageKeyName) {
+  return sessionStorage.getItem(STORAGE_KEYS[key]);
+}
+
+export function setSessionStoredValue(key: StorageKeyName, value: string) {
+  sessionStorage.setItem(STORAGE_KEYS[key], value);
+}
+
+export function removeSessionStoredValue(key: StorageKeyName) {
+  sessionStorage.removeItem(STORAGE_KEYS[key]);
+}
