@@ -119,7 +119,9 @@ Required secret-backed values:
 - `DOCPILOT_ASSISTANT_ENGINE=pi`
 - `DOCPILOT_PI_AGENT_URL=http://pi-agent:8787`
 - `DOCPILOT_PI_TOOL_BRIDGE_URL=http://api:8000/internal/pi/tools/execute`
-- `DOCPILOT_PI_INTERNAL_SECRET` shared only by the API and Pi sidecar
+- `DOCPILOT_PI_INTERNAL_SECRET` shared only by the API, Pi sidecar, and Worker
+  queue consumer; it authorizes short-lived run-scoped bridge/task tokens and
+  must never be exposed to the browser
 
 `DOCPILOT_AUTH_REQUIRED` must be `true`.
 
