@@ -9,6 +9,10 @@
   disabled by default until the deployment injects `DOCPILOT_MEM0_API_KEY`.
   BidPilot `MemoryRecord` remains the evidence-backed business memory source;
   Pi `SessionManager.inMemory()` remains per-attempt working memory.
+  The implementation was deployed in `04cf11e`; production health remained
+  ready and the Worker registered `worker.capture_mem0_profile`. Mem0 remains
+  disabled in production until its API key is injected through the deployment
+  secret store; no key is stored in this repository.
 
 - Fixed conversation isolation in the web Agent projection. The selected
   conversation is tab-scoped, active run/cancel targets are keyed by
