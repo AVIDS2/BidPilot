@@ -1000,7 +1000,9 @@ function handleAssistantSseEvent(
     if (title || summary) {
       dispatch({
         type: "APPEND_VISIBLE_REASONING",
-        content: summary || title,
+        // The title is owned by the execution group. Keeping the task-start
+        // block title-identical lets the thread suppress that duplicate row.
+        content: title || summary,
         title: title || summary,
         turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : undefined,
         source: "harness",
