@@ -167,17 +167,18 @@ export function runtimeEventToAssistantEvents(
         }];
       }
       if (stage === "task_started") {
+        const taskTitle = asString(payload.title) ?? asString(payload.task_title) ?? event.public_summary;
         return [{
           eventType: "assistant.task_started",
           data: {
             ...metadata,
             turn_id: turnId,
-            title: asString(payload.title) || event.public_summary,
+            title: taskTitle,
             summary: event.public_summary,
             skill_name: asString(payload.skill_name),
             presentation_kind: asString(payload.presentation_kind),
             presentation_session_id: asString(payload.presentation_session_id) ?? event.event_id,
-            presentation_title: asString(payload.presentation_title) ?? asString(payload.title),
+            presentation_title: asString(payload.presentation_title) ?? taskTitle,
             state: "thinking",
           },
         }];

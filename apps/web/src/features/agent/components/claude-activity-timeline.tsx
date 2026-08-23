@@ -15,7 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { downloadAssistantArtifact } from "@/lib/api";
+import { downloadAssistantArtifact, listRuntimeChildRuns, listRuntimeEvents, type RuntimeChildRunRead } from "@/lib/api";
 import type {
   AssistantExecutionItem,
   WorkflowNodeProgress,
@@ -741,6 +741,67 @@ function ToolStep({
   );
 }
 
+function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
+  const [children, setChildren] = useState<RuntimeChildRunRead[]>([]);
+  const [selected, setSelected] = useState(0);
+  const [events, setEvents] = useState<Array<{ type: string; public_summary: string }>>([]);
+  const parentRunId = item.runtimeRunId;
+
+  useEffect(() => {
+    if (item.toolName !== "spawn_subagents" || !parentRunId) return;
+    let cancelled = false;
+    void listRuntimeChildRuns(parentRunId, 20).then((rows) => {
+      if (!cancelled) {
+        setChildren(rows);
+        setSelected(0);
+      }
+    }).catch(() => {
+      if (!cancelled) setChildren([]);
+    });
+    return () => { cancelled = true; };
+  }, [item.toolName, parentRunId, item.status]);
+
+  const child = children[selected];
+  useEffect(() => {
+    if (!child) {
+      setEvents([]);
+      return;
+    }
+    let cancelled = false;
+    void listRuntimeEvents(child.id, 0).then((response) => {
+      if (!cancelled) setEvents(response.items.map((event) => ({ type: event.type, public_summary: event.public_summary })));
+    }).catch(() => {
+      if (!cancelled) setEvents([]);
+    });
+    return () => { cancelled = true; };
+  }, [child]);
+
+  if (item.toolName !== "spawn_subagents" || children.length === 0) return null;
+  return (
+    <section className="cr-subagent-viewer" aria-label="子 Agent 执行记录">
+      <header className="cr-subagent-viewer-header">
+        <span>子 Agent</span>
+        <span>{selected + 1} / {children.length}</span>
+      </header>
+      {child && (
+        <div className="cr-subagent-viewer-body">
+          <strong>{child.profile || "子 Agent"} 子 Agent</strong>
+          <small>{child.status === "completed" ? "已完成" : child.status === "failed" ? "失败" : "执行中"}</small>
+          {events.filter((event) => event.type.startsWith("capability.")).map((event, index) => (
+            <p key={`${child.id}-${index}`}>{event.public_summary}</p>
+          ))}
+        </div>
+      )}
+      {children.length > 1 && (
+        <div className="cr-subagent-viewer-actions">
+          <button type="button" disabled={selected === 0} onClick={() => setSelected((value) => Math.max(0, value - 1))}>查看上一个子 Agent</button>
+          <button type="button" disabled={selected === children.length - 1} onClick={() => setSelected((value) => Math.min(children.length - 1, value + 1))}>查看下一个子 Agent</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function DeepResearchRuntime({ items }: { items: AssistantExecutionItem[] }) {
   const [open, setOpen] = useState(false);
   const searches = items.filter((item) => item.toolName === "web_search");
@@ -817,15 +878,17 @@ function TaskTurn({
             {deepResearch ? (
               <DeepResearchRuntime items={turn.items} />
             ) : turn.items.map((item) => (
-              <ToolStep
-                key={item.toolCallId || item.id}
-                item={item}
-                t={t}
-                onCancelWorkflow={onCancelWorkflow}
-                onConfigureProvider={onConfigureProvider}
-                onOpenWorkflowCanvas={onOpenWorkflowCanvas}
-                isCancelling={cancellingRunId === item.runtimeRunId}
-              />
+              <div key={item.toolCallId || item.id}>
+                <SubagentExecutionViewer item={item} />
+                <ToolStep
+                  item={item}
+                  t={t}
+                  onCancelWorkflow={onCancelWorkflow}
+                  onConfigureProvider={onConfigureProvider}
+                  onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+                  isCancelling={cancellingRunId === item.runtimeRunId}
+                />
+              </div>
             ))}
           </div>
         </div>
