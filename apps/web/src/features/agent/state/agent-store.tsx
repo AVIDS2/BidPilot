@@ -240,6 +240,7 @@ type Action =
   | { type: "MERGE_MESSAGES"; messages: ChatMessage[] }
   | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
   | { type: "SET_LAST_USER_DURABLE_ID"; durableId: string }
+  | { type: "SET_ACTIVE_ASSISTANT_RUNTIME_RUN"; runtimeRunId: string }
   | { type: "UPDATE_LAST_ASSISTANT"; content: string }
   | {
       type: "APPEND_VISIBLE_REASONING";
@@ -531,27 +532,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "ADD_MESSAGE":
       return { ...state, messages: [...state.messages, action.message] };
     case "MERGE_MESSAGES": {
-      const messages = [...state.messages];
-      for (const incoming of action.messages) {
-        const index = messages.findIndex(
-          (message) =>
-            message.id === incoming.id ||
-            (message.role === incoming.role &&
-              Boolean(message.runtimeRunId) &&
-              message.runtimeRunId === incoming.runtimeRunId),
-        );
-        if (index < 0) {
-          messages.push(incoming);
-        } else {
-          messages[index] = {
-            ...messages[index],
-            ...incoming,
-            transcriptParts: messages[index].transcriptParts ?? incoming.transcriptParts,
-          };
-        }
-      }
-      messages.sort((left, right) => left.timestamp - right.timestamp);
-      return { ...state, messages };
+      return { ...state, messages: mergeAssistantMessages(state.messages, action.messages) };
     }
     case "REPLACE_MESSAGES":
       return {
@@ -575,6 +556,15 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       if (messageIndex < 0) return state;
       const messages = [...state.messages];
       messages[messageIndex] = { ...messages[messageIndex], durableId: action.durableId };
+      return { ...state, messages };
+    }
+    case "SET_ACTIVE_ASSISTANT_RUNTIME_RUN": {
+      if (!state.activeAssistantMessageId) return state;
+      const messages = state.messages.map((message) =>
+        message.id === state.activeAssistantMessageId
+          ? { ...message, runtimeRunId: action.runtimeRunId }
+          : message,
+      );
       return { ...state, messages };
     }
     case "UPDATE_LAST_ASSISTANT": {
@@ -839,6 +829,32 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     default:
       return state;
   }
+}
+
+/** Merge optimistic live messages with their server-owned counterparts. */
+export function mergeAssistantMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const messages = [...current];
+  for (const nextMessage of incoming) {
+    const index = messages.findIndex(
+      (message) =>
+        message.id === nextMessage.id ||
+        (Boolean(message.durableId) && message.durableId === nextMessage.durableId) ||
+        (message.role === nextMessage.role &&
+          Boolean(message.runtimeRunId) &&
+          message.runtimeRunId === nextMessage.runtimeRunId),
+    );
+    if (index < 0) {
+      messages.push(nextMessage);
+      continue;
+    }
+    messages[index] = {
+      ...messages[index],
+      ...nextMessage,
+      transcriptParts: messages[index].transcriptParts ?? nextMessage.transcriptParts,
+    };
+  }
+  messages.sort((left, right) => left.timestamp - right.timestamp);
+  return messages;
 }
 
 interface AssistantSseHandlingOptions {
@@ -2185,6 +2201,7 @@ export function AIAssistantProvider({
         navigate: (path) => navigateRef.current?.(path),
         onRuntimeRun: (runId) => {
           activeRuntimeRunId = runId;
+          dispatch({ type: "SET_ACTIVE_ASSISTANT_RUNTIME_RUN", runtimeRunId: runId });
           if (activeConversationId) {
             runtimeRunByConversationRef.current[activeConversationId] = runId;
           }

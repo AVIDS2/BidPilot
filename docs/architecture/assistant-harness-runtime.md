@@ -61,20 +61,23 @@ inventory is the current authority.
 5. Every capability goes through authorization, policy, audit, and durable
    runtime events. The model never bypasses a product service.
 6. The assistant response, terminal state, and public event summaries are
-   persisted in PostgreSQL. SSE is only a short-lived projection of that
-   durable trace; closing the browser does not cancel the Worker task.
+   persisted in PostgreSQL. During an active Worker-owned run, the API also
+   publishes the same user-safe Pi frames through a run-scoped Redis live
+   channel; the browser's initial SSE subscribes to that channel. PostgreSQL
+   event replay is used only after reconnect, refresh, or a missed live
+   channel, and closing the browser does not cancel the Worker task.
 
 ### Queue and reconnect contract
 
 The browser must never be the owner of an assistant turn. The initial
-`POST /assistant/stream` returns the conversation ID and queued runtime ID,
-then may close immediately. The Web client keeps a per-run event cursor and
-polls `GET /runtime/runs/{run_id}/events?after_sequence=N` while the run is
-`queued`, `running`, `awaiting_approval` or `cancel_requested`. On a reload it
-loads the conversation messages, lists the conversation's runtime runs, and
-replays every run from sequence zero before continuing active runs from their
-last cursor. Terminal status is taken from `RuntimeRun`, not inferred from a
-closed socket.
+`POST /assistant/stream` creates the durable run, subscribes to its ephemeral
+Redis live channel before queue dispatch, and forwards Pi's current
+`turn.started`, `thinking.*`, text deltas, tool lifecycle, and terminal frames
+while the Worker executes. The Web client still keeps a per-run event cursor.
+On a reconnect or reload it loads conversation messages and resumes from
+`GET /runtime/runs/{run_id}/events?after_sequence=N`; this durable replay is a
+recovery path, not the normal live rendering path. Terminal status is taken
+from `RuntimeRun`, not inferred from a closed socket.
 
 The Worker task is idempotent through the outbox delivery lease and the run
 ID. A transient API/Pi transport failure releases the outbox row for retry;

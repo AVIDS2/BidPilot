@@ -40,6 +40,7 @@ from .assistant_adapter import (
     _sse,
 )
 from .events import latest_event_sequence
+from .live_events import open_live_run
 from .prompt_assembly import ConversationContextWindow, compact_conversation_context
 from .queue import enqueue_assistant_run
 from .service import (
@@ -224,27 +225,32 @@ async def stream_operator_assistant_response(
     )
     run.input_json = {**(run.input_json or {}), "user_message_id": user_message.id}
     db.commit()
-    # The browser is only a projection channel. Queue the Pi turn before
-    # returning so closing a tab cannot cancel model execution.
-    enqueue_assistant_run(db, user, run)
-    yield _sse(
-        "assistant.start",
-        {
-            "conversation_id": conversation_id,
-            "runtime_run_id": run.id,
-            "user_message_id": user_message.id,
-            "state": "queued",
-        },
-    )
-    yield _sse(
-        "assistant.runtime_state",
-        {
-            "runtime_run_id": run.id,
-            "phase": "queued",
-            "state": "queued",
-        },
-    )
-    return
+    # Subscribe before queue dispatch. The Worker owns execution, while Redis
+    # carries the ephemeral Pi event stream directly to this browser request.
+    # PostgreSQL replay remains the reconnect fallback, not the normal path.
+    async with open_live_run(run.id) as live:
+        enqueue_assistant_run(db, user, run)
+        yield _sse(
+            "assistant.start",
+            {
+                "conversation_id": conversation_id,
+                "runtime_run_id": run.id,
+                "user_message_id": user_message.id,
+                "state": "queued",
+            },
+        )
+        yield _sse(
+            "assistant.runtime_state",
+            {
+                "runtime_run_id": run.id,
+                "phase": "queued",
+                "state": "queued",
+            },
+        )
+        if live is not None:
+            async for frame in live.events():
+                yield frame
+        return
 
 
 async def _replay_existing_run(

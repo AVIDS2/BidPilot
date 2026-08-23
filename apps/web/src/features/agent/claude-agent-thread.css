@@ -203,14 +203,6 @@
   min-width: 0;
 }
 
-.bidpilot-claude-thread .cr-task-trace::before {
-  content: "任务执行";
-  margin: 0 0 8px 3px;
-  color: #8b8983;
-  font-size: 12px;
-  font-weight: 540;
-}
-
 .bidpilot-claude-thread .cr-reasoning-heading {
   display: flex;
   width: 100%;
