@@ -994,6 +994,21 @@ function handleAssistantSseEvent(
     return;
   }
 
+  if (eventType === "assistant.task_started") {
+    const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
+    const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : title;
+    if (title || summary) {
+      dispatch({
+        type: "APPEND_VISIBLE_REASONING",
+        content: summary || title,
+        title: title || summary,
+        turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : undefined,
+        source: "harness",
+      });
+    }
+    return;
+  }
+
   if (eventType === "assistant.reasoning" && typeof parsed.content === "string") {
     // Only the Harness may publish user-facing reasoning. Provider thinking
     // tokens are private model state and must never become transcript text.
@@ -1959,6 +1974,7 @@ export function AIAssistantProvider({
                 compatibilityEvent.eventType !== "assistant.tool_failed" &&
                 compatibilityEvent.eventType !== "assistant.turn_started" &&
                 compatibilityEvent.eventType !== "assistant.turn_finished" &&
+                compatibilityEvent.eventType !== "assistant.task_started" &&
                 compatibilityEvent.eventType !== "assistant.reasoning" &&
                 compatibilityEvent.eventType !== "assistant.reasoning_completed"
               ) {

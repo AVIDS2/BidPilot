@@ -812,18 +812,18 @@ function DeepResearchRuntime({ items }: { items: AssistantExecutionItem[] }) {
     <section className={`cr-deep-research-runtime${active ? " is-live" : ""}`} aria-label="深度调研运行状态">
       <header>
         <span className={active ? "cr-live-label" : undefined}>深度调研运行状态</span>
-        <small>{completed}/{searches.length || 0} 个来源已核验</small>
+        <small>{completed} 个可追溯来源</small>
       </header>
-      <button type="button" className="cr-inline-action" onClick={() => setOpen((value) => !value)}>
-        {open ? "收起调研过程" : "查看调研过程"}
-      </button>
-      {open && (
+      <details className="cr-deep-research-process" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+        <summary>查看调研过程</summary>
+        {open && (
         <ol className="cr-deep-research-stages">
           <li className={searches.length ? "is-active" : undefined}>来源发现</li>
           <li className={completed === searches.length && searches.length > 0 ? "is-complete" : undefined}>来源核验</li>
           <li>候选结果汇总</li>
         </ol>
-      )}
+        )}
+      </details>
     </section>
   );
 }
