@@ -1061,6 +1061,9 @@ function handleAssistantSseEvent(
         runtimeRunId,
         arguments: asRecord(parsed.arguments),
         isRunning: true,
+        presentationKind: typeof parsed.presentation_kind === "string" ? parsed.presentation_kind : undefined,
+        presentationSessionId: typeof parsed.presentation_session_id === "string" ? parsed.presentation_session_id : undefined,
+        presentationTitle: typeof parsed.presentation_title === "string" ? parsed.presentation_title : undefined,
       },
     });
     dispatch({ type: "SET_STATUS", status: "executing_tool" });
@@ -1156,6 +1159,9 @@ function handleAssistantSseEvent(
         turnId,
         runtimeRunId,
         title: typeof parsed.title === "string" && parsed.title ? parsed.title : toolName,
+        presentationKind: typeof parsed.presentation_kind === "string" ? parsed.presentation_kind : undefined,
+        presentationSessionId: typeof parsed.presentation_session_id === "string" ? parsed.presentation_session_id : undefined,
+        presentationTitle: typeof parsed.presentation_title === "string" ? parsed.presentation_title : undefined,
       },
     });
     // A completed tool is not necessarily a completed turn: the harness may
