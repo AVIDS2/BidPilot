@@ -1,5 +1,32 @@
 # Progress Log
 
+## 2026-08-24 live Pi runtime release
+
+- Replaced the browser-first assistant projection with a run-scoped Redis live
+  channel. The API subscribes before dispatching the Celery outbox task; the
+  Worker-owned Pi session publishes the same user-safe runtime frames while it
+  executes. PostgreSQL `RuntimeEvent` remains the durable source of truth for
+  reconnect, refresh, and missed-event recovery. Closing the browser does not
+  cancel the run.
+- Fixed optimistic/durable message reconciliation by binding the optimistic
+  assistant to `runtime_run_id` and merging by durable identity, runtime run,
+  or message ID. This prevents a single user turn from rendering twice after
+  history restoration.
+- Removed the legacy CSS-injected `任务执行` heading. Runtime state is now
+  projected from Pi lifecycle events and durable event metadata; no assistant
+  message or tool-name substring selects a product mode.
+- Added a paged, parent/child execution viewer for real `spawn_subagents`
+  runtime runs and a specialized collapsible deep-research process surface.
+  Presentation metadata is carried by runtime events, while ordinary tool
+  calls retain the normal chronological projection.
+- Verification: Pi sidecar real-model smoke passed with native
+  `agent.started`, `turn.started`, `text.delta`, `turn.completed`, and
+  `agent.completed`; Pi package tests `13 passed`; live Redis projection test
+  `1 passed`; public Agent-workspace Playwright acceptance `4 passed` on
+  Chromium; production readiness reports PostgreSQL, Redis, MinIO, Pi bridge,
+  and Pi sidecar healthy; production Mem0 smoke passed capture, recall, and
+  isolated cleanup.
+
 ## 2026-08-22
 
 - Final acceptance pass for the memory/runtime release: API PostgreSQL suite
