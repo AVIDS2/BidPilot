@@ -330,7 +330,7 @@ function ClaudeAssistantMessage({
   const hasTranscriptParts = parts.length > 0;
   const hasNarrativePart = parts.some((part) => part.kind === "narrative" && part.text);
   const isTimelineTitle = (part: Extract<AssistantTranscriptPart, { kind: "reasoning" }>) =>
-    Boolean(part.turnId && part.title && part.title.trim() === part.text.trim());
+    Boolean(part.title && part.title.trim() === part.text.trim());
   const turnIds = useMemo(
     () => new Set(parts.flatMap((part) => (part.kind === "turn" ? [part.turnId] : []))),
     [parts],
