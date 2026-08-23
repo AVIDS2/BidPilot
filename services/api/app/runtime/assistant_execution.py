@@ -158,10 +158,9 @@ async def execute_queued_assistant_run(db: Session, run: RuntimeRun) -> str:
         pending_input=pending_input,
         approval_mode=payload.approval_mode,
         reasoning_effort=payload.reasoning_effort,
-        detached_execution=True,
     ):
-        # RuntimeEvent and chat persistence happen inside the Pi adapter. This
-        # worker deliberately discards the browser-facing projection frames.
+        # RuntimeEvent/chat persistence and the Redis live projection all happen
+        # inside the Pi adapter. The worker does not own the browser socket.
         continue
     db.refresh(run)
     return run.status

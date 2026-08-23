@@ -133,7 +133,6 @@ async def stream_pi_assistant_response(
     reasoning_effort: str | None,
     wake_runtime_run_id: str | None = None,
     system_wake: bool = False,
-    detached_execution: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Run one Pi turn and project only user-safe events to SSE."""
     from .background_tasks import collect_completed_notifications
