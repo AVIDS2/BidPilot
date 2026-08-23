@@ -2,6 +2,9 @@ FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
 WORKDIR /app
 
+ENV UV_HTTP_TIMEOUT=120
+ENV UV_HTTP_RETRIES=5
+
 RUN apt-get update \
     && apt-get install --no-install-recommends -y tesseract-ocr tesseract-ocr-chi-sim \
     && rm -rf /var/lib/apt/lists/*
