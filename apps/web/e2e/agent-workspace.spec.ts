@@ -41,6 +41,31 @@ async function prepareAuthenticatedAgent(page: Page) {
       body: JSON.stringify([]),
     });
   });
+  await page.route("**/auth/me/providers/runtime", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: {
+          version: "1",
+          sandbox: {
+            profile: "governed_cloud",
+            hostTools: "disabled",
+            network: "bridge_only",
+            maxToolInputBytes: 131072,
+            maxToolObservationBytes: 524288,
+          },
+          extensions: ["bidpilot-governance", "bidpilot-skills", "bidpilot-subagents"],
+          skills: [{ name: "deep-research", description: "Research", version: "1.1.0", resources: ["references/source-quality.md"] }],
+          tool_count: 44,
+          parallel_tool_count: 21,
+          mcp_servers: [],
+        },
+      }),
+    });
+  });
+  await page.route("**/runtime/runs?**", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
+  });
 }
 
 test("keeps the Agent composer inside the conversation pane at every viewport", async ({
@@ -94,6 +119,7 @@ test("keeps the Agent composer inside the conversation pane at every viewport", 
   // layouts. The footer history control is intentionally desktop-only.
   if (testInfo.project.name === "chromium") {
     await expect(page.getByRole("button", { name: "Chat history" })).toBeVisible();
+    await expect(page.locator(".agent-environment-panel")).toBeVisible();
 
     // The desktop account menu is part of the shared workbench shell. Keep
     // its admin settings routes visible and on the light menu surface.
@@ -661,7 +687,7 @@ test("projects deep research as one specialized runtime", async ({ page }, testI
   await parentGroup.locator(":scope > .cr-task-turn-summary").click();
   await expect(page.getByLabel("深度调研运行状态")).toBeVisible();
   await expect(parentGroup.locator(".cr-deep-research-process > summary")).toContainText("查看调研过程");
-  await expect(page.getByText("3 个可追溯来源", { exact: true })).toBeVisible();
+  await expect(page.getByText("3 个来源", { exact: true })).toBeVisible();
   await expect(parentGroup.locator(".cr-tool-step")).toHaveCount(0);
 
   await page.screenshot({

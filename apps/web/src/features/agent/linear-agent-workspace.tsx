@@ -13,6 +13,7 @@ import {
   FileSearchIcon,
   FileTextIcon,
   MoreHorizontalIcon,
+  PanelRightIcon,
   PanelTopIcon,
   PencilIcon,
   PinIcon,
@@ -27,6 +28,7 @@ import {
 } from "@/features/agent/components/AIAssistantPanel";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { ClaudeAgentThread } from "./claude-agent-thread";
+import { AgentEnvironmentPanel } from "./components/agent-environment-panel";
 import { useAIAssistant, type AIAssistantState } from "@/features/agent/state/agent-store";
 import {
   deleteChatConversation,
@@ -392,6 +394,9 @@ export function LinearAgentWorkspace() {
     confirmAssistantAction,
   } = useAIAssistant();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [environmentPanelOpen, setEnvironmentPanelOpen] = useState(() =>
+    typeof window !== "undefined" ? !window.matchMedia("(max-width: 820px)").matches : true,
+  );
   const [previewAttachment, setPreviewAttachment] = useState<AttachmentPreviewSelection | null>(null);
   const [workflowCanvasProjectId, setWorkflowCanvasProjectId] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState(420);
@@ -462,6 +467,7 @@ export function LinearAgentWorkspace() {
   };
   const hasSideCanvas = Boolean(previewAttachment || workflowCanvasProjectId);
   const showDesktopCanvas = hasSideCanvas && !isCompactViewport;
+  const showDesktopEnvironment = environmentPanelOpen && !isCompactViewport;
   const closeSideSurface = () => {
     setPreviewAttachment(null);
     setWorkflowCanvasProjectId(null);
@@ -499,7 +505,7 @@ export function LinearAgentWorkspace() {
   return (
     <div className={`linear-agent-embedded bidpilot-linear-agent${isPreviewResizing ? " is-preview-resizing" : ""}`} ref={workspaceRef}>
       <main
-        className={`linear-main${showDesktopCanvas ? " has-preview-canvas" : ""}`}
+        className={`linear-main${showDesktopCanvas ? " has-preview-canvas" : ""}${showDesktopEnvironment ? " has-environment-panel" : ""}`}
         style={{ "--preview-width": `${previewWidth}px` } as CSSProperties}
       >
         <section className="agent-canvas">
@@ -522,6 +528,16 @@ export function LinearAgentWorkspace() {
               </button>
               <button type="button" className="agent-header-icon" aria-label="Conversation options" onClick={() => setHistoryOpen((value) => !value)}>
                 <MoreHorizontalIcon size={16} />
+              </button>
+              <button
+                type="button"
+                className={`agent-header-icon${environmentPanelOpen ? " is-active" : ""}`}
+                aria-expanded={environmentPanelOpen}
+                aria-label={environmentPanelOpen ? "收起运行环境" : "打开运行环境"}
+                title={environmentPanelOpen ? "收起运行环境" : "打开运行环境"}
+                onClick={() => setEnvironmentPanelOpen((value) => !value)}
+              >
+                <PanelRightIcon size={15} />
               </button>
             </header>
             <AgentHistory
@@ -594,6 +610,12 @@ export function LinearAgentWorkspace() {
         ) : showDesktopCanvas ? (
           <AgentPreviewCanvas selection={previewAttachment} onClose={() => setPreviewAttachment(null)} />
         ) : null}
+        {showDesktopEnvironment ? (
+          <AgentEnvironmentPanel
+            onClose={() => setEnvironmentPanelOpen(false)}
+            onOpenRun={(runId) => navigate(`/runs?run=${runId}`)}
+          />
+        ) : null}
         <AgentFooter onHistory={() => setHistoryOpen((value) => !value)} />
       </main>
       <Sheet
@@ -625,6 +647,27 @@ export function LinearAgentWorkspace() {
               showHeader={false}
             />
           )}
+        </SheetContent>
+      </Sheet>
+      <Sheet
+        open={isCompactViewport && environmentPanelOpen}
+        onOpenChange={(open) => setEnvironmentPanelOpen(open)}
+      >
+        <SheetContent
+          side="right"
+          className="agent-mobile-environment-sheet w-[min(100vw,22rem)] max-w-none gap-0 p-0 sm:max-w-none"
+        >
+          <SheetHeader className="agent-mobile-side-sheet-header">
+            <SheetTitle>运行环境</SheetTitle>
+            <SheetDescription>Pi Agent 的实时资源与后台运行</SheetDescription>
+          </SheetHeader>
+          <AgentEnvironmentPanel
+            onClose={() => setEnvironmentPanelOpen(false)}
+            onOpenRun={(runId) => {
+              setEnvironmentPanelOpen(false);
+              navigate(`/runs?run=${runId}`);
+            }}
+          />
         </SheetContent>
       </Sheet>
     </div>
