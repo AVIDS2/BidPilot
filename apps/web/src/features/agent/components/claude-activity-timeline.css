@@ -974,9 +974,10 @@
 
 .assistant-claude-timeline .cr-deep-research-runtime {
   margin: 4px 0 10px;
-  padding: 10px 12px;
+  padding: 12px 0 4px;
   border-left: 2px solid #d8d5ce;
-  background: #fafaf8;
+  background: transparent;
+  padding-left: 14px;
 }
 
 .assistant-claude-timeline .cr-deep-research-runtime header {
@@ -998,16 +999,83 @@
 }
 
 .assistant-claude-timeline .cr-deep-research-stages {
-  display: grid;
-  gap: 6px;
-  margin: 8px 0 0;
-  padding: 0 0 0 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 11px 0 8px;
+  padding: 0;
   color: #777570;
   font-size: 12px;
+  list-style: none;
 }
 
-.assistant-claude-timeline .cr-deep-research-stages li.is-active { color: #4b70d8; }
+.assistant-claude-timeline .cr-deep-research-stages li {
+  padding: 4px 8px;
+  border: 1px solid #e5e2da;
+  border-radius: 999px;
+  background: #fff;
+}
+.assistant-claude-timeline .cr-deep-research-stages li.is-active {
+  color: #4b70d8;
+  border-color: #b9c8f2;
+  animation: claude-timeline-live-label 2.4s ease-in-out infinite;
+}
 .assistant-claude-timeline .cr-deep-research-stages li.is-complete { color: #35845c; }
+.assistant-claude-timeline .cr-deep-research-counts {
+  display: flex;
+  gap: 12px;
+  color: #777570;
+  font-size: 11px;
+}
+.assistant-claude-timeline .cr-deep-research-counts span,
+.assistant-claude-timeline .cr-deep-research-process summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.assistant-claude-timeline .cr-deep-research-process {
+  margin-top: 8px;
+  color: #5f5d57;
+  font-size: 12px;
+}
+.assistant-claude-timeline .cr-deep-research-process summary { cursor: pointer; }
+.assistant-claude-timeline .cr-deep-research-sources {
+  display: grid;
+  gap: 5px;
+  margin-top: 7px;
+}
+.assistant-claude-timeline .cr-deep-research-sources a {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid #ebe9e4;
+  color: #34322d;
+  text-decoration: none;
+}
+.assistant-claude-timeline .cr-deep-research-sources a:hover { background: #fafaf8; }
+.assistant-claude-timeline .cr-deep-research-sources span { display: grid; gap: 2px; min-width: 0; }
+.assistant-claude-timeline .cr-deep-research-sources strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-claude-timeline .cr-deep-research-sources small { color: #929089; }
+.assistant-claude-timeline .cr-deep-research-claims {
+  display: grid;
+  gap: 6px;
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.assistant-claude-timeline .cr-deep-research-claims li { display: flex; gap: 7px; line-height: 1.45; }
+.assistant-claude-timeline .cr-deep-research-report {
+  max-height: 240px;
+  overflow: auto;
+  margin-top: 7px;
+  padding: 10px;
+  border: 1px solid #ebe9e4;
+  background: #fff;
+  color: #403e39;
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
 
 @media (max-width: 520px) {
   .assistant-claude-timeline .cr-tool-summary,

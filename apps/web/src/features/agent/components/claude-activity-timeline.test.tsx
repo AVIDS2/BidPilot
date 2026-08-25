@@ -330,6 +330,14 @@ describe("ClaudeActivityTimeline", () => {
         presentationSessionId: "research-1",
         presentationTitle: "招标机会深度调研",
         runtimeRunId: "research-run-1",
+        result: {
+          phase: "verify",
+          source_count: 2,
+          claim_count: 1,
+          sources: [{ source_id: "S1", title: "公开采购公告", url: "https://example.com/notice" }],
+          claims: [{ claim_id: "C1", claim: "公告仍可追溯。", source_ids: ["S1"] }],
+          report: "# 深度调研报告\n\n结论可追溯。",
+        },
         timestamp: 1,
       },
       ...[1, 2, 3].map((index): AssistantExecutionItem => ({
@@ -352,6 +360,9 @@ describe("ClaudeActivityTimeline", () => {
     fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
     expect(screen.getByLabelText("深度调研运行状态")).toBeInTheDocument();
     expect(screen.getByText("查看调研过程")).toBeInTheDocument();
+    expect(screen.getByText("公开采购公告")).toBeInTheDocument();
+    expect(screen.getByText("公告仍可追溯。")).toBeInTheDocument();
+    expect(container.querySelector(".cr-deep-research-report")).toHaveTextContent("# 深度调研报告");
     expect(container.querySelectorAll(".cr-tool-step")).toHaveLength(0);
   });
 });

@@ -2,6 +2,15 @@
 
 > Status: Pi `AgentSession`, trusted dynamic resources, governed cloud sandbox, asynchronous subagent delegation, durable system wake, and browser-verified parent/child projection implemented locally, 2026-08-19
 
+The generic `deep_research` capability is a separate durable child run. Pi
+decides when to call it after loading the `deep-research` Skill; the Worker then
+owns a bounded plan/retrieve/read/verify/synthesize pipeline. It persists
+source records, source-backed claims, report Markdown and phase events in the
+child `RuntimeRun`. The web client renders that child as one specialized live
+research surface, while PostgreSQL event replay is used only for reconnect or
+recovery. A tender-specific Skill may constrain scope and output, but it does
+not reimplement the research loop or issue an unbounded search sequence.
+
 ## Purpose
 
 BidPilot has two different AI execution modes. They solve different problems

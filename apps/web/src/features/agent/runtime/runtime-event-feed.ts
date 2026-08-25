@@ -25,6 +25,7 @@ const WORKFLOW_CAPABILITIES = new Set([
   "retry_run",
   "propose_memory_graph",
   "run_section_campaign",
+  "start_deep_research",
 ]);
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -273,6 +274,26 @@ export function runtimeEventToAssistantEvents(
       return events;
     }
     case "capability.progressed": {
+      if (capability === "deep_research") {
+        const progress = Object.fromEntries(
+          Object.entries(payload).filter(([key]) => ![
+            "capability", "action_id", "turn_id", "tool_call_id", "title",
+          ].includes(key)),
+        );
+        return [{
+          eventType: "assistant.deep_research_progress",
+          data: {
+            ...metadata,
+            tool_name: "start_deep_research",
+            tool_call_id: toolCallId,
+            turn_id: turnId,
+            phase: asString(payload.phase),
+            summary: event.public_summary,
+            result: progress,
+            state: "running_workflow",
+          },
+        }];
+      }
       if (capability === "subagent" && payload.phase === "children_spawned") {
         return [{
           eventType: "assistant.subagents_spawned",
@@ -442,7 +463,31 @@ export function runtimeEventToAssistantEvents(
         eventType: "assistant.message",
         data: { ...metadata, turn_id: turnId, content: event.public_summary, state: "completed" },
       }];
-    case "run.failed":
+    case "run.failed": {
+      if (capability === "deep_research") {
+        return [
+          {
+            eventType: "assistant.deep_research_completed",
+            data: {
+              ...metadata,
+              tool_name: "start_deep_research",
+              phase: "failed",
+              summary: event.public_summary,
+              error_message: event.public_summary,
+              error_code: asString(payload.error_code),
+              state: "failed",
+            },
+          },
+          {
+            eventType: "assistant.end",
+            data: {
+              ...metadata,
+              conversation_id: conversationId ?? undefined,
+              state: "failed",
+            },
+          },
+        ];
+      }
       return [
         {
           eventType: "assistant.workflow_failed",
@@ -463,7 +508,39 @@ export function runtimeEventToAssistantEvents(
           },
         },
       ];
+    }
     case "run.completed":
+      if (capability === "deep_research") {
+        return [
+          {
+            eventType: "assistant.deep_research_completed",
+            data: {
+              ...metadata,
+              tool_name: "start_deep_research",
+              phase: "completed",
+              summary: event.public_summary,
+              result: asRecord(payload.result),
+              state: "completed",
+            },
+          },
+          {
+            eventType: "assistant.end",
+            data: {
+              ...metadata,
+              conversation_id: conversationId ?? undefined,
+              state: "completed",
+            },
+          },
+        ];
+      }
+      return [{
+        eventType: "assistant.end",
+        data: {
+          ...metadata,
+          conversation_id: conversationId ?? undefined,
+          state: asString(payload.state) ?? "completed",
+        },
+      }];
     case "run.cancelled":
       return [{
         eventType: "assistant.end",

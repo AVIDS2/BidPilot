@@ -345,13 +345,25 @@ def _finish_runtime_run(
         run.error_message = redact_text(error_message) if error_message else None
         run.finished_at = datetime.now(UTC).replace(tzinfo=None)
         latest = db.scalar(select(func.max(RuntimeEvent.sequence)).where(RuntimeEvent.run_id == run.id)) or 0
+        terminal_payload: dict[str, Any] = {"status": status}
+        # A research report is a user-facing, redacted artifact. Include it in
+        # the terminal event so a reconnecting client can render the result
+        # without a second private database endpoint or a fake replay layer.
+        if run.kind == "deep_research" and isinstance(result, dict):
+            terminal_payload["capability"] = "deep_research"
+            terminal_payload["presentation_kind"] = "deep_research"
+            terminal_payload["presentation_session_id"] = run.id
+            terminal_payload["presentation_title"] = "深度调研"
+            terminal_payload["result"] = redact_payload(result)
+        if error_code:
+            terminal_payload["error_code"] = error_code
         db.add(
             RuntimeEvent(
                 run_id=run.id,
                 sequence=latest + 1,
                 event_type=event_type.value,
                 public_summary=summary,
-                payload_json={"status": status, **({"error_code": error_code} if error_code else {})},
+                payload_json=terminal_payload,
                 schema_version=RUNTIME_EVENT_SCHEMA_VERSION,
             )
         )

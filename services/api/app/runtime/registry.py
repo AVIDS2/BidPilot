@@ -161,6 +161,13 @@ _CAPABILITIES = (
     ),
     CapabilityDefinition("semantic_search", "检索资料", "Search project evidence", RuntimeRiskLevel.READ, "project.read"),
     CapabilityDefinition(
+        "start_deep_research",
+        "启动深度调研",
+        "Start deep research",
+        RuntimeRiskLevel.COSTING,
+        requires_approval_in_risky_only=True,
+    ),
+    CapabilityDefinition(
         "web_search",
         "联网搜索",
         "Web search",
@@ -237,6 +244,7 @@ WORKFLOW_CAPABILITY_NAMES = frozenset(
         "resume_draft_run",
         "retry_run",
         "propose_memory_graph",
+        "start_deep_research",
         "run_section_campaign",
     }
 )
@@ -250,6 +258,7 @@ _REQUIRED_ARGUMENT_FIELDS: dict[str, tuple[str, ...]] = {
     "discover_remote_documents": ("url",),
     "fetch_url_to_project": ("project_id", "url"),
     "semantic_search": ("project_id", "query"),
+    "start_deep_research": ("query",),
     "run_section_campaign": ("project_id",),
 }
 
@@ -314,6 +323,9 @@ def format_approval_request(capability_name: str, arguments: dict[str, Any]) -> 
         return f"确认对章节草稿提交审核决定：{decision}吗？"
     if capability_name == "propose_memory_graph":
         return "确认从这条已验证的项目知识生成实体关系提案吗？该操作会使用一次模型额度，结果仍需人工审核。"
+    if capability_name == "start_deep_research":
+        depth = str(arguments.get("depth") or "standard")
+        return f"确认启动{depth}深度调研吗？它会并行检索公开来源、读取正文并生成可追溯报告。"
     if capability_name == "retry_run":
         return "确认重新启动这次工作流吗？"
     if capability_name == "export_deliverable":
@@ -638,6 +650,31 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
             if remaining:
                 summary += f"，剩余 {remaining} 章待下一波"
             summary += "。"
+        return PublicCapabilityResult(summary, payload)
+    if capability_name == "start_deep_research":
+        payload = {
+            key: result[key]
+            for key in (
+                "research_run_id",
+                "runtime_run_id",
+                "trace_id",
+                "status",
+                "depth",
+                "source_policy",
+                "presentation_kind",
+                "presentation_title",
+                "resumable",
+                "duplicate",
+                "next_step",
+            )
+            if key in result
+        }
+        research_run_id = result.get("research_run_id") or result.get("runtime_run_id")
+        summary = (
+            f"深度调研已启动（运行 {str(research_run_id)[:8]}），会在后台完成计划、检索、核验和报告生成。"
+            if isinstance(research_run_id, str) and research_run_id
+            else "深度调研已启动，会在后台完成计划、检索、核验和报告生成。"
+        )
         return PublicCapabilityResult(summary, payload)
     if capability_name == "semantic_search":
         items = _public_items(

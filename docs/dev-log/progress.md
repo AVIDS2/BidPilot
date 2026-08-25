@@ -104,6 +104,30 @@
   historical replay compatibility. They are not a public entry point,
   production fallback, or destination for new features. No `temple/` reference
   material or user data was removed.
+# 2026-08-25 generic deep research runtime
+
+- Added the model-selected `start_deep_research` capability and a durable
+  `RuntimeRun(kind=deep_research)` child. The Worker now performs a bounded
+  planner -> parallel retrieval -> page/PDF reading -> source-backed claim
+  verification -> report synthesis pipeline. The parent Pi turn receives a
+  linked run and can continue without keeping the browser open.
+- Added the generic `docs/agent-skills/deep-research/SKILL.md` contract. The
+  existing tender skill is now a domain wrapper; it no longer describes a
+  second search loop. The runtime remains bounded by depth-specific query and
+  source budgets and stores a redacted report, sources and claims.
+- Added Hikari Tavily gateway handling: custom gateways use Bearer auth and an
+  automatically normalized `/search` endpoint; the official endpoint keeps
+  its API key in the request body. Added unit coverage for both wire formats.
+- Replaced the old flat deep-research web search rows with one live research
+  surface showing phase, source/claim counts, evidence links, claim checks
+  and the persisted report. Durable child events are polled only while the
+  run is active and replayed after reconnect; no UI state is inferred from
+  user text or search count.
+- Verification: API/Worker Ruff and compile checks passed; Web TypeScript
+  check passed; focused Web runtime/timeline tests passed (`28` tests). Full
+  API pytest remains gated by the repository's dedicated PostgreSQL `_test`
+  database safety guard; no production database was used as a substitute.
+
 - Ran `git diff --check`; no whitespace errors were reported. This was a
   documentation/architecture baseline pass and did not claim that the full
   application test suite was rerun.

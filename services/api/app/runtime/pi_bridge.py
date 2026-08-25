@@ -314,7 +314,7 @@ async def resume_pi_from_system_wake(
     db: Session = SessionLocal()
     try:
         source = db.get(RuntimeRun, payload.wake_run_id)
-        if source is None or source.kind not in {"subagent", "workflow_bridge"}:
+        if source is None or source.kind not in {"subagent", "workflow_bridge", "deep_research"}:
             raise HTTPException(status_code=404, detail="Wake runtime not found")
         if source.status not in {"succeeded", "failed", "cancelled", "expired"}:
             raise HTTPException(status_code=409, detail="Wake runtime is not terminal")

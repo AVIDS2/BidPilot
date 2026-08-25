@@ -522,4 +522,50 @@ describe("runtime event feed", () => {
       }),
     }]);
   });
+
+  it("projects deep-research phases as one live runtime instead of search rows", () => {
+    const [progress] = runtimeEventToAssistantEvents(runtimeEvent({
+      type: "capability.progressed",
+      public_summary: "已收集来源，开始读取正文。",
+      payload: {
+        capability: "deep_research",
+        phase: "retrieve",
+        presentation_kind: "deep_research",
+        presentation_session_id: "research-1",
+        presentation_title: "深度调研",
+        source_count: 4,
+      },
+    }));
+
+    expect(progress).toEqual({
+      eventType: "assistant.deep_research_progress",
+      data: expect.objectContaining({
+        tool_name: "start_deep_research",
+        phase: "retrieve",
+        result: expect.objectContaining({ source_count: 4 }),
+        presentation_kind: "deep_research",
+      }),
+    });
+
+    const terminal = runtimeEventToAssistantEvents(runtimeEvent({
+      type: "run.completed",
+      public_summary: "研究报告已生成。",
+      payload: {
+        capability: "deep_research",
+        presentation_kind: "deep_research",
+        result: {
+          report: "# 研究报告",
+          source_count: 4,
+          claim_count: 2,
+        },
+      },
+    }));
+    expect(terminal[0]).toEqual({
+      eventType: "assistant.deep_research_completed",
+      data: expect.objectContaining({
+        result: { report: "# 研究报告", source_count: 4, claim_count: 2 },
+        state: "completed",
+      }),
+    });
+  });
 });

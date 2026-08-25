@@ -8,6 +8,7 @@ import {
   ExternalLinkIcon,
   FileCheck2Icon,
   FileSearchIcon,
+  FileTextIcon,
   FolderOpenIcon,
   Globe2Icon,
   Loader2Icon,
@@ -814,26 +815,91 @@ function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
 
 function DeepResearchRuntime({ items }: { items: AssistantExecutionItem[] }) {
   const [open, setOpen] = useState(false);
-  const searches = items.filter((item) => item.toolName === "web_search");
-  const completed = searches.filter((item) => item.status === "succeeded").length;
-  const active = searches.some((item) => statusIsActive(item.status));
+  const research = items.find((item) => item.toolName === "start_deep_research" || item.presentationKind === "deep_research");
+  const result = research?.result ?? {};
+  const phase = typeof result.phase === "string" ? result.phase : "scope";
+  const active = research ? statusIsActive(research.status) : false;
+  const phaseLabels: Record<string, string> = {
+    scope: "确定范围",
+    plan: "制定计划",
+    retrieve: "检索来源",
+    read: "读取正文",
+    verify: "核验证据",
+    synthesize: "综合结论",
+    package: "整理报告",
+    completed: "报告可查看",
+    failed: "需要处理",
+  };
+  const phases = ["scope", "plan", "retrieve", "read", "verify", "synthesize", "package"];
+  const phaseIndex = Math.max(0, phases.indexOf(phase));
+  const sources = Array.isArray(result.sources)
+    ? result.sources.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
+    : [];
+  const claims = Array.isArray(result.claims)
+    ? result.claims.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
+    : [];
+  const report = typeof result.report === "string" ? result.report.trim() : "";
+  const sourceCount = typeof result.source_count === "number" ? result.source_count : sources.length;
+  const claimCount = typeof result.claim_count === "number" ? result.claim_count : claims.length;
 
   return (
     <section className={`cr-deep-research-runtime${active ? " is-live" : ""}`} aria-label="深度调研运行状态">
       <header>
-        <span className={active ? "cr-live-label" : undefined}>深度调研运行状态</span>
-        <small>{completed} 个可追溯来源</small>
+        <span className={active ? "cr-live-label" : undefined}>深度调研</span>
+        <small className={active ? "cr-live-label" : undefined}>{phaseLabels[phase] || "研究结果"}</small>
       </header>
-      <details className="cr-deep-research-process" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-        <summary>查看调研过程</summary>
-        {open && (
-        <ol className="cr-deep-research-stages">
-          <li className={searches.length ? "is-active" : undefined}>来源发现</li>
-          <li className={completed === searches.length && searches.length > 0 ? "is-complete" : undefined}>来源核验</li>
-          <li>候选结果汇总</li>
-        </ol>
-        )}
-      </details>
+      <ol className="cr-deep-research-stages" aria-label="调研阶段">
+        {phases.map((name, index) => (
+          <li
+            className={index < phaseIndex || phase === "completed" ? "is-complete" : index === phaseIndex && active ? "is-active" : undefined}
+            key={name}
+          >
+            <span>{phaseLabels[name]}</span>
+          </li>
+        ))}
+      </ol>
+      {(sourceCount > 0 || claimCount > 0) && (
+        <div className="cr-deep-research-counts">
+          {sourceCount > 0 && <span><Globe2Icon size={13} />{sourceCount} 个来源</span>}
+          {claimCount > 0 && <span><FileCheck2Icon size={13} />{claimCount} 条主张</span>}
+        </div>
+      )}
+      {sources.length > 0 && (
+        <details className="cr-deep-research-process" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+          <summary>查看调研过程</summary>
+          <div className="cr-deep-research-sources">
+            {sources.map((source) => {
+              const url = publicUrl(source.url)?.href;
+              const title = valueText(source.title) || url || "公开来源";
+              return (
+                <a href={url || undefined} key={valueText(source.source_id) || title} rel="noreferrer" target="_blank">
+                  <Globe2Icon size={13} />
+                  <span><strong>{title}</strong><small>{valueText(source.domain) || (url ? new URL(url).hostname : "")}</small></span>
+                </a>
+              );
+            })}
+          </div>
+        </details>
+      )}
+      {claims.length > 0 && (
+        <details className="cr-deep-research-process">
+          <summary>查看核验主张</summary>
+          <ul className="cr-deep-research-claims">
+            {claims.map((claim, index) => (
+              <li key={valueText(claim.claim_id) || `${index}-${valueText(claim.claim)}`}>
+                <FileCheck2Icon size={13} />
+                <span>{valueText(claim.claim)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {report && (
+        <details className="cr-deep-research-process">
+          <summary><FileTextIcon size={13} />打开研究报告</summary>
+          <article className="cr-deep-research-report">{report}</article>
+        </details>
+      )}
     </section>
   );
 }

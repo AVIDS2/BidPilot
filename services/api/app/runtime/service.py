@@ -418,7 +418,7 @@ def list_linked_workflow_runs(
             select(RuntimeRun)
             .where(
                 RuntimeRun.parent_run_id == parent.id,
-                RuntimeRun.kind.in_(("workflow_bridge", "remote_import")),
+                RuntimeRun.kind.in_(("workflow_bridge", "deep_research", "remote_import")),
                 RuntimeRun.org_id == current_user.org_id,
                 RuntimeRun.user_id == current_user.id,
             )
@@ -1260,6 +1260,7 @@ def _execute_action(
             "start_draft_section",
             "start_redraft_section",
             "run_section_campaign",
+            "start_deep_research",
             "fetch_url_to_project",
         }:
             execution_arguments.setdefault("parent_runtime_run_id", run.id)

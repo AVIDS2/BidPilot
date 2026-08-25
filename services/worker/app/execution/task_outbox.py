@@ -24,6 +24,7 @@ _ALLOWED_TASKS = {
     "worker.extract_memory_graph",
     "worker.resume_draft",
     "worker.run_subagent",
+    "worker.run_deep_research",
     "worker.run_assistant_turn",
 }
 _PUBLISH_RETRY_DELAY = timedelta(minutes=1)

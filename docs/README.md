@@ -119,6 +119,13 @@ It is organized to support three goals:
 - `docs/research/ai-tender-platform-competitive-scan.md`
   - public capability scan of domestic AI tender/proposal products and BidPilot gap matrix
 
+### Agent skills
+
+- `docs/agent-skills/deep-research/SKILL.md`
+  - generic bounded research contract used by the durable `deep_research` runtime
+- `docs/agent-skills/opportunity-deep-research/SKILL.md`
+  - BidPilot tender-specific read-only wrapper and output constraints
+
 ### Implementation plans
 
 - `docs/superpowers/plans/2026-04-18-docpilot-phase-0-foundation.md`

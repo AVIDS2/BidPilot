@@ -406,6 +406,20 @@ def run_assistant_turn(self, runtime_run_id: str, *, outbox_event_id: str | None
         db.close()
 
 
+@celery_app.task(name="worker.run_deep_research", bind=True, max_retries=3)
+def run_deep_research(self, runtime_run_id: str, *, outbox_event_id: str | None = None) -> dict[str, object]:
+    """Run one bounded Deep Research pipeline outside the Pi conversation."""
+    from app.execution.deep_research import execute_deep_research
+
+    try:
+        return execute_deep_research(runtime_run_id, outbox_event_id=outbox_event_id)
+    except Exception as exc:  # noqa: BLE001 - Celery retries transient worker errors
+        logger.exception("Deep Research task failed: %s", runtime_run_id)
+        if self.request.retries >= 2:
+            raise
+        raise self.retry(exc=exc, countdown=min(60, 10 * (self.request.retries + 1)))
+
+
 @celery_app.task(name="worker.capture_mem0_profile", bind=True, max_retries=3)
 def capture_mem0_profile(self, runtime_run_id: str) -> dict[str, object]:
     """Persist only low-risk profile signals through the official Mem0 SDK."""

@@ -139,6 +139,8 @@ def execute_tool(
         return delete_project_tool(db, user, arguments)
     if tool_name == "semantic_search":
         return semantic_search_tool(db, user, arguments)
+    if tool_name == "start_deep_research":
+        return start_deep_research_tool(db, user, arguments)
     if tool_name == "web_search":
         return web_search_tool(db, user, arguments)
     if tool_name == "discover_remote_documents":
@@ -1534,11 +1536,36 @@ def semantic_search_tool(db: Session, user: CurrentUser, arguments: dict) -> Ass
     )
 
 
+def start_deep_research_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
+    """Queue the generic Deep Research runtime from a governed Pi action."""
+    from app.runtime.deep_research_control import create_deep_research_run
+
+    parent_run_id = str(arguments.get("parent_runtime_run_id") or "").strip()
+    tool_call_id = str(arguments.get("tool_call_id") or "deep-research-action").strip()
+    if not parent_run_id:
+        raise ValueError("deep_research_parent_run_required")
+    result = create_deep_research_run(
+        db,
+        user,
+        parent_run_id=parent_run_id,
+        tool_call_id=tool_call_id,
+        arguments=arguments,
+    )
+    return AssistantToolResult(
+        tool_name="start_deep_research",
+        result=result,
+        summary="深度调研已启动，将按计划并行检索、核验来源并生成报告。",
+    )
+
+
 def web_search_tool(db: Session, user: CurrentUser, arguments: dict) -> AssistantToolResult:
     """External web search for research tasks.
 
-    Prefer Tavily when ``TAVILY_API_KEY`` / ``DOCPILOT_TAVILY_API_KEY`` is set;
-    otherwise fall back to DuckDuckGo Instant Answer (no key, thinner results).
+    Prefer the configured Hikari Tavily gateway when present. The gateway uses
+    a Bearer token and a ``/search`` endpoint; the official Tavily endpoint
+    instead receives its key in the JSON body. Keeping these wire contracts
+    separate prevents an aggregator token from being sent as an official key.
+    Without either configuration, fall back to DuckDuckGo for local/dev.
     """
     import os
 
@@ -1560,20 +1587,33 @@ def web_search_tool(db: Session, user: CurrentUser, arguments: dict) -> Assistan
         or os.environ.get("TAVILY_API_KEY")
         or ""
     ).strip()
+    tavily_base_url = (
+        os.environ.get("TAVILY_HIKARI_BASE_URL")
+        or os.environ.get("TAVILY_API_BASE_URL")
+        or ""
+    ).strip().rstrip("/")
+    hikari_token = (os.environ.get("TAVILY_HIKARI_TOKEN") or tavily_key).strip()
     items: list[dict] = []
     provider = "duckduckgo"
 
-    if tavily_key:
-        provider = "tavily"
+    if tavily_base_url or tavily_key:
+        provider = "tavily_hikari" if tavily_base_url else "tavily"
+        endpoint = (
+            tavily_base_url if tavily_base_url.endswith("/search") else f"{tavily_base_url}/search"
+        ) if tavily_base_url else "https://api.tavily.com/search"
+        request_headers = {"Authorization": f"Bearer {hikari_token}"} if tavily_base_url and hikari_token else {}
+        request_body = {
+            "query": query,
+            "max_results": limit,
+            "include_answer": False,
+            "search_depth": "basic",
+        }
+        if not tavily_base_url:
+            request_body["api_key"] = tavily_key
         resp = httpx.post(
-            "https://api.tavily.com/search",
-            json={
-                "api_key": tavily_key,
-                "query": query,
-                "max_results": limit,
-                "include_answer": False,
-                "search_depth": "basic",
-            },
+            endpoint,
+            headers=request_headers,
+            json=request_body,
             timeout=20.0,
         )
         resp.raise_for_status()

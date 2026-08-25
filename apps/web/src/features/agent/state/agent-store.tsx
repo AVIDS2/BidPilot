@@ -703,13 +703,20 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         if (matches) {
           updated = true;
           // Preserve the first stable ids when later durable events omit them.
+          const mergedPatch = { ...action.patch };
+          if (Object.prototype.hasOwnProperty.call(action.patch, "result")) {
+            mergedPatch.result = {
+              ...(item.result ?? {}),
+              ...(action.patch.result ?? {}),
+            };
+          }
           return {
             ...item,
-            ...action.patch,
-            toolCallId: action.patch.toolCallId ?? item.toolCallId,
-            turnId: item.turnId ?? action.patch.turnId ?? action.turnId,
-            runtimeRunId: item.runtimeRunId ?? action.patch.runtimeRunId ?? action.runtimeRunId,
-            runId: item.runId ?? action.patch.runId ?? action.runId,
+            ...mergedPatch,
+            toolCallId: mergedPatch.toolCallId ?? item.toolCallId,
+            turnId: item.turnId ?? mergedPatch.turnId ?? action.turnId,
+            runtimeRunId: item.runtimeRunId ?? mergedPatch.runtimeRunId ?? action.runtimeRunId,
+            runId: item.runId ?? mergedPatch.runId ?? action.runId,
             messageId: item.messageId ?? stateWithClosedReasoning.activeAssistantMessageId ?? undefined,
           };
         }
@@ -1107,6 +1114,15 @@ function handleAssistantSseEvent(
         title: toolName,
         arguments: asRecord(parsed.arguments),
         result,
+        presentationKind: typeof parsed.presentation_kind === "string"
+          ? parsed.presentation_kind
+          : typeof result.presentation_kind === "string" ? result.presentation_kind : undefined,
+        presentationSessionId: typeof parsed.presentation_session_id === "string"
+          ? parsed.presentation_session_id
+          : typeof result.presentation_session_id === "string" ? result.presentation_session_id : workflowRuntimeRunId,
+        presentationTitle: typeof parsed.presentation_title === "string"
+          ? parsed.presentation_title
+          : typeof result.presentation_title === "string" ? result.presentation_title : undefined,
         isRunning: true,
         timestamp: Date.now(),
       },
@@ -1244,6 +1260,64 @@ function handleAssistantSseEvent(
       },
     });
     dispatch({ type: "SET_STATUS", status: "executing_tool" });
+    return;
+  }
+
+  if (eventType === "assistant.deep_research_progress") {
+    const result = asRecord(parsed.result);
+    dispatch({
+      type: "UPDATE_EXECUTION_ITEM",
+      toolName: "start_deep_research",
+      toolCallId: typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined,
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : undefined,
+      runtimeRunId,
+      patch: {
+        kind: "workflow",
+        status: "running",
+        isRunning: true,
+        summary: typeof parsed.summary === "string" ? parsed.summary : undefined,
+        presentationKind: "deep_research",
+        presentationSessionId: typeof parsed.presentation_session_id === "string"
+          ? parsed.presentation_session_id : runtimeRunId,
+        presentationTitle: typeof parsed.presentation_title === "string"
+          ? parsed.presentation_title : "深度调研",
+        result: {
+          ...result,
+          phase: typeof parsed.phase === "string" ? parsed.phase : result.phase,
+        },
+      },
+    });
+    dispatch({ type: "SET_STATUS", status: "running_workflow" });
+    return;
+  }
+
+  if (eventType === "assistant.deep_research_completed") {
+    const result = asRecord(parsed.result);
+    dispatch({
+      type: "UPDATE_EXECUTION_ITEM",
+      toolName: "start_deep_research",
+      toolCallId: typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined,
+      turnId: typeof parsed.turn_id === "string" ? parsed.turn_id : undefined,
+      runtimeRunId,
+      patch: {
+        kind: "workflow",
+        status: parsed.state === "failed" ? "failed" : "succeeded",
+        isRunning: false,
+        summary: typeof parsed.summary === "string" ? parsed.summary : undefined,
+        errorMessage: typeof parsed.error_message === "string" ? parsed.error_message : undefined,
+        errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
+        presentationKind: "deep_research",
+        presentationSessionId: typeof parsed.presentation_session_id === "string"
+          ? parsed.presentation_session_id : runtimeRunId,
+        presentationTitle: typeof parsed.presentation_title === "string"
+          ? parsed.presentation_title : "深度调研",
+        result: {
+          ...result,
+          phase: typeof parsed.phase === "string" ? parsed.phase : result.phase,
+        },
+      },
+    });
+    dispatch({ type: "SET_STATUS", status: parsed.state === "failed" ? "failed" : "completed" });
     return;
   }
 

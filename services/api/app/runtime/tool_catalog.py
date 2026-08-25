@@ -294,6 +294,26 @@ _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["project_id", "query"],
         "additionalProperties": False,
     },
+    "start_deep_research": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Research question or decision to investigate"},
+            "depth": {
+                "type": "string",
+                "enum": ["quick", "standard", "deep"],
+                "default": "standard",
+                "description": "Research depth and bounded budget",
+            },
+            "project_id": {"type": "string", "description": "Optional active project scope"},
+            "source_policy": {
+                "type": "string",
+                "enum": ["official_first", "open_web"],
+                "default": "official_first",
+            },
+        },
+        "required": ["query"],
+        "additionalProperties": False,
+    },
     "web_search": {
         "type": "object",
         "properties": {
