@@ -851,7 +851,15 @@ function DeepResearchRuntime({ items }: { items: AssistantExecutionItem[] }) {
   const phaseIndex = Math.max(0, phases.indexOf(phase));
   const sources = Array.isArray(result.sources)
     ? result.sources.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
-    : [];
+    : items
+      .filter((item) => item.toolName === "web_search" && Array.isArray(item.result?.items))
+      .flatMap((item) => (item.result?.items ?? []).filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object")))
+      .map((source, index) => ({
+        source_id: valueText(source.source_id) || `S${index + 1}`,
+        title: source.title,
+        url: source.url,
+        status: "candidate",
+      }));
   const claims = Array.isArray(result.claims)
     ? result.claims.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
     : [];
