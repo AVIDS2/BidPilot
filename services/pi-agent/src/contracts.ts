@@ -22,6 +22,9 @@ export interface PiToolRequest {
   description: string;
   parameters: Record<string, unknown>;
   executionMode?: ToolExecutionMode;
+  /** Structured presentation metadata; never inferred from user text. */
+  resourceKind?: "tool" | "skill" | "mcp";
+  provider?: string;
 }
 
 export interface PiTranscriptMessage {

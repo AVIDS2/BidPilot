@@ -27,7 +27,7 @@ from .live_events import publish_live_frame
 from .pi_bridge import create_pi_bridge_token
 from .pi_config import pi_resources as _pi_resources
 from .pi_config import pi_sandbox as _pi_sandbox
-from .pi_config import pi_tools as _pi_tools
+from .pi_config import pi_tools_for_run as _pi_tools_for_run
 from .prompt_assembly import ConversationContextWindow, assemble_harness_prompt
 from .service import complete_runtime_run, fail_runtime_run, get_previous_terminal_action_context
 
@@ -222,7 +222,7 @@ async def stream_pi_assistant_response(
             "reasoning": reasoning_effort not in {None, "off"},
             "thinkingLevel": _thinking_level(reasoning_effort),
         },
-        "tools": _pi_tools(),
+        "tools": await _pi_tools_for_run(),
         "resources": _pi_resources(),
         "sandbox": _pi_sandbox(),
         "toolCallback": {"url": callback_url, "token": bridge_token},
@@ -333,6 +333,23 @@ async def stream_pi_assistant_response(
                                 result.get("kind") == "failed" and result.get("recoverable") is False
                             ):
                                 terminal_tool_failure = result
+                        if event_type == "tool.started":
+                            # Pi emits this before the bridge request starts.
+                            # Project it immediately so a slow Skill/MCP call
+                            # never appears only after its result arrives.
+                            live_tool_payload: dict[str, Any] = {
+                                "runtime_run_id": run.id,
+                                "turn_id": event.get("turn_id") or current_turn_id,
+                                "tool_call_id": event.get("tool_call_id"),
+                                "tool_name": event.get("name"),
+                                "title": event.get("title") or event.get("name"),
+                                "resource_kind": event.get("resource_kind") or "tool",
+                                "resource_name": event.get("resource_name"),
+                                "provider": event.get("provider"),
+                                "state": "executing_tool",
+                                "live": True,
+                            }
+                            yield await emit_live(_sse("assistant.tool_started", live_tool_payload))
                         for rendered in flush_events():
                             yield await emit_live(rendered)
                     elif event_type == "agent.failed":

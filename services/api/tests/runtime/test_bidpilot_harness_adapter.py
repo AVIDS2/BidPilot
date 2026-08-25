@@ -13,6 +13,7 @@ from app.runtime.harness_core import HarnessExecutionContext, HarnessToolCall, T
 from app.runtime.harness_loop import _TOOL_PARAMETER_SCHEMAS
 from app.runtime.registry import PublicCapabilityResult
 from app.runtime.service import create_runtime_run
+from contracts.runtime import RuntimeEventType
 
 
 @dataclass
@@ -82,6 +83,28 @@ def test_preflight_blocks_an_unregistered_capability_without_an_action() -> None
     assert outcome is not None
     assert outcome.kind is ToolOutcomeKind.BLOCKED
     assert outcome.error_code == "capability_unavailable"
+
+
+def test_skill_load_emits_structured_started_and_succeeded_events(monkeypatch) -> None:
+    from app.runtime import bidpilot_harness_adapter as module
+
+    events: list[Any] = []
+    monkeypatch.setattr(module, "read_skill", lambda _name: "# procedure")
+    monkeypatch.setattr(module, "skill_metadata", lambda _name: None)
+    monkeypatch.setattr(module, "publish_event", lambda *args, **kwargs: events.append(kwargs.get("event", args[-1])))
+    adapter = _adapter()
+    call = _call("read_skill", {"name": "opportunity-deep-research"})
+
+    assert asyncio.run(adapter.prepare(call, _context())) is None
+    outcome = asyncio.run(adapter.execute(call, _context()))
+
+    assert outcome.kind is ToolOutcomeKind.SUCCEEDED
+    assert [event.type for event in events] == [
+        RuntimeEventType.CAPABILITY_STARTED,
+        RuntimeEventType.CAPABILITY_SUCCEEDED,
+    ]
+    assert events[0].payload["resource_kind"] == "skill"
+    assert events[0].payload["resource_name"] == "opportunity-deep-research"
 
 
 def test_preflight_guard_blocks_before_mcp_or_capability_routing() -> None:

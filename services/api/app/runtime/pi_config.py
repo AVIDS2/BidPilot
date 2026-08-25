@@ -7,6 +7,7 @@ from typing import Any
 from contracts.runtime import RuntimeRiskLevel
 
 from .registry import CAPABILITY_REGISTRY
+from .mcp_client import list_mcp_tool_specs
 from .skills import build_skill_index
 from .tool_catalog import (
     _READ_SKILL_TOOL_SPEC,
@@ -33,6 +34,39 @@ def pi_tools() -> list[dict[str, Any]]:
                 "description": str(function.get("description") or name),
                 "parameters": function.get("parameters") or _TOOL_PARAMETER_SCHEMAS.get(name, {}),
                 "executionMode": "parallel" if read_only else "sequential",
+                "resourceKind": "skill" if name == "read_skill" else "tool",
+            }
+        )
+    return result
+
+
+async def pi_tools_for_run() -> list[dict[str, Any]]:
+    """Build the server-owned Pi tool list, including configured MCP tools.
+
+    MCP discovery is an adapter concern. The model still receives ordinary
+    structured tools, while the bridge remains the authorization boundary.
+    """
+
+    result = pi_tools()
+    try:
+        mcp_specs = await list_mcp_tool_specs()
+    except Exception:
+        # An optional MCP server must not prevent a normal Pi turn from
+        # starting. The actual call will return a structured unavailable result
+        # if a stale tool is ever selected.
+        mcp_specs = []
+    for spec in mcp_specs:
+        server_name = spec.server_name
+        tool_name = spec.tool_name or spec.name
+        result.append(
+            {
+                "name": spec.name,
+                "label": f"MCP · {tool_name}",
+                "description": spec.description or spec.name,
+                "parameters": spec.parameters,
+                "executionMode": "parallel",
+                "resourceKind": "mcp",
+                "provider": server_name or "mcp",
             }
         )
     return result
@@ -70,4 +104,4 @@ def pi_execution_contract() -> dict[str, Any]:
     }
 
 
-__all__ = ["pi_execution_contract", "pi_resources", "pi_sandbox", "pi_tools"]
+__all__ = ["pi_execution_contract", "pi_resources", "pi_sandbox", "pi_tools", "pi_tools_for_run"]

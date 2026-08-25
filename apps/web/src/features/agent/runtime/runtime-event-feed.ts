@@ -59,6 +59,15 @@ function presentationMetadata(payload: Record<string, unknown>): Record<string, 
   return metadata;
 }
 
+function resourceMetadata(payload: Record<string, unknown>): Record<string, unknown> {
+  const metadata: Record<string, unknown> = {};
+  for (const key of ["resource_kind", "resource_name", "provider"] as const) {
+    const value = asString(payload[key]);
+    if (value) metadata[key] = value;
+  }
+  return metadata;
+}
+
 export function isRuntimeSequenceNewer(
   cursors: RuntimeEventCursor,
   runId: string,
@@ -141,7 +150,11 @@ export function runtimeEventToAssistantEvents(
   const turnId = asString(payload.turn_id);
   const toolCallId = asString(payload.tool_call_id) ?? actionId;
   const title = asString(payload.title);
-  const metadata = { ...runtimeMetadata(event), ...presentationMetadata(payload) };
+  const metadata = {
+    ...runtimeMetadata(event),
+    ...presentationMetadata(payload),
+    ...resourceMetadata(payload),
+  };
 
   switch (event.type) {
     case "plan.proposed":

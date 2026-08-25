@@ -237,6 +237,25 @@ declare a trusted `presentation` contract. The API copies that metadata and a
 stable presentation-session ID onto related runtime events so the browser can
 render one purpose-built runtime surface across multiple tool bursts.
 
+The active browser stream also receives Pi's native `tool_execution_start`
+projection before the bridge request begins. This is an ephemeral live frame
+with the same `tool_call_id` as the durable capability event; the frontend
+merges both identities into one row. It prevents a slow external call from
+appearing only after its result arrives. Skill and MCP rows carry structured
+`resource_kind`, `resource_name`, and `provider` metadata. The user-facing
+label can therefore say that a named Skill is being used or that an external
+provider is being queried without exposing Skill instructions, raw arguments,
+or internal prompts.
+
+Skill/MCP presentation follows three rules: a Skill is shown when its
+`read_skill` call actually loads it, an MCP row is shown for the configured
+server/tool that actually executes, and parallel MCP calls share one parent
+activity with expandable children. Historical/reconnected rows keep the same
+event identities but are rendered static; only pending/running live rows use
+motion. This is the same event-first shape used by Pi Web's per-session SSE
+and reconciliation model, adapted to BidPilot's cloud queue and durable
+PostgreSQL event log.
+
 `opportunity-deep-research`, for example, declares `presentation=deep_research`.
 Its searches, source checks, evidence extraction and synthesis render as one
 collapsible research runtime with stages and source progress, rather than a

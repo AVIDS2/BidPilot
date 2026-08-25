@@ -64,6 +64,8 @@ class McpToolSpec:
     name: str
     description: str
     parameters: dict[str, Any]
+    server_name: str | None = None
+    tool_name: str | None = None
 
 
 def normalize_mcp_search_payload(
@@ -192,6 +194,8 @@ def _spec_for_tool(server: McpServerConfig, tool: Any) -> McpToolSpec | None:
         name=exposed,
         description=description,
         parameters=_openai_parameters(input_schema if isinstance(input_schema, dict) else None),
+        server_name=server.name,
+        tool_name=name,
     )
 
 

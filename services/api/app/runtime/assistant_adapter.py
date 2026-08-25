@@ -436,6 +436,10 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
         "runtime_sequence": event.sequence,
         "runtime_timestamp": event.created_at.isoformat() if event.created_at else None,
     }
+    for key in ("resource_kind", "resource_name", "provider"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            runtime_metadata[key] = value.strip()
     if event.event_type in {
         RuntimeEventType.PLAN_PROPOSED.value,
         RuntimeEventType.PLAN_UPDATED.value,

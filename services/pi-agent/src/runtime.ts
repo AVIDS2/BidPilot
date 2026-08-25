@@ -259,6 +259,30 @@ function publicSessionEvent(event: AgentSessionEvent): PiRuntimeEvent | null {
   return core ? publicCoreEvent(core) : null;
 }
 
+function enrichToolLifecycleEvent(
+  event: PiRuntimeEvent,
+  request: PiRunRequest,
+): PiRuntimeEvent {
+  if (!event.type.startsWith("tool.")) return event;
+  const toolName = typeof event.name === "string" ? event.name : "";
+  const definition = request.tools.find((tool) => tool.name === toolName);
+  if (!definition) return event;
+  const enriched: PiRuntimeEvent = {
+    ...event,
+    title: definition.label,
+    resource_kind: definition.resourceKind ?? "tool",
+  };
+  if (definition.provider) enriched.provider = definition.provider;
+  if (definition.resourceKind === "skill") {
+    const args = event.arguments;
+    if (args && typeof args === "object" && !Array.isArray(args)) {
+      const name = (args as Record<string, unknown>).name;
+      if (typeof name === "string" && name.trim()) enriched.resource_name = name.trim();
+    }
+  }
+  return enriched;
+}
+
 export async function runPiAgent(
   request: PiRunRequest,
   sink: EventSink,
@@ -355,10 +379,11 @@ export async function runPiAgent(
     }
     const projected = publicSessionEvent(event);
     if (projected) {
+      const enriched = enrichToolLifecycleEvent(projected, request);
       if (event.type === "turn_start" || event.type.startsWith("tool_execution_")) {
-        projected.turn_id = turnState.id;
+        enriched.turn_id = turnState.id;
       }
-      await sink(projected);
+      await sink(enriched);
     }
   });
 

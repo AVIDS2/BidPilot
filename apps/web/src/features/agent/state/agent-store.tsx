@@ -143,6 +143,9 @@ export interface AssistantExecutionItem {
   presentationKind?: string;
   presentationSessionId?: string;
   presentationTitle?: string;
+  resourceKind?: "tool" | "skill" | "mcp";
+  resourceName?: string;
+  provider?: string;
   status: "pending" | "running" | "succeeded" | "failed" | "cancelled";
   title: string;
   summary?: string;
@@ -1037,6 +1040,9 @@ function handleAssistantSseEvent(
   if (eventType === "assistant.tool_started") {
     const toolName = String(parsed.tool_name ?? "");
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
+    const resourceKind = parsed.resource_kind === "skill" || parsed.resource_kind === "mcp" || parsed.resource_kind === "tool"
+      ? parsed.resource_kind
+      : undefined;
     // Durable CAPABILITY_STARTED events often omit turn_id. Fall back to
     // runtime_run_id so tools still group and render as a turn block.
     const turnId =
@@ -1066,6 +1072,9 @@ function handleAssistantSseEvent(
         presentationKind: typeof parsed.presentation_kind === "string" ? parsed.presentation_kind : undefined,
         presentationSessionId: typeof parsed.presentation_session_id === "string" ? parsed.presentation_session_id : undefined,
         presentationTitle: typeof parsed.presentation_title === "string" ? parsed.presentation_title : undefined,
+        resourceKind,
+        resourceName: typeof parsed.resource_name === "string" ? parsed.resource_name : undefined,
+        provider: typeof parsed.provider === "string" ? parsed.provider : undefined,
       },
     });
     dispatch({ type: "SET_STATUS", status: "executing_tool" });
@@ -1139,6 +1148,9 @@ function handleAssistantSseEvent(
   if (eventType === "assistant.tool_succeeded") {
     const toolName = String(parsed.tool_name ?? "");
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
+    const resourceKind = parsed.resource_kind === "skill" || parsed.resource_kind === "mcp" || parsed.resource_kind === "tool"
+      ? parsed.resource_kind
+      : undefined;
     const turnId =
       (typeof parsed.turn_id === "string" && parsed.turn_id) ||
       (runtimeRunId ? `run:${runtimeRunId}` : undefined);
@@ -1164,6 +1176,9 @@ function handleAssistantSseEvent(
         presentationKind: typeof parsed.presentation_kind === "string" ? parsed.presentation_kind : undefined,
         presentationSessionId: typeof parsed.presentation_session_id === "string" ? parsed.presentation_session_id : undefined,
         presentationTitle: typeof parsed.presentation_title === "string" ? parsed.presentation_title : undefined,
+        resourceKind,
+        resourceName: typeof parsed.resource_name === "string" ? parsed.resource_name : undefined,
+        provider: typeof parsed.provider === "string" ? parsed.provider : undefined,
       },
     });
     // A completed tool is not necessarily a completed turn: the harness may
@@ -1186,6 +1201,9 @@ function handleAssistantSseEvent(
   if (eventType === "assistant.tool_failed") {
     const toolName = String(parsed.tool_name ?? "");
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
+    const resourceKind = parsed.resource_kind === "skill" || parsed.resource_kind === "mcp" || parsed.resource_kind === "tool"
+      ? parsed.resource_kind
+      : undefined;
     const turnId =
       (typeof parsed.turn_id === "string" && parsed.turn_id) ||
       (runtimeRunId ? `run:${runtimeRunId}` : undefined);
@@ -1201,6 +1219,9 @@ function handleAssistantSseEvent(
         errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
         toolCallId,
         turnId,
+        resourceKind,
+        resourceName: typeof parsed.resource_name === "string" ? parsed.resource_name : undefined,
+        provider: typeof parsed.provider === "string" ? parsed.provider : undefined,
       },
     });
     dispatch({ type: "SET_STATUS", status: "failed" });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getAssistantToolLabel } from "./assistant-tool-metadata";
+import { getAssistantActivityLabel, getAssistantToolLabel } from "./assistant-tool-metadata";
+import type { AssistantExecutionItem } from "@/features/agent/state/agent-store";
 
 const EN_TOOL_LABELS: Record<string, string> = {
   "activity.tool.list_claim_review_queue": "Check claims awaiting review",
@@ -24,5 +25,20 @@ describe("assistant tool metadata", () => {
     })) {
       expect(getAssistantToolLabel(toolName, translate)).toBe(expectedLabel);
     }
+  });
+
+  it("uses structured Skill and MCP metadata for live activity labels", () => {
+    const base: AssistantExecutionItem = {
+      id: "activity-1",
+      kind: "tool",
+      toolName: "read_skill",
+      title: "载入流程技能",
+      status: "running",
+      timestamp: 1,
+    };
+    expect(getAssistantActivityLabel({ ...base, resourceKind: "skill", resourceName: "opportunity-deep-research" }, translate))
+      .toBe("使用「opportunity-deep-research」技能");
+    expect(getAssistantActivityLabel({ ...base, resourceKind: "mcp", provider: "mcp:tavily", toolName: "mcp_tavily_search" }, translate))
+      .toBe("通过 tavily · mcp_tavily_search");
   });
 });

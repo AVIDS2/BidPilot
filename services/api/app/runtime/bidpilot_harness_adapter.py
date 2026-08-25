@@ -136,6 +136,24 @@ class BidPilotToolExecutor:
             name = str(call.arguments.get("name") or "").strip()
             body = read_skill(name)
             if not body:
+                publish_event(
+                    self.db,
+                    self.runtime_run.id,
+                    RuntimeEventDraft(
+                        type=RuntimeEventType.CAPABILITY_FAILED,
+                        parent_event_id=(self.parent_event_id_provider() if self.parent_event_id_provider else None),
+                        public_summary="未找到请求的流程技能。",
+                        payload={
+                            "capability": "read_skill",
+                            "title": "载入流程技能",
+                            "resource_kind": "skill",
+                            "resource_name": name,
+                            "tool_call_id": call.id,
+                            "turn_id": context.turn_id,
+                            "reason_code": "skill_not_found",
+                        },
+                    ),
+                )
                 return HarnessToolOutcome.failed(
                     "未找到该流程技能，请使用 AVAILABLE_SKILLS 中的准确名称。",
                     error_code="skill_not_found",
@@ -147,6 +165,23 @@ class BidPilotToolExecutor:
                 body=body,
                 presentation=metadata.presentation if metadata else None,
                 presentation_title=metadata.presentation_title if metadata else None,
+            )
+            publish_event(
+                self.db,
+                self.runtime_run.id,
+                RuntimeEventDraft(
+                    type=RuntimeEventType.CAPABILITY_STARTED,
+                    parent_event_id=(self.parent_event_id_provider() if self.parent_event_id_provider else None),
+                    public_summary=f"正在使用流程技能「{name}」。",
+                    payload={
+                        "capability": "read_skill",
+                        "title": "使用流程技能",
+                        "resource_kind": "skill",
+                        "resource_name": name,
+                        "tool_call_id": call.id,
+                        "turn_id": context.turn_id,
+                    },
+                ),
             )
             return None
 
@@ -172,6 +207,8 @@ class BidPilotToolExecutor:
                         "tool_call_id": call.id,
                         "turn_id": context.turn_id,
                         "provider": f"mcp:{server_name}",
+                        "resource_kind": "mcp",
+                        "resource_name": tool_name,
                         **self._presentation_payload(),
                     },
                 ),
@@ -336,6 +373,24 @@ class BidPilotToolExecutor:
                 self.runtime_run.input_json = run_input
                 self.db.commit()
                 self.db.refresh(self.runtime_run)
+            publish_event(
+                self.db,
+                self.runtime_run.id,
+                RuntimeEventDraft(
+                    type=RuntimeEventType.CAPABILITY_SUCCEEDED,
+                    parent_event_id=(self.parent_event_id_provider() if self.parent_event_id_provider else None),
+                    public_summary=f"已载入流程技能「{prepared.name}」。",
+                    payload={
+                        "capability": "read_skill",
+                        "title": "使用流程技能",
+                        "resource_kind": "skill",
+                        "resource_name": prepared.name,
+                        "tool_call_id": call.id,
+                        "turn_id": _context.turn_id,
+                        "skill_name": prepared.name,
+                    },
+                ),
+            )
             return HarnessToolOutcome.succeeded(
                 f"已加载流程技能：{prepared.name}。",
                 {
@@ -574,6 +629,9 @@ class BidPilotToolExecutor:
                     "title": prepared.title,
                     "tool_call_id": tool_call_id,
                     "turn_id": context.turn_id,
+                    "resource_kind": "mcp",
+                    "resource_name": prepared.tool_name,
+                    "provider": f"mcp:{prepared.server_name}",
                     **self._presentation_payload(),
                     **dict(payload),
                 },

@@ -21,8 +21,8 @@ import type {
   WorkflowNodeProgress,
 } from "@/features/agent/state/agent-store";
 import {
+  getAssistantActivityLabel,
   getAssistantToolIcon,
-  getAssistantToolLabel,
 } from "./assistant-tool-metadata";
 import { parseAgentUiAction } from "./agent-ui-action";
 import "./claude-activity-timeline.css";
@@ -256,10 +256,20 @@ function RemoteDocumentImport({ item }: { item: AssistantExecutionItem }) {
 
 function displayGroupSummary(items: AssistantExecutionItem[], t: Translate) {
   const active = aggregateStatus(items);
+  const mcpProviders = [...new Set(
+    items
+      .filter((item) => item.resourceKind === "mcp")
+      .map((item) => item.provider?.replace(/^mcp:/i, "").trim())
+      .filter((value): value is string => Boolean(value)),
+  )];
+  if (items.length > 1 && mcpProviders.length > 0) {
+    const provider = mcpProviders.length === 1 ? mcpProviders[0] : "多个来源";
+    return `${provider} · ${items.length} 项外部调用`;
+  }
   if (items.length === 1) {
     const item = items[0];
     const label = item.toolName
-      ? getAssistantToolLabel(item.toolName, t)
+      ? getAssistantActivityLabel(item, t)
       : t("activity.workflow.default", { defaultValue: "Workflow" });
     if (active === "succeeded") {
       // A turn heading should identify the action. Its returned explanation
@@ -678,7 +688,7 @@ function ToolStep({
   const previousStatus = useRef(item.status);
   const Icon: LucideIcon = getAssistantToolIcon(item);
   const label = item.toolName
-    ? getAssistantToolLabel(item.toolName, t)
+    ? getAssistantActivityLabel(item, t)
     : t("activity.workflow.default", { defaultValue: "Workflow" });
   const active = statusIsActive(item.status);
 

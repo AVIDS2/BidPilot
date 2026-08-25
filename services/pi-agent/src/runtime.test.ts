@@ -85,8 +85,10 @@ test("Pi AgentSession completes a tool turn and returns native lifecycle events"
   const runtime = await testRuntime(faux.streamSimple);
   const callbackCalls: string[] = [];
   const events: string[] = [];
+  const projected: Array<Record<string, unknown>> = [];
   await runPiAgent(request(), (event) => {
     events.push(event.type);
+    projected.push(event);
   }, {
     createModelRuntime: async () => runtime,
     fetch: async (input) => {
@@ -106,6 +108,9 @@ test("Pi AgentSession completes a tool turn and returns native lifecycle events"
   assert.ok(events.includes("tool.completed"));
   assert.ok(events.includes("agent.completed"));
   assert.equal(events.includes("agent.failed"), false);
+  const started = projected.find((event) => event.type === "tool.started");
+  assert.equal(started?.resource_kind, "tool");
+  assert.equal(started?.title, "读取项目状态");
 });
 
 test("private provider thinking is never projected as text", async () => {

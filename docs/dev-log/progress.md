@@ -27,6 +27,20 @@
   and Pi sidecar healthy; production Mem0 smoke passed capture, recall, and
   isolated cleanup.
 
+- Extended the live projection to Pi-native tool starts. Skill loads now emit
+  durable `capability.started/succeeded/failed` events with structured
+  `resource_kind=skill` metadata; configured MCP tools are discovered as
+  server-owned Pi tools and carry `resource_kind=mcp`, `resource_name`, and
+  provider metadata. The browser merges the immediate Pi start frame with the
+  later durable result by `tool_call_id`, so a slow Tavily/Context7-style call
+  is visible before its response and never creates a duplicate row.
+- Added structured activity labels for named Skills and MCP providers,
+  preserving the existing parent timeline and parallel grouping. No user text
+  or tool-name substring selects a runtime mode.
+- Focused verification after this change: Pi `13 passed`, Web `166 passed`,
+  API Skill/MCP/live projection tests `12 passed`; TypeScript, Ruff and
+  compile checks passed.
+
 ## 2026-08-22
 
 - Final acceptance pass for the memory/runtime release: API PostgreSQL suite
