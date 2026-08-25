@@ -14,6 +14,20 @@
   Agent Playwright acceptance: 8/8 across Chromium and mobile Chromium;
   TypeScript and Vite production build passed.
 
+## 2026-08-25 chat history actions and scroll behavior
+
+- Replaced the conversation row's raw CRUD icon buttons with the existing
+  shadcn/base `DropdownMenu` and `Button` primitives. Pin, rename and delete
+  remain available without keeping three low-signal controls visible in every
+  row; deletion is a destructive menu action.
+- Changed the Claude-style thread from unconditional smooth scrolling to a
+  bottom-following policy: initial history restore jumps directly to the latest
+  message, streaming follows only while the reader is near the bottom, and
+  upward reading is preserved. A shadcn outline button appears only when the
+  reader has left the bottom.
+- Verification: Web full suite `168 passed`, Agent Playwright `8/8` on desktop
+  and mobile Chromium, TypeScript and Vite build passed.
+
 ## 2026-08-24 live Pi runtime release
 
 - Replaced the browser-first assistant projection with a run-scoped Redis live

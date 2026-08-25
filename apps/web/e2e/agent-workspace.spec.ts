@@ -149,6 +149,11 @@ test("keeps the Agent composer inside the conversation pane at every viewport", 
     await page.getByRole("button", { name: "Chat history" }).click();
     await expect(page.locator(".bp-linear-history").getByText("常州招标响应", { exact: true })).toBeVisible();
     await expect(page.locator(".bp-linear-history").getByText("个人会话", { exact: true })).toBeVisible();
+    await page.locator(".bp-linear-history").getByRole("button", { name: "会话操作" }).first().click();
+    await expect(page.getByRole("menuitem", { name: "置顶会话" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "重命名会话" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "删除会话" })).toBeVisible();
+    await page.keyboard.press("Escape");
 
     // The desktop account menu is part of the shared workbench shell. Keep
     // its admin settings routes visible and on the light menu surface.

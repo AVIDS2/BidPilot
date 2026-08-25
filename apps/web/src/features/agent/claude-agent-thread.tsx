@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, CopyIcon, FileIcon, ImageIcon, PencilIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { MessageContent } from "@/components/ui/message";
 import { ClaudeActivityTimeline } from "@/features/agent/components/claude-activity-timeline";
 import { AssistantInputRequestForm } from "@/features/agent/components/assistant-input-request";
@@ -496,6 +497,8 @@ export function ClaudeAgentThread({
   onOpenWorkflowCanvas?: (projectId: string) => void;
 }) {
   const threadRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const executionItemsByMessageId = useMemo(() => {
     const grouped = new Map<string, AssistantExecutionItem[]>();
     for (const item of state.executionItems) {
@@ -511,14 +514,49 @@ export function ClaudeAgentThread({
     [state.executionItems],
   );
 
-  useEffect(() => {
+  const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
     const node = threadRef.current;
     if (!node) return;
-    node.scrollTo({ top: node.scrollHeight, behavior: state.isStreaming ? "auto" : "smooth" });
+    node.scrollTo({ top: node.scrollHeight, behavior });
+    stickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+  };
+
+  useEffect(() => {
+    stickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    const frame = window.requestAnimationFrame(() => scrollToBottom());
+    return () => window.cancelAnimationFrame(frame);
+  }, [state.currentConversationId]);
+
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const frame = window.requestAnimationFrame(() => scrollToBottom());
+    return () => window.cancelAnimationFrame(frame);
   }, [state.activeAssistantMessageId, state.executionItems, state.isStreaming, state.messages]);
 
+  useEffect(() => {
+    const node = threadRef.current;
+    const content = node?.firstElementChild;
+    if (!node || !content || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) scrollToBottom();
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [state.currentConversationId]);
+
+  const handleThreadScroll = () => {
+    const node = threadRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.clientHeight - node.scrollTop;
+    const atBottom = distanceFromBottom <= 48;
+    stickToBottomRef.current = atBottom;
+    setShowScrollToBottom(!atBottom && node.scrollHeight > node.clientHeight);
+  };
+
   return (
-    <div ref={threadRef} className="cr-thread" data-testid="claude-agent-thread">
+    <div ref={threadRef} className="cr-thread" data-testid="claude-agent-thread" onScroll={handleThreadScroll}>
       <div className="cr-thread-inner">
         {state.messages.map((message) => {
           const confirmation =
@@ -579,6 +617,17 @@ export function ClaudeAgentThread({
           />
         )}
       </div>
+      <Button
+        aria-label="回到底部"
+        className={`cr-scroll-to-bottom${showScrollToBottom ? " is-visible" : ""}`}
+        data-testid="claude-scroll-to-bottom"
+        onClick={() => scrollToBottom()}
+        size="icon"
+        type="button"
+        variant="outline"
+      >
+        <ChevronDownIcon data-icon="inline-start" />
+      </Button>
     </div>
   );
 }

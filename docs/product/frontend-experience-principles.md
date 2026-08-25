@@ -42,6 +42,13 @@ The Agent workspace uses two user-facing context surfaces:
   unscoped conversations remain under `个人会话`.
 - **Work overview** shows the current project, active background work, recent
   work, and links back to project or run details. It is not a developer console.
+- Conversation actions use a single shadcn `DropdownMenu` per row rather than
+  several always-visible icon buttons. The menu keeps pin, rename, and delete
+  discoverable without competing with the conversation title.
+- Chat history restores directly to the latest message. While the reader is at
+  the bottom, new streamed content follows automatically; once the reader
+  scrolls upward, the viewport is left alone and a single "回到底部" action is
+  provided.
 
 Runtime implementation details such as provider names, tool counts, MCP
 registration, sandbox/network profiles, raw event payloads, and internal engine

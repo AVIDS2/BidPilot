@@ -30,6 +30,16 @@ import {
   type AttachmentPreviewSelection,
 } from "@/features/agent/components/AIAssistantPanel";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ClaudeAgentThread } from "./claude-agent-thread";
 import { AgentEnvironmentPanel } from "./components/agent-environment-panel";
 import { useAIAssistant, type AIAssistantState } from "@/features/agent/state/agent-store";
@@ -313,43 +323,48 @@ function AgentHistory({
                       {conversation.id === currentConversationId ? <small>当前</small> : null}
                     </button>
                   )}
-                  <div className="bp-linear-history-actions">
-                    <button
-                      type="button"
-                      aria-label={conversation.is_pinned ? "取消置顶会话" : "置顶会话"}
-                      title={conversation.is_pinned ? "取消置顶" : "置顶"}
-                      onClick={() =>
-                        void onTogglePinned(conversation.id, !conversation.is_pinned).catch((error) =>
-                          console.error("Failed to pin conversation:", error),
-                        )
-                      }
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={<Button aria-label="会话操作" className="bp-linear-history-actions" size="icon-xs" variant="ghost" />}
                     >
-                      <PinIcon size={13} fill={conversation.is_pinned ? "currentColor" : "none"} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="重命名会话"
-                      title="重命名"
-                      onClick={() => {
-                        setEditingId(conversation.id);
-                        setEditingTitle(conversation.title || "");
-                      }}
-                    >
-                      <PencilIcon size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="删除会话"
-                      title="删除"
-                      onClick={() =>
-                        void onDelete(conversation.id).catch((error) =>
-                          console.error("Failed to delete conversation:", error),
-                        )
-                      }
-                    >
-                      <Trash2Icon size={13} />
-                    </button>
-                  </div>
+                      <MoreHorizontalIcon />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>会话操作</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() =>
+                            void onTogglePinned(conversation.id, !conversation.is_pinned).catch((error) =>
+                              console.error("Failed to pin conversation:", error),
+                            )
+                          }
+                        >
+                          <PinIcon fill={conversation.is_pinned ? "currentColor" : "none"} />
+                          {conversation.is_pinned ? "取消置顶" : "置顶会话"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setEditingId(conversation.id);
+                            setEditingTitle(conversation.title || "");
+                          }}
+                        >
+                          <PencilIcon />重命名会话
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() =>
+                            void onDelete(conversation.id).catch((error) =>
+                              console.error("Failed to delete conversation:", error),
+                            )
+                          }
+                          variant="destructive"
+                        >
+                          <Trash2Icon />删除会话
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               );
             })}

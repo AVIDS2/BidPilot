@@ -195,13 +195,13 @@
 .bidpilot-linear-agent .bp-linear-history-row-main strong { overflow: hidden; font-size: 12px; font-weight: 520; text-overflow: ellipsis; white-space: nowrap; }
 .bidpilot-linear-agent .bp-linear-history-row-main small { color: lch(58 0 282); font-size: 11px; }
 .bidpilot-linear-agent .bp-linear-history-row input { min-width: 0; width: 100%; border: 1px solid lch(82 0 282); border-radius: 4px; outline: 0; background: #fff; padding: 4px 7px; color: lch(20 0 282); font-size: 12px; }
-.bidpilot-linear-agent .bp-linear-history-actions { display: flex; align-items: center; gap: 1px; padding-right: 4px; opacity: 0; transition: opacity 120ms ease; }
+.bidpilot-linear-agent .bp-linear-history-actions { display: grid; width: 24px; height: 24px; margin-right: 3px; place-items: center; border: 0; border-radius: 5px; background: transparent; padding: 0; color: lch(55 0 282); opacity: 0; transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease; }
 .bidpilot-linear-agent .bp-linear-history-row:hover .bp-linear-history-actions,
 .bidpilot-linear-agent .bp-linear-history-row.is-current .bp-linear-history-actions,
-.bidpilot-linear-agent .bp-linear-history-actions:focus-within { opacity: 1; }
-.bidpilot-linear-agent .bp-linear-history-actions button { display: grid; width: 22px; height: 22px; place-items: center; border: 0; border-radius: 4px; background: transparent; color: lch(55 0 282); }
-.bidpilot-linear-agent .bp-linear-history-actions button:hover { background: lch(91 0 282); color: lch(22 0 282); }
-.bidpilot-linear-agent .bp-linear-history-actions button:last-child:hover { color: lch(52 57 30); }
+.bidpilot-linear-agent .bp-linear-history-actions:focus-visible,
+.bidpilot-linear-agent .bp-linear-history-actions[aria-expanded="true"] { opacity: 1; }
+.bidpilot-linear-agent .bp-linear-history-actions:hover,
+.bidpilot-linear-agent .bp-linear-history-actions[aria-expanded="true"] { background: lch(91 0 282); color: lch(22 0 282); }
 .bidpilot-linear-agent .bp-linear-history-empty { margin: 10px 8px 4px; color: lch(55 0 282); font-size: 12px; }
 
 .bidpilot-linear-agent .bp-agent-session-error { flex: 0 0 auto; border-bottom: 1px solid #ead2cc; background: #fff8f6; padding: 8px 14px; color: #a84937; font-size: 12px; }

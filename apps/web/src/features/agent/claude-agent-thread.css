@@ -55,18 +55,36 @@
 .bidpilot-claude-thread input { font: inherit; -webkit-tap-highlight-color: transparent; }
 
 .bidpilot-claude-thread .cr-thread {
+  position: relative;
   min-height: 0;
   flex: 1 1 auto;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .bidpilot-claude-thread .cr-thread-inner {
   width: min(720px, calc(100% - 56px));
   margin: 0 auto;
   padding: 34px 0 178px;
+}
+
+.bidpilot-claude-thread .cr-scroll-to-bottom {
+  position: absolute;
+  right: max(18px, calc((100% - 720px) / 2));
+  bottom: 18px;
+  z-index: 3;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.bidpilot-claude-thread .cr-scroll-to-bottom.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .bidpilot-claude-thread .cr-user-message-wrap { display: flow-root; }
@@ -374,10 +392,12 @@
   .bidpilot-claude-thread .cr-thread-inner { width: min(100% - 32px, 720px); padding-top: 22px; }
   .bidpilot-claude-thread .cr-user-message { max-width: 88%; margin-right: 0; }
   .bidpilot-claude-thread .cr-user-attachments { max-width: 88%; margin-right: 0; }
+  .bidpilot-claude-thread .cr-scroll-to-bottom { right: 16px; bottom: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .bidpilot-claude-thread .cr-thread { scroll-behavior: auto; }
+  .bidpilot-claude-thread .cr-scroll-to-bottom { transition: none; }
   .bidpilot-claude-thread .cr-thinking-indicator i { animation: none; }
   .bidpilot-claude-thread .cr-thinking-copy { animation: none; }
   .bidpilot-claude-thread .cr-reasoning-status i { animation: none; }
