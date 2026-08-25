@@ -164,6 +164,18 @@
   for a live Pi sidecar in the local suite and was excluded from the focused
   gate; it was not counted as a product pass.
 
+# 2026-08-25 live agent environment panel
+
+- Added a Codex-style Agent environment panel to the Agent workspace using the
+  installed shadcn `Card`, `Badge`, `ScrollArea`, `Separator`, `Collapsible`,
+  `Button`, and mobile `Sheet` components.
+- The panel reads the Pi runtime contract and `/runtime/runs` API, refreshes
+  live runs every four seconds, links each run to the Run Center, and shows
+  real Skill resource and MCP registration state. It has no static run counts.
+- Desktop and Pixel 7 Playwright acceptance passed `8/8`; Web full suite now
+  passes `168` tests. A legacy deep-research fixture was updated to assert the
+  new source count wording while retaining compatibility with older traces.
+
 - Ran `git diff --check`; no whitespace errors were reported. This was a
   documentation/architecture baseline pass and did not claim that the full
   application test suite was rerun.
