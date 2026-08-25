@@ -54,6 +54,8 @@ It is organized to support three goals:
   - REST, async run, and event contract conventions for stable implementation
 - `docs/architecture/assistant-harness-runtime.md`
   - current Pi Assistant lifecycle, idempotency, approval, replay, and failure boundary; also records the legacy compatibility boundary
+- `docs/architecture/pi-capability-inventory.md`
+  - dated inventory of Pi tools, Skills, MCP, extensions, sandbox and code-vs-production enablement
 - `docs/architecture/frontend-application-architecture.md`
   - route, state, UI layer, and component architecture for the frontend application
 - `docs/architecture/document-ingestion-and-format-strategy.md`

@@ -128,6 +128,18 @@
   API pytest remains gated by the repository's dedicated PostgreSQL `_test`
   database safety guard; no production database was used as a substitute.
 
+# 2026-08-25 Pi capability inventory
+
+- Audited the Pi contract from API registry/catalog, Skills loader, MCP client,
+  Pi sidecar sandbox/extensions, and the production container environment.
+- Added `docs/architecture/pi-capability-inventory.md` with the code-supported,
+  configured, and publicly deployed states kept separate. The audit confirms:
+  local `42` business capabilities plus `read_skill`, five local Skills, no
+  production MCP servers, Pi enabled, Mem0 enabled, and official Tavily active
+  in production because Hikari base variables are not configured there.
+- The next research passes are intentionally ordered by search/DR, Skills,
+  MCP, subagents, material ingestion, LangGraph workflows, memory and UI.
+
 - Ran `git diff --check`; no whitespace errors were reported. This was a
   documentation/architecture baseline pass and did not claim that the full
   application test suite was rerun.
