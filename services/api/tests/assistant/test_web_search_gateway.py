@@ -26,6 +26,7 @@ def test_hikari_gateway_uses_bearer_and_appends_search(monkeypatch) -> None:
 
     monkeypatch.setenv("TAVILY_HIKARI_BASE_URL", "https://hikari.example.test/tavily")
     monkeypatch.setenv("TAVILY_HIKARI_TOKEN", "gateway-token")
+    monkeypatch.delenv("TAVILY_API_BASE_URL", raising=False)
     monkeypatch.setenv("TAVILY_API_KEY", "official-key-that-must-not-be-used-as-body")
     monkeypatch.setattr("httpx.post", fake_post)
 

@@ -309,7 +309,7 @@ def _search_public_web(query: str, *, limit: int, search_depth: str = "basic") -
     queued research run while preserving the same Hikari wire contract.
     """
     query = query.strip()
-    base_url = (os.getenv("TAVILY_HIKARI_BASE_URL") or os.getenv("TAVILY_API_BASE_URL") or "").strip().rstrip("/")
+    base_url = (os.getenv("TAVILY_API_BASE_URL") or os.getenv("TAVILY_HIKARI_BASE_URL") or "").strip().rstrip("/")
     tavily_key = (os.getenv("DOCPILOT_TAVILY_API_KEY") or os.getenv("TAVILY_API_KEY") or "").strip()
     hikari_token = (os.getenv("TAVILY_HIKARI_TOKEN") or tavily_key).strip()
     provider = "duckduckgo"

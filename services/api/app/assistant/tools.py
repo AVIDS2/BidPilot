@@ -1595,8 +1595,8 @@ def web_search_tool(db: Session, user: CurrentUser, arguments: dict) -> Assistan
         or ""
     ).strip()
     tavily_base_url = (
-        os.environ.get("TAVILY_HIKARI_BASE_URL")
-        or os.environ.get("TAVILY_API_BASE_URL")
+        os.environ.get("TAVILY_API_BASE_URL")
+        or os.environ.get("TAVILY_HIKARI_BASE_URL")
         or ""
     ).strip().rstrip("/")
     hikari_token = (os.environ.get("TAVILY_HIKARI_TOKEN") or tavily_key).strip()
