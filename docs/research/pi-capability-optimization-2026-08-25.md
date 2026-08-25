@@ -24,6 +24,7 @@
 - Tavily 的官方 Agent 集成和 GPT Researcher 都强调“并行研究者/来源整理/报告合成”，不是无上限重复搜索。
 - LangChain 的 Open Deep Research 展示了可替换搜索 API、MCP 和 LangGraph Studio 配置，但仓库状态与许可证/维护情况仍需单独审计，不能直接替换 BidPilot 控制面。
 - `dzhng/deep-research` 是极简迭代研究循环，适合验证“计划 -> 搜索 -> 深挖 -> 合成”的最小闭环；`AnotiaWang/deep-research-web-ui` 适合参考专用研究运行 UI，不适合直接接入我们的租户和权限。
+- Hikari 官方仓库的 HTTP cheat sheet 规定代理路径为 `/api/tavily/search`；配置中的 `TAVILY_API_BASE_URL` 应优先于根域名变量，调用端再补 `/search`。本轮真实请求曾因错误优先级命中根域名 `/search` 返回 404，现已修正并通过真实常州招标查询。
 
 ### 当前改造
 

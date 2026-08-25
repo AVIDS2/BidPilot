@@ -154,6 +154,10 @@
 - Updated the Pi runtime contract panel, subagent active polling, Tavily
   search depth/topic fields, remote Content-Disposition filename handling, and
   user-isolated Mem0 assistant entities.
+- A real Tavily smoke initially exposed a Hikari routing bug: both base URL
+  variables were present and the root-domain value won, producing `/search`
+  404. The adapter now prefers the configured `/api/tavily` base and appends
+  `/search`; a real `site:gov.cn 常州 招标 信息化` request returned three sources.
 - Verification: API focused suites passed (`63` tests), Worker full suite
   passed (`197`), Pi tests passed (`14`), Web full suite passed (`167`) and
   Web/Pi builds passed. One legacy API streaming quota test is not suitable
