@@ -25,6 +25,8 @@ export interface PiToolRequest {
   /** Structured presentation metadata; never inferred from user text. */
   resourceKind?: "tool" | "skill" | "mcp";
   provider?: string;
+  outputSchema?: Record<string, unknown> | null;
+  annotations?: Record<string, unknown> | null;
 }
 
 export interface PiTranscriptMessage {
@@ -36,6 +38,8 @@ export interface PiTranscriptMessage {
 export interface PiSkillRequest {
   name: string;
   description: string;
+  version?: string;
+  resources?: string[];
 }
 
 export interface PiRuntimeResources {

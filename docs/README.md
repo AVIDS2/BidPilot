@@ -120,6 +120,8 @@ It is organized to support three goals:
 
 - `docs/research/ai-tender-platform-competitive-scan.md`
   - public capability scan of domestic AI tender/proposal products and BidPilot gap matrix
+- `docs/research/pi-capability-optimization-2026-08-25.md`
+  - official/open-source research and implementation record for Pi capabilities 1–8
 
 ### Agent skills
 

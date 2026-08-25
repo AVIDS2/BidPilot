@@ -751,6 +751,11 @@
 .wb-pi-runtime dd { display: flex; align-items: center; gap: 4px; margin: 0; color: #53545b; font-size: 11px; font-weight: 600; }
 .wb-pi-runtime dd svg { width: 12px; height: 12px; }
 .wb-pi-runtime > p { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.wb-pi-runtime-details { border-top: 1px solid var(--wb-line); padding-top: 10px; color: #53545b; font-size: 11px; }
+.wb-pi-runtime-details summary { cursor: pointer; color: var(--wb-subtle); }
+.wb-pi-runtime-resource-list { display: grid; gap: 5px; padding-top: 9px; }
+.wb-pi-runtime-resource-list strong { color: #414248; font-size: 10px; font-weight: 650; }
+.wb-pi-runtime-resource-list span { color: var(--wb-subtle); }
 
 /* Detailed access administration stays in the workbench's list-and-detail vocabulary. */
 .wb-admin-detail-page { width: min(1160px, 100%); margin: 0 auto; padding: 30px 34px 64px; }

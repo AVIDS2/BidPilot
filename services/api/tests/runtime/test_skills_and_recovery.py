@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.runtime.skills import build_skill_prompt_block, read_skill, select_skill_names
+from app.runtime.skills import build_skill_prompt_block, read_skill, read_skill_resource, select_skill_names
 
 
 def test_skill_loading_requires_an_explicit_model_choice() -> None:
@@ -109,3 +109,10 @@ def test_deep_research_skill_declares_its_runtime_presentation() -> None:
     assert metadata is not None
     assert metadata.presentation == "deep_research"
     assert metadata.presentation_title == "招标机会深度调研"
+
+
+def test_skill_resources_are_explicit_and_cannot_escape_package() -> None:
+    quality = read_skill_resource("deep-research", "references/source-quality.md")
+    assert "Primary or official source" in quality
+    assert read_skill_resource("deep-research", "../opportunity-deep-research/SKILL.md") == ""
+    assert read_skill_resource("deep-research", "not-listed.txt") == ""

@@ -2016,9 +2016,10 @@ export interface PiRuntimeContract {
     maxToolObservationBytes: number;
   };
   extensions: string[];
-  skills: Array<{ name: string; description: string }>;
+  skills: Array<{ name: string; description: string; version?: string | null; resources?: string[] }>;
   tool_count: number;
   parallel_tool_count: number;
+  mcp_servers?: Array<{ name: string; transport: string; trusted_mutations: boolean }>;
 }
 
 // Chat

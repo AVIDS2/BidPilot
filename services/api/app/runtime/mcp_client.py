@@ -66,6 +66,8 @@ class McpToolSpec:
     parameters: dict[str, Any]
     server_name: str | None = None
     tool_name: str | None = None
+    output_schema: dict[str, Any] | None = None
+    annotations: dict[str, Any] | None = None
 
 
 def normalize_mcp_search_payload(
@@ -190,12 +192,16 @@ def _spec_for_tool(server: McpServerConfig, tool: Any) -> McpToolSpec | None:
             else "[read-only MCP sensing]"
         )
     input_schema = getattr(tool, "inputSchema", None)
+    output_schema = getattr(tool, "outputSchema", None)
+    annotations = getattr(tool, "annotations", None)
     return McpToolSpec(
         name=exposed,
         description=description,
         parameters=_openai_parameters(input_schema if isinstance(input_schema, dict) else None),
         server_name=server.name,
         tool_name=name,
+        output_schema=output_schema if isinstance(output_schema, dict) else None,
+        annotations=annotations if isinstance(annotations, dict) else None,
     )
 
 
@@ -299,13 +305,20 @@ async def list_mcp_tool_specs(env: dict[str, str] | None = None) -> list[McpTool
         if session is None:
             continue
         try:
-            result = await asyncio.wait_for(
-                session.list_tools(), timeout=_MCP_OPERATION_TIMEOUT_SECONDS
-            )
+            tools: list[Any] = []
+            cursor: str | None = None
+            for _page in range(32):
+                result = await asyncio.wait_for(
+                    session.list_tools(cursor=cursor), timeout=_MCP_OPERATION_TIMEOUT_SECONDS
+                )
+                tools.extend(getattr(result, "tools", None) or [])
+                next_cursor = getattr(result, "nextCursor", None)
+                if not next_cursor or next_cursor == cursor:
+                    break
+                cursor = str(next_cursor)
         except Exception as exc:  # noqa: BLE001
             logger.warning("MCP server %s list_tools failed: %s", cfg.name, type(exc).__name__)
             continue
-        tools = getattr(result, "tools", None) or getattr(result, "result", {}).get("tools", []) or []
         for tool in tools:
             spec = _spec_for_tool(cfg, tool)
             if spec:

@@ -14,6 +14,19 @@ test("skill catalog is progressive metadata and escapes untrusted descriptions",
   assert.equal(block.includes("Research <public>"), false);
 });
 
+test("skill catalog exposes only bounded declared resources", () => {
+  const block = buildSkillCatalogBlock([
+    {
+      name: "deep-research",
+      description: "Research with evidence.",
+      version: "1.1.0",
+      resources: ["references/source-quality.md", "scripts/validate_report.py"],
+    },
+  ]);
+
+  assert.match(block, /<resources><path>references\/source-quality\.md<\/path><path>scripts\/validate_report\.py<\/path><\/resources>/);
+});
+
 test("invalid skill names cannot enter the Pi system prompt", () => {
   assert.throws(
     () => buildSkillCatalogBlock([{ name: "../escape", description: "invalid" }]),

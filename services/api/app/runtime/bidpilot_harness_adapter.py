@@ -36,7 +36,7 @@ from .registry import (
     missing_required_capability_arguments,
 )
 from .service import execute_prepared_capability, prepare_capability_execution
-from .skills import read_skill, skill_metadata
+from .skills import read_skill, read_skill_resource, skill_metadata
 from contracts.runtime import RuntimeEventType
 from contracts.runtime import RuntimeRiskLevel
 
@@ -70,6 +70,13 @@ class _PreparedSkill:
     body: str
     presentation: str | None = None
     presentation_title: str | None = None
+
+
+@dataclass(frozen=True)
+class _PreparedSkillResource:
+    name: str
+    resource_path: str
+    body: str
 
 
 class BidPilotToolExecutor:
@@ -176,6 +183,36 @@ class BidPilotToolExecutor:
                     payload={
                         "capability": "read_skill",
                         "title": "使用流程技能",
+                        "resource_kind": "skill",
+                        "resource_name": name,
+                        "tool_call_id": call.id,
+                        "turn_id": context.turn_id,
+                    },
+                ),
+            )
+            return None
+
+        if call.name == "read_skill_resource":
+            name = str(call.arguments.get("name") or "").strip()
+            resource_path = str(call.arguments.get("resource_path") or "").strip()
+            body = read_skill_resource(name, resource_path)
+            if not body:
+                return HarnessToolOutcome.failed(
+                    "未找到该 Skill 资源，请使用技能目录中列出的路径。",
+                    error_code="skill_resource_not_found",
+                    recoverable=True,
+                )
+            self._prepared[call.id] = _PreparedSkillResource(name=name, resource_path=resource_path, body=body)
+            publish_event(
+                self.db,
+                self.runtime_run.id,
+                RuntimeEventDraft(
+                    type=RuntimeEventType.CAPABILITY_STARTED,
+                    parent_event_id=(self.parent_event_id_provider() if self.parent_event_id_provider else None),
+                    public_summary=f"正在读取技能资源「{resource_path}」。",
+                    payload={
+                        "capability": "read_skill_resource",
+                        "title": "读取 Skill 资源",
                         "resource_kind": "skill",
                         "resource_name": name,
                         "tool_call_id": call.id,
@@ -399,6 +436,30 @@ class BidPilotToolExecutor:
                     "instructions": prepared.body,
                 },
                 public_payload={"skill_name": prepared.name},
+            )
+        if isinstance(prepared, _PreparedSkillResource):
+            publish_event(
+                self.db,
+                self.runtime_run.id,
+                RuntimeEventDraft(
+                    type=RuntimeEventType.CAPABILITY_SUCCEEDED,
+                    parent_event_id=(self.parent_event_id_provider() if self.parent_event_id_provider else None),
+                    public_summary=f"已读取 Skill 资源「{prepared.resource_path}」。",
+                    payload={
+                        "capability": "read_skill_resource",
+                        "title": "读取 Skill 资源",
+                        "resource_kind": "skill",
+                        "resource_name": prepared.name,
+                        "resource_path": prepared.resource_path,
+                        "tool_call_id": call.id,
+                        "turn_id": _context.turn_id,
+                    },
+                ),
+            )
+            return HarnessToolOutcome.succeeded(
+                f"已读取 Skill 资源：{prepared.resource_path}。",
+                {"status": "loaded", "skill_name": prepared.name, "resource_path": prepared.resource_path, "content": prepared.body},
+                public_payload={"skill_name": prepared.name, "resource_path": prepared.resource_path},
             )
         try:
             if prepared.capability_name in EXTERNAL_IO_CAPABILITIES:

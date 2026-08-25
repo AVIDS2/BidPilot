@@ -761,15 +761,22 @@ function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
   useEffect(() => {
     if (item.toolName !== "spawn_subagents" || !parentRunId) return;
     let cancelled = false;
-    void listRuntimeChildRuns(parentRunId, 20).then((rows) => {
-      if (!cancelled) {
-        setChildren(rows);
-        setSelected(0);
-      }
-    }).catch(() => {
-      if (!cancelled) setChildren([]);
-    });
-    return () => { cancelled = true; };
+    const refresh = () => {
+      void listRuntimeChildRuns(parentRunId, 20).then((rows) => {
+        if (!cancelled) {
+          setChildren(rows);
+          setSelected((value) => Math.min(value, Math.max(0, rows.length - 1)));
+        }
+      }).catch(() => {
+        if (!cancelled) setChildren([]);
+      });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 1_200);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [item.toolName, parentRunId, item.status]);
 
   const child = children[selected];
@@ -779,12 +786,22 @@ function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
       return;
     }
     let cancelled = false;
-    void listRuntimeEvents(child.id, 0).then((response) => {
-      if (!cancelled) setEvents(response.items.map((event) => ({ type: event.type, public_summary: event.public_summary })));
-    }).catch(() => {
-      if (!cancelled) setEvents([]);
-    });
-    return () => { cancelled = true; };
+    const refresh = () => {
+      void listRuntimeEvents(child.id, 0).then((response) => {
+        if (!cancelled) setEvents(response.items.map((event) => ({ type: event.type, public_summary: event.public_summary })));
+      }).catch(() => {
+        if (!cancelled) setEvents([]);
+      });
+    };
+    refresh();
+    if (["completed", "succeeded", "failed", "cancelled", "expired"].includes(child.status)) {
+      return () => { cancelled = true; };
+    }
+    const timer = window.setInterval(refresh, 1_200);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [child]);
 
   if (item.toolName !== "spawn_subagents" || children.length === 0) return null;
@@ -797,7 +814,7 @@ function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
       {child && (
         <div className="cr-subagent-viewer-body">
           <strong>{child.profile || "子 Agent"} 子 Agent</strong>
-          <small>{child.status === "completed" ? "已完成" : child.status === "failed" ? "失败" : "执行中"}</small>
+          <small>{child.status === "completed" || child.status === "succeeded" ? "已完成" : child.status === "failed" ? "失败" : child.status === "cancelled" ? "已取消" : "执行中"}</small>
           {events.filter((event) => event.type.startsWith("capability.")).map((event, index) => (
             <p key={`${child.id}-${index}`}>{event.public_summary}</p>
           ))}

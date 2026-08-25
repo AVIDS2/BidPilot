@@ -88,7 +88,7 @@ describe("ProviderSettingsPage", () => {
     expect(await screen.findByText("Pi Agent 运行边界")).toBeInTheDocument();
     expect(screen.getByText("受治理云环境")).toBeInTheDocument();
     expect(screen.getByText("仅业务桥接")).toBeInTheDocument();
-    expect(screen.getByText("18 个工具 · 1 个技能")).toBeInTheDocument();
+    expect(screen.getByText("18 个工具 · 1 个技能 · 7 个可并行")).toBeInTheDocument();
     expect(screen.getByText("subagents · opportunity-deep-research")).toBeInTheDocument();
 
     expect(await screen.findByText("Pi 原生模型目录")).toBeInTheDocument();

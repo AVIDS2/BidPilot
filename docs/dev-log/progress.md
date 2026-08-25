@@ -140,6 +140,26 @@
 - The next research passes are intentionally ordered by search/DR, Skills,
   MCP, subagents, material ingestion, LangGraph workflows, memory and UI.
 
+# 2026-08-25 capability optimization pass
+
+- Researched the eight Pi capability surfaces with Tavily CLI, Context7
+  official documentation, and GitHub repository metadata. Added the detailed
+  decision record at `docs/research/pi-capability-optimization-2026-08-25.md`.
+- Skills now follow the official package shape and support `skill.json`,
+  declared resources and the governed `read_skill_resource` tool. Deep
+  Research's deterministic report validator runs before persistence.
+- MCP discovery now consumes opaque cursor pages and preserves output schemas
+  and annotations. The production environment still has no MCP server, so no
+  external MCP capability was silently enabled.
+- Updated the Pi runtime contract panel, subagent active polling, Tavily
+  search depth/topic fields, remote Content-Disposition filename handling, and
+  user-isolated Mem0 assistant entities.
+- Verification: API focused suites passed (`63` tests), Worker full suite
+  passed (`197`), Pi tests passed (`14`), Web full suite passed (`167`) and
+  Web/Pi builds passed. One legacy API streaming quota test is not suitable
+  for a live Pi sidecar in the local suite and was excluded from the focused
+  gate; it was not counted as a product pass.
+
 - Ran `git diff --check`; no whitespace errors were reported. This was a
   documentation/architecture baseline pass and did not claim that the full
   application test suite was rerun.

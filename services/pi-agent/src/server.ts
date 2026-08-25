@@ -25,7 +25,7 @@ const server = createServer(async (request, response) => {
         runtime: "pi-coding-agent-session",
         sandbox_profiles: ["governed_cloud"],
         host_tools: false,
-        trusted_extensions: ["bidpilot-governance", "bidpilot-skills"],
+        trusted_extensions: ["bidpilot-governance", "bidpilot-skills", "bidpilot-subagents"],
       }),
     );
     return;

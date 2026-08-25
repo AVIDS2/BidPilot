@@ -7,10 +7,11 @@ from typing import Any
 from contracts.runtime import RuntimeRiskLevel
 
 from .registry import CAPABILITY_REGISTRY
-from .mcp_client import list_mcp_tool_specs
+from .mcp_client import configured_servers, list_mcp_tool_specs
 from .skills import build_skill_index
 from .tool_catalog import (
     _READ_SKILL_TOOL_SPEC,
+    _READ_SKILL_RESOURCE_TOOL_SPEC,
     _TOOL_PARAMETER_SCHEMAS,
     build_capability_tool_specs,
 )
@@ -18,7 +19,7 @@ from .tool_catalog import (
 
 def pi_tools() -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
-    for spec in [*build_capability_tool_specs(), _READ_SKILL_TOOL_SPEC]:
+    for spec in [*build_capability_tool_specs(), _READ_SKILL_TOOL_SPEC, _READ_SKILL_RESOURCE_TOOL_SPEC]:
         function = spec.get("function") if isinstance(spec, dict) else None
         if not isinstance(function, dict):
             continue
@@ -34,7 +35,7 @@ def pi_tools() -> list[dict[str, Any]]:
                 "description": str(function.get("description") or name),
                 "parameters": function.get("parameters") or _TOOL_PARAMETER_SCHEMAS.get(name, {}),
                 "executionMode": "parallel" if read_only else "sequential",
-                "resourceKind": "skill" if name == "read_skill" else "tool",
+                "resourceKind": "skill" if name in {"read_skill", "read_skill_resource"} else "tool",
             }
         )
     return result
@@ -64,6 +65,8 @@ async def pi_tools_for_run() -> list[dict[str, Any]]:
                 "label": f"MCP · {tool_name}",
                 "description": spec.description or spec.name,
                 "parameters": spec.parameters,
+                "outputSchema": spec.output_schema,
+                "annotations": spec.annotations,
                 "executionMode": "parallel",
                 "resourceKind": "mcp",
                 "provider": server_name or "mcp",
@@ -77,7 +80,12 @@ def pi_resources() -> dict[str, Any]:
     return {
         "extensions": ["bidpilot-governance", "bidpilot-skills", "bidpilot-subagents"],
         "skills": [
-            {"name": skill.name, "description": skill.description}
+            {
+                "name": skill.name,
+                "description": skill.description,
+                "version": skill.version,
+                "resources": list(skill.resources),
+            }
             for skill in build_skill_index()
         ],
     }
@@ -96,11 +104,20 @@ def pi_sandbox() -> dict[str, Any]:
 
 def pi_execution_contract() -> dict[str, Any]:
     """Freeze the audited child capability surface at delegation time."""
+    mcp_servers = [
+        {
+            "name": server.name,
+            "transport": "stdio" if server.command else "streamable_http",
+            "trusted_mutations": server.trusted_mutations,
+        }
+        for server in configured_servers()
+    ]
     return {
         "version": "1",
         "tools": pi_tools(),
         "resources": pi_resources(),
         "sandbox": pi_sandbox(),
+        "mcp_servers": mcp_servers,
     }
 
 

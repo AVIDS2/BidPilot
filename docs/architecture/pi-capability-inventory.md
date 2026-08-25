@@ -9,8 +9,8 @@
 | 层 | 本地当前代码 `5ddbf1f` | 公网当前代码 `f3d445c` | 真实含义 |
 | --- | --- | --- | --- |
 | Pi 运行时 | 已接入 `@earendil-works/pi-agent-core` / `pi-ai` 的 Pi `AgentSession` | 已启用 | Pi 负责模型轮次、流式事件、工具生命周期、重试、压缩和终止信号 |
-| 业务工具 | 42 个 API capability + `read_skill` | 旧版本能力目录，尚未含本地新增的通用深度调研运行 | 工具由 API 动态生成，Pi 不持有数据库或租户密钥 |
-| Skills | 5 个本地 Skill 元数据 | 旧版本 4 个领域 Skill | 只发送元数据；模型显式调用 `read_skill` 后才加载正文 |
+| 业务工具 | 42 个 API capability + `read_skill` + `read_skill_resource` | 旧版本能力目录，尚未含本地新增的通用深度调研运行与资源读取工具 | 工具由 API 动态生成，Pi 不持有数据库或租户密钥 |
+| Skills | 5 个本地 Skill 元数据，带版本和资源索引 | 旧版本 4 个领域 Skill | 只发送元数据；模型显式调用 `read_skill`，需要时再调用 `read_skill_resource` |
 | MCP | 代码支持 stdio / Streamable HTTP 动态发现 | 生产白名单为空 | 当前没有任何 MCP 工具进入 Pi；`mcp_<server>_<tool>` 只是扩展协议，不代表已经配置 |
 | Pi 扩展 | governance、skills、subagents 三个一方扩展 | 已启用治理和 Skills，子 Agent 以生产代码为准继续做健康检查 | 扩展是构建时信任列表，不接受租户随意注入 npm 包 |
 | 云沙箱 | `governed_cloud` | `governed_cloud` | 主机工具关闭，网络只能走业务桥接；不是 bash/read/write 云端工作区 |
@@ -21,7 +21,7 @@
 
 ## 2. Pi 收到的工具
 
-Pi 的基础目录由 `services/api/app/runtime/pi_config.py` 生成。当前本地是 42 个业务 capability，外加 1 个 `read_skill` 工具。只读 capability 默认 `executionMode=parallel`；写入、计费、破坏和导航操作默认 `sequential`。
+Pi 的基础目录由 `services/api/app/runtime/pi_config.py` 生成。当前本地是 42 个业务 capability，外加 `read_skill` 和 `read_skill_resource` 两个 Skill 工具，共 44 个工具。只读 capability 默认 `executionMode=parallel`；写入、计费、破坏和导航操作默认 `sequential`。
 
 ### 项目与上下文
 
@@ -97,7 +97,7 @@ Pi 的基础目录由 `services/api/app/runtime/pi_config.py` 生成。当前本
 
 ### Skill 入口
 
-`read_skill(name)` 是 Pi 的第 43 个工具。它只接受 `AVAILABLE_SKILLS` 中的精确名称，不通过用户文本关键词路由。它的执行模式是 sequential，因为一次加载的流程正文会改变当前模型上下文。
+`read_skill(name)` 和 `read_skill_resource(name, resource_path)` 是 Pi 的两个 Skill 工具。它们只接受 `AVAILABLE_SKILLS` 中的精确名称和资源路径，不通过用户文本关键词路由。资源路径只允许 Skill 自己声明的 `scripts/`、`references/`、`assets/` 文件，不能穿越目录或读取宿主机文件。
 
 ## 3. 当前 Skills
 
@@ -117,6 +117,8 @@ Skills 的实际加载路径是：
 4. API 返回截断到约 1,200 字符的流程正文；
 5. 网页、邮件、资料正文仍然是数据，不会因为 Skill 正文而获得指令权限。
 
+当前 `deep-research` Skill 已包含 `skill.json`、来源质量参考、报告结构 JSON 和确定性 `scripts/validate_report.py`；Worker 在持久化报告前执行同一份结构校验。它不是只给模型看的 Markdown。
+
 ## 4. MCP 能力
 
 ### 代码支持
@@ -130,6 +132,7 @@ Skills 的实际加载路径是：
 - 工具名统一暴露为 `mcp_<server>_<tool>`，避免和一方 capability 重名；
 - 默认只读感知；只有服务名列入 `DOCPILOT_MCP_TRUSTED_MUTATIONS` 才允许被标记为受信变更服务；
 - MCP 不可用时跳过发现，不阻塞普通 Pi 回合。
+- `tools/list` 使用不透明 cursor 分页，最多读取 32 页；工具的 `outputSchema` 和 `annotations` 会进入受控工具元数据，不被当成可信权限声明。
 
 ### 实际配置
 
@@ -184,3 +187,18 @@ Skills 的实际加载路径是：
 8. UI：Pi 原生事件、Skill/MCP 运行事件、子 Agent 分栏、深度调研专用面板和恢复态如何映射到实时组件。
 
 每一项调研必须分别产出：官方资料、当前实现差距、是否需要替换现有代码、前端呈现方案、测试场景和发布门槛。
+
+## 8. 本轮调研依据与决策
+
+### 采用
+
+- Agent Skills 官方规范：`SKILL.md` 必需，`scripts/`、`references/`、`assets/` 按需加载；主文件保持短小，资源延迟读取。实现已增加标准包资源索引和安全读取。
+- MCP 官方规范：`tools/list` 使用 cursor 分页，工具可提供 `outputSchema`，工具注解必须视为不可信，调用界面应提供可见状态和必要确认。实现已增加分页与结构化元数据保留。
+- LangGraph 官方文档：持久化依赖 checkpointer + 稳定 `thread_id`，中断后使用 `Command(resume=...)`；现有 BidPilot 图已按该模式运行，继续保持 LangGraph 只负责业务工作流，不替代 Pi 会话。
+- Mem0 官方文档：用 `user_id`、`agent_id`、`run_id`、`app_id` 明确隔离；实现已把 assistant entity 改成用户级 ID，避免组织内成员互相看到助手提取的画像。
+
+### 参考但不直接引入
+
+- `assafelovic/gpt-researcher`、`langchain-ai/open_deep_research`、`AnotiaWang/deep-research-web-ui`：用于研究计划、并行检索、来源证据和专用 UI 的对比，不直接替换 BidPilot 的业务控制面。
+- `obra/superpowers`、`agentskills/agentskills`、`addyosmani/agent-skills`：用于 Skill 包结构、验证和资源渐进披露；低星或许可证不明确的“creative skill”包不直接安装进生产。
+- `punkpeye/awesome-mcp-servers`、官方 GitHub MCP、Playwright MCP：作为后续 MCP 候选目录，必须先做权限、许可证、维护状态和租户隔离评估。

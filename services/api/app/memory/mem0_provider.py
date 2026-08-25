@@ -66,8 +66,16 @@ def mem0_enabled() -> bool:
     )
 
 
-def mem0_agent_id() -> str:
-    return os.getenv("DOCPILOT_MEM0_AGENT_ID", _DEFAULT_AGENT_ID).strip() or _DEFAULT_AGENT_ID
+def mem0_agent_id(user_id: str | None = None) -> str:
+    """Return a user-isolated assistant entity id.
+
+    A shared agent id would make assistant-extracted memories from one member
+    visible to every other member in the same organization. The user entity
+    remains the private scope; the suffix keeps the assistant entity private
+    too while preserving a stable base for operational filtering.
+    """
+    base = os.getenv("DOCPILOT_MEM0_AGENT_ID", _DEFAULT_AGENT_ID).strip() or _DEFAULT_AGENT_ID
+    return f"{base}:{user_id}" if user_id else base
 
 
 def mem0_host() -> str:
@@ -118,7 +126,7 @@ def _scope_filters(*, user_id: str, org_id: str) -> dict[str, Any]:
     entity_filter: dict[str, Any] = {
         "OR": [
             {"user_id": user_id},
-            {"agent_id": mem0_agent_id()},
+            {"agent_id": mem0_agent_id(user_id)},
         ]
     }
     # Mem0 Platform supports app_id for tenant/project separation. OSS
@@ -219,7 +227,7 @@ def capture_profile_memory(
                 custom_instructions=_PROFILE_INSTRUCTIONS,
                 metadata={"source": "bidpilot_assistant", "profile_version": "v1"},
             ),
-            agent_id=mem0_agent_id(),
+            agent_id=mem0_agent_id(user_id),
             run_id=run_id,
             **scope_kwargs,
         )
@@ -243,7 +251,7 @@ def delete_profile_memory(*, user_id: str, org_id: str) -> dict[str, Any]:
         app_scope = _entity_scope_kwargs(org_id=org_id)
         responses = [
             client.delete_all(user_id=user_id, **app_scope),
-            client.delete_all(agent_id=mem0_agent_id(), **app_scope),
+            client.delete_all(agent_id=mem0_agent_id(user_id), **app_scope),
         ]
     except Exception:  # noqa: BLE001 - deletion is retried by the caller
         logger.warning("Mem0 profile deletion failed", exc_info=True)

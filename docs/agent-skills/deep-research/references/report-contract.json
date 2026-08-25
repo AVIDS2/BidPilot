@@ -1,0 +1,7 @@
+{
+  "required": ["query", "sources", "claims", "report"],
+  "source": {"required": ["source_id", "title", "url", "status"]},
+  "claim": {"required": ["claim_id", "claim", "source_ids", "verification"]},
+  "verification_values": ["verified", "uncertain"],
+  "citation_format": "[S<source_id>]"
+}

@@ -84,7 +84,10 @@ function validateSkills(skills: PiSkillRequest[]): PiSkillRequest[] {
     }
     if (seen.has(name)) throw new Error(`Duplicate skill: ${name}`);
     seen.add(name);
-    return { name, description };
+    const resources = Array.isArray(skill.resources)
+      ? skill.resources.filter((path): path is string => typeof path === "string" && path.length <= 240).slice(0, 64)
+      : undefined;
+    return { name, description, ...(skill.version ? { version: skill.version } : {}), ...(resources?.length ? { resources } : {}) };
   });
 }
 
@@ -94,7 +97,8 @@ export function buildSkillCatalogBlock(skills: PiSkillRequest[]): string {
   const entries = validated
     .map(
       (skill) =>
-        `  <skill><name>${xmlEscape(skill.name)}</name><description>${xmlEscape(skill.description)}</description></skill>`,
+        `  <skill><name>${xmlEscape(skill.name)}</name><description>${xmlEscape(skill.description)}</description>` +
+        `${skill.resources?.length ? `<resources>${skill.resources.map((path) => `<path>${xmlEscape(path)}</path>`).join("")}</resources>` : ""}</skill>`,
     )
     .join("\n");
   return [

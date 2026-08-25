@@ -29,6 +29,23 @@ _READ_SKILL_TOOL_SPEC = {
     },
 }
 
+_READ_SKILL_RESOURCE_TOOL_SPEC = {
+    "type": "function",
+    "function": {
+        "name": "read_skill_resource",
+        "description": "Read one declared references/scripts/assets resource from an already available Skill.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Exact Skill name from AVAILABLE_SKILLS"},
+                "resource_path": {"type": "string", "description": "Relative path listed by the Skill, for example references/source-quality.md"},
+            },
+            "required": ["name", "resource_path"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 # Minimal OpenAI-compatible argument schemas. Keep these product-facing and
 # small; execute_capability remains the real validation boundary.
 _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
@@ -319,6 +336,9 @@ _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
         "properties": {
             "query": {"type": "string", "description": "Search query for the public web"},
             "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
+            "topic": {"type": "string", "enum": ["general", "news", "finance"], "default": "general"},
+            "search_depth": {"type": "string", "enum": ["basic", "advanced"], "default": "basic"},
+            "include_raw_content": {"type": "boolean", "default": False},
         },
         "required": ["query"],
         "additionalProperties": False,

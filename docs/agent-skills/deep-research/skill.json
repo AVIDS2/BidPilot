@@ -1,0 +1,12 @@
+{
+  "name": "deep-research",
+  "version": "1.1.0",
+  "license": "MIT",
+  "compatibility": "BidPilot Pi runtime; resources are read through the governed Skill bridge",
+  "presentation": "deep_research",
+  "presentation_title": "深度调研",
+  "resources": {
+    "references": ["references/source-quality.md", "references/report-contract.json"],
+    "scripts": ["scripts/validate_report.py"]
+  }
+}

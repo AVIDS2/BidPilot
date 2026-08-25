@@ -163,6 +163,7 @@ def download_remote_artifact_to_tempfile(
     temp_path = Path(temp.name)
     final_url = current_url
     response_content_type = ""
+    response_filename: str | None = None
     signature = bytearray()
     checksum = hashlib.sha256()
     total = 0
@@ -218,6 +219,7 @@ def download_remote_artifact_to_tempfile(
                             checksum.update(chunk)
                             temp.write(chunk)
                         response_content_type = _normalized_content_type(response.headers.get("content-type"))
+                        response_filename = _filename_from_content_disposition(response.headers.get("content-disposition"))
                         final_url = str(response.url)
                         completed = True
                         break
@@ -248,7 +250,7 @@ def download_remote_artifact_to_tempfile(
             checksum=checksum.hexdigest(),
             signature=prefix,
             content_type=response_content_type or "application/octet-stream",
-            filename=_safe_filename(filename) if filename else _filename_from_url(final_url),
+            filename=_safe_filename(filename or response_filename) if (filename or response_filename) else _filename_from_url(final_url),
             source_url=final_url,
         )
     except httpx.TimeoutException as exc:
@@ -639,6 +641,19 @@ def _normalized_content_type(value: str | None) -> str:
 def _filename_from_url(url: str) -> str:
     name = unquote(PurePosixPath(urlparse(url).path).name).strip()
     return _safe_filename(name or "web-source")
+
+
+def _filename_from_content_disposition(value: str | None) -> str | None:
+    """Extract an RFC 5987/legacy attachment name without trusting a path."""
+    if not value:
+        return None
+    extended = re.search(r"filename\*\s*=\s*[^']*''([^;]+)", value, flags=re.IGNORECASE)
+    if extended:
+        return _safe_filename(unquote(extended.group(1).strip().strip('"')))
+    legacy = re.search(r"filename\s*=\s*(?:\"([^\"]+)\"|([^;]+))", value, flags=re.IGNORECASE)
+    if not legacy:
+        return None
+    return _safe_filename((legacy.group(1) or legacy.group(2) or "").strip())
 
 
 def _safe_filename(value: str) -> str:

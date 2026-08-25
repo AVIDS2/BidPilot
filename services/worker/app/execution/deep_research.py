@@ -14,6 +14,8 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
+from runpy import run_path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -32,8 +34,11 @@ from app.security.secrets import decrypt_secret
 from contracts.runtime import RuntimeEventType, RuntimeRunStatus
 
 from app.runtime.events import (
+    RuntimeCancellationRequested,
+    cancel_runtime_run,
     complete_runtime_run,
     fail_runtime_run,
+    is_runtime_cancellation_requested,
     publish_runtime_event,
 )
 from app.execution.task_outbox import claim_workflow_task_delivery, complete_workflow_task_delivery
@@ -73,6 +78,10 @@ def execute_deep_research(runtime_run_id: str, *, outbox_event_id: str | None = 
         complete_runtime_run(run.id, result=result)
         complete_workflow_task_delivery(outbox_event_id)
         return {"status": "succeeded", "runtime_run_id": run.id}
+    except RuntimeCancellationRequested:
+        cancel_runtime_run(run.id if "run" in locals() and run is not None else runtime_run_id)
+        complete_workflow_task_delivery(outbox_event_id)
+        return {"status": "cancelled", "runtime_run_id": runtime_run_id}
     except Exception as exc:  # noqa: BLE001 - terminal error is redacted
         logger.exception("Deep Research run failed: %s", runtime_run_id)
         fail_runtime_run(run.id if "run" in locals() and run is not None else runtime_run_id, str(exc), error_code="deep_research_failed")
@@ -92,6 +101,7 @@ async def _run_pipeline(run: RuntimeRun, user: CurrentUser) -> dict[str, Any]:
     if not query:
         raise ValueError("deep_research_query_missing")
 
+    _ensure_not_cancelled(run.id)
     presentation = {
         "presentation_kind": "deep_research",
         "presentation_session_id": run.id,
@@ -100,9 +110,11 @@ async def _run_pipeline(run: RuntimeRun, user: CurrentUser) -> dict[str, Any]:
     _progress(run.id, "scope", "已确定研究问题与来源边界。", {"query": query, "depth": depth, **presentation})
     provider = _resolve_provider(run, user)
     plan = await _plan_queries(query, max_queries=max_queries, source_policy=source_policy, provider=provider)
+    _ensure_not_cancelled(run.id)
     _progress(run.id, "plan", f"研究计划已生成，将从 {len(plan)} 个互补角度检索。", {"queries": plan, **presentation})
 
-    search_results = await asyncio.to_thread(_parallel_search, user, plan)
+    search_results = await asyncio.to_thread(_parallel_search, user, plan, depth)
+    _ensure_not_cancelled(run.id)
     sources = _deduplicate_sources(search_results, max_sources=max_sources)
     _progress(
         run.id,
@@ -112,6 +124,7 @@ async def _run_pipeline(run: RuntimeRun, user: CurrentUser) -> dict[str, Any]:
     )
 
     read_sources = await asyncio.to_thread(_parallel_read, sources)
+    _ensure_not_cancelled(run.id)
     readable = [item for item in read_sources if item["status"] == "read"]
     for item in readable:
         _progress(
@@ -122,6 +135,7 @@ async def _run_pipeline(run: RuntimeRun, user: CurrentUser) -> dict[str, Any]:
         )
 
     claims = await _extract_and_verify_claims(query, readable, provider)
+    _ensure_not_cancelled(run.id)
     _progress(
         run.id,
         "verify",
@@ -129,6 +143,7 @@ async def _run_pipeline(run: RuntimeRun, user: CurrentUser) -> dict[str, Any]:
         {"claims": claims, **presentation},
     )
     report = await _synthesize_report(query, claims, readable, provider)
+    _ensure_not_cancelled(run.id)
     _progress(run.id, "synthesize", "证据已综合，正在生成研究报告。", {**presentation})
     result = {
         "query": query,
@@ -142,6 +157,9 @@ async def _run_pipeline(run: RuntimeRun, user: CurrentUser) -> dict[str, Any]:
         "generated_at": datetime.now(UTC).isoformat(),
         **presentation,
     }
+    validation_errors = _validate_research_result(result)
+    if validation_errors:
+        raise ValueError(f"deep_research_result_invalid:{','.join(validation_errors[:8])}")
     _progress(
         run.id,
         "package",
@@ -149,6 +167,29 @@ async def _run_pipeline(run: RuntimeRun, user: CurrentUser) -> dict[str, Any]:
         {"source_count": len(readable), "claim_count": len(claims), "report_ready": True, **presentation},
     )
     return result
+
+
+def _ensure_not_cancelled(runtime_run_id: str) -> None:
+    if is_runtime_cancellation_requested(runtime_run_id):
+        raise RuntimeCancellationRequested()
+
+
+def _validate_research_result(payload: dict[str, Any]) -> list[str]:
+    """Run the Skill's deterministic report contract before persistence."""
+    repository_root = Path(__file__).resolve().parents[4]
+    validator_path = repository_root / "docs" / "agent-skills" / "deep-research" / "scripts" / "validate_report.py"
+    if not validator_path.is_file():
+        return ["validator_missing"]
+    try:
+        namespace = run_path(str(validator_path))
+        validator = namespace.get("validate_payload")
+        if not callable(validator):
+            return ["validator_invalid"]
+        result = validator(payload)
+        return [str(item) for item in result] if isinstance(result, list) else ["validator_invalid_result"]
+    except Exception as exc:  # noqa: BLE001 - malformed Skill resources fail closed
+        logger.warning("Deep Research Skill validator failed", exc_info=True)
+        return [type(exc).__name__]
 
 
 def _current_user(row: User) -> CurrentUser:
@@ -239,11 +280,15 @@ async def _plan_queries(
     return [{"id": "Q1", "query": query[:500], "purpose": "核心问题"}]
 
 
-def _parallel_search(user: CurrentUser, plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _parallel_search(user: CurrentUser, plan: list[dict[str, Any]], depth: str) -> list[dict[str, Any]]:
     def search_one(item: dict[str, Any]) -> dict[str, Any]:
         db = SessionLocal()
         try:
-            result = _search_public_web(item["query"], limit=6)
+            result = _search_public_web(
+                item["query"],
+                limit=6,
+                search_depth="advanced" if depth == "deep" else "basic",
+            )
             return {"query_id": item["id"], "query": item["query"], "purpose": item.get("purpose", ""), "result": result}
         except Exception as exc:  # noqa: BLE001 - one angle may fail safely
             return {"query_id": item["id"], "query": item["query"], "purpose": item.get("purpose", ""), "result": {}, "error": type(exc).__name__}
@@ -255,7 +300,7 @@ def _parallel_search(user: CurrentUser, plan: list[dict[str, Any]]) -> list[dict
         return sorted((future.result() for future in as_completed(futures)), key=lambda item: str(item.get("query_id") or ""))
 
 
-def _search_public_web(query: str, *, limit: int) -> dict[str, Any]:
+def _search_public_web(query: str, *, limit: int, search_depth: str = "basic") -> dict[str, Any]:
     """Worker-local search adapter; do not import the API application package.
 
     The Worker has a module named ``app.drafting`` for graph execution, which
@@ -273,7 +318,14 @@ def _search_public_web(query: str, *, limit: int) -> dict[str, Any]:
         provider = "tavily_hikari" if base_url else "tavily"
         endpoint = base_url if base_url.endswith("/search") else f"{base_url}/search" if base_url else "https://api.tavily.com/search"
         headers = {"Authorization": f"Bearer {hikari_token}"} if base_url and hikari_token else {}
-        body: dict[str, Any] = {"query": query, "max_results": limit, "include_answer": False, "search_depth": "basic"}
+        body: dict[str, Any] = {
+            "query": query,
+            "max_results": limit,
+            "include_answer": False,
+            "search_depth": search_depth if search_depth in {"basic", "advanced"} else "basic",
+            "topic": "general",
+            "include_raw_content": False,
+        }
         if not base_url:
             body["api_key"] = tavily_key
         response = httpx.post(endpoint, headers=headers, json=body, timeout=20.0)

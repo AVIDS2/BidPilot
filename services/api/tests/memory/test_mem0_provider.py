@@ -51,7 +51,7 @@ def test_mem0_profile_provider_uses_official_scoped_operations(monkeypatch) -> N
     )
     assert queued == {"status": "queued", "event_id": "mem0-event-1"}
     assert fake.add_calls[0]["user_id"] == "user-1"
-    assert fake.add_calls[0]["agent_id"] == "bidpilot-assistant"
+    assert fake.add_calls[0]["agent_id"] == "bidpilot-assistant:user-1"
     assert fake.add_calls[0]["app_id"] == "org-1"
     assert fake.add_calls[0]["run_id"] == "run-1"
     assert fake.add_calls[0]["options"].custom_instructions
@@ -64,14 +64,14 @@ def test_mem0_profile_provider_uses_official_scoped_operations(monkeypatch) -> N
     assert memories[0].text == "用户偏好中文、先给结论。"
     filters = fake.search_calls[0]["options"].filters
     assert {"user_id": "user-1"} in filters["OR"]
-    assert {"agent_id": "bidpilot-assistant"} in filters["OR"]
+    assert {"agent_id": "bidpilot-assistant:user-1"} in filters["OR"]
     assert filters["AND"] == [{"app_id": "org-1"}]
 
     deleted = mem0_provider.delete_profile_memory(user_id="user-1", org_id="org-1")
     assert deleted["status"] == "deleted"
     assert fake.delete_calls == [
         {"user_id": "user-1", "app_id": "org-1"},
-        {"agent_id": "bidpilot-assistant", "app_id": "org-1"},
+        {"agent_id": "bidpilot-assistant:user-1", "app_id": "org-1"},
     ]
 
 

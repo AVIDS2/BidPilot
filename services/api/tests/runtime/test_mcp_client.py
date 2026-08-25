@@ -115,6 +115,44 @@ def test_spec_for_tool_trusted_keeps_original_description() -> None:
     assert spec.description == "Search web"
 
 
+def test_spec_preserves_mcp_output_schema_and_annotations() -> None:
+    cfg = mcp_client.McpServerConfig(name="web", command="npx")
+    tool = type("Tool", (), {
+        "name": "search",
+        "description": "Search web",
+        "inputSchema": {"type": "object"},
+        "outputSchema": {"type": "object", "properties": {"items": {"type": "array"}}},
+        "annotations": {"readOnlyHint": True},
+    })()
+    spec = mcp_client._spec_for_tool(cfg, tool)
+    assert spec is not None
+    assert spec.output_schema == tool.outputSchema
+    assert spec.annotations == tool.annotations
+
+
+def test_mcp_discovery_consumes_paginated_tool_lists(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Session:
+        def __init__(self) -> None:
+            self.calls: list[str | None] = []
+
+        async def list_tools(self, cursor=None):
+            self.calls.append(cursor)
+            row = type("Tool", (), {"name": f"search_{len(self.calls)}", "description": "search", "inputSchema": {"type": "object"}})()
+            return type("Page", (), {"tools": [row], "nextCursor": "next" if len(self.calls) == 1 else None})()
+
+    session = _Session()
+    cfg = mcp_client.McpServerConfig(name="web", command="npx")
+
+    async def acquire(_cfg):
+        return session
+
+    monkeypatch.setattr(mcp_client, "_env_servers", lambda _env=None: [cfg])
+    monkeypatch.setattr(mcp_client._pool, "acquire", acquire)
+    specs = asyncio.run(mcp_client.list_mcp_tool_specs())
+    assert [spec.name for spec in specs] == ["mcp_web_search_1", "mcp_web_search_2"]
+    assert session.calls == [None, "next"]
+
+
 def test_mcp_tool_discovery_times_out_instead_of_blocking_harness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

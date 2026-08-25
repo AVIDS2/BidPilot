@@ -427,6 +427,7 @@ function PiRuntimeSummary({
   contract: Awaited<ReturnType<typeof getPiRuntimeContract>>["data"];
 }) {
   const sandbox = contract.sandbox;
+  const mcpServers = contract.mcp_servers ?? [];
   return (
     <section className="wb-pi-runtime" aria-label="Pi Agent 运行边界">
       <div className="wb-pi-runtime-heading">
@@ -437,9 +438,20 @@ function PiRuntimeSummary({
         <div><dt>沙箱</dt><dd>{sandbox.profile === "governed_cloud" ? "受治理云环境" : sandbox.profile}</dd></div>
         <div><dt>主机工具</dt><dd>{sandbox.hostTools === "disabled" ? "关闭" : sandbox.hostTools}</dd></div>
         <div><dt>网络</dt><dd><NetworkIcon aria-hidden="true" />{sandbox.network === "bridge_only" ? "仅业务桥接" : sandbox.network}</dd></div>
-        <div><dt>能力</dt><dd>{contract.tool_count} 个工具 · {contract.skills.length} 个技能</dd></div>
+        <div><dt>能力</dt><dd>{contract.tool_count} 个工具 · {contract.skills.length} 个技能 · {contract.parallel_tool_count} 个可并行</dd></div>
       </dl>
       <p>{contract.extensions.join(" · ")}</p>
+      <details className="wb-pi-runtime-details">
+        <summary>查看已注册资源</summary>
+        <div className="wb-pi-runtime-resource-list">
+          <strong>Skills · {contract.skills.length}</strong>
+          {contract.skills.map((skill) => (
+            <span key={skill.name}>{skill.name}{skill.version ? ` · v${skill.version}` : ""}{skill.resources?.length ? ` · ${skill.resources.length} 个资源` : ""}</span>
+          ))}
+          <strong>MCP · {mcpServers.length}</strong>
+          {mcpServers.length === 0 ? <span>未配置 MCP server</span> : mcpServers.map((server) => <span key={server.name}>{server.name} · {server.transport}</span>)}
+        </div>
+      </details>
     </section>
   );
 }

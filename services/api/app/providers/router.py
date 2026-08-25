@@ -60,6 +60,7 @@ def get_pi_runtime_contract(user=Depends(require_auth)):
             "sandbox": sandbox,
             "extensions": resources.get("extensions") or [],
             "skills": resources.get("skills") or [],
+            "mcp_servers": contract.get("mcp_servers") or [],
             "tool_count": len(tools),
             "parallel_tool_count": sum(
                 1 for tool in tools if tool.get("executionMode") == "parallel"

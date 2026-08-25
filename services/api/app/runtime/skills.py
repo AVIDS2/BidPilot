@@ -25,13 +25,17 @@ The runtime never routes skills by matching words in the user's message.
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from pathlib import PurePosixPath
+from typing import Any
 
 # BidPilot repo root: services/api/app/runtime/skills.py -> parents[4]
 _ROOT = Path(__file__).resolve().parents[4]
 _SKILLS_DIR = _ROOT / "docs" / "agent-skills"
+_MAX_SKILL_BODY_CHARACTERS = 12_000
 
 @dataclass(frozen=True)
 class SkillMetadata:
@@ -42,6 +46,10 @@ class SkillMetadata:
     path: Path
     presentation: str | None = None
     presentation_title: str | None = None
+    version: str | None = None
+    license: str | None = None
+    compatibility: str | None = None
+    resources: tuple[str, ...] = ()
 
     def to_index_line(self) -> str:
         return f"- {self.name}: {self.description}"
@@ -70,9 +78,39 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
             continue
         key = m.group(1).strip()
         value = m.group(2).strip().strip("\"'")
-        if key in {"name", "description", "presentation", "presentation_title"} and value:
+        if key in {
+            "name", "description", "presentation", "presentation_title",
+            "version", "license", "compatibility",
+        } and value:
             fields[key] = value
     return fields
+
+
+def _skill_manifest(path: Path) -> dict[str, Any]:
+    """Read optional package metadata without making it part of the prompt."""
+    manifest = path / "skill.json"
+    if not manifest.is_file():
+        return {}
+    try:
+        value = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _resource_paths(path: Path) -> tuple[str, ...]:
+    """Return safe, bounded resources from the Agent Skills directories."""
+    resources: list[str] = []
+    for directory in ("scripts", "references", "assets"):
+        root = path / directory
+        if not root.is_dir():
+            continue
+        for item in sorted(root.rglob("*")):
+            if len(resources) >= 64 or not item.is_file() or item.is_symlink():
+                continue
+            relative = item.relative_to(path).as_posix()
+            resources.append(relative)
+    return tuple(resources)
 
 
 @lru_cache(maxsize=1)
@@ -94,12 +132,20 @@ def build_skill_index() -> list[SkillMetadata]:
         fm = _parse_frontmatter(text)
         name = fm.get("name") or entry.name
         description = fm.get("description") or "No description provided."
+        manifest = _skill_manifest(entry)
+        manifest_name = str(manifest.get("name") or "").strip()
+        if manifest_name and manifest_name != name:
+            continue
         index.append(SkillMetadata(
             name=name,
             description=description,
             path=skill_md,
-            presentation=fm.get("presentation"),
-            presentation_title=fm.get("presentation_title"),
+            presentation=fm.get("presentation") or str(manifest.get("presentation") or "").strip() or None,
+            presentation_title=fm.get("presentation_title") or str(manifest.get("presentation_title") or "").strip() or None,
+            version=str(manifest.get("version") or fm.get("version") or "").strip() or None,
+            license=str(manifest.get("license") or fm.get("license") or "").strip() or None,
+            compatibility=str(manifest.get("compatibility") or fm.get("compatibility") or "").strip() or None,
+            resources=_resource_paths(entry),
         ))
     return index
 
@@ -134,7 +180,7 @@ def _read_skill_body(skill_name: str) -> str:
                 compact.append("")
             continue
         compact.append(line)
-        if sum(len(item) for item in compact) > 1200:
+        if sum(len(item) for item in compact) > _MAX_SKILL_BODY_CHARACTERS:
             compact.append("…")
             break
     return "\n".join(compact).strip()
@@ -179,6 +225,29 @@ def read_skill(skill_name: str) -> str:
     return _read_skill_body(names[0]) if names else ""
 
 
+def read_skill_resource(skill_name: str, resource_path: str, *, max_characters: int = 20_000) -> str:
+    """Read one declared Skill resource without exposing arbitrary files."""
+    metadata = skill_metadata(skill_name)
+    if metadata is None:
+        return ""
+    candidate_path = PurePosixPath(str(resource_path).strip())
+    if candidate_path.is_absolute() or ".." in candidate_path.parts:
+        return ""
+    normalized = candidate_path.as_posix()
+    if normalized not in metadata.resources:
+        return ""
+    resource = metadata.path.parent / Path(*candidate_path.parts)
+    try:
+        resolved = resource.resolve()
+        root = metadata.path.parent.resolve()
+        resolved.relative_to(root)
+        if resource.is_symlink() or not resource.is_file():
+            return ""
+        return resource.read_text(encoding="utf-8", errors="replace")[:max(1, min(max_characters, 50_000))]
+    except (OSError, ValueError):
+        return ""
+
+
 def skill_metadata(skill_name: str) -> SkillMetadata | None:
     """Return trusted metadata for an explicitly loaded skill."""
     return next((skill for skill in build_skill_index() if skill.name == skill_name), None)
@@ -212,6 +281,7 @@ __all__ = [
     "clear_skill_cache",
     "list_skill_names",
     "read_skill",
+    "read_skill_resource",
     "skill_metadata",
     "select_skill_names",
 ]

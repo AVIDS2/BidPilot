@@ -1,8 +1,7 @@
 ---
 name: deep-research
 description: Use for open-ended questions that need a bounded, source-grounded report with a plan, parallel retrieval, full-page reading, claim verification, uncertainty tracking, and citations. Do not use for a single factual lookup or a project-only evidence search.
-presentation: deep_research
-presentation_title: 深度调研
+license: MIT
 ---
 
 # 通用深度调研
@@ -16,6 +15,8 @@ presentation_title: 深度调研
 3. 运行会并行生成互补检索计划，读取候选来源正文，去重并记录来源 ID。
 4. 运行会把主张绑定到来源，区分已核验、冲突和待确认；没有证据不得补全事实。
 5. 报告必须包含结论、证据、限制、风险、开放问题、建议和可点击来源；引用使用运行返回的来源 ID。
+
+需要判断来源级别或检查报告结构时，读取 `references/source-quality.md` 或 `references/report-contract.json`；不要把这两份参考资料默认全部塞进上下文。`scripts/validate_report.py` 是确定性校验器，供 Worker/CI 验证报告结构，不是让模型自行发明校验结果。
 
 ## 收敛与交付
 

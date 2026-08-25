@@ -1581,6 +1581,13 @@ def web_search_tool(db: Session, user: CurrentUser, arguments: dict) -> Assistan
     except (TypeError, ValueError):
         limit = 5
     limit = max(1, min(limit, 10))
+    topic = str(arguments.get("topic") or "general").strip().lower()
+    if topic not in {"general", "news", "finance"}:
+        topic = "general"
+    search_depth = str(arguments.get("search_depth") or "basic").strip().lower()
+    if search_depth not in {"basic", "advanced"}:
+        search_depth = "basic"
+    include_raw_content = bool(arguments.get("include_raw_content") is True)
 
     tavily_key = (
         os.environ.get("DOCPILOT_TAVILY_API_KEY")
@@ -1606,7 +1613,9 @@ def web_search_tool(db: Session, user: CurrentUser, arguments: dict) -> Assistan
             "query": query,
             "max_results": limit,
             "include_answer": False,
-            "search_depth": "basic",
+            "search_depth": search_depth,
+            "topic": topic,
+            "include_raw_content": include_raw_content,
         }
         if not tavily_base_url:
             request_body["api_key"] = tavily_key
@@ -1626,6 +1635,7 @@ def web_search_tool(db: Session, user: CurrentUser, arguments: dict) -> Assistan
                     "title": str(row.get("title") or "")[:200],
                     "url": str(row.get("url") or "")[:500],
                     "snippet": str(row.get("content") or row.get("snippet") or "")[:500],
+                    **({"raw_content": str(row.get("raw_content") or "")[:4_000]} if include_raw_content and row.get("raw_content") else {}),
                 }
             )
     else:
@@ -1659,7 +1669,7 @@ def web_search_tool(db: Session, user: CurrentUser, arguments: dict) -> Assistan
 
     return AssistantToolResult(
         tool_name="web_search",
-        result={"query": query, "provider": provider, "count": len(items), "items": items},
+        result={"query": query, "provider": provider, "topic": topic, "search_depth": search_depth, "count": len(items), "items": items},
         summary=f"联网搜索「{query}」返回 {len(items)} 条结果（{provider}）。",
     )
 
