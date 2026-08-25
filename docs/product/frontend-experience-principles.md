@@ -36,6 +36,19 @@ Default screens should prioritize:
 - current evidence and review status
 - next useful action
 
+The Agent workspace uses two user-facing context surfaces:
+
+- **Project workspaces** group related conversations under the project they work on;
+  unscoped conversations remain under `个人会话`.
+- **Work overview** shows the current project, active background work, recent
+  work, and links back to project or run details. It is not a developer console.
+
+Runtime implementation details such as provider names, tool counts, MCP
+registration, sandbox/network profiles, raw event payloads, and internal engine
+names stay out of the user surface. They belong in the operations and
+observability views. The overview must still be backed by live project/run APIs,
+not demo counters or replay-only UI state.
+
 ### 2. Dense, but navigable
 
 The product will carry a lot of information.

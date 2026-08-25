@@ -12,11 +12,14 @@ import {
   Clock3Icon,
   FileSearchIcon,
   FileTextIcon,
+  FolderKanbanIcon,
+  MessageSquareTextIcon,
   MoreHorizontalIcon,
   PanelRightIcon,
   PanelTopIcon,
   PencilIcon,
   PinIcon,
+  PlusIcon,
   StarIcon,
   Trash2Icon,
   XIcon,
@@ -32,9 +35,11 @@ import { AgentEnvironmentPanel } from "./components/agent-environment-panel";
 import { useAIAssistant, type AIAssistantState } from "@/features/agent/state/agent-store";
 import {
   deleteChatConversation,
+  listProjects,
   renameChatConversation,
   setChatConversationPinned,
   type ChatConversationRead,
+  type ProjectRead,
 } from "@/lib/api";
 import {
   Sheet,
@@ -174,14 +179,6 @@ function formatPreviewSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function dayLabel(conversation: ChatConversationRead) {
-  const value = conversation.created_at ? new Date(conversation.created_at) : null;
-  if (!value) return "更早";
-  const today = new Date();
-  if (value.toDateString() === today.toDateString()) return "今天";
-  return "最近";
-}
-
 function agentWorkspacePath({
   conversationId,
   projectId,
@@ -199,18 +196,22 @@ function agentWorkspacePath({
 function AgentHistory({
   open,
   conversations,
+  projects,
   currentConversationId,
   onNew,
   onSelect,
+  onOpenProject,
   onRename,
   onDelete,
   onTogglePinned,
 }: {
   open: boolean;
   conversations: ChatConversationRead[];
+  projects: ProjectRead[];
   currentConversationId: string | null;
   onNew: () => void;
   onSelect: (conversationId: string) => void;
+  onOpenProject: (projectId: string) => void;
   onRename: (conversationId: string, title: string) => Promise<void>;
   onDelete: (conversationId: string) => Promise<void>;
   onTogglePinned: (conversationId: string, isPinned: boolean) => Promise<void>;
@@ -233,21 +234,52 @@ function AgentHistory({
   const groups = useMemo(() => {
     const next = new Map<string, ChatConversationRead[]>();
     for (const conversation of conversations.slice(0, 16)) {
-      const label = dayLabel(conversation);
-      next.set(label, [...(next.get(label) ?? []), conversation]);
+      const projectId = conversation.project_id ?? "personal";
+      next.set(projectId, [...(next.get(projectId) ?? []), conversation]);
     }
-    return [...next.entries()];
-  }, [conversations]);
+    const currentProjectId = conversations.find((conversation) => conversation.id === currentConversationId)?.project_id ?? "personal";
+    return [...next.entries()]
+      .map(([id, items]) => ({
+        id,
+        items,
+        project: projects.find((project) => project.id === id) ?? null,
+      }))
+      .sort((left, right) => {
+        if (left.id === currentProjectId) return -1;
+        if (right.id === currentProjectId) return 1;
+        if (left.id === "personal") return 1;
+        if (right.id === "personal") return -1;
+        return left.items[0]?.created_at && right.items[0]?.created_at
+          ? Date.parse(right.items[0].created_at) - Date.parse(left.items[0].created_at)
+          : 0;
+      });
+  }, [conversations, currentConversationId, projects]);
 
   return (
     <div className={`bp-linear-history${open ? " is-open" : ""}`} aria-hidden={!open}>
       <div className="bp-linear-history-inner">
         <button type="button" className="bp-linear-history-new" onClick={onNew}>
-          <span>+</span> 新对话
+          <PlusIcon data-icon="inline-start" /> 新对话
         </button>
-        {groups.map(([label, items]) => (
-          <section className="bp-linear-history-group" key={label}>
-            <span>{label}</span>
+        {groups.map(({ id, items, project }) => {
+          const label = project?.name ?? "个人会话";
+          return (
+          <section className="bp-linear-history-group" key={id}>
+            <div className="bp-linear-history-project-heading">
+              <button
+                type="button"
+                className="bp-linear-history-project-main"
+                onClick={() => id !== "personal" && onOpenProject(id)}
+                disabled={id === "personal"}
+              >
+                {id === "personal" ? <MessageSquareTextIcon aria-hidden="true" /> : <FolderKanbanIcon aria-hidden="true" />}
+                <span>
+                  <strong>{label}</strong>
+                  <small>{project?.scenario_package || `${items.length} 个会话`}</small>
+                </span>
+              </button>
+              <span className="bp-linear-history-project-count">{items.length}</span>
+            </div>
             {items.map((conversation) => {
               const isEditing = editingId === conversation.id;
               const title = conversation.title || "未命名对话";
@@ -278,7 +310,7 @@ function AgentHistory({
                       onClick={() => onSelect(conversation.id)}
                     >
                       <strong>{title}</strong>
-                      <small>{conversation.id === currentConversationId ? "当前" : ""}</small>
+                      {conversation.id === currentConversationId ? <small>当前</small> : null}
                     </button>
                   )}
                   <div className="bp-linear-history-actions">
@@ -322,7 +354,8 @@ function AgentHistory({
               );
             })}
           </section>
-        ))}
+        );
+        })}
         {groups.length === 0 && <p className="bp-linear-history-empty">还没有会话记录</p>}
       </div>
     </div>
@@ -394,6 +427,7 @@ export function LinearAgentWorkspace() {
     confirmAssistantAction,
   } = useAIAssistant();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [projects, setProjects] = useState<ProjectRead[]>([]);
   const [environmentPanelOpen, setEnvironmentPanelOpen] = useState(() =>
     typeof window !== "undefined" ? !window.matchMedia("(max-width: 820px)").matches : true,
   );
@@ -409,6 +443,10 @@ export function LinearAgentWorkspace() {
   useEffect(() => {
     void refreshConversations();
   }, [refreshConversations]);
+
+  useEffect(() => {
+    void listProjects().then(setProjects).catch(() => setProjects([]));
+  }, []);
 
   const conversationTitle = useMemo(() => {
     if (!state.currentConversationId) return "新对话";
@@ -533,8 +571,8 @@ export function LinearAgentWorkspace() {
                 type="button"
                 className={`agent-header-icon${environmentPanelOpen ? " is-active" : ""}`}
                 aria-expanded={environmentPanelOpen}
-                aria-label={environmentPanelOpen ? "收起运行环境" : "打开运行环境"}
-                title={environmentPanelOpen ? "收起运行环境" : "打开运行环境"}
+                aria-label={environmentPanelOpen ? "收起工作概览" : "打开工作概览"}
+                title={environmentPanelOpen ? "收起工作概览" : "打开工作概览"}
                 onClick={() => setEnvironmentPanelOpen((value) => !value)}
               >
                 <PanelRightIcon size={15} />
@@ -543,9 +581,14 @@ export function LinearAgentWorkspace() {
             <AgentHistory
               open={historyOpen}
               conversations={state.conversations}
+              projects={projects}
               currentConversationId={state.currentConversationId}
               onNew={handleStartNewConversation}
               onSelect={handleLoadConversation}
+              onOpenProject={(projectId) => {
+                setHistoryOpen(false);
+                navigate(`/projects/${projectId}`);
+              }}
               onRename={renameConversation}
               onDelete={deleteConversation}
               onTogglePinned={togglePinnedConversation}
@@ -612,7 +655,9 @@ export function LinearAgentWorkspace() {
         ) : null}
         {showDesktopEnvironment ? (
           <AgentEnvironmentPanel
+            currentProjectId={state.currentContext.projectId ?? currentConversation?.project_id}
             onClose={() => setEnvironmentPanelOpen(false)}
+            onOpenProject={(projectId) => navigate(`/projects/${projectId}`)}
             onOpenRun={(runId) => navigate(`/runs?run=${runId}`)}
           />
         ) : null}
@@ -658,11 +703,16 @@ export function LinearAgentWorkspace() {
           className="agent-mobile-environment-sheet w-[min(100vw,22rem)] max-w-none gap-0 p-0 sm:max-w-none"
         >
           <SheetHeader className="agent-mobile-side-sheet-header">
-            <SheetTitle>运行环境</SheetTitle>
-            <SheetDescription>Pi Agent 的实时资源与后台运行</SheetDescription>
+            <SheetTitle>工作概览</SheetTitle>
+            <SheetDescription>项目、资料和后台工作都在这里继续</SheetDescription>
           </SheetHeader>
           <AgentEnvironmentPanel
+            currentProjectId={state.currentContext.projectId ?? currentConversation?.project_id}
             onClose={() => setEnvironmentPanelOpen(false)}
+            onOpenProject={(projectId) => {
+              setEnvironmentPanelOpen(false);
+              navigate(`/projects/${projectId}`);
+            }}
             onOpenRun={(runId) => {
               setEnvironmentPanelOpen(false);
               navigate(`/runs?run=${runId}`);

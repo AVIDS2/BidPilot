@@ -179,6 +179,15 @@
 .bidpilot-linear-agent .bp-linear-history-new span { font-size: 18px; line-height: 1; }
 .bidpilot-linear-agent .bp-linear-history-group { display: grid; gap: 2px; margin-top: 9px; }
 .bidpilot-linear-agent .bp-linear-history-group > span { padding: 0 8px 3px; color: lch(55 0 282); font-size: 11px; font-weight: 560; }
+.bidpilot-linear-agent .bp-linear-history-project-heading { display: flex; min-width: 0; align-items: center; gap: 4px; padding: 1px 4px 3px 5px; }
+.bidpilot-linear-agent .bp-linear-history-project-main { display: flex; min-width: 0; flex: 1; align-items: center; gap: 7px; border: 0; border-radius: 5px; background: transparent; padding: 4px 4px; color: lch(34 0 282); text-align: left; }
+.bidpilot-linear-agent .bp-linear-history-project-main:not(:disabled):hover { background: lch(96.5 0 282); color: lch(18 0 282); }
+.bidpilot-linear-agent .bp-linear-history-project-main:disabled { cursor: default; }
+.bidpilot-linear-agent .bp-linear-history-project-main > svg { width: 14px; height: 14px; flex: 0 0 auto; color: lch(48 0 282); }
+.bidpilot-linear-agent .bp-linear-history-project-main > span { display: grid; min-width: 0; gap: 1px; }
+.bidpilot-linear-agent .bp-linear-history-project-main strong { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.bidpilot-linear-agent .bp-linear-history-project-main small { overflow: hidden; color: lch(58 0 282); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.bidpilot-linear-agent .bp-linear-history-project-count { min-width: 18px; color: lch(58 0 282); font-size: 10px; text-align: right; }
 .bidpilot-linear-agent .bp-linear-history-row { display: grid; min-height: 31px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border-radius: 5px; color: lch(31 0 282); transition: background-color 120ms ease; }
 .bidpilot-linear-agent .bp-linear-history-row:hover,
 .bidpilot-linear-agent .bp-linear-history-row.is-current { background: lch(96.3 0 282); }

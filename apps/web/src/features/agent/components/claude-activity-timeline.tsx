@@ -833,7 +833,7 @@ function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
 function DeepResearchRuntime({ items }: { items: AssistantExecutionItem[] }) {
   const [open, setOpen] = useState(false);
   const research = items.find((item) => item.toolName === "start_deep_research" || item.presentationKind === "deep_research");
-  const result = research?.result ?? {};
+  const result: Record<string, unknown> = research?.result && typeof research.result === "object" ? research.result : {};
   const phase = typeof result.phase === "string" ? result.phase : "scope";
   const active = research ? statusIsActive(research.status) : false;
   const phaseLabels: Record<string, string> = {
@@ -849,17 +849,23 @@ function DeepResearchRuntime({ items }: { items: AssistantExecutionItem[] }) {
   };
   const phases = ["scope", "plan", "retrieve", "read", "verify", "synthesize", "package"];
   const phaseIndex = Math.max(0, phases.indexOf(phase));
-  const sources = Array.isArray(result.sources)
+  const fallbackSources = items
+    .filter((item) => item.toolName === "web_search")
+    .flatMap((item) => {
+      const candidate = item.result && typeof item.result === "object" ? (item.result as Record<string, unknown>).items : null;
+      return Array.isArray(candidate)
+        ? candidate.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
+        : [];
+    })
+    .map((source, index) => ({
+      source_id: valueText(source.source_id) || `S${index + 1}`,
+      title: source.title,
+      url: source.url,
+      status: "candidate",
+    }));
+  const sources: Record<string, unknown>[] = Array.isArray(result.sources)
     ? result.sources.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
-    : items
-      .filter((item) => item.toolName === "web_search" && Array.isArray(item.result?.items))
-      .flatMap((item) => (item.result?.items ?? []).filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object")))
-      .map((source, index) => ({
-        source_id: valueText(source.source_id) || `S${index + 1}`,
-        title: source.title,
-        url: source.url,
-        status: "candidate",
-      }));
+    : fallbackSources;
   const claims = Array.isArray(result.claims)
     ? result.claims.filter((value): value is Record<string, unknown> => Boolean(value && typeof value === "object"))
     : [];

@@ -30,9 +30,33 @@ async function prepareAuthenticatedAgent(page: Page) {
     });
   });
   await page.route("**/chat/conversations**", async (route) => {
+    if (route.request().url().includes("/messages")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ total: 0, items: [] }),
+      });
+      return;
+    }
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify([]),
+      body: JSON.stringify([
+        { id: "visual-project-chat", project_id: "visual-project", title: "常州机会筛选", is_pinned: false, created_at: "2026-08-25T12:00:00Z" },
+        { id: "visual-personal-chat", project_id: null, title: "临时问题", is_pinned: false, created_at: "2026-08-25T11:00:00Z" },
+      ]),
+    });
+  });
+  await page.route("**/projects", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          id: "visual-project",
+          slug: "visual-project",
+          name: "常州招标响应",
+          scenario_package: "招标响应",
+          status: "active",
+        },
+      ]),
     });
   });
   await page.route("**/notifications", async (route) => {
@@ -120,6 +144,11 @@ test("keeps the Agent composer inside the conversation pane at every viewport", 
   if (testInfo.project.name === "chromium") {
     await expect(page.getByRole("button", { name: "Chat history" })).toBeVisible();
     await expect(page.locator(".agent-environment-panel")).toBeVisible();
+    await expect(page.getByText("工作概览", { exact: true })).toBeVisible();
+    await expect(page.getByText("项目工作区", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Chat history" }).click();
+    await expect(page.locator(".bp-linear-history").getByText("常州招标响应", { exact: true })).toBeVisible();
+    await expect(page.locator(".bp-linear-history").getByText("个人会话", { exact: true })).toBeVisible();
 
     // The desktop account menu is part of the shared workbench shell. Keep
     // its admin settings routes visible and on the light menu surface.

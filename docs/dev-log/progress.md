@@ -1,5 +1,19 @@
 # Progress Log
 
+## 2026-08-25 user-facing Agent workspace context
+
+- Reworked the right-side Agent context panel from a developer-facing runtime
+  diagnostic into a user-facing **工作概览**. It now reads live project and run
+  APIs and shows only current project, active background work, recent work, and
+  actionable links. Pi/MCP/sandbox/provider counts and internal engine details
+  are no longer exposed in the conversation surface.
+- Reorganized the conversation switcher by durable `project_id`: each project
+  is a work partition containing its conversations, while unscoped chats live
+  under `个人会话`. Project headers open the project workspace directly.
+- Added desktop and mobile regression coverage. Web full suite: 168 tests;
+  Agent Playwright acceptance: 8/8 across Chromium and mobile Chromium;
+  TypeScript and Vite production build passed.
+
 ## 2026-08-24 live Pi runtime release
 
 - Replaced the browser-first assistant projection with a run-scoped Redis live
