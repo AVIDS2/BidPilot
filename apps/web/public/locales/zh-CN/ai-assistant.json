@@ -3,6 +3,10 @@
   "subtitle": "您的文档助手",
   "inputPlaceholder": "问我任何问题...",
   "thinking": "思考中",
+  "trace": {
+    "publicExplanation": "执行说明",
+    "processing": "正在处理"
+  },
   "model": {
     "select": "选择模型",
     "menuTitle": "模型",
@@ -39,6 +43,8 @@
   },
   "status": {
     "ready": "准备就绪",
+    "waiting": "等待首个响应",
+    "nativeThinking": "正在思考",
     "thinking": "正在理解请求",
     "needs_input": "等待补充信息",
     "needs_confirmation": "等待你的确认",

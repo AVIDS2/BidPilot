@@ -1045,9 +1045,10 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === "assistant.turn_started") {
-    // Pi emits turn.started before model output. This is the legitimate live
-    // signal for the short window before the first text or tool event arrives.
-    dispatch({ type: "SET_THINKING", thinking: true });
+    // Pi emits turn.started before model output. It marks a live model turn,
+    // but it is not evidence that the provider returned a thinking block.
+    // Only thinking.started may set the user-facing thinking state.
+    dispatch({ type: "SET_THINKING", thinking: false });
     return;
   }
 

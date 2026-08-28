@@ -45,6 +45,19 @@ export type AssistantTranscriptPart =
       timestamp: number;
     };
 
+const EMPTY_PUBLIC_TRANSCRIPT_PARTS: AssistantTranscriptPart[] = [];
+
+/** Provider reasoning is private; only Harness-authored explanations are public. */
+export function isPublicTranscriptPart(part: AssistantTranscriptPart): boolean {
+  return part.kind !== "reasoning" || part.source === "harness";
+}
+
+/** Preserve the existing array when it is already fully public. */
+export function publicTranscriptParts(parts?: AssistantTranscriptPart[]): AssistantTranscriptPart[] {
+  if (!parts?.length) return EMPTY_PUBLIC_TRANSCRIPT_PARTS;
+  return parts.every(isPublicTranscriptPart) ? parts : parts.filter(isPublicTranscriptPart);
+}
+
 export interface TranscriptExecutionProjection {
   itemsByPartId: Map<string, AssistantExecutionItem[]>;
   orphanItems: AssistantExecutionItem[];
@@ -112,10 +125,7 @@ export function appendNarrativePart(
   return next;
 }
 
-/**
- * Keep provider-visible reasoning as its own chronological transcript block.
- * It is never merged into the final answer or a tool payload.
- */
+/** Keep explicitly public reasoning as its own chronological transcript block. */
 export function appendReasoningPart(
   parts: AssistantTranscriptPart[] | undefined,
   text: string,
@@ -128,6 +138,8 @@ export function appendReasoningPart(
 ): AssistantTranscriptPart[] {
   if (!text) return parts ? [...parts] : [];
   const next = parts ? [...parts] : [];
+  // Fail closed: callers must explicitly mark user-facing explanations as
+  // Harness-authored before they can enter the visible transcript.
   const source = options.source ?? "provider";
   const normalizedText = normalizeTranscriptText(text);
   const normalizedTitle = normalizeTranscriptText(options.title ?? "");

@@ -257,13 +257,13 @@
 }
 
 .bidpilot-claude-thread .cr-reasoning-collapse {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.25s cubic-bezier(0.165, 0.84, 0.44, 1);
+  height: 0;
+  overflow: hidden;
+  transition: height 0.25s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
-.bidpilot-claude-thread .cr-reasoning.is-open .cr-reasoning-collapse {
-  grid-template-rows: 1fr;
+.bidpilot-claude-thread .cr-reasoning-collapse[data-open] {
+  height: var(--collapsible-panel-height);
 }
 
 .bidpilot-claude-thread .cr-reasoning-collapse-inner {
@@ -353,20 +353,11 @@
   color: #181815;
 }
 
-.bidpilot-claude-thread .cr-thinking-indicator { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; }
-.bidpilot-claude-thread .cr-thinking-indicator i { display: block; width: 5px; height: 5px; border-radius: 50%; background: #96948e; animation: bp-claude-pulse 1.15s ease-in-out infinite; }
-.bidpilot-claude-thread .cr-thinking-indicator i:nth-child(2) { animation-delay: 150ms; }
-.bidpilot-claude-thread .cr-thinking-indicator i:nth-child(3) { animation-delay: 300ms; }
 .bidpilot-claude-thread .cr-thinking-copy {
   display: inline-block;
   min-height: 24px;
-  background: linear-gradient(100deg, #777570 12%, #8ea34c 48%, #777570 84%);
-  background-size: 220% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
+  color: #777570;
   font-size: 13px;
-  animation: bp-claude-thinking-label 2.4s ease-in-out infinite;
 }
 
 .bidpilot-claude-thread .cr-message-actions { display: flex; min-height: 26px; align-items: center; gap: 3px; margin: 12px 0 0; color: #918f89; }
@@ -384,8 +375,6 @@
 .bidpilot-claude-thread .cr-approval-actions button:hover:not(:disabled) { background: #efefec; color: #262521; }
 .bidpilot-claude-thread .cr-approval-actions button:disabled { cursor: default; opacity: 0.4; }
 
-@keyframes bp-claude-pulse { 0%, 80%, 100% { opacity: 0.28; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
-@keyframes bp-claude-thinking-label { 0%, 100% { background-position: 100% 50%; } 50% { background-position: 0% 50%; } }
 @keyframes bp-claude-reasoning-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 720px) {
@@ -398,7 +387,5 @@
 @media (prefers-reduced-motion: reduce) {
   .bidpilot-claude-thread .cr-thread { scroll-behavior: auto; }
   .bidpilot-claude-thread .cr-scroll-to-bottom { transition: none; }
-  .bidpilot-claude-thread .cr-thinking-indicator i { animation: none; }
-  .bidpilot-claude-thread .cr-thinking-copy { animation: none; }
   .bidpilot-claude-thread .cr-reasoning-status i { animation: none; }
 }

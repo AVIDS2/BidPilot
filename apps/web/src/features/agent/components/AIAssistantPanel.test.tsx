@@ -262,10 +262,12 @@ describe("AIAssistantPanel", () => {
       encoder.encode(
         [
           'event: assistant.start\ndata: {"conversation_id":"c-live-thinking","state":"thinking"}',
+          'event: assistant.turn_started\ndata: {"turn_id":"turn-1","state":"thinking"}',
         ].join("\n\n") + "\n\n",
       ),
     );
     expect(screen.queryByTestId("assistant-thinking-indicator")).not.toBeInTheDocument();
+    expect(screen.getByTestId("assistant-waiting-indicator")).toBeInTheDocument();
 
     controller!.enqueue(
       encoder.encode(

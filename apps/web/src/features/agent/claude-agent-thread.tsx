@@ -2,19 +2,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon, ChevronDownIcon, CopyIcon, FileIcon, ImageIcon, PencilIcon, RotateCcwIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { MessageContent } from "@/components/ui/message";
+import { AssistantActivityIndicator } from "@/features/agent/components/assistant-activity-indicator";
 import { ClaudeActivityTimeline } from "@/features/agent/components/claude-activity-timeline";
 import { AssistantInputRequestForm } from "@/features/agent/components/assistant-input-request";
+import { cn } from "@/lib/utils";
 import type {
   AIAssistantState,
   AssistantConfirmationRequest,
   AssistantExecutionItem,
   ChatMessage,
 } from "@/features/agent/state/agent-store";
-import type { AssistantTranscriptPart } from "@/features/agent/runtime/assistant-transcript";
+import { publicTranscriptParts, type AssistantTranscriptPart } from "@/features/agent/runtime/assistant-transcript";
 import "./claude-agent-thread.css";
-
-const EMPTY_TRANSCRIPT_PARTS: NonNullable<ChatMessage["transcriptParts"]> = [];
 
 function normalizeAssistantMarkdown(content: string): string {
   if (!content.includes("\\")) return content;
@@ -202,23 +203,6 @@ function ClaudeUserMessage({
   );
 }
 
-function ThinkingIndicator({ started = false }: { started?: boolean }) {
-  if (started) {
-    return (
-      <span className="cr-thinking-copy" aria-label="正在思考">
-        正在思考
-      </span>
-    );
-  }
-  return (
-    <span className="cr-thinking-indicator" aria-label="等待首个响应">
-      <i />
-      <i />
-      <i />
-    </span>
-  );
-}
-
 function ClaudeReasoning({
   part,
   forceCompleted = false,
@@ -226,6 +210,7 @@ function ClaudeReasoning({
   part: Extract<AssistantTranscriptPart, { kind: "reasoning" }>;
   forceCompleted?: boolean;
 }) {
+  const { t } = useTranslation("ai-assistant");
   const completed = part.completed || forceCompleted;
   const [open, setOpen] = useState(() => !completed);
   // A live stream stays open while reasoning; the moment it completes the
@@ -238,29 +223,32 @@ function ClaudeReasoning({
     wasCompleted.current = completed;
   }, [completed]);
 
+  const completedLabel = t("trace.publicExplanation", { defaultValue: "执行说明" });
+  const liveLabel = t("trace.processing", { defaultValue: "正在处理" });
+
   return (
-    <section
-      className={`cr-reasoning${completed ? " is-complete" : ""}${open ? " is-open" : ""}`}
-      aria-label={completed ? "思考过程" : "正在思考"}
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className={cn("cr-reasoning", completed && "is-complete", open && "is-open")}
+      aria-label={completed ? completedLabel : liveLabel}
     >
-      <button
+      <CollapsibleTrigger
         type="button"
         className="cr-reasoning-heading"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
       >
         <span className="cr-reasoning-status" aria-hidden="true"><i /></span>
         <span className={completed ? undefined : "cr-thinking-copy"}>
-          {part.title || (completed ? "思考过程" : "正在思考")}
+          {part.title || (completed ? completedLabel : liveLabel)}
         </span>
         <ChevronDownIcon size={12} className="cr-reasoning-chevron" />
-      </button>
-      <div className="cr-reasoning-collapse">
+      </CollapsibleTrigger>
+      <CollapsibleContent className="cr-reasoning-collapse">
         <div className="cr-reasoning-collapse-inner">
           {part.title !== part.text && <div className="cr-reasoning-text">{part.text}</div>}
         </div>
-      </div>
-    </section>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -331,7 +319,7 @@ function ClaudeAssistantMessage({
 }) {
   const { t } = useTranslation("ai-assistant");
   const [copied, setCopied] = useState(false);
-  const parts = message.transcriptParts ?? EMPTY_TRANSCRIPT_PARTS;
+  const parts = publicTranscriptParts(message.transcriptParts);
   const hasTranscriptParts = parts.length > 0;
   const hasNarrativePart = parts.some((part) => part.kind === "narrative" && part.text);
   const isTimelineTitle = (part: Extract<AssistantTranscriptPart, { kind: "reasoning" }>) =>
@@ -453,7 +441,9 @@ function ClaudeAssistantMessage({
             />
           )}
           {message.content && !hasNarrativePart && renderNarrative(message.content, `${message.id}-durable`) }
-          {isStreaming && isThinking && !hasLiveTrace && <ThinkingIndicator started={hasAssistantOutput} />}
+          {isStreaming && !hasLiveTrace && (isThinking || !hasAssistantOutput) && (
+            <AssistantActivityIndicator phase={isThinking ? "thinking" : "waiting"} />
+          )}
         </>
       ) : (
         <>
@@ -466,7 +456,9 @@ function ClaudeAssistantMessage({
             />
           )}
           {message.content ? renderNarrative(message.content, message.id) : null}
-          {isStreaming && isThinking && !hasLiveTrace ? <ThinkingIndicator started={hasAssistantOutput} /> : null}
+          {isStreaming && !hasLiveTrace && (isThinking || !hasAssistantOutput) ? (
+            <AssistantActivityIndicator phase={isThinking ? "thinking" : "waiting"} />
+          ) : null}
         </>
       )}
       {sessionError && <p className="cr-session-error" role="alert">{sessionError}</p>}

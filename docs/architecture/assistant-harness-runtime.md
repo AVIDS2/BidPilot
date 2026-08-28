@@ -439,10 +439,14 @@ Pi event projection has three distinct audiences:
 - Retry, compaction and queue events become ephemeral `assistant.runtime_state`
   updates. They may update the live busy state but must not create timeline
   cards or masquerade as user-facing reasoning.
-- The browser shows a thinking indicator only after a native Pi
-  `turn.started` or `thinking.started` event, and stops it on the corresponding
-  completion/tool/text boundary. An open SSE connection or a generic `state:
-  thinking` field is not sufficient evidence.
+- `turn.started` marks that Pi has entered a model turn, but it is not proof
+  that the provider returned a thinking block. The browser labels the short
+  pre-output window as waiting, and labels `thinking.started` /
+  `thinking.completed` only as the native thinking lifecycle. An open SSE
+  connection or a generic `state: thinking` field is not sufficient evidence.
+- Public Harness explanations are rendered as execution notes. They are
+  separate from provider thinking and never claim to be the model's private
+  chain of thought.
 - A terminal assistant failure is rendered as a separate session error. The
   terminal failure message is excluded from normal assistant-message replay so
   a partial answer and its failure state cannot appear as duplicate responses.

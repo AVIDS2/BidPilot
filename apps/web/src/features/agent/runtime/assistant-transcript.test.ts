@@ -7,6 +7,7 @@ import {
   ensureTurnPart,
   narrativeTextFromParts,
   projectExecutionItemsOntoTranscript,
+  publicTranscriptParts,
 } from "@/features/agent/runtime/assistant-transcript";
 
 function item(partial: Partial<AssistantExecutionItem> & Pick<AssistantExecutionItem, "id" | "title">): AssistantExecutionItem {
@@ -167,5 +168,17 @@ describe("interleaved transcript parts", () => {
     let parts = appendReasoningPart(undefined, options.title, options);
     parts = appendReasoningPart(parts, options.title, options);
     expect(parts).toHaveLength(1);
+  });
+
+  it("keeps unlabelled reasoning private by default", () => {
+    const [part] = appendReasoningPart(undefined, "未标注的 reasoning");
+    expect(part.kind).toBe("reasoning");
+    if (part.kind === "reasoning") expect(part.source).toBe("provider");
+  });
+
+  it("preserves the public transcript array when no private parts exist", () => {
+    const parts = [{ id: "narrative", kind: "narrative" as const, text: "公开内容", timestamp: 1 }];
+    expect(publicTranscriptParts(parts)).toBe(parts);
+    expect(publicTranscriptParts(undefined)).toHaveLength(0);
   });
 });

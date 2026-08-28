@@ -54,6 +54,8 @@ import {
   type ChatMessageAttachment,
   type ChatMessage,
 } from "@/features/agent/state/agent-store";
+import { publicTranscriptParts } from "@/features/agent/runtime/assistant-transcript";
+import { AssistantActivityIndicator } from "@/features/agent/components/assistant-activity-indicator";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -143,8 +145,6 @@ export interface AttachmentPreviewSelection {
 }
 type ComposerAttachmentStatus = "ready" | "uploading" | "uploaded" | "failed";
 type ConfigMenu = "model" | "reasoning" | "approval" | null;
-
-const EMPTY_TRANSCRIPT_PARTS: NonNullable<ChatMessage["transcriptParts"]> = [];
 
 type AssistantComposerMenusProps = {
   variant: "linear" | "panel";
@@ -700,9 +700,16 @@ function MessageBubble({
   const isUser = msg.role === "user";
   // Keep hook order identical for user and assistant messages. A stable empty
   // value also prevents transcript-derived memo dependencies from churning.
-  const parts = msg.transcriptParts ?? EMPTY_TRANSCRIPT_PARTS;
+  const parts = publicTranscriptParts(msg.transcriptParts);
   const hasTurnParts = parts.some((part) => part.kind === "turn");
   const hasNarrativePart = parts.some((part) => part.kind === "narrative" && part.text);
+  const hasLiveTrace =
+    activityItems.some((item) => item.status === "pending" || item.status === "running") ||
+    parts.some((part) => part.kind === "reasoning" && !part.completed);
+  const showActivityIndicator =
+    isStreaming &&
+    !hasLiveTrace &&
+    (isThinking || !msg.content);
   const executionProjection = useMemo(
     () => projectExecutionItemsOntoTranscript(parts, activityItems),
     [activityItems, parts],
@@ -766,27 +773,7 @@ function MessageBubble({
       </MessageContent>
     ) : null;
 
-  const thinkingDots = (
-    <span
-      className="inline-flex items-center gap-1.5 text-muted-foreground"
-      data-testid="assistant-thinking-indicator"
-    >
-      <span
-        className="h-1.5 w-1.5 animate-pulse rounded-full bg-current"
-        style={{ animationDelay: "0ms" }}
-      />
-      <span
-        className="h-1.5 w-1.5 animate-pulse rounded-full bg-current"
-        style={{ animationDelay: "150ms" }}
-      />
-      <span
-        className="h-1.5 w-1.5 animate-pulse rounded-full bg-current"
-        style={{ animationDelay: "300ms" }}
-      />
-    </span>
-  );
-
-  if (!msg.content && activityItems.length === 0 && !isStreaming && !sessionError) {
+  if (!msg.content && activityItems.length === 0 && parts.length === 0 && !isStreaming && !sessionError) {
     return null;
   }
 
@@ -821,7 +808,9 @@ function MessageBubble({
               />
             )}
             {msg.content && !hasNarrativePart && renderNarrative(msg.content, `${msg.id}-durable`)}
-            {activityItems.length === 0 && isStreaming && isThinking && thinkingDots}
+            {activityItems.length === 0 && showActivityIndicator && (
+              <AssistantActivityIndicator phase={isThinking ? "thinking" : "waiting"} />
+            )}
           </>
         ) : (
           <>
@@ -840,8 +829,8 @@ function MessageBubble({
               >
                 {normalizeAssistantMarkdown(msg.content)}
               </MessageContent>
-            ) : isStreaming && isThinking ? (
-              thinkingDots
+            ) : showActivityIndicator ? (
+              <AssistantActivityIndicator phase={isThinking ? "thinking" : "waiting"} />
             ) : null}
           </>
         )}

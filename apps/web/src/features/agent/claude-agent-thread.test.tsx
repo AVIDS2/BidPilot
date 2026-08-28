@@ -247,13 +247,14 @@ describe("ClaudeAgentThread", () => {
       />,
     );
 
-    expect(screen.getByLabelText("正在思考")).toBeInTheDocument();
+    expect(screen.getByTestId("assistant-thinking-indicator")).toBeInTheDocument();
   });
 
   it("does not call an open stream thinking without a native thinking signal", () => {
     const state = createState();
     state.isStreaming = true;
     state.activeAssistantMessageId = "assistant-1";
+    state.messages[1] = { ...state.messages[1], content: "", transcriptParts: [] };
     state.executionItems = [];
 
     render(
@@ -266,8 +267,8 @@ describe("ClaudeAgentThread", () => {
       />,
     );
 
-    expect(screen.queryByLabelText("正在思考")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("等待首个响应")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("assistant-thinking-indicator")).not.toBeInTheDocument();
+    expect(screen.getByTestId("assistant-waiting-indicator")).toBeInTheDocument();
   });
 
   it("renders stale reasoning as completed after the stream has ended", () => {
@@ -298,8 +299,38 @@ describe("ClaudeAgentThread", () => {
       />,
     );
 
-    expect(screen.getByLabelText("思考过程")).toBeInTheDocument();
-    expect(screen.queryByLabelText("正在思考")).not.toBeInTheDocument();
+    expect(document.querySelector(".cr-reasoning.is-complete")).not.toBeNull();
+  });
+
+  it("does not render provider reasoning parts from a legacy transcript", () => {
+    const state = createState();
+    state.messages[1] = {
+      ...state.messages[1],
+      content: "公开回答",
+      transcriptParts: [
+        {
+          id: "provider-reasoning",
+          kind: "reasoning",
+          text: "private provider thought",
+          source: "provider",
+          completed: true,
+          timestamp: 3,
+        },
+      ],
+    };
+
+    render(
+      <ClaudeAgentThread
+        state={state}
+        onCancelWorkflow={vi.fn().mockResolvedValue(undefined)}
+        onConfigureProvider={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancelConfirmation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("公开回答")).toBeInTheDocument();
+    expect(screen.queryByText("private provider thought")).not.toBeInTheDocument();
   });
 
   it("sends user retry through the durable checkpoint action", () => {
