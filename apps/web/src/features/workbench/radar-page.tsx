@@ -54,6 +54,7 @@ import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const radarChartConfig = {
@@ -156,6 +157,7 @@ export function RadarPage() {
     staleTime: 15_000,
   });
   const overview = radarQuery.data;
+  const radarLoading = radarQuery.isLoading;
   const selectedNotice = overview?.notices.find((notice) => notice.id === selectedNoticeId) ?? null;
   const selectedNoticeUrl = selectedNotice ? safeExternalUrl(selectedNotice.source_url) : undefined;
   const summary = overview?.summary;
@@ -282,14 +284,14 @@ export function RadarPage() {
         <section className="wb-radar-scope-panel" aria-labelledby="radar-scope-title">
           <header>
             <div><h2 id="radar-scope-title">来源信号</h2><p>动效只在至少一个来源处于采集状态时显示。</p></div>
-            <span className={activeSources.length ? "is-live" : ""}>{activeSources.length ? "采集中" : "待连接"}</span>
+            <span className={activeSources.length ? "is-live" : ""}>{radarLoading ? "读取中" : activeSources.length ? "采集中" : "待连接"}</span>
           </header>
           <div className={`wb-radar-scope${activeSources.length ? " is-live" : ""}`} aria-label={activeSources.length ? `${activeSources.length} 个来源正在采集` : "尚未连接来源"}>
             <i className="wb-radar-scope__ring wb-radar-scope__ring--outer" aria-hidden="true" />
             <i className="wb-radar-scope__ring wb-radar-scope__ring--middle" aria-hidden="true" />
             <i className="wb-radar-scope__ring wb-radar-scope__ring--inner" aria-hidden="true" />
             <i className="wb-radar-scope__sweep" aria-hidden="true" />
-            <span className="wb-radar-scope__core"><RadarIcon aria-hidden="true" /><strong>{activeSources.length}</strong><small>活跃来源</small></span>
+            <span className="wb-radar-scope__core"><RadarIcon aria-hidden="true" /><strong>{radarLoading ? "—" : activeSources.length}</strong><small>活跃来源</small></span>
             {activeSources.slice(0, 4).map((source, index) => <span className={`wb-radar-scope__signal signal-${index + 1}`} key={source.id} title={source.name}><i aria-hidden="true" /><em>{source.name}</em></span>)}
           </div>
           <footer>
@@ -298,8 +300,8 @@ export function RadarPage() {
         </section>
 
         <section className="wb-radar-trend-panel" aria-labelledby="radar-trend-title">
-          <header><div><h2 id="radar-trend-title">新增机会趋势</h2><p>最近 14 天由已接入来源采集到的公告数量。</p></div><span>{chartData.reduce((total, point) => total + point.notice_count, 0)} 条</span></header>
-          {chartData.some((point) => point.notice_count > 0) ? <ChartContainer className="h-[236px] w-full" config={radarChartConfig}>
+          <header><div><h2 id="radar-trend-title">新增机会趋势</h2><p>最近 14 天由已接入来源采集到的公告数量。</p></div><span>{radarLoading ? "—" : `${chartData.reduce((total, point) => total + point.notice_count, 0)} 条`}</span></header>
+          {radarLoading ? <Skeleton className="mt-auto h-[236px] w-full" /> : chartData.some((point) => point.notice_count > 0) ? <ChartContainer className="h-[236px] w-full" config={radarChartConfig}>
             <AreaChart accessibilityLayer data={chartData} margin={{ top: 12, right: 6, left: -24, bottom: 0 }}>
               <defs><linearGradient id="radar-notices" x1="0" x2="0" y1="0" y2="1"><stop offset="5%" stopColor="var(--color-notices)" stopOpacity={0.22} /><stop offset="95%" stopColor="var(--color-notices)" stopOpacity={0.02} /></linearGradient></defs>
               <CartesianGrid vertical={false} />
@@ -315,7 +317,7 @@ export function RadarPage() {
       <section className="wb-radar-notices" aria-labelledby="radar-notices-title">
         <header className="wb-radar-section-head">
           <div><h2 id="radar-notices-title">机会队列</h2><p>每条推荐都带有订阅命中依据，先研判，再决定是否进入项目工作区。</p></div>
-          <span>{overview?.notices.length ?? 0} 条结果</span>
+          <span>{radarLoading ? "—" : `${overview?.notices.length ?? 0} 条结果`}</span>
         </header>
         <div className="wb-radar-toolbar">
           <Tabs onValueChange={(value) => setView(value as RadarOverviewView)} value={view}>
@@ -324,8 +326,8 @@ export function RadarPage() {
           <InputGroup className="wb-radar-search"><InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon><InputGroupInput aria-label="搜索招采公告" onChange={(event) => setQuery(event.target.value)} placeholder="搜索公告、采购人或区域" value={query} /></InputGroup>
         </div>
 
-        {radarQuery.isLoading ? <div className="wb-radar-loading"><LoaderCircleIcon className="animate-spin" aria-hidden="true" />正在读取雷达队列…</div> : null}
-        {!radarQuery.isLoading && !overview?.notices.length ? <div className="wb-radar-empty"><RadarIcon aria-hidden="true" /><strong>{overview?.sources.length ? "当前筛选没有匹配机会" : "从一个公开来源开始"}</strong><p>{overview?.sources.length ? "调整筛选或新建订阅后，新的命中机会会持续出现。" : "接入 RSS 或 JSON Feed，平台会保留来源链接、采集时间和订阅匹配记录。"}</p><Button onClick={() => setSourceDialogOpen(true)} size="sm"><PlusIcon aria-hidden="true" data-icon="inline-start" />管理来源</Button></div> : null}
+        {radarLoading ? <div className="flex flex-col gap-3 py-4" role="status" aria-label="正在读取雷达队列"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-11/12" /><Skeleton className="h-12 w-4/5" /></div> : null}
+        {!radarLoading && !overview?.notices.length ? <div className="wb-radar-empty"><RadarIcon aria-hidden="true" /><strong>{overview?.sources.length ? "当前筛选没有匹配机会" : "从一个公开来源开始"}</strong><p>{overview?.sources.length ? "调整筛选或新建订阅后，新的命中机会会持续出现。" : "接入 RSS 或 JSON Feed，平台会保留来源链接、采集时间和订阅匹配记录。"}</p><Button onClick={() => setSourceDialogOpen(true)} size="sm"><PlusIcon aria-hidden="true" data-icon="inline-start" />管理来源</Button></div> : null}
         {overview?.notices.length ? <div className="wb-radar-notice-list">{overview.notices.map((notice) => {
           const primaryMatch = notice.matches[0];
           return <button className="wb-radar-notice-row" key={notice.id} onClick={() => setSelectedNoticeId(notice.id)} type="button">

@@ -314,6 +314,8 @@ function ClaudeAssistantMessage({
   message,
   activityItems,
   isStreaming,
+  isThinking,
+  sessionError,
   onCancelWorkflow,
   onConfigureProvider,
   onOpenWorkflowCanvas,
@@ -321,6 +323,8 @@ function ClaudeAssistantMessage({
   message: ChatMessage;
   activityItems: AssistantExecutionItem[];
   isStreaming: boolean;
+  isThinking: boolean;
+  sessionError?: string | null;
   onCancelWorkflow: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider: () => void;
   onOpenWorkflowCanvas?: (projectId: string) => void;
@@ -402,7 +406,7 @@ function ClaudeAssistantMessage({
     );
   };
 
-  if (!message.content && activityItems.length === 0 && parts.length === 0 && !isStreaming) return null;
+  if (!message.content && activityItems.length === 0 && parts.length === 0 && !isStreaming && !sessionError) return null;
 
   return (
     <article
@@ -421,7 +425,7 @@ function ClaudeAssistantMessage({
                 <ClaudeReasoning
                   key={part.id}
                   part={part}
-                  forceCompleted={hasActiveExecution}
+                  forceCompleted={hasActiveExecution || !isStreaming || !isThinking || Boolean(sessionError)}
                 />
               );
             }
@@ -449,7 +453,7 @@ function ClaudeAssistantMessage({
             />
           )}
           {message.content && !hasNarrativePart && renderNarrative(message.content, `${message.id}-durable`) }
-          {isStreaming && !hasLiveTrace && <ThinkingIndicator started={hasAssistantOutput} />}
+          {isStreaming && isThinking && !hasLiveTrace && <ThinkingIndicator started={hasAssistantOutput} />}
         </>
       ) : (
         <>
@@ -462,9 +466,10 @@ function ClaudeAssistantMessage({
             />
           )}
           {message.content ? renderNarrative(message.content, message.id) : null}
-          {isStreaming && !hasLiveTrace ? <ThinkingIndicator started={hasAssistantOutput} /> : null}
+          {isStreaming && isThinking && !hasLiveTrace ? <ThinkingIndicator started={hasAssistantOutput} /> : null}
         </>
       )}
+      {sessionError && <p className="cr-session-error" role="alert">{sessionError}</p>}
       {!isStreaming && (message.content || parts.some((part) => part.kind === "narrative" && part.text)) && (
         <div className="cr-message-actions" aria-label="Message actions">
           <button type="button" title="Copy" onClick={copyResponse}>
@@ -512,6 +517,10 @@ export function ClaudeAgentThread({
   const unassignedExecutionItems = useMemo(
     () => state.executionItems.filter((item) => !item.messageId),
     [state.executionItems],
+  );
+  const latestAssistantMessageId = useMemo(
+    () => [...state.messages].reverse().find((message) => message.role === "assistant")?.id ?? null,
+    [state.messages],
   );
 
   const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
@@ -579,6 +588,13 @@ export function ClaudeAgentThread({
                 message={message}
                 activityItems={executionItemsByMessageId.get(message.id) ?? []}
                 isStreaming={state.isStreaming && state.activeAssistantMessageId === message.id}
+                isThinking={state.isThinking && state.activeAssistantMessageId === message.id}
+                sessionError={
+                  state.sessionError &&
+                  (state.activeAssistantMessageId ?? latestAssistantMessageId) === message.id
+                    ? state.sessionError
+                    : null
+                }
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
                 onOpenWorkflowCanvas={onOpenWorkflowCanvas}

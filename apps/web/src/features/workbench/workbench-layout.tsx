@@ -20,6 +20,7 @@ import {
 import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  Suspense,
   useEffect,
   useMemo,
   useState,
@@ -30,6 +31,7 @@ import i18n from "@/lib/i18n";
 import bidpilotLogo from "@/assets/bidpilot-logo.svg";
 
 import { AgentWakeResume } from "@/features/agent/components/AgentWakeResume";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,10 +39,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AIAssistantProvider } from "@/features/agent/state/agent-store";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { prefetchRoute } from "@/app-route-loaders";
 
 import "./workbench.css";
 
@@ -103,6 +107,24 @@ function workbenchPageLabel(pathname: string) {
   if (pathname.startsWith("/my-work")) return "nav.myWork";
   if (pathname.startsWith("/agent")) return "nav.agent";
   return "nav.dashboard";
+}
+
+function WorkbenchRouteLoading() {
+  return (
+    <div className="flex min-h-full items-start justify-center px-6 py-10 sm:px-10" role="status" aria-label="正在加载页面">
+      <div className="flex w-full max-w-5xl flex-col gap-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-4 w-72 max-w-full" />
+          </div>
+          <Skeleton className="h-8 w-24" />
+        </div>
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-[min(48dvh,28rem)] w-full" />
+      </div>
+    </div>
+  );
 }
 
 export function WorkbenchLayout() {
@@ -184,35 +206,17 @@ export function WorkbenchLayout() {
         >
           <aside className="wb-sidebar" aria-label="BidPilot workspace navigation">
             <div className="wb-workspace-row">
-              <button className="wb-workspace-switcher" type="button" aria-label="切换工作区">
+              <Button className="wb-workspace-switcher" size="sm" type="button" variant="ghost" aria-label="切换工作区">
                 <img alt="BidPilot" className="wb-workspace-mark" src={bidpilotLogo} />
                 <span className="wb-workspace-name">{user?.org_slug || "BidPilot workspace"}</span>
                 <ChevronDownIcon aria-hidden="true" />
-              </button>
+              </Button>
               <div className="wb-workspace-actions">
-                <button className="wb-icon-button" type="button" aria-label="搜索工作区" title="搜索工作区">
-                  <SearchIcon aria-hidden="true" />
-                </button>
-                <button
-                  className="wb-icon-button wb-icon-button--raised"
-                  type="button"
-                  aria-label="新建投标项目"
-                  title="新建投标项目"
-                  onClick={openNewProject}
-                >
-                  <PlusIcon aria-hidden="true" />
-                </button>
-                <button
-                  className="wb-icon-button wb-sidebar-toggle"
-                  type="button"
-                  aria-label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
-                  title={sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
-                  aria-pressed={sidebarCollapsed}
-                  data-state={sidebarCollapsed ? "collapsed" : "expanded"}
-                  onClick={() => setSidebarCollapsed((value) => !value)}
-                >
+                <Tooltip><TooltipTrigger render={<Button aria-label="搜索工作区" className="wb-icon-button" size="icon-sm" type="button" variant="ghost" />}><SearchIcon aria-hidden="true" /></TooltipTrigger><TooltipContent>搜索工作区</TooltipContent></Tooltip>
+                <Tooltip><TooltipTrigger render={<Button aria-label="新建投标项目" className="wb-icon-button wb-icon-button--raised" onClick={openNewProject} size="icon-sm" type="button" variant="ghost" />}><PlusIcon aria-hidden="true" /></TooltipTrigger><TooltipContent>新建投标项目</TooltipContent></Tooltip>
+                <Tooltip><TooltipTrigger render={<Button aria-label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} aria-pressed={sidebarCollapsed} className="wb-icon-button wb-sidebar-toggle" data-state={sidebarCollapsed ? "collapsed" : "expanded"} onClick={() => setSidebarCollapsed((value) => !value)} size="icon-sm" type="button" variant="ghost" />}>
                   {sidebarCollapsed ? <PanelLeftOpenIcon aria-hidden="true" /> : <PanelLeftCloseIcon aria-hidden="true" />}
-                </button>
+                </TooltipTrigger><TooltipContent>{sidebarCollapsed ? "展开侧栏" : "收起侧栏"}</TooltipContent></Tooltip>
               </div>
             </div>
 
@@ -232,6 +236,9 @@ export function WorkbenchLayout() {
                       <NavLink
                         className={cn("wb-nav-link", active && "is-active")}
                         key={`${group.label}-${item.label}`}
+                        onFocus={() => prefetchRoute(item.to)}
+                        onMouseEnter={() => prefetchRoute(item.to)}
+                        onPointerDown={() => prefetchRoute(item.to)}
                         to={item.to}
                       >
                         <Icon aria-hidden="true" />
@@ -249,7 +256,7 @@ export function WorkbenchLayout() {
 
             <DropdownMenu>
               <DropdownMenuTrigger
-                render={<button className="wb-user-menu" type="button" aria-label="打开账户菜单" />}
+                render={<Button aria-label="打开账户菜单" className="wb-user-menu" size="sm" type="button" variant="ghost" />}
               >
                 <span className="wb-user-avatar">{getInitials(userName)}</span>
                 <span className="wb-user-copy">
@@ -303,24 +310,15 @@ export function WorkbenchLayout() {
                   <b>{t(pageLabel)}</b>
                 </div>
                 <div className="wb-topbar-actions">
-                  <button
-                    aria-label="切换语言"
-                    onClick={() => i18n.changeLanguage(i18n.language === "zh-CN" ? "en" : "zh-CN")}
-                    title="切换语言"
-                    type="button"
-                  >
-                    <LanguagesIcon aria-hidden="true" />
-                  </button>
-                  <button aria-label="查看需要处理的事项" onClick={() => navigate("/my-work")} title="需要处理的事项" type="button">
-                    <BellIcon aria-hidden="true" />
-                  </button>
-                  <button aria-label="打开 Agent" onClick={() => navigate("/agent")} title="打开 Agent" type="button">
-                    <CommandIcon aria-hidden="true" />
-                  </button>
+                  <Tooltip><TooltipTrigger render={<Button aria-label="切换语言" onClick={() => i18n.changeLanguage(i18n.language === "zh-CN" ? "en" : "zh-CN")} size="icon-sm" type="button" variant="ghost" />}><LanguagesIcon aria-hidden="true" /></TooltipTrigger><TooltipContent>切换语言</TooltipContent></Tooltip>
+                  <Tooltip><TooltipTrigger render={<Button aria-label="查看需要处理的事项" onClick={() => navigate("/my-work")} size="icon-sm" type="button" variant="ghost" />}><BellIcon aria-hidden="true" /></TooltipTrigger><TooltipContent>需要处理的事项</TooltipContent></Tooltip>
+                  <Tooltip><TooltipTrigger render={<Button aria-label="打开 Agent" onClick={() => navigate("/agent")} size="icon-sm" type="button" variant="ghost" />}><CommandIcon aria-hidden="true" /></TooltipTrigger><TooltipContent>打开 Agent</TooltipContent></Tooltip>
                 </div>
               </header>
               <div className="wb-route-surface">
-                <Outlet />
+                <Suspense fallback={<WorkbenchRouteLoading />}>
+                  <Outlet />
+                </Suspense>
               </div>
             </section>
           </main>

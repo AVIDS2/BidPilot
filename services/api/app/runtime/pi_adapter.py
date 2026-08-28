@@ -374,31 +374,37 @@ async def stream_pi_assistant_response(
             return
         if terminal_tool_failure is not None:
             summary = str(terminal_tool_failure.get("publicSummary") or "本轮操作未能完成。")
-            final_text = final_text or summary
-            save_message(db, conversation_id, "assistant", final_text)
+            has_partial_text = bool(final_text)
+            save_message(db, conversation_id, "assistant", final_text, runtime_run_id=run.id)
             fail_runtime_run(
                 db,
                 run.id,
                 summary,
                 error_code=str(terminal_tool_failure.get("errorCode") or "capability_failed"),
+                message_delta_emitted=has_partial_text,
             )
             for rendered in flush_events():
                 yield await emit_live(rendered)
             if rendered_terminal := terminal_event("failed"):
                 yield await emit_live(rendered_terminal)
             return
-        if not final_text:
-            final_text = (
-                "模型运行中断，未生成可展示的结果。"
-                if terminal_type == "failed"
-                else "本轮没有产生需要展示的文字结果。"
-            )
-        save_message(db, conversation_id, "assistant", final_text)
+        has_partial_text = bool(text_parts)
         if terminal_type == "failed":
             logger.warning("Pi agent failed: run=%s error=%s", run.id, terminal_error or "unknown")
-            fail_runtime_run(db, run.id, final_text, error_code="pi_agent_failed")
+            failure_message = "模型运行未能完成，已安全停止。请稍后重试或查看运行记录。"
+            save_message(db, conversation_id, "assistant", final_text, runtime_run_id=run.id)
+            fail_runtime_run(
+                db,
+                run.id,
+                failure_message,
+                error_code="pi_agent_failed",
+                message_delta_emitted=has_partial_text,
+            )
             state = "failed"
         else:
+            if not final_text:
+                final_text = "本轮没有产生需要展示的文字结果。"
+            save_message(db, conversation_id, "assistant", final_text, runtime_run_id=run.id)
             complete_runtime_run(
                 db,
                 run.id,
@@ -415,10 +421,17 @@ async def stream_pi_assistant_response(
             yield await emit_live(rendered_terminal)
     except Exception as exc:  # noqa: BLE001 - public boundary classifies details
         logger.exception("Pi assistant stream failed: run=%s error_type=%s", run.id, type(exc).__name__)
-        message = "助手连接中断，运行未能安全完成。请稍后重试或查看运行记录。"
+        message = "助手运行未完成，已安全停止。请稍后重试或查看运行记录。"
+        has_partial_text = bool(text_parts)
         try:
-            fail_runtime_run(db, run.id, message, error_code="assistant_stream_incomplete")
-            save_message(db, conversation_id, "assistant", message)
+            save_message(db, conversation_id, "assistant", "".join(text_parts).strip() or message, runtime_run_id=run.id)
+            fail_runtime_run(
+                db,
+                run.id,
+                message,
+                error_code="assistant_stream_incomplete",
+                message_delta_emitted=has_partial_text,
+            )
         except ValueError:
             db.rollback()
         for rendered in flush_events():

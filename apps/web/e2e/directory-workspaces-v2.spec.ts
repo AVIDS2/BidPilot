@@ -213,3 +213,32 @@ test("空项目目录保持表格结构并将创建入口居中", async ({ page 
   expect(contentBox!.x).toBeGreaterThan(cellBox!.x);
   expect(contentBox!.x + contentBox!.width).toBeLessThan(cellBox!.x + cellBox!.width);
 });
+
+test("项目列表加载期间不显示误导性的空状态或零计数", async ({ page }) => {
+  await prepareDirectoryWorkspaces(page);
+  await page.unroute("**/projects");
+
+  let releaseProjects!: () => void;
+  const projectsReady = new Promise<void>((resolve) => {
+    releaseProjects = resolve;
+  });
+  await page.route("**/projects", async (route) => {
+    const resourceType = route.request().resourceType();
+    if (resourceType !== "fetch" && resourceType !== "xhr") {
+      await route.fallback();
+      return;
+    }
+    await projectsReady;
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(projects) });
+  });
+
+  const navigation = page.goto("/projects");
+  await expect(page.getByRole("heading", { name: "投标机会" })).toBeVisible();
+  await expect(page.locator(".wb-projects-table__state")).toBeVisible();
+  await expect(page.locator(".wb-projects-table__empty")).toHaveCount(0);
+  await expect(page.locator(".wb-project-tab").first().locator("small")).toHaveText("—");
+
+  releaseProjects();
+  await navigation;
+  await expect(page.getByText("城市智慧交通平台投标", { exact: true })).toBeVisible();
+});

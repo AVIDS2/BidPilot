@@ -158,11 +158,20 @@ The event subject should identify what changed:
 ## Assistant runtime event contract
 
 Assistant and workflow execution traces use `RuntimeEventRecord` schema version
-`1.1`. Every event is durable before it is rendered to SSE and includes a
-run-local monotonic sequence plus optional parent-event lineage. The public
-assistant endpoint may still emit `assistant.*` events for compatibility, but
-those events are projections of `run.*`, `capability.*`, `approval.*`,
-`workflow.linked`, and `message.*` runtime facts.
+`1.2`. Every event is durable before it is rendered to SSE and includes a
+run-local monotonic sequence plus optional parent-event lineage. Capability
+events may include the provider-native `tool_call_id`; the browser uses it to
+merge a live Pi tool start with its later durable result. Older events without
+that field may use a scoped fallback only when there is one unambiguous open
+tool in the same run.
+
+The public assistant endpoint may still emit `assistant.*` events for
+compatibility, but those events are projections of `run.*`, `capability.*`,
+`approval.*`, `workflow.linked`, and `message.*` runtime facts. A terminal
+assistant failure is projected as `assistant.session_error` plus a failed
+`assistant.end`; a failure message is not rendered as a normal assistant answer.
+If public text was already streamed, those partial deltas remain visible
+separately from the terminal error.
 
 See [assistant-harness-runtime.md](assistant-harness-runtime.md) for the
 Harness lifecycle, idempotency, approval, and failure-handling rules.

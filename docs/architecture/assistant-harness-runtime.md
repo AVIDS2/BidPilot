@@ -388,11 +388,13 @@ not reuse the original submit ID as a new assistant turn.
 
 ## Event contract
 
-`RuntimeEventRecord` schema version `1.1` is the source for assistant and
+`RuntimeEventRecord` schema version `1.2` is the source for assistant and
 workflow execution traces. Each event has:
 
 - `event_id`, `run_id`, optional `parent_event_id`
 - monotonic `sequence` within one run
+- capability events may carry `tool_call_id` to correlate the provider-native
+  Pi lifecycle with the durable API action
 
 ### Browser event projection
 
@@ -433,6 +435,13 @@ Pi event projection has three distinct audiences:
 - Retry, compaction and queue events become ephemeral `assistant.runtime_state`
   updates. They may update the live busy state but must not create timeline
   cards or masquerade as user-facing reasoning.
+- The browser shows a thinking indicator only after a native Pi
+  `turn.started` or `thinking.started` event, and stops it on the corresponding
+  completion/tool/text boundary. An open SSE connection or a generic `state:
+  thinking` field is not sufficient evidence.
+- A terminal assistant failure is rendered as a separate session error. The
+  terminal failure message is excluded from normal assistant-message replay so
+  a partial answer and its failure state cannot appear as duplicate responses.
 
 The API accepts a Pi stream as successful only after an explicit terminal
 event. A closed connection without `agent.completed` or `agent.failed` is a

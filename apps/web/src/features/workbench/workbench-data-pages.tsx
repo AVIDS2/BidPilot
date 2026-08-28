@@ -87,6 +87,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -225,6 +226,10 @@ function readinessLabel(summary: BidReadinessSummary | null) {
   return `${Math.round(summary.readiness_score)}%`;
 }
 
+function PendingMetric({ loading, children }: { loading: boolean; children: ReactNode }) {
+  return loading ? <span aria-label="正在加载">—</span> : children;
+}
+
 const dashboardReadinessChartConfig = {
   readiness: { label: "就绪度", color: "#348463" },
 } satisfies ChartConfig;
@@ -243,6 +248,8 @@ export function DashboardPage() {
       retry: false,
     })),
   });
+  const readinessLoading = projectsQuery.isLoading || readinessQueries.some((query) => query.isLoading);
+  const dashboardLoading = projectsQuery.isLoading || runsQuery.isLoading || readinessLoading;
 
   const healthRows = useMemo<DashboardProjectHealth[]>(() => projects.map((project, index) => {
     const summary = readinessQueries[index]?.data ?? null;
@@ -296,10 +303,10 @@ export function DashboardPage() {
           </header>
 
           <section className="wb-dashboard-facts" aria-label="当前工作概况">
-            <div><span className="wb-dashboard-fact-icon"><FolderKanbanIcon aria-hidden="true" /></span><span><small>进行中的机会</small><strong>{activeProjects.length}</strong><em>{projects.length} 个项目已纳入工作区</em></span></div>
-            <div><span className="wb-dashboard-fact-icon"><ShieldCheckIcon aria-hidden="true" /></span><span><small>平均就绪度</small><strong>{readinessAverage === null ? "--" : `${readinessAverage}%`}</strong><em>{assessedRows.length ? `${assessedRows.length} 个项目已有要求基线` : "等待资料解析"}</em></span></div>
-            <div><span className="wb-dashboard-fact-icon is-attention"><AlertCircleIcon aria-hidden="true" /></span><span><small>需要团队决定</small><strong>{blockerCount + approvalRuns.length}</strong><em>{blockerCount} 项缺口 · {approvalRuns.length} 项待审核</em></span></div>
-            <div><span className="wb-dashboard-fact-icon"><DownloadIcon aria-hidden="true" /></span><span><small>完成交付</small><strong>{completedProjectCount}</strong><em>已完成并归档的项目</em></span></div>
+            <div><span className="wb-dashboard-fact-icon"><FolderKanbanIcon aria-hidden="true" /></span><span><small>进行中的机会</small><strong><PendingMetric loading={projectsQuery.isLoading}>{activeProjects.length}</PendingMetric></strong><em>{projectsQuery.isLoading ? "正在读取项目" : `${projects.length} 个项目已纳入工作区`}</em></span></div>
+            <div><span className="wb-dashboard-fact-icon"><ShieldCheckIcon aria-hidden="true" /></span><span><small>平均就绪度</small><strong><PendingMetric loading={readinessLoading}>{readinessAverage === null ? "--" : `${readinessAverage}%`}</PendingMetric></strong><em>{readinessLoading ? "正在计算项目基线" : assessedRows.length ? `${assessedRows.length} 个项目已有要求基线` : "等待资料解析"}</em></span></div>
+            <div><span className="wb-dashboard-fact-icon is-attention"><AlertCircleIcon aria-hidden="true" /></span><span><small>需要团队决定</small><strong><PendingMetric loading={dashboardLoading}>{blockerCount + approvalRuns.length}</PendingMetric></strong><em>{dashboardLoading ? "正在整理待处理事项" : `${blockerCount} 项缺口 · ${approvalRuns.length} 项待审核`}</em></span></div>
+            <div><span className="wb-dashboard-fact-icon"><DownloadIcon aria-hidden="true" /></span><span><small>完成交付</small><strong><PendingMetric loading={projectsQuery.isLoading}>{completedProjectCount}</PendingMetric></strong><em>{projectsQuery.isLoading ? "正在读取项目" : "已完成并归档的项目"}</em></span></div>
           </section>
         </div>
 
@@ -310,7 +317,9 @@ export function DashboardPage() {
               <span>基于已识别要求、证据和分配情况计算</span>
             </div>
           </header>
-          {readinessChartData.length ? (
+          {readinessLoading ? (
+            <Skeleton className="mt-auto h-[264px] w-full" />
+          ) : readinessChartData.length ? (
             <ChartContainer className="h-[264px] w-full" config={dashboardReadinessChartConfig}>
               <BarChart accessibilityLayer data={readinessChartData} margin={{ top: 12, right: 6, left: -18, bottom: 0 }}>
                 <CartesianGrid vertical={false} />
@@ -326,7 +335,7 @@ export function DashboardPage() {
               <span>{unassessedProjectCount ? `${unassessedProjectCount} 个项目尚未识别出要求，上传并解析招标资料后会显示这里。` : "建立项目并完成要求识别后会显示这里。"}</span>
             </div>
           )}
-          <footer>{assessedRows.length} 个已评估项目 · {unassessedProjectCount} 个尚未建立要求基线</footer>
+          <footer>{readinessLoading ? "正在计算项目就绪度…" : `${assessedRows.length} 个已评估项目 · ${unassessedProjectCount} 个尚未建立要求基线`}</footer>
         </section>
       </div>
 
@@ -337,19 +346,21 @@ export function DashboardPage() {
             <Button onClick={() => navigate("/projects")} size="xs" variant="ghost">项目列表<ArrowRightIcon aria-hidden="true" data-icon="inline-end" /></Button>
           </header>
           <Card className="wb-dashboard-project-list" size="sm">
-            {projectsQuery.isLoading ? <p className="wb-dashboard-project-list-status">正在读取项目与就绪度…</p> : null}
+             {projectsQuery.isLoading ? <div className="flex flex-col gap-3 p-4" role="status" aria-label="正在读取项目与就绪度"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-5 w-full" /><Skeleton className="h-5 w-5/6" /></div> : null}
             {!projectsQuery.isLoading && !healthRows.length ? <Empty className="wb-dashboard-list-empty border-0"><EmptyHeader><EmptyTitle>还没有投标机会</EmptyTitle><EmptyDescription>新建机会并上传招标资料后，这里会持续汇总项目进展。</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={openCreateProject} size="sm">新建机会</Button></EmptyContent></Empty> : null}
-            {healthRows.slice(0, 6).map((row) => {
-              const tone = projectHealthTone(row);
-              const total = row.summary?.counts.total ?? 0;
-              const covered = row.summary?.counts.covered ?? 0;
-              return (
+             {healthRows.slice(0, 6).map((row) => {
+               const tone = projectHealthTone(row);
+               const total = row.summary?.counts.total ?? 0;
+               const covered = row.summary?.counts.covered ?? 0;
+               const projectIndex = projects.findIndex((project) => project.id === row.project.id);
+               const rowLoading = projectIndex >= 0 && (readinessQueries[projectIndex]?.isLoading ?? false);
+               return (
                 <button className="wb-dashboard-project-row" key={row.project.id} onClick={() => openProject(row.project.id)} type="button">
                   <span className={`wb-dashboard-project-marker is-${tone}`} aria-hidden="true" />
                   <span className="wb-dashboard-project-copy"><strong>{projectDisplayName(row.project)}</strong><small>{row.project.scenario_package}</small></span>
-                  <span className="wb-dashboard-project-metric"><small>就绪度</small><Badge className={`wb-dashboard-readiness is-${tone}`} variant="outline">{readinessLabel(row.summary)}</Badge></span>
-                  <span className="wb-dashboard-project-metric"><small>要求承接</small><strong>{total ? `${covered} / ${total}` : "尚未提取"}</strong></span>
-                  <span className={`wb-dashboard-project-metric ${row.blockerCount ? "is-risk" : ""}`}><small>待处理</small><strong>{row.blockerCount ? `${row.blockerCount} 项` : "无"}</strong></span>
+                   <span className="wb-dashboard-project-metric"><small>就绪度</small><Badge className={`wb-dashboard-readiness is-${tone}`} variant="outline">{rowLoading ? "—" : readinessLabel(row.summary)}</Badge></span>
+                   <span className="wb-dashboard-project-metric"><small>要求承接</small><strong>{rowLoading ? "—" : total ? `${covered} / ${total}` : "尚未提取"}</strong></span>
+                   <span className={`wb-dashboard-project-metric ${row.blockerCount ? "is-risk" : ""}`}><small>待处理</small><strong>{rowLoading ? "—" : row.blockerCount ? `${row.blockerCount} 项` : "无"}</strong></span>
                   <ChevronRightIcon aria-hidden="true" />
                 </button>
               );
@@ -363,21 +374,22 @@ export function DashboardPage() {
             <Button onClick={() => navigate("/my-work")} size="xs" variant="ghost">全部查看<ArrowRightIcon aria-hidden="true" data-icon="inline-end" /></Button>
           </header>
           <div className="wb-dashboard-attention-content">
-            {attentionRows.map((row) => (
+             {dashboardLoading ? <div className="flex flex-col gap-3 py-4" role="status" aria-label="正在整理待处理事项"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-5/6" /><Skeleton className="h-10 w-2/3" /></div> : null}
+             {!dashboardLoading && attentionRows.map((row) => (
               <button className="wb-dashboard-attention-row" key={row.project.id} onClick={() => openProject(row.project.id)} type="button">
                 <AlertCircleIcon aria-hidden="true" />
                 <span><strong>{projectDisplayName(row.project)}</strong><small>{row.blockerCount} 项资料或要求缺口待处理</small></span>
                 <ChevronRightIcon aria-hidden="true" />
               </button>
             ))}
-            {approvalRuns.slice(0, 3).map((run) => (
+             {!dashboardLoading && approvalRuns.slice(0, 3).map((run) => (
               <button className="wb-dashboard-attention-row" key={run.id} onClick={() => openProject(run.project_id)} type="button">
                 <ShieldCheckIcon aria-hidden="true" />
                 <span><strong>{run.project_name || "项目审核"}</strong><small>有一项响应内容等待团队决定</small></span>
                 <ChevronRightIcon aria-hidden="true" />
               </button>
             ))}
-            {!attentionRows.length && !approvalRuns.length ? <Empty className="wb-dashboard-empty-state border-0"><EmptyHeader><EmptyMedia variant="icon"><CheckCircle2Icon aria-hidden="true" /></EmptyMedia><EmptyTitle>当前没有待处理事项</EmptyTitle><EmptyDescription>项目中的资料缺口和待审核内容会在这里汇总。</EmptyDescription></EmptyHeader></Empty> : null}
+             {!dashboardLoading && !attentionRows.length && !approvalRuns.length ? <Empty className="wb-dashboard-empty-state border-0"><EmptyHeader><EmptyMedia variant="icon"><CheckCircle2Icon aria-hidden="true" /></EmptyMedia><EmptyTitle>当前没有待处理事项</EmptyTitle><EmptyDescription>项目中的资料缺口和待审核内容会在这里汇总。</EmptyDescription></EmptyHeader></Empty> : null}
           </div>
         </aside>
       </div>
@@ -421,7 +433,7 @@ export function InboxPage() {
         <Button onClick={() => void runsQuery.refetch()} size="sm" variant="outline"><RefreshCwIcon aria-hidden="true" data-icon="inline-start" />刷新</Button>
       </header>
       <ScrollArea className="wb-workboard-scroll"><div className="wb-workboard-content">
-        <section className="wb-workboard-summary" aria-label="待处理概览"><div><span>待处理事项</span><strong>{inboxRuns.length}</strong><small>等待人工处理</small></div><div><span>等待审批</span><strong>{approvalCount}</strong><small>需要团队决定</small></div><div><span>执行异常</span><strong>{failedCount}</strong><small>需要调查或恢复</small></div><div><span>当前查看</span><strong>{selectedRun ? runStatusMeta(selectedRun.status).label : "无"}</strong><small>选中的事项状态</small></div></section>
+         <section className="wb-workboard-summary" aria-label="待处理概览"><div><span>待处理事项</span><strong><PendingMetric loading={runsQuery.isLoading}>{inboxRuns.length}</PendingMetric></strong><small>等待人工处理</small></div><div><span>等待审批</span><strong><PendingMetric loading={runsQuery.isLoading}>{approvalCount}</PendingMetric></strong><small>需要团队决定</small></div><div><span>执行异常</span><strong><PendingMetric loading={runsQuery.isLoading}>{failedCount}</PendingMetric></strong><small>需要调查或恢复</small></div><div><span>当前查看</span><strong><PendingMetric loading={runsQuery.isLoading}>{selectedRun ? runStatusMeta(selectedRun.status).label : "无"}</PendingMetric></strong><small>选中的事项状态</small></div></section>
         {runsQuery.isLoading ? <p className="wb-list-loading">正在读取运行状态…</p> : null}
         {!runsQuery.isLoading && inboxRuns.length === 0 ? <EmptySplitState detail="后台执行与已完成记录会留在“运行”页；这里只显示需要你处理的事项。" icon={CheckCircle2Icon} title="当前没有待处理事项" action={<Link className="wb-text-action" to="/runs">查看全部运行 <ArrowRightIcon aria-hidden="true" /></Link>} /> : null}
         {inboxRuns.length > 0 ? <section className="wb-workboard-section"><header><div><h2>处理队列</h2><p>按审批优先、异常随后排序。选择一项可查看其公开上下文与后续动作。</p></div></header><div className="wb-inbox-queue">{inboxRuns.map((run) => { const state = runStatusMeta(run.status); return <button className={cn("wb-inbox-queue-row", selectedRun?.id === run.id && "is-selected")} key={run.id} onClick={() => setSelectedRunId(run.id)} type="button"><span className={cn("wb-inbox-queue-marker", `is-${state.tone}`)} aria-hidden="true" /><span><strong>{run.latest_event_summary || runTitle(run)}</strong><small>{run.project_name || "未关联项目"} · {formatInboxTime(run.created_at)}</small></span><RunState status={run.status} /><ChevronRightIcon aria-hidden="true" /></button>; })}</div></section> : null}
@@ -463,6 +475,7 @@ export function MyWorkPage() {
   const visibleApprovalRuns = scope === "compliance" ? [] : approvalRuns;
   const totalItems = readinessItems.length + approvalRuns.length;
   const failedCount = approvalRuns.filter((run) => run.status === "failed").length;
+  const myWorkLoading = projectsQuery.isLoading || runsQuery.isLoading || readinessQueries.some((query) => query.isLoading);
 
   const readinessTitle = (kind: "mandatory" | "evidence" | "conflict") => {
     if (kind === "mandatory") return "补齐强制要求的响应依据";
@@ -487,22 +500,22 @@ export function MyWorkPage() {
           <Tabs aria-label="我的工作筛选" className="wb-workboard-tabs" onValueChange={(value) => setScope(value as typeof scope)} value={scope}>
             <TabsList className="wb-work-tabs-list" variant="line">
               {([
-                ["all", "全部待办", totalItems],
-                ["compliance", "要求与合规", readinessItems.length],
-                ["approval", "人工确认", approvalRuns.length],
+                 ["all", "全部待办", myWorkLoading ? "—" : totalItems],
+                 ["compliance", "要求与合规", myWorkLoading ? "—" : readinessItems.length],
+                 ["approval", "人工确认", myWorkLoading ? "—" : approvalRuns.length],
               ] as const).map(([candidate, label, count]) => (
                 <TabsTrigger className="wb-work-tab" key={candidate} value={candidate}>{label}<small>{count}</small></TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
           <section className="wb-workboard-summary" aria-label="我的工作概览">
-            <div><span>需要处理</span><strong>{totalItems}</strong><small>跨项目待办</small></div>
-            <div><span>要求与合规</span><strong>{readinessItems.length}</strong><small>缺口或冲突</small></div>
-            <div><span>等待人工确认</span><strong>{approvalRuns.filter((run) => run.status === "awaiting_approval").length}</strong><small>等待决定</small></div>
-            <div><span>执行异常</span><strong>{failedCount}</strong><small>需要恢复</small></div>
+             <div><span>需要处理</span><strong><PendingMetric loading={myWorkLoading}>{totalItems}</PendingMetric></strong><small>跨项目待办</small></div>
+             <div><span>要求与合规</span><strong><PendingMetric loading={myWorkLoading}>{readinessItems.length}</PendingMetric></strong><small>缺口或冲突</small></div>
+             <div><span>等待人工确认</span><strong><PendingMetric loading={myWorkLoading}>{approvalRuns.filter((run) => run.status === "awaiting_approval").length}</PendingMetric></strong><small>等待决定</small></div>
+             <div><span>执行异常</span><strong><PendingMetric loading={myWorkLoading}>{failedCount}</PendingMetric></strong><small>需要恢复</small></div>
           </section>
           {runsQuery.isLoading || projectsQuery.isLoading ? <p className="wb-list-loading">正在整理待办事项…</p> : null}
-          {!runsQuery.isLoading && !projectsQuery.isLoading && totalItems === 0 ? (
+          {!myWorkLoading && totalItems === 0 ? (
             <EmptySplitState
               detail="新的要求、审核意见和需要人工确认的项目动作会在这里出现。"
               icon={CheckCircle2Icon}
@@ -536,6 +549,7 @@ export function RunsPage() {
   }, [requestedRunId, visibleRuns]);
 
   const selectedRun = visibleRuns.find((run) => run.id === selectedRunId) ?? null;
+  const runsLoading = runsQuery.isLoading;
   const eventsQuery = useQuery({
     queryKey: ["runtime-events", selectedRun?.id],
     queryFn: () => listRuntimeEvents(selectedRun!.id),
@@ -558,9 +572,9 @@ export function RunsPage() {
   return (
     <section className="wb-workboard-page wb-runs-workboard" aria-labelledby="runs-title">
       <header className="wb-workboard-header"><div><p className="wb-eyebrow">Execution health</p><h1 id="runs-title">{t("nav.runs")}</h1><p>查看自动化执行、等待审批和需要恢复的异常，而不是逐条翻运行日志。</p></div><Button onClick={() => void runsQuery.refetch()} size="sm" type="button" variant="outline"><RefreshCwIcon data-icon="inline-start" />刷新</Button></header>
-      <Tabs className="wb-workboard-tabs" onValueChange={(value) => setFilter(value as RunFilter)} value={filter}><TabsList variant="line">{(["all", "active", "approval", "failed", "completed"] as const).map((candidate) => <TabsTrigger key={candidate} value={candidate}>{{ all: "全部", active: "运行中", approval: "待审批", failed: "失败", completed: "已完成" }[candidate]} <small>{counts[candidate]}</small></TabsTrigger>)}</TabsList></Tabs>
+      <Tabs className="wb-workboard-tabs" onValueChange={(value) => setFilter(value as RunFilter)} value={filter}><TabsList variant="line">{(["all", "active", "approval", "failed", "completed"] as const).map((candidate) => <TabsTrigger key={candidate} value={candidate}>{{ all: "全部", active: "运行中", approval: "待审批", failed: "失败", completed: "已完成" }[candidate]} <small><PendingMetric loading={runsLoading}>{counts[candidate]}</PendingMetric></small></TabsTrigger>)}</TabsList></Tabs>
       <ScrollArea className="wb-workboard-scroll"><div className="wb-workboard-content">
-        <section className="wb-workboard-summary" aria-label="运行概览"><div><span>全部运行</span><strong>{counts.all}</strong><small>最近 50 条执行</small></div><div><span>正在执行</span><strong>{counts.active}</strong><small>运行中或排队中</small></div><div><span>等待审批</span><strong>{counts.approval}</strong><small>需要人工决策</small></div><div><span>执行异常</span><strong>{counts.failed}</strong><small>需要调查或恢复</small></div></section>
+        <section className="wb-workboard-summary" aria-label="运行概览"><div><span>全部运行</span><strong><PendingMetric loading={runsLoading}>{counts.all}</PendingMetric></strong><small>最近 50 条执行</small></div><div><span>正在执行</span><strong><PendingMetric loading={runsLoading}>{counts.active}</PendingMetric></strong><small>运行中或排队中</small></div><div><span>等待审批</span><strong><PendingMetric loading={runsLoading}>{counts.approval}</PendingMetric></strong><small>需要人工决策</small></div><div><span>执行异常</span><strong><PendingMetric loading={runsLoading}>{counts.failed}</PendingMetric></strong><small>需要调查或恢复</small></div></section>
         <section className="wb-workboard-section"><header><div><h2>运行队列</h2><p>选择一条记录，在下方查看它的公开执行轨迹。</p></div></header>{runsQuery.isLoading ? <p className="wb-list-loading">正在加载运行记录…</p> : null}{!runsQuery.isLoading && visibleRuns.length === 0 ? <p className="wb-list-empty">没有匹配的运行记录。</p> : null}<div className="wb-run-workboard-list">{visibleRuns.map((run) => <button className={cn("wb-run-list-row", selectedRun?.id === run.id && "is-selected")} key={run.id} onClick={() => selectRun(run)} type="button"><span className="wb-list-row-icon"><RunIcon kind={run.kind} /></span><span className="wb-list-row-copy"><strong>{run.latest_event_summary || runTitle(run)}</strong><small>{run.project_name || "未关联项目"} · {formatDate(run.created_at)}</small></span><RunState status={run.status} /></button>)}</div></section>
         {selectedRun ? <section className="wb-workboard-section wb-run-inspector"><header><div><p className="wb-detail-kicker">{runKindLabel(selectedRun.kind)}</p><h2>{selectedRun.project_name || "未关联项目运行"}</h2><p>引擎 {selectedRun.engine} · 开始于 {formatDate(selectedRun.started_at || selectedRun.created_at)}{selectedRun.finished_at ? ` · 结束于 ${formatDate(selectedRun.finished_at)}` : ""}</p></div><RunState status={selectedRun.status} /></header>{eventsQuery.isLoading ? <p className="wb-list-loading">正在加载事件…</p> : null}{!eventsQuery.isLoading && (eventsQuery.data?.items.length ?? 0) === 0 ? <p className="wb-list-empty">此运行尚未写入公开事件。</p> : null}<div className="wb-run-event-list">{(eventsQuery.data?.items ?? []).map((event) => <RunEventRow event={event} key={`${event.run_id}-${event.sequence}`} />)}</div></section> : null}
       </div></ScrollArea>
@@ -710,6 +724,8 @@ export function KnowledgePage() {
       projectName: item.project_name,
     }))
   )), [memoryQueries, portfolio]);
+  const materialsLoading = projectsQuery.isLoading || bundleQueries.some((item) => item.isLoading) || documentQueries.some((item) => item.isLoading);
+  const knowledgeLoading = portfolioQuery.isLoading || (surface === "knowledge" && memoryQueries.some((item) => item.isLoading));
   const filteredMaterials = useMemo(() => materialRecords.filter((record) => {
     if (projectFilter !== "all" && record.project.id !== projectFilter) return false;
     if (documentFilter === "processing" && !["pending", "parsing"].includes(record.document.parse_status) && record.document.index_status !== "indexing") return false;
@@ -845,8 +861,8 @@ export function KnowledgePage() {
         <div className="wb-workboard-content">
           <Tabs className="wb-workboard-tabs" onValueChange={(value) => setSurface(value as "materials" | "knowledge")} value={surface}>
             <TabsList aria-label="资料中心视图">
-              <TabsTrigger value="materials">资料 <small>{materialRecords.length}</small></TabsTrigger>
-              <TabsTrigger value="knowledge">共享知识 <small>{sharedKnowledge.length || portfolio.reduce((total, item) => total + item.active_shared_count, 0)}</small></TabsTrigger>
+              <TabsTrigger value="materials">资料 <small><PendingMetric loading={materialsLoading}>{materialRecords.length}</PendingMetric></small></TabsTrigger>
+              <TabsTrigger value="knowledge">共享知识 <small><PendingMetric loading={knowledgeLoading}>{sharedKnowledge.length || portfolio.reduce((total, item) => total + item.active_shared_count, 0)}</PendingMetric></small></TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -865,8 +881,8 @@ export function KnowledgePage() {
           </div>
 
           {surface === "materials" ? <section aria-label="项目资料">
-            {projectsQuery.isLoading || bundleQueries.some((item) => item.isLoading) ? <p className="wb-list-loading">正在整理项目资料…</p> : null}
-            {!projectsQuery.isLoading && !materialRecords.length ? <Empty className="border-dashed py-12">
+            {materialsLoading ? <div className="flex flex-col gap-3 py-4" role="status" aria-label="正在整理项目资料"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-11/12" /><Skeleton className="h-10 w-4/5" /></div> : null}
+            {!materialsLoading && !materialRecords.length ? <Empty className="border-dashed py-12">
               <EmptyHeader><EmptyMedia variant="icon"><UploadIcon aria-hidden="true" /></EmptyMedia><EmptyTitle>从第一份招标资料开始</EmptyTitle><EmptyDescription>上传 PDF、DOCX、XLSX、CSV、TXT 或 Markdown。平台会自动解析，随后可在项目中提取要求和证据。</EmptyDescription></EmptyHeader>
               <EmptyContent><Button onClick={openUploadDialog} size="sm"><UploadIcon aria-hidden="true" data-icon="inline-start" />上传资料</Button></EmptyContent>
             </Empty> : null}
@@ -886,8 +902,8 @@ export function KnowledgePage() {
             </Table></div> : null}
             {materialRecords.length && !filteredMaterials.length ? <Empty className="border-dashed py-10"><EmptyHeader><EmptyMedia><SearchIcon aria-hidden="true" /></EmptyMedia><EmptyTitle>没有匹配的资料</EmptyTitle><EmptyDescription>调整项目、状态或关键词后再试。</EmptyDescription></EmptyHeader></Empty> : null}
           </section> : <section aria-label="共享知识">
-            {portfolioQuery.isLoading || memoryQueries.some((item) => item.isLoading) ? <p className="wb-list-loading">正在读取可复用知识…</p> : null}
-            {!portfolioQuery.isLoading && !filteredKnowledge.length ? <Empty className="border-dashed py-12"><EmptyHeader><EmptyMedia variant="icon"><LibraryBigIcon aria-hidden="true" /></EmptyMedia><EmptyTitle>尚无可复用知识</EmptyTitle><EmptyDescription>资料解析并经团队确认后，能用于响应和核验的结论会在这里出现。</EmptyDescription></EmptyHeader></Empty> : null}
+            {knowledgeLoading ? <div className="flex flex-col gap-3 py-4" role="status" aria-label="正在读取可复用知识"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-10/12" /><Skeleton className="h-10 w-3/4" /></div> : null}
+            {!knowledgeLoading && !filteredKnowledge.length ? <Empty className="border-dashed py-12"><EmptyHeader><EmptyMedia variant="icon"><LibraryBigIcon aria-hidden="true" /></EmptyMedia><EmptyTitle>尚无可复用知识</EmptyTitle><EmptyDescription>资料解析并经团队确认后，能用于响应和核验的结论会在这里出现。</EmptyDescription></EmptyHeader></Empty> : null}
             {filteredKnowledge.length ? <div className="wb-directory-table-group"><Table className="wb-knowledge-table">
               <TableHeader><TableRow><TableHead>知识</TableHead><TableHead className="wb-knowledge-col-project">所属项目</TableHead><TableHead>类型</TableHead><TableHead className="wb-knowledge-col-source">来源</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
               <TableBody>{filteredKnowledge.map(({ memory, projectId, projectName }) => <TableRow key={memory.id}>

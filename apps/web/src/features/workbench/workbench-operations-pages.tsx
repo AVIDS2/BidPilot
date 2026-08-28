@@ -13,7 +13,7 @@ import {
   ShieldCheckIcon,
   UsersRoundIcon,
 } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -45,6 +45,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { displayDeliverableType, displayWorkbenchValue } from "./workbench-labels";
 import { SettingsNavigation } from "./settings-navigation";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const EMPTY_PROJECTS: ProjectRead[] = [];
 const EMPTY_DELIVERABLES: DeliverableRead[] = [];
@@ -115,6 +116,14 @@ function OperationsEmpty({
   );
 }
 
+function PendingMetric({ loading, children }: { loading: boolean; children: ReactNode }) {
+  return loading ? <span aria-label="正在加载">—</span> : children;
+}
+
+function OperationsLoading({ label }: { label: string }) {
+  return <div className="flex flex-col gap-3 py-6" role="status" aria-label={label}><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-11/12" /><Skeleton className="h-10 w-4/5" /></div>;
+}
+
 export function DeliverablesPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -146,6 +155,7 @@ export function DeliverablesPage() {
   ), [deliverables, sectionQueries]);
   const exportedCount = deliverables.filter((deliverable) => deliverable.export_status === "exported").length;
   const reviewCount = deliverables.filter((deliverable) => /(draft|review|pending)/i.test(deliverable.status)).length;
+  const deliverablesLoading = deliverablesQuery.isLoading || sectionQueries.some((query) => query.isLoading);
   const createMutation = useMutation({
     mutationFn: createDeliverable,
     onSuccess: () => {
@@ -164,16 +174,16 @@ export function DeliverablesPage() {
         <div className="flex flex-wrap items-center justify-end gap-2"><ProjectScope onSelect={setSelectedProjectId} projects={projects} selectedId={activeProjectId} /><Button disabled={!activeProjectId} onClick={() => setCreateOpen(true)} size="sm"><PlusIcon aria-hidden="true" data-icon="inline-start" />新建交付物</Button></div>
       </header>
       <ScrollArea className="wb-workboard-scroll"><div className="wb-workboard-content">
-        {selectedProject ? <>
+        {projectsQuery.isLoading ? <OperationsLoading label="正在读取投标项目" /> : selectedProject ? <>
           <section className="wb-workboard-summary" aria-label="交付物概览">
             <div><span>当前项目</span><strong>{projectLabel(selectedProject)}</strong><small>{displayWorkbenchValue(selectedProject.status)}</small></div>
-            <div><span>交付物</span><strong>{deliverables.length}</strong><small>已建立的响应文件</small></div>
-            <div><span>待审核</span><strong>{reviewCount}</strong><small>需要内部确认</small></div>
-            <div><span>已导出</span><strong>{exportedCount}</strong><small>可供提交或归档</small></div>
+            <div><span>交付物</span><strong><PendingMetric loading={deliverablesLoading}>{deliverables.length}</PendingMetric></strong><small>已建立的响应文件</small></div>
+            <div><span>待审核</span><strong><PendingMetric loading={deliverablesLoading}>{reviewCount}</PendingMetric></strong><small>需要内部确认</small></div>
+            <div><span>已导出</span><strong><PendingMetric loading={deliverablesLoading}>{exportedCount}</PendingMetric></strong><small>可供提交或归档</small></div>
           </section>
           <section className="wb-workboard-section">
             <header><div><h2>响应文件</h2><p>从章节完整度和导出状态判断交付准备程度。</p></div><Button onClick={() => navigate(`/projects/${selectedProject.id}`)} size="sm" variant="outline">打开项目 <ChevronRightIcon aria-hidden="true" data-icon="inline-end" /></Button></header>
-            {deliverablesQuery.isLoading ? <p className="wb-list-loading">正在读取交付物…</p> : null}
+             {deliverablesLoading ? <OperationsLoading label="正在读取交付物" /> : null}
             {!deliverablesQuery.isLoading && deliverables.length === 0 ? <OperationsEmpty description="项目中还没有创建交付物。可在项目工作区或通过 Agent 创建。" icon={FileOutputIcon} title="暂无交付物" /> : null}
             {deliverables.length > 0 ? <div className="wb-workboard-table wb-deliverables-table"><div className="wb-workboard-table-head"><span>交付物</span><span>类型</span><span>章节</span><span>内容状态</span><span>导出</span></div>{deliverables.map((deliverable) => <DeliverableRow deliverable={deliverable} key={deliverable.id} sectionCount={sectionCounts.get(deliverable.id) ?? 0} />)}</div> : null}
           </section>
@@ -260,15 +270,16 @@ export function ReviewsPage() {
     () => (requirementsQuery.data ?? []).filter((requirement) => requirement.verification_status !== "verified"),
     [requirementsQuery.data],
   );
+  const reviewLoading = deliverablesQuery.isLoading || requirementsQuery.isLoading || sectionQueries.some((query) => query.isLoading) || threadQueries.some((query) => query.isLoading);
 
   return (
     <section className="wb-workboard-page" aria-labelledby="reviews-title">
       <header className="wb-workboard-header"><div><p className="wb-eyebrow">Quality control</p><h1 id="reviews-title">{t("nav.reviews")}</h1><p>把章节评审和证据核验放在同一条待办队列中，优先处理影响提交的事项。</p></div><ProjectScope onSelect={setSelectedProjectId} projects={projects} selectedId={activeProjectId} /></header>
       <ScrollArea className="wb-workboard-scroll"><div className="wb-workboard-content">
-        {selectedProject ? <>
-          <section className="wb-workboard-summary" aria-label="审核概览"><div><span>当前项目</span><strong>{projectLabel(selectedProject)}</strong><small>{displayWorkbenchValue(selectedProject.status)}</small></div><div><span>章节评审</span><strong>{reviewSections.length}</strong><small>已进入评审范围</small></div><div><span>未解决线程</span><strong>{reviewSections.reduce((count, item) => count + item.openThreadCount, 0)}</strong><small>等待响应或处理</small></div><div><span>待核验要求</span><strong>{unverifiedRequirements.length}</strong><small>尚未形成可审证据</small></div></section>
+        {projectsQuery.isLoading ? <OperationsLoading label="正在读取投标项目" /> : selectedProject ? <>
+          <section className="wb-workboard-summary" aria-label="审核概览"><div><span>当前项目</span><strong>{projectLabel(selectedProject)}</strong><small>{displayWorkbenchValue(selectedProject.status)}</small></div><div><span>章节评审</span><strong><PendingMetric loading={reviewLoading}>{reviewSections.length}</PendingMetric></strong><small>已进入评审范围</small></div><div><span>未解决线程</span><strong><PendingMetric loading={reviewLoading}>{reviewSections.reduce((count, item) => count + item.openThreadCount, 0)}</PendingMetric></strong><small>等待响应或处理</small></div><div><span>待核验要求</span><strong><PendingMetric loading={reviewLoading}>{unverifiedRequirements.length}</PendingMetric></strong><small>尚未形成可审证据</small></div></section>
           <section className="wb-workboard-section"><header><div><h2>章节评审</h2><p>按开放线程优先，确认每个响应章节可进入下一轮。</p></div><Button onClick={() => navigate(`/projects/${selectedProject.id}`)} size="sm" variant="outline">进入项目 <ChevronRightIcon aria-hidden="true" data-icon="inline-end" /></Button></header>
-              {deliverablesQuery.isLoading ? <p className="wb-list-loading">正在读取交付物与章节…</p> : null}
+              {reviewLoading ? <OperationsLoading label="正在读取交付物与章节" /> : null}
               {!deliverablesQuery.isLoading && reviewSections.length === 0 ? (
                 <p className="wb-inline-empty">当前项目还没有可评审章节。</p>
               ) : null}
@@ -291,7 +302,7 @@ export function ReviewsPage() {
           </section>
 
           <section className="wb-workboard-section"><header><div><h2>待核验证据要求</h2><p>未核验的要求会直接影响响应内容的可信度。</p></div></header>
-              {requirementsQuery.isLoading ? <p className="wb-list-loading">正在读取要求状态…</p> : null}
+              {requirementsQuery.isLoading ? <OperationsLoading label="正在读取要求状态" /> : null}
               {!requirementsQuery.isLoading && unverifiedRequirements.length === 0 ? (
                 <p className="wb-inline-empty">所有已提取要求均已标记为已核验，或当前项目尚未提取要求。</p>
               ) : null}

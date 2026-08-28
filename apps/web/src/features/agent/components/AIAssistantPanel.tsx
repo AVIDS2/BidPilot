@@ -57,6 +57,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   PromptInput,
   PromptInputTextarea,
@@ -75,6 +76,17 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -133,6 +145,127 @@ type ComposerAttachmentStatus = "ready" | "uploading" | "uploaded" | "failed";
 type ConfigMenu = "model" | "reasoning" | "approval" | null;
 
 const EMPTY_TRANSCRIPT_PARTS: NonNullable<ChatMessage["transcriptParts"]> = [];
+
+type AssistantComposerMenusProps = {
+  variant: "linear" | "panel";
+  attachmentMenuOpen: boolean;
+  configMenuOpen: ConfigMenu;
+  modelLabel: string;
+  reasoningLabel: string;
+  approvalLabel: string;
+  approvalHint: string;
+  providerConfigs: ProviderConfig[];
+  selectedProviderConfigId: string | null;
+  reasoningEffort: AssistantReasoningEffort;
+  approvalMode: AssistantApprovalMode;
+  onAttachmentMenuOpenChange: (open: boolean) => void;
+  onConfigMenuOpenChange: (menu: Exclude<ConfigMenu, null>, open: boolean) => void;
+  onSelectProvider: (id: string | null) => void;
+  onSelectReasoning: (effort: AssistantReasoningEffort) => void;
+  onSelectApproval: (mode: AssistantApprovalMode) => void;
+  onUploadFile: () => void;
+  onUploadImage: () => void;
+  onAddFromProject: () => void;
+  showAttachment?: boolean;
+  showConfig?: boolean;
+};
+
+function AssistantComposerMenus({
+  variant,
+  attachmentMenuOpen,
+  configMenuOpen,
+  modelLabel,
+  reasoningLabel,
+  approvalLabel,
+  approvalHint,
+  providerConfigs,
+  selectedProviderConfigId,
+  reasoningEffort,
+  approvalMode,
+  onAttachmentMenuOpenChange,
+  onConfigMenuOpenChange,
+  onSelectProvider,
+  onSelectReasoning,
+  onSelectApproval,
+  onUploadFile,
+  onUploadImage,
+  onAddFromProject,
+  showAttachment = true,
+  showConfig = true,
+}: AssistantComposerMenusProps) {
+  const { t } = useTranslation("ai-assistant");
+  const textTriggerClass = variant === "linear"
+    ? "bp-linear-agent-text-control"
+    : "flex max-w-[7.25rem] items-center gap-1 rounded-full px-2 py-1 min-[420px]:max-w-[9.5rem]";
+  const attachmentTriggerClass = variant === "linear"
+    ? "bp-linear-agent-icon-button"
+    : "flex size-8 items-center justify-center rounded-full text-muted-foreground";
+
+  return (
+    <>
+      {showAttachment ? <DropdownMenu open={attachmentMenuOpen} onOpenChange={onAttachmentMenuOpenChange}>
+        <DropdownMenuTrigger render={<Button aria-label={t("attachments.add", { defaultValue: "Add attachment" })} className={attachmentTriggerClass} size="icon-sm" type="button" variant="ghost" />}>
+          <PlusIcon aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56" side="top" sideOffset={8}>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t("attachments.menuTitle", { defaultValue: "Add to this message" })}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onUploadFile}><FileIcon aria-hidden="true" />{t("attachments.uploadFile", { defaultValue: "Upload file" })}</DropdownMenuItem>
+            <DropdownMenuItem onClick={onUploadImage}><ImageIcon aria-hidden="true" />{t("attachments.uploadImage", { defaultValue: "Upload image" })}</DropdownMenuItem>
+            <DropdownMenuItem onClick={onAddFromProject}><FolderOpenIcon aria-hidden="true" />{t("attachments.addFromProject", { defaultValue: "Add from project" })}</DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu> : null}
+      {showConfig ? <>
+      <DropdownMenu open={configMenuOpen === "model"} onOpenChange={(open) => onConfigMenuOpenChange("model", open)}>
+        <DropdownMenuTrigger render={<Button aria-label={t("model.select", { defaultValue: "Select model" })} className={textTriggerClass} size="sm" type="button" variant="ghost" />}>
+          <span className="truncate">{modelLabel}</span><ChevronDownIcon aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64" side="top" sideOffset={8}>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t("model.menuTitle", { defaultValue: "Model" })}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup value={selectedProviderConfigId ?? "official"} onValueChange={(value) => { onSelectProvider(value === "official" ? null : value); onConfigMenuOpenChange("model", false); }}>
+              <DropdownMenuRadioItem value="official">{t("model.platformDefault", { defaultValue: "Platform default" })}</DropdownMenuRadioItem>
+              {providerConfigs.map((provider) => <DropdownMenuRadioItem key={provider.id} value={provider.id}><span className="min-w-0 truncate">{provider.label}</span><span className="min-w-0 truncate text-muted-foreground">{provider.model}</span></DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
+            {providerConfigs.length === 0 ? <div className="px-1.5 py-1 text-xs text-muted-foreground">{t("model.empty", { defaultValue: "No custom providers yet" })}</div> : null}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu open={configMenuOpen === "reasoning"} onOpenChange={(open) => onConfigMenuOpenChange("reasoning", open)}>
+        <DropdownMenuTrigger render={<Button aria-label={t("reasoning.select", { defaultValue: "Select reasoning effort" })} className={variant === "linear" ? textTriggerClass : "flex items-center gap-1 rounded-full px-2 py-1"} size="sm" type="button" variant="ghost" />}>
+          <span>{reasoningLabel}</span><ChevronDownIcon aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44" side="top" sideOffset={8}>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t("reasoning.menuTitle", { defaultValue: "Reasoning" })}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup value={reasoningEffort} onValueChange={(value) => { onSelectReasoning(value as AssistantReasoningEffort); onConfigMenuOpenChange("reasoning", false); }}>
+              {REASONING_OPTIONS.map((effort) => <DropdownMenuRadioItem key={effort} value={effort}>{t(`reasoning.options.${effort}`, { defaultValue: effort })}</DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu open={configMenuOpen === "approval"} onOpenChange={(open) => onConfigMenuOpenChange("approval", open)}>
+        <DropdownMenuTrigger render={<Button aria-label={t("approval.select", { defaultValue: "Select approval mode" })} className={cn(variant === "linear" ? textTriggerClass : "flex max-w-[6.75rem] items-center gap-1 rounded-full px-2 py-1", approvalMode === "full_access" && "text-amber-600 dark:text-amber-300")} title={approvalHint} size="sm" type="button" variant="ghost" />}>
+          <span className="truncate">{approvalLabel}</span><ChevronDownIcon aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-60" side="top" sideOffset={8}>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t("approval.menuTitle", { defaultValue: "Approval" })}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup value={approvalMode} onValueChange={(value) => { onSelectApproval(value as AssistantApprovalMode); onConfigMenuOpenChange("approval", false); }}>
+              {APPROVAL_MODES.map((mode) => <DropdownMenuRadioItem key={mode} value={mode}>{t(`approval.options.${mode}`, { defaultValue: mode })}</DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      </> : null}
+    </>
+  );
+}
 
 interface ComposerAttachment {
   id: string;
@@ -553,12 +686,16 @@ function MessageBubble({
   onCancelWorkflow,
   onConfigureProvider,
   isStreaming = false,
+  isThinking = false,
+  sessionError = null,
 }: {
   msg: ChatMessage;
   activityItems?: AssistantExecutionItem[];
   onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider?: () => void;
   isStreaming?: boolean;
+  isThinking?: boolean;
+  sessionError?: string | null;
 }) {
   const isUser = msg.role === "user";
   // Keep hook order identical for user and assistant messages. A stable empty
@@ -630,7 +767,10 @@ function MessageBubble({
     ) : null;
 
   const thinkingDots = (
-    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+    <span
+      className="inline-flex items-center gap-1.5 text-muted-foreground"
+      data-testid="assistant-thinking-indicator"
+    >
       <span
         className="h-1.5 w-1.5 animate-pulse rounded-full bg-current"
         style={{ animationDelay: "0ms" }}
@@ -646,7 +786,7 @@ function MessageBubble({
     </span>
   );
 
-  if (!msg.content && activityItems.length === 0 && !isStreaming) {
+  if (!msg.content && activityItems.length === 0 && !isStreaming && !sessionError) {
     return null;
   }
 
@@ -681,7 +821,7 @@ function MessageBubble({
               />
             )}
             {msg.content && !hasNarrativePart && renderNarrative(msg.content, `${msg.id}-durable`)}
-            {activityItems.length === 0 && isStreaming && thinkingDots}
+            {activityItems.length === 0 && isStreaming && isThinking && thinkingDots}
           </>
         ) : (
           <>
@@ -700,12 +840,13 @@ function MessageBubble({
               >
                 {normalizeAssistantMarkdown(msg.content)}
               </MessageContent>
-            ) : isStreaming ? (
+            ) : isStreaming && isThinking ? (
               thinkingDots
             ) : null}
           </>
         )}
       </div>
+      {sessionError && <p className="cr-session-error" role="alert">{sessionError}</p>}
     </Message>
   );
 }
@@ -1044,7 +1185,6 @@ export function AIAssistantPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const linearComposerRef = useRef<HTMLDivElement>(null);
   const queueDrainingRef = useRef(false);
   const isBusy = isAssistantBusy(state.status);
   const isStreaming = state.isStreaming;
@@ -1095,6 +1235,10 @@ export function AIAssistantPanel({
   const unassignedExecutionItems = useMemo(
     () => state.executionItems.filter((item) => !item.messageId),
     [state.executionItems],
+  );
+  const latestAssistantMessageId = useMemo(
+    () => [...state.messages].reverse().find((message) => message.role === "assistant")?.id ?? null,
+    [state.messages],
   );
   const currentConversationIsRunning =
     isBusy && Boolean(state.currentConversationId);
@@ -1155,17 +1299,6 @@ export function AIAssistantPanel({
       setConfigMenuOpen(null);
     }
   }, [state.isOpen]);
-
-  useEffect(() => {
-    if (!isLinearAgent || (!attachmentMenuOpen && !configMenuOpen)) return;
-    const closeMenusFromOutside = (event: PointerEvent) => {
-      if (linearComposerRef.current?.contains(event.target as Node)) return;
-      setAttachmentMenuOpen(false);
-      setConfigMenuOpen(null);
-    };
-    document.addEventListener("pointerdown", closeMenusFromOutside);
-    return () => document.removeEventListener("pointerdown", closeMenusFromOutside);
-  }, [attachmentMenuOpen, configMenuOpen, isLinearAgent]);
 
   useEffect(() => {
     if (editingConversationId) {
@@ -1530,17 +1663,17 @@ export function AIAssistantPanel({
   if (!isWorkspace && !isLinearAgent && (!state.isOpen || state.mode !== "panel")) return null;
 
   if (isLinearAgent) {
-    const toggleAttachmentMenu = () => {
+    const handleAttachmentMenuOpenChange = (open: boolean) => {
       setConfigMenuOpen(null);
-      setAttachmentMenuOpen((value) => !value);
+      setAttachmentMenuOpen(open);
     };
-    const toggleConfigMenu = (menu: Exclude<ConfigMenu, null>) => {
+    const handleConfigMenuOpenChange = (menu: Exclude<ConfigMenu, null>, open: boolean) => {
       setAttachmentMenuOpen(false);
-      setConfigMenuOpen((value) => (value === menu ? null : menu));
+      setConfigMenuOpen(open ? menu : null);
     };
 
     return (
-      <div className="bp-linear-agent-composer" data-testid="linear-agent-composer" ref={linearComposerRef}>
+      <div className="bp-linear-agent-composer" data-testid="linear-agent-composer">
         <input
           ref={fileInputRef}
           type="file"
@@ -1609,7 +1742,7 @@ export function AIAssistantPanel({
             </ol>
           </section>
         )}
-        <textarea
+        <Textarea
           ref={inputRef}
           value={input}
           rows={1}
@@ -1629,91 +1762,64 @@ export function AIAssistantPanel({
         />
         <div className="bp-linear-agent-composer-footer">
           <div className="bp-linear-agent-composer-left">
-            <div className="bp-linear-agent-menu-anchor">
-              <button
-                type="button"
-                className="bp-linear-agent-icon-button"
-                aria-label={t("attachments.add", { defaultValue: "Add attachment" })}
-                aria-expanded={attachmentMenuOpen}
-                onClick={toggleAttachmentMenu}
-              >
-                <PlusIcon size={18} />
-              </button>
-              <div className={`bp-linear-agent-popover bp-linear-agent-attachment-menu${attachmentMenuOpen ? " is-open" : ""}`} role="menu" aria-hidden={!attachmentMenuOpen}>
-                <div className="bp-linear-agent-popover-inner">
-                  <button type="button" role="menuitem" onClick={() => fileInputRef.current?.click()}>
-                    <FileIcon size={15} /> {t("attachments.uploadFile", { defaultValue: "Upload file" })}
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => imageInputRef.current?.click()}>
-                    <ImageIcon size={15} /> {t("attachments.uploadImage", { defaultValue: "Upload image" })}
-                  </button>
-                  <button type="button" role="menuitem" onClick={handleAddFromProject}>
-                    <FolderOpenIcon size={15} /> {t("attachments.addFromProject", { defaultValue: "Add from project" })}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <AssistantComposerMenus
+              variant="linear"
+              showConfig={false}
+              attachmentMenuOpen={attachmentMenuOpen}
+              configMenuOpen={configMenuOpen}
+              modelLabel={modelLabel}
+              reasoningLabel={reasoningLabel}
+              approvalLabel={approvalLabel}
+              approvalHint={approvalHint}
+              providerConfigs={providerConfigs}
+              selectedProviderConfigId={state.selectedProviderConfigId}
+              reasoningEffort={state.reasoningEffort}
+              approvalMode={state.approvalMode}
+              onAttachmentMenuOpenChange={handleAttachmentMenuOpenChange}
+              onConfigMenuOpenChange={handleConfigMenuOpenChange}
+              onSelectProvider={setSelectedProviderConfig}
+              onSelectReasoning={setReasoningEffort}
+              onSelectApproval={setApprovalMode}
+              onUploadFile={() => fileInputRef.current?.click()}
+              onUploadImage={() => imageInputRef.current?.click()}
+              onAddFromProject={handleAddFromProject}
+            />
             <span className="bp-linear-agent-keyhint"><CornerDownLeftIcon size={13} /> {isBusy ? "Enter to queue" : "Enter to send"}</span>
           </div>
           <div className="bp-linear-agent-composer-right">
-            <div className="bp-linear-agent-menu-anchor">
-              <button type="button" className="bp-linear-agent-text-control" onClick={() => toggleConfigMenu("model")}>
-                <span>{modelLabel}</span><ChevronDownIcon size={13} />
-              </button>
-              <div className={`bp-linear-agent-popover bp-linear-agent-config-menu${configMenuOpen === "model" ? " is-open" : ""}`} role="menu" aria-hidden={configMenuOpen !== "model"}>
-                <div className="bp-linear-agent-popover-inner">
-                  <span className="bp-linear-agent-menu-label">{t("model.menuTitle", { defaultValue: "Model" })}</span>
-                  <button type="button" role="menuitemradio" aria-checked={!state.selectedProviderConfigId} onClick={() => { setSelectedProviderConfig(null); setConfigMenuOpen(null); }}>
-                    <span>{t("model.platformDefault", { defaultValue: "Platform default" })}</span>{!state.selectedProviderConfigId && <span>✓</span>}
-                  </button>
-                  {providerConfigs.map((provider) => (
-                    <button key={provider.id} type="button" role="menuitemradio" aria-checked={state.selectedProviderConfigId === provider.id} onClick={() => { setSelectedProviderConfig(provider.id); setConfigMenuOpen(null); }}>
-                      <span>{provider.label} · {provider.model}</span>{state.selectedProviderConfigId === provider.id && <span>✓</span>}
-                    </button>
-                  ))}
-                  {providerConfigs.length === 0 && <span className="bp-linear-agent-empty-menu">{t("model.empty", { defaultValue: "No custom providers yet" })}</span>}
-                </div>
-              </div>
-            </div>
-            <div className="bp-linear-agent-menu-anchor">
-              <button type="button" className="bp-linear-agent-text-control" onClick={() => toggleConfigMenu("reasoning")}>
-                <span>{reasoningLabel}</span><ChevronDownIcon size={13} />
-              </button>
-              <div className={`bp-linear-agent-popover bp-linear-agent-config-menu${configMenuOpen === "reasoning" ? " is-open" : ""}`} role="menu" aria-hidden={configMenuOpen !== "reasoning"}>
-                <div className="bp-linear-agent-popover-inner">
-                  <span className="bp-linear-agent-menu-label">{t("reasoning.menuTitle", { defaultValue: "Reasoning" })}</span>
-                  {REASONING_OPTIONS.map((effort) => (
-                    <button key={effort} type="button" role="menuitemradio" aria-checked={state.reasoningEffort === effort} onClick={() => { setReasoningEffort(effort); setConfigMenuOpen(null); }}>
-                      <span>{t(`reasoning.options.${effort}`, { defaultValue: effort })}</span>{state.reasoningEffort === effort && <span>✓</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="bp-linear-agent-menu-anchor bp-linear-agent-approval-anchor">
-              <button type="button" className="bp-linear-agent-text-control" title={approvalHint} onClick={() => toggleConfigMenu("approval")}>
-                <span>{approvalLabel}</span><ChevronDownIcon size={13} />
-              </button>
-              <div className={`bp-linear-agent-popover bp-linear-agent-config-menu${configMenuOpen === "approval" ? " is-open" : ""}`} role="menu" aria-hidden={configMenuOpen !== "approval"}>
-                <div className="bp-linear-agent-popover-inner">
-                  <span className="bp-linear-agent-menu-label">{t("approval.menuTitle", { defaultValue: "Approval" })}</span>
-                  {APPROVAL_MODES.map((mode) => (
-                    <button key={mode} type="button" role="menuitemradio" aria-checked={state.approvalMode === mode} onClick={() => { setApprovalMode(mode); setConfigMenuOpen(null); }}>
-                      <span>{t(`approval.options.${mode}`, { defaultValue: mode })}</span>{state.approvalMode === mode && <span>✓</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <button
+            <AssistantComposerMenus
+              variant="linear"
+              showAttachment={false}
+              attachmentMenuOpen={attachmentMenuOpen}
+              configMenuOpen={configMenuOpen}
+              modelLabel={modelLabel}
+              reasoningLabel={reasoningLabel}
+              approvalLabel={approvalLabel}
+              approvalHint={approvalHint}
+              providerConfigs={providerConfigs}
+              selectedProviderConfigId={state.selectedProviderConfigId}
+              reasoningEffort={state.reasoningEffort}
+              approvalMode={state.approvalMode}
+              onAttachmentMenuOpenChange={handleAttachmentMenuOpenChange}
+              onConfigMenuOpenChange={handleConfigMenuOpenChange}
+              onSelectProvider={setSelectedProviderConfig}
+              onSelectReasoning={setReasoningEffort}
+              onSelectApproval={setApprovalMode}
+              onUploadFile={() => fileInputRef.current?.click()}
+              onUploadImage={() => imageInputRef.current?.click()}
+              onAddFromProject={handleAddFromProject}
+            />
+            <Button
               type="button"
               className="bp-linear-agent-send"
               onClick={isStreaming ? stopAssistantResponse : handleSend}
               disabled={isStreaming ? false : !canSend}
               aria-label={isStreaming ? t("actions.stopGenerating") : t("actions.send")}
+              size="icon-sm"
+              variant="ghost"
             >
-              {isStreaming ? <SquareIcon size={12} fill="currentColor" /> : isUploadingAttachments ? <Loader2Icon size={16} className="animate-spin" /> : <SendIcon size={16} />}
-            </button>
+              {isStreaming ? <SquareIcon aria-hidden="true" fill="currentColor" /> : isUploadingAttachments ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : <SendIcon aria-hidden="true" />}
+            </Button>
           </div>
         </div>
       </div>
@@ -1988,6 +2094,15 @@ export function AIAssistantPanel({
                               state.isStreaming &&
                               state.activeAssistantMessageId === msg.id
                             }
+                            isThinking={
+                              state.isThinking &&
+                              state.activeAssistantMessageId === msg.id
+                            }
+                            sessionError={
+                              (state.activeAssistantMessageId ?? latestAssistantMessageId) === msg.id
+                                ? state.sessionError
+                                : null
+                            }
                           />
                         </div>
                       );
@@ -2097,74 +2212,27 @@ export function AIAssistantPanel({
                   </div>
                 )}
                 <div className="flex min-h-10 items-center gap-1.5">
-                  <div className="relative shrink-0">
-                    <button
-                      type="button"
-                      aria-label={t("attachments.add", {
-                        defaultValue: "Add attachment",
-                      })}
-                      aria-expanded={attachmentMenuOpen}
-                      onClick={() => {
-                        setHistoryOpen(false);
-                        setConfigMenuOpen(null);
-                        setAttachmentMenuOpen((value) => !value);
-                      }}
-                      className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                    >
-                      <PlusIcon className="h-4 w-4" />
-                    </button>
-                    {attachmentMenuOpen && (
-                      <div
-                        role="menu"
-                        className="absolute bottom-11 left-0 z-30 w-[min(15rem,calc(100vw-2.25rem))] overflow-hidden rounded-xl border bg-popover/95 p-1.5 text-sm shadow-lg backdrop-blur-xl"
-                        style={{
-                          borderColor:
-                            "color-mix(in oklch, var(--border) 72%, transparent)",
-                          color: "var(--popover-foreground)",
-                        }}
-                      >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
-                        >
-                          <FileIcon className="h-4 w-4 text-muted-foreground" />
-                          <span>
-                            {t("attachments.uploadFile", {
-                              defaultValue: "Upload file",
-                            })}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => imageInputRef.current?.click()}
-                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
-                        >
-                          <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                          <span>
-                            {t("attachments.uploadImage", {
-                              defaultValue: "Upload image",
-                            })}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={handleAddFromProject}
-                          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left transition hover:bg-muted"
-                        >
-                          <FolderOpenIcon className="h-4 w-4 text-muted-foreground" />
-                          <span>
-                            {t("attachments.addFromProject", {
-                              defaultValue: "Add from project",
-                            })}
-                          </span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <DropdownMenu
+                    open={attachmentMenuOpen}
+                    onOpenChange={(open) => {
+                      setHistoryOpen(false);
+                      setConfigMenuOpen(null);
+                      setAttachmentMenuOpen(open);
+                    }}
+                  >
+                    <DropdownMenuTrigger render={<Button aria-label={t("attachments.add", { defaultValue: "Add attachment" })} className="flex size-8 items-center justify-center rounded-full text-muted-foreground" size="icon-sm" type="button" variant="ghost" />}>
+                      <PlusIcon aria-hidden="true" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-56" side="top" sideOffset={8}>
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>{t("attachments.menuTitle", { defaultValue: "Add to this message" })}</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => fileInputRef.current?.click()}><FileIcon aria-hidden="true" />{t("attachments.uploadFile", { defaultValue: "Upload file" })}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => imageInputRef.current?.click()}><ImageIcon aria-hidden="true" />{t("attachments.uploadImage", { defaultValue: "Upload image" })}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleAddFromProject}><FolderOpenIcon aria-hidden="true" />{t("attachments.addFromProject", { defaultValue: "Add from project" })}</DropdownMenuItem>
+                      </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <PromptInput
                     value={input}
                     onValueChange={(value) => {
@@ -2188,7 +2256,7 @@ export function AIAssistantPanel({
                             : t("actions.send")
                         }
                       >
-                        <button
+                        <Button
                           type="button"
                           onClick={isStreaming ? stopAssistantResponse : handleSend}
                           disabled={isStreaming ? false : !canSend}
@@ -2205,6 +2273,8 @@ export function AIAssistantPanel({
                               ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
                               : "text-muted-foreground",
                           )}
+                          size="icon"
+                          variant="ghost"
                         >
                           {isStreaming ? (
                             <>
@@ -2216,7 +2286,7 @@ export function AIAssistantPanel({
                           ) : (
                             <SendIcon className="w-4 h-4" />
                           )}
-                        </button>
+                        </Button>
                       </PromptInputAction>
                     </PromptInputActions>
                   </PromptInput>
@@ -2240,225 +2310,35 @@ export function AIAssistantPanel({
                     )}
                   </span>
                   <div className="relative ml-auto flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
-                    <button
-                      type="button"
-                      aria-label={t("model.select", {
-                        defaultValue: "Select model",
-                      })}
-                      onClick={() => {
+                    <AssistantComposerMenus
+                      variant="panel"
+                      showAttachment={false}
+                      attachmentMenuOpen={attachmentMenuOpen}
+                      configMenuOpen={configMenuOpen}
+                      modelLabel={modelLabel}
+                      reasoningLabel={reasoningLabel}
+                      approvalLabel={approvalLabel}
+                      approvalHint={approvalHint}
+                      providerConfigs={providerConfigs}
+                      selectedProviderConfigId={state.selectedProviderConfigId}
+                      reasoningEffort={state.reasoningEffort}
+                      approvalMode={state.approvalMode}
+                      onAttachmentMenuOpenChange={(open) => {
+                        setAttachmentMenuOpen(open);
+                        setConfigMenuOpen(null);
+                      }}
+                      onConfigMenuOpenChange={(menu, open) => {
                         setAttachmentMenuOpen(false);
                         setHistoryOpen(false);
-                        setConfigMenuOpen((value) =>
-                          value === "model" ? null : "model",
-                        );
+                        setConfigMenuOpen(open ? menu : null);
                       }}
-                      className="flex max-w-[7.25rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground min-[420px]:max-w-[9.5rem]"
-                    >
-                      <span className="truncate">{modelLabel}</span>
-                      <ChevronDownIcon className="h-3 w-3 shrink-0" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t("reasoning.select", {
-                        defaultValue: "Select reasoning effort",
-                      })}
-                      onClick={() => {
-                        setAttachmentMenuOpen(false);
-                        setHistoryOpen(false);
-                        setConfigMenuOpen((value) =>
-                          value === "reasoning" ? null : "reasoning",
-                        );
-                      }}
-                      className="flex items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground"
-                    >
-                      <span>{reasoningLabel}</span>
-                      <ChevronDownIcon className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t("approval.select", {
-                        defaultValue: "Select approval mode",
-                      })}
-                      title={approvalHint}
-                      onClick={() => {
-                        setAttachmentMenuOpen(false);
-                        setHistoryOpen(false);
-                        setConfigMenuOpen((value) =>
-                          value === "approval" ? null : "approval",
-                        );
-                      }}
-                      className={cn(
-                        "flex max-w-[6.75rem] items-center gap-1 rounded-full px-2 py-1 transition hover:bg-muted hover:text-foreground",
-                        state.approvalMode === "full_access" &&
-                          "text-amber-600 dark:text-amber-300",
-                      )}
-                    >
-                      <span className="truncate">{approvalLabel}</span>
-                      <ChevronDownIcon className="h-3 w-3 shrink-0" />
-                    </button>
-                    {configMenuOpen && (
-                      <div
-                        role="menu"
-                        className="absolute bottom-7 right-0 z-30 w-[min(16rem,calc(100vw-2.25rem))] overflow-hidden rounded-xl border bg-popover/95 p-1.5 text-sm shadow-lg backdrop-blur-xl"
-                        style={{
-                          borderColor:
-                            "color-mix(in oklch, var(--border) 72%, transparent)",
-                          color: "var(--popover-foreground)",
-                        }}
-                      >
-                        {configMenuOpen === "model" ? (
-                          <>
-                            <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
-                              {t("model.menuTitle", { defaultValue: "Model" })}
-                            </div>
-                            <button
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={!state.selectedProviderConfigId}
-                              onClick={() => {
-                                setSelectedProviderConfig(null);
-                                setConfigMenuOpen(null);
-                              }}
-                              className={cn(
-                                "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                                !state.selectedProviderConfigId &&
-                                  "bg-muted text-foreground",
-                              )}
-                            >
-                              <span className="min-w-0">
-                                <span className="block truncate text-sm font-medium">
-                                  {t("model.platformDefault", {
-                                    defaultValue: "Platform default",
-                                  })}
-                                </span>
-                                <span className="block truncate text-xs text-muted-foreground">
-                                  {t("model.platformHint", {
-                                    defaultValue: "Use BidPilot official model",
-                                  })}
-                                </span>
-                              </span>
-                              {!state.selectedProviderConfigId && (
-                                <span className="text-xs">✓</span>
-                              )}
-                            </button>
-                            {providerConfigs.map((provider) => (
-                              <button
-                                key={provider.id}
-                                type="button"
-                                role="menuitemradio"
-                                aria-checked={
-                                  state.selectedProviderConfigId === provider.id
-                                }
-                                onClick={() => {
-                                  setSelectedProviderConfig(provider.id);
-                                  setConfigMenuOpen(null);
-                                }}
-                                className={cn(
-                                  "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                                  state.selectedProviderConfigId ===
-                                    provider.id && "bg-muted text-foreground",
-                                )}
-                              >
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm font-medium">
-                                    {provider.label}
-                                  </span>
-                                  <span className="block truncate text-xs text-muted-foreground">
-                                    {provider.model}
-                                  </span>
-                                </span>
-                                {state.selectedProviderConfigId ===
-                                  provider.id && (
-                                  <span className="text-xs">✓</span>
-                                )}
-                              </button>
-                            ))}
-                            {providerConfigs.length === 0 && (
-                              <div className="px-3 py-2 text-xs text-muted-foreground">
-                                {t("model.empty", {
-                                  defaultValue: "No custom providers yet",
-                                })}
-                              </div>
-                            )}
-                          </>
-                        ) : configMenuOpen === "reasoning" ? (
-                          <>
-                            <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
-                              {t("reasoning.menuTitle", {
-                                defaultValue: "Reasoning",
-                              })}
-                            </div>
-                            {REASONING_OPTIONS.map((effort) => (
-                              <button
-                                key={effort}
-                                type="button"
-                                role="menuitemradio"
-                                aria-checked={state.reasoningEffort === effort}
-                                onClick={() => {
-                                  setReasoningEffort(effort);
-                                  setConfigMenuOpen(null);
-                                }}
-                                className={cn(
-                                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                                  state.reasoningEffort === effort &&
-                                    "bg-muted text-foreground",
-                                )}
-                              >
-                                <span>
-                                  {t(`reasoning.options.${effort}`, {
-                                    defaultValue: effort,
-                                  })}
-                                </span>
-                                {state.reasoningEffort === effort && (
-                                  <span className="text-xs">✓</span>
-                                )}
-                              </button>
-                            ))}
-                          </>
-                        ) : (
-                          <>
-                            <div className="px-3 pb-1.5 pt-2 text-[11px] font-medium text-muted-foreground">
-                              {t("approval.menuTitle", {
-                                defaultValue: "Approval",
-                              })}
-                            </div>
-                            {APPROVAL_MODES.map((mode) => (
-                              <button
-                                key={mode}
-                                type="button"
-                                role="menuitemradio"
-                                aria-checked={state.approvalMode === mode}
-                                onClick={() => {
-                                  setApprovalMode(mode);
-                                  setConfigMenuOpen(null);
-                                }}
-                                className={cn(
-                                  "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-muted",
-                                  state.approvalMode === mode &&
-                                    "bg-muted text-foreground",
-                                )}
-                              >
-                                <span className="min-w-0">
-                                  <span className="block truncate text-sm font-medium">
-                                    {t(`approval.options.${mode}`, {
-                                      defaultValue: mode,
-                                    })}
-                                  </span>
-                                  <span className="block truncate text-xs text-muted-foreground">
-                                    {t(`approval.hints.${mode}`, {
-                                      defaultValue: "",
-                                    })}
-                                  </span>
-                                </span>
-                                {state.approvalMode === mode && (
-                                  <span className="text-xs">✓</span>
-                                )}
-                              </button>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    )}
+                      onSelectProvider={setSelectedProviderConfig}
+                      onSelectReasoning={setReasoningEffort}
+                      onSelectApproval={setApprovalMode}
+                      onUploadFile={() => fileInputRef.current?.click()}
+                      onUploadImage={() => imageInputRef.current?.click()}
+                      onAddFromProject={handleAddFromProject}
+                    />
                   </div>
                 </div>
               </div>

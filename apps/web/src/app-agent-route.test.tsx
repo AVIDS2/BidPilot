@@ -20,7 +20,10 @@ vi.mock("@/features/agent/components/AgentWakeResume", () => ({
 }));
 
 vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children: unknown }) => children,
+  TooltipContent: () => null,
   TooltipProvider: ({ children }: { children: unknown }) => children,
+  TooltipTrigger: ({ children, render }: { children: unknown; render?: unknown }) => render ?? children,
 }));
 
 vi.mock("@/features/agent/state/agent-store", () => ({

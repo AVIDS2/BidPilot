@@ -42,6 +42,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -201,7 +202,7 @@ export function BidProjectsPage() {
               {(["all", "active", "completed", "archived"] as const).map((status) => (
                 <TabsTrigger className="wb-project-tab" key={status} value={status}>
                   {status === "all" ? "全部" : PROJECT_STATUSES.find((item) => item.value === status)?.label}
-                  <small>{counts[status]}</small>
+                  <small>{projectsQuery.isLoading ? "—" : counts[status]}</small>
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -236,7 +237,7 @@ export function BidProjectsPage() {
               <TableBody>
 
                 {projectsQuery.isLoading ? (
-                  <TableRow><TableCell className="wb-projects-table__state" colSpan={5} role="status">正在加载项目…</TableCell></TableRow>
+                  <TableRow><TableCell className="wb-projects-table__state" colSpan={5} role="status"><div className="flex flex-col gap-3 py-3"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-5 w-5/6" /><Skeleton className="h-5 w-3/5" /></div></TableCell></TableRow>
                 ) : null}
 
                 {!projectsQuery.isLoading && projects.length === 0 ? (
@@ -247,9 +248,9 @@ export function BidProjectsPage() {
                         <strong>{allProjects.length === 0 ? "创建第一个投标机会" : "没有匹配的机会"}</strong>
                         <span>{allProjects.length === 0 ? "将一个招标机会转化为可协作、可追溯的响应工作集。" : "调整搜索词或状态筛选。"}</span>
                         {allProjects.length === 0 ? (
-                          <button className="wb-text-action" onClick={() => setIsCreating(true)} type="button">
-                            新建机会 <ChevronRightIcon aria-hidden="true" />
-                          </button>
+                          <Button className="wb-text-action" onClick={() => setIsCreating(true)} size="sm" type="button" variant="ghost">
+                            新建机会 <ChevronRightIcon aria-hidden="true" data-icon="inline-end" />
+                          </Button>
                         ) : null}
                       </div>
                     </TableCell>

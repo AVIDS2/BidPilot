@@ -2377,6 +2377,9 @@ class RuntimeAction(Base):
     # tree without parsing implementation identifiers.
     parent_event_id: Mapped[str | None] = mapped_column(String(36))
     turn_id: Mapped[str | None] = mapped_column(String(64))
+    # Correlates the durable capability event with the provider-native Pi
+    # tool lifecycle event rendered by the browser.
+    tool_call_id: Mapped[str | None] = mapped_column(String(128))
     action_key: Mapped[str] = mapped_column(String(255), nullable=False)
     capability_name: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="pending")

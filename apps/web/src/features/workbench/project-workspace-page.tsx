@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   createBundle,
@@ -638,7 +639,7 @@ function RequirementInspectorSheet({
           <SheetDescription>在当前项目上下文中核对原文、证据和响应责任。</SheetDescription>
         </SheetHeader>
         <div className="wb-requirement-inspector__body">
-          {loading ? <div className="wb-requirement-inspector__loading"><span /><span /><span /></div> : null}
+          {loading ? <div className="flex flex-col gap-3" role="status" aria-label="正在读取要求详情"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-20 w-full" /><Skeleton className="h-5 w-1/2" /></div> : null}
           {error ? <div className="wb-requirement-inspector__error">暂时无法读取这条要求的详情，请稍后重试。</div> : null}
           {detail ? (
             <div className="wb-requirement-inspector__content">
@@ -814,7 +815,7 @@ function DocumentInspectorSheet({ assets, document, error, loading, onClose, ope
           {document ? <div className="wb-document-inspector__content">
             <section className="wb-document-inspector__lead"><div className="wb-document-inspector__file"><FileTextIcon aria-hidden="true" /><div><h2>{document.original_filename}</h2><p>{document.mime_type}</p></div></div><div className="wb-document-inspector__badges"><StatusMark status={document.parse_status} /><StatusMark status={document.index_status} /></div></section>
             <section className="wb-document-inspector__section"><header><FileClockIcon aria-hidden="true" /><h3>处理信息</h3></header><dl><div><dt>解析器</dt><dd>{document.parse_status === "not_applicable" ? "该附件无需文本解析" : (document.parser_name ?? "尚未运行")}{document.parser_version ? ` · ${document.parser_version}` : ""}</dd></div><div><dt>解析尝试</dt><dd>{document.parse_attempt_count} 次</dd></div><div><dt>当前版本</dt><dd>v{document.version_number}</dd></div><div><dt>被替代版本</dt><dd>{document.supersedes_document_id ?? "无"}</dd></div></dl>{document.parse_error_detail ? <p className="wb-document-inspector__error"><FileWarningIcon aria-hidden="true" />{document.parse_error_detail}</p> : null}</section>
-            <section className="wb-document-inspector__section"><header><FileSearchIcon aria-hidden="true" /><h3>解析预览</h3></header>{document.parse_status === "not_applicable" ? <p className="wb-document-inspector__empty">此文件已作为项目附件归档，可下载使用；当前格式不参与文本解析、要求识别或证据检索。</p> : <>{loading ? <div className="wb-document-inspector__loading"><span /><span /><span /></div> : null}{error ? <p className="wb-document-inspector__error">暂时无法读取解析结果。</p> : null}{!loading && !error && preview ? <pre className="wb-document-inspector__preview">{preview.slice(0, 8000)}</pre> : null}{!loading && !error && !preview ? <p className="wb-document-inspector__empty">这份资料还没有可预览的解析文本，完成解析后会自动出现。</p> : null}</>}</section>
+             <section className="wb-document-inspector__section"><header><FileSearchIcon aria-hidden="true" /><h3>解析预览</h3></header>{document.parse_status === "not_applicable" ? <p className="wb-document-inspector__empty">此文件已作为项目附件归档，可下载使用；当前格式不参与文本解析、要求识别或证据检索。</p> : <>{loading ? <div className="flex flex-col gap-3" role="status" aria-label="正在读取解析预览"><Skeleton className="h-5 w-2/3" /><Skeleton className="h-40 w-full" /><Skeleton className="h-5 w-1/2" /></div> : null}{error ? <p className="wb-document-inspector__error">暂时无法读取解析结果。</p> : null}{!loading && !error && preview ? <pre className="wb-document-inspector__preview">{preview.slice(0, 8000)}</pre> : null}{!loading && !error && !preview ? <p className="wb-document-inspector__empty">这份资料还没有可预览的解析文本，完成解析后会自动出现。</p> : null}</>}</section>
           </div> : null}
         </div>
       </SheetContent>
@@ -1634,7 +1635,7 @@ export function ProjectWorkspacePage() {
   };
 
   if (projectQuery.isPending) {
-    return <div className="wb-project-loading">正在读取项目…</div>;
+    return <div className="flex min-h-full items-start justify-center px-6 py-10" role="status" aria-label="正在读取项目"><div className="flex w-full max-w-5xl flex-col gap-5"><div className="flex items-center justify-between gap-4"><div className="flex min-w-0 flex-1 flex-col gap-2"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-72 max-w-full" /></div><Skeleton className="h-8 w-24" /></div><Skeleton className="h-12 w-full" /><Skeleton className="h-56 w-full" /></div></div>;
   }
 
   if (projectQuery.isError || !projectQuery.data) {

@@ -1,6 +1,8 @@
 import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -25,10 +27,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import {
-  AIAssistantPanel,
-  type AttachmentPreviewSelection,
-} from "@/features/agent/components/AIAssistantPanel";
+import type { AttachmentPreviewSelection } from "@/features/agent/components/AIAssistantPanel";
 import { WorkflowCanvas } from "@/components/workflow-canvas";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,7 +57,23 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import "./linear-agent-workspace.css";
+
+const LazyAIAssistantPanel = lazy(() => import("@/features/agent/components/AIAssistantPanel").then(({ AIAssistantPanel }) => ({ default: AIAssistantPanel })));
+
+function AgentComposerLoading() {
+  return (
+    <div className="flex min-h-28 w-full flex-col gap-3 rounded-lg border bg-background p-3" role="status" aria-label="正在加载 Agent 输入框">
+      <Skeleton className="h-12 w-full" />
+      <div className="flex items-center justify-between gap-3">
+        <Skeleton className="h-7 w-20" />
+        <Skeleton className="h-7 w-28" />
+      </div>
+    </div>
+  );
+}
 
 function AgentPreviewCanvas({
   selection,
@@ -99,7 +114,7 @@ function AgentPreviewCanvas({
             <strong title={selection.name}>{selection.name}</strong>
             <span>{formatPreviewSize(selection.size)} · {isImage ? "图片" : "文件"}</span>
           </div>
-          <button type="button" className="agent-preview-close" aria-label="关闭预览" onClick={onClose}><XIcon size={16} /></button>
+          <Button className="agent-preview-close" aria-label="关闭预览" onClick={onClose} size="icon-sm" type="button" variant="ghost"><XIcon aria-hidden="true" /></Button>
         </header>
       )}
       <div className="agent-preview-body">
@@ -149,7 +164,7 @@ function AgentWorkflowCanvas({
             <strong>响应工作流</strong>
             <span>{workflow?.isWaitingApproval ? "当前在等待人工确认" : workflow?.summary || "查看本次任务的执行路径与节点状态"}</span>
           </div>
-          <button type="button" className="agent-preview-close" aria-label="关闭任务编排画布" onClick={onClose}><XIcon size={16} /></button>
+          <Button className="agent-preview-close" aria-label="关闭任务编排画布" onClick={onClose} size="icon-sm" type="button" variant="ghost"><XIcon aria-hidden="true" /></Button>
         </header>
       )}
       <div className="agent-preview-body agent-workflow-body">
@@ -161,7 +176,7 @@ function AgentWorkflowCanvas({
       </div>
       <footer className="agent-workflow-footer">
         <span>{workflow ? "节点状态会随当前运行实时更新" : "当前项目尚无运行中的编排任务"}</span>
-        <button type="button" onClick={onOpenProject}><PanelTopIcon size={14} />在项目工作区打开</button>
+        <Button onClick={onOpenProject} size="sm" type="button" variant="ghost"><PanelTopIcon aria-hidden="true" data-icon="inline-start" />在项目工作区打开</Button>
       </footer>
     </aside>
   );
@@ -268,26 +283,28 @@ function AgentHistory({
   return (
     <div className={`bp-linear-history${open ? " is-open" : ""}`} aria-hidden={!open}>
       <div className="bp-linear-history-inner">
-        <button type="button" className="bp-linear-history-new" onClick={onNew}>
+        <Button type="button" className="bp-linear-history-new" onClick={onNew} size="sm" variant="ghost">
           <PlusIcon data-icon="inline-start" /> 新对话
-        </button>
+        </Button>
         {groups.map(({ id, items, project }) => {
           const label = project?.name ?? "个人会话";
           return (
           <section className="bp-linear-history-group" key={id}>
             <div className="bp-linear-history-project-heading">
-              <button
+              <Button
                 type="button"
                 className="bp-linear-history-project-main"
                 onClick={() => id !== "personal" && onOpenProject(id)}
                 disabled={id === "personal"}
+                size="sm"
+                variant="ghost"
               >
                 {id === "personal" ? <MessageSquareTextIcon aria-hidden="true" /> : <FolderKanbanIcon aria-hidden="true" />}
                 <span>
                   <strong>{label}</strong>
                   <small>{project?.scenario_package || `${items.length} 个会话`}</small>
                 </span>
-              </button>
+              </Button>
               <span className="bp-linear-history-project-count">{items.length}</span>
             </div>
             {items.map((conversation) => {
@@ -299,7 +316,7 @@ function AgentHistory({
                   className={`bp-linear-history-row${conversation.id === currentConversationId ? " is-current" : ""}`}
                 >
                   {isEditing ? (
-                    <input
+                    <Input
                       autoFocus
                       value={editingTitle}
                       aria-label="会话名称"
@@ -314,14 +331,16 @@ function AgentHistory({
                       onBlur={() => commitEditing(conversation.id)}
                     />
                   ) : (
-                    <button
+                    <Button
                       type="button"
                       className="bp-linear-history-row-main"
                       onClick={() => onSelect(conversation.id)}
+                      size="sm"
+                      variant="ghost"
                     >
                       <strong>{title}</strong>
                       {conversation.id === currentConversationId ? <small>当前</small> : null}
-                    </button>
+                    </Button>
                   )}
                   <DropdownMenu>
                     <DropdownMenuTrigger
@@ -394,14 +413,16 @@ function AgentWelcome({ onExample, onPreviewAttachment }: { onExample: (prompt: 
     <div className="agent-welcome" aria-label="BidPilot Agent welcome">
       <div className="agent-watermark" aria-hidden="true"><i className="watermark-disk" /><i className="watermark-slice slice-one" /><i className="watermark-slice slice-two" /><i className="watermark-slice slice-three" /></div>
       <h3>欢迎使用 BidPilot</h3>
-      <AIAssistantPanel variant="linear-agent" onPreviewAttachment={onPreviewAttachment} />
+      <Suspense fallback={<AgentComposerLoading />}>
+        <LazyAIAssistantPanel variant="linear-agent" onPreviewAttachment={onPreviewAttachment} />
+      </Suspense>
       {examplesVisible ? (
         <section className="agent-examples" aria-label="Agent examples">
           <div className="examples-label">
             <span>从这些常用任务开始</span>
-            <button type="button" aria-label="隐藏示例" onClick={() => setExamplesVisible(false)}>
-              <XIcon aria-hidden="true" size={14} />
-            </button>
+            <Button aria-label="隐藏示例" onClick={() => setExamplesVisible(false)} size="icon-xs" type="button" variant="ghost">
+              <XIcon aria-hidden="true" />
+            </Button>
           </div>
           <div className="examples-grid">
             {examples.map((example) => {
@@ -425,7 +446,7 @@ function AgentFooter({ onHistory }: { onHistory: () => void }) {
   return (
     <div className="agent-footer">
       <span><PanelTopIcon size={14} /> Agent</span>
-      <button type="button" aria-label="Chat history" onClick={onHistory}><Clock3Icon size={15} /></button>
+      <Button aria-label="Chat history" onClick={onHistory} size="icon-xs" type="button" variant="ghost"><Clock3Icon aria-hidden="true" /></Button>
     </div>
   );
 }
@@ -564,10 +585,10 @@ export function LinearAgentWorkspace() {
         <section className="agent-canvas">
           <div className="agent-history-surface" ref={historySurfaceRef}>
             <header className="agent-topbar">
-              <button type="button" className="chat-switch" aria-expanded={historyOpen} onClick={() => setHistoryOpen((value) => !value)}>
-                <span>{conversationTitle}</span><ChevronDownIcon size={13} />
-              </button>
-              <button
+              <Button type="button" className="chat-switch" aria-expanded={historyOpen} onClick={() => setHistoryOpen((value) => !value)} size="sm" variant="ghost">
+                <span>{conversationTitle}</span><ChevronDownIcon aria-hidden="true" />
+              </Button>
+              <Button
                 type="button"
                 className={`agent-header-icon${currentConversation?.is_pinned ? " is-active" : ""}`}
                 aria-label={currentConversation?.is_pinned ? "取消置顶会话" : "置顶会话"}
@@ -576,22 +597,26 @@ export function LinearAgentWorkspace() {
                     void togglePinnedConversation(currentConversation.id, !currentConversation.is_pinned);
                   }
                 }}
+                size="icon-sm"
+                variant="ghost"
               >
-                <StarIcon size={15} fill={currentConversation?.is_pinned ? "currentColor" : "none"} />
-              </button>
-              <button type="button" className="agent-header-icon" aria-label="Conversation options" onClick={() => setHistoryOpen((value) => !value)}>
-                <MoreHorizontalIcon size={16} />
-              </button>
-              <button
+                <StarIcon aria-hidden="true" fill={currentConversation?.is_pinned ? "currentColor" : "none"} />
+              </Button>
+              <Button type="button" className="agent-header-icon" aria-label="Conversation options" onClick={() => setHistoryOpen((value) => !value)} size="icon-sm" variant="ghost">
+                <MoreHorizontalIcon aria-hidden="true" />
+              </Button>
+              <Button
                 type="button"
                 className={`agent-header-icon${environmentPanelOpen ? " is-active" : ""}`}
                 aria-expanded={environmentPanelOpen}
                 aria-label={environmentPanelOpen ? "收起工作概览" : "打开工作概览"}
                 title={environmentPanelOpen ? "收起工作概览" : "打开工作概览"}
                 onClick={() => setEnvironmentPanelOpen((value) => !value)}
+                size="icon-sm"
+                variant="ghost"
               >
-                <PanelRightIcon size={15} />
-              </button>
+                <PanelRightIcon aria-hidden="true" />
+              </Button>
             </header>
             <AgentHistory
               open={historyOpen}
@@ -628,13 +653,15 @@ export function LinearAgentWorkspace() {
                   onOpenWorkflowCanvas={openWorkflowCanvas}
                 />
                 <div className="bp-linear-agent-composer-slot" aria-label="Agent composer">
-                  <AIAssistantPanel
-                    variant="linear-agent"
-                    onPreviewAttachment={(selection) => {
-                      setWorkflowCanvasProjectId(null);
-                      setPreviewAttachment(selection);
-                    }}
-                  />
+                  <Suspense fallback={<AgentComposerLoading />}>
+                    <LazyAIAssistantPanel
+                      variant="linear-agent"
+                      onPreviewAttachment={(selection) => {
+                        setWorkflowCanvasProjectId(null);
+                        setPreviewAttachment(selection);
+                      }}
+                    />
+                  </Suspense>
                 </div>
               </>
             ) : (

@@ -49,6 +49,7 @@ function createState(): AIAssistantState {
     activeAssistantMessageId: null,
     assistantContentBuffers: {},
     isStreaming: false,
+    isThinking: false,
     status: "completed",
     executionItems: [
       {
@@ -232,6 +233,7 @@ describe("ClaudeAgentThread", () => {
   it("keeps a visible live indicator after narration while the next event is pending", () => {
     const state = createState();
     state.isStreaming = true;
+    state.isThinking = true;
     state.activeAssistantMessageId = "assistant-1";
     state.executionItems = [];
 
@@ -246,6 +248,58 @@ describe("ClaudeAgentThread", () => {
     );
 
     expect(screen.getByLabelText("正在思考")).toBeInTheDocument();
+  });
+
+  it("does not call an open stream thinking without a native thinking signal", () => {
+    const state = createState();
+    state.isStreaming = true;
+    state.activeAssistantMessageId = "assistant-1";
+    state.executionItems = [];
+
+    render(
+      <ClaudeAgentThread
+        state={state}
+        onCancelWorkflow={vi.fn().mockResolvedValue(undefined)}
+        onConfigureProvider={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancelConfirmation={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("正在思考")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("等待首个响应")).not.toBeInTheDocument();
+  });
+
+  it("renders stale reasoning as completed after the stream has ended", () => {
+    const state = createState();
+    state.messages[1] = {
+      ...state.messages[1],
+      content: "最终结果",
+      transcriptParts: [
+        {
+          id: "stale-reasoning",
+          kind: "reasoning",
+          text: "上一次运行留下的状态",
+          source: "harness",
+          turnId: "turn-stale",
+          completed: false,
+          timestamp: 3,
+        },
+      ],
+    };
+
+    render(
+      <ClaudeAgentThread
+        state={state}
+        onCancelWorkflow={vi.fn().mockResolvedValue(undefined)}
+        onConfigureProvider={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancelConfirmation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("思考过程")).toBeInTheDocument();
+    expect(screen.queryByLabelText("正在思考")).not.toBeInTheDocument();
   });
 
   it("sends user retry through the durable checkpoint action", () => {

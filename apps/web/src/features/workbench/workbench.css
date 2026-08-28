@@ -2145,10 +2145,6 @@
 .wb-requirement-trace-list article > span { color: #92939a; font-size: 11px; line-height: 1.45; }
 .wb-requirement-trace-list article [data-slot="button"] { width: fit-content; }
 .wb-requirement-inspector__empty { margin: 0; color: #85868d; font-size: 12px; line-height: 1.6; }
-.wb-requirement-inspector__loading { display: grid; gap: 12px; }
-.wb-requirement-inspector__loading span { display: block; height: 12px; border-radius: 4px; background: linear-gradient(90deg, #f0f1f1, #fafafa, #f0f1f1); animation: wb-inspector-pulse 1.3s ease-in-out infinite; }
-.wb-requirement-inspector__loading span:nth-child(2) { width: 82%; height: 72px; }
-.wb-requirement-inspector__loading span:nth-child(3) { width: 58%; }
 .wb-requirement-inspector__error { border: 1px solid #f0ded1; border-radius: 8px; background: #fffaf6; padding: 13px; color: #a25e31; font-size: 12px; line-height: 1.6; }
 
 /* Materials: make processing state and recovery actions visible at the point of failure. */
@@ -2211,13 +2207,6 @@
 .wb-document-inspector__error { display: flex; align-items: flex-start; gap: 7px; margin: 0; border: 1px solid #f0ded1; border-radius: 8px; background: #fffaf6; padding: 13px; color: #a25e31; font-size: 12px; line-height: 1.6; }
 .wb-document-inspector__error svg { width: 14px; height: 14px; flex: none; margin-top: 2px; stroke-width: 1.6; }
 .wb-document-inspector__empty { margin: 0; color: #85868d; font-size: 12px; line-height: 1.6; }
-.wb-document-inspector__loading { display: grid; gap: 12px; }
-.wb-document-inspector__loading span { display: block; height: 12px; border-radius: 4px; background: linear-gradient(90deg, #f0f1f1, #fafafa, #f0f1f1); animation: wb-inspector-pulse 1.3s ease-in-out infinite; }
-.wb-document-inspector__loading span:nth-child(2) { width: 82%; height: 150px; }
-.wb-document-inspector__loading span:nth-child(3) { width: 58%; }
-
-@keyframes wb-inspector-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
-
 @media (max-width: 760px) {
   .wb-requirement-inspector { width: 100vw; }
   .wb-requirement-inspector__header { padding: 20px 18px 16px; }

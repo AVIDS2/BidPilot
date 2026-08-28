@@ -425,6 +425,71 @@ describe("runtime event feed", () => {
     ]);
   });
 
+  it("does not recover a terminal failure as a normal assistant message", () => {
+    expect(
+      recoverRuntimeMessageFromEvents("runtime-1", [
+        runtimeEvent({
+          type: "message.completed",
+          public_summary: "模型运行未能完成。",
+          payload: { terminal_failure: true },
+        }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("keeps a failed assistant turn's partial answer separate from its terminal error", () => {
+    const events = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        type: "run.failed",
+        public_summary: "任务未能完成。",
+        payload: {
+          kind: "assistant_turn",
+          message: "助手运行未完成，已安全停止。",
+          message_delta_emitted: true,
+          error_code: "assistant_stream_incomplete",
+        },
+      }),
+      "conversation-1",
+    );
+
+    expect(events).toEqual([
+      {
+        eventType: "assistant.session_error",
+        data: expect.objectContaining({
+          message: "助手运行未完成，已安全停止。",
+          error_code: "assistant_stream_incomplete",
+          state: "failed",
+        }),
+      },
+      {
+        eventType: "assistant.end",
+        data: expect.objectContaining({
+          conversation_id: "conversation-1",
+          state: "failed",
+        }),
+      },
+    ]);
+  });
+
+  it("carries a durable tool call id into both capability lifecycle events", () => {
+    const events = runtimeEventToAssistantEvents(
+      runtimeEvent({
+        type: "capability.started",
+        payload: {
+          capability: "search_projects",
+          action_id: "action-1",
+          tool_call_id: "pi-call-1",
+          turn_id: "turn-1",
+        },
+      }),
+    );
+
+    expect(events[0]?.data).toEqual(expect.objectContaining({
+      tool_call_id: "pi-call-1",
+      turn_id: "turn-1",
+    }));
+  });
+
   it("maps Pi subagent tool lifecycle without exposing arguments or raw results", () => {
     const started = runtimeEventToAssistantEvents(runtimeEvent({
       type: "capability.progressed",

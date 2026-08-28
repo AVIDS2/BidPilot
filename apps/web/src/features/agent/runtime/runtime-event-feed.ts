@@ -119,7 +119,12 @@ export function recoverRuntimeMessageFromEvents(
 ): RecoveredRuntimeMessage | null {
   const completed = [...events]
     .reverse()
-    .find((event) => event.type === "message.completed" && event.public_summary.trim());
+    .find(
+      (event) =>
+        event.type === "message.completed" &&
+        event.payload.terminal_failure !== true &&
+        event.public_summary.trim(),
+    );
   const deltas = events
     .filter((event) => event.type === "message.delta")
     .map((event) => event.public_summary)
@@ -458,7 +463,7 @@ export function runtimeEventToAssistantEvents(
         data: { ...metadata, turn_id: turnId, content: event.public_summary, state: "thinking" },
       }];
     case "message.completed":
-      if (payload.delta_emitted === true) return [];
+      if (payload.delta_emitted === true || payload.terminal_failure === true) return [];
       return [{
         eventType: "assistant.message",
         data: { ...metadata, turn_id: turnId, content: event.public_summary, state: "completed" },
@@ -474,6 +479,27 @@ export function runtimeEventToAssistantEvents(
               phase: "failed",
               summary: event.public_summary,
               error_message: event.public_summary,
+              error_code: asString(payload.error_code),
+              state: "failed",
+            },
+          },
+          {
+            eventType: "assistant.end",
+            data: {
+              ...metadata,
+              conversation_id: conversationId ?? undefined,
+              state: "failed",
+            },
+          },
+        ];
+      }
+      if (payload.kind === "assistant_turn") {
+        return [
+          {
+            eventType: "assistant.session_error",
+            data: {
+              ...metadata,
+              message: asString(payload.message) ?? "本次回复未能完成，已安全停止。",
               error_code: asString(payload.error_code),
               state: "failed",
             },

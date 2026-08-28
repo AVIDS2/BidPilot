@@ -223,6 +223,58 @@ describe("AIAssistantPanel", () => {
     expect(document.querySelector(".cr-task-turn-summary")).not.toBeInTheDocument();
   });
 
+  it("shows the thinking indicator only after Pi reports a live thinking boundary", async () => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: new ReadableStream({
+          start(streamController) {
+            controller = streamController;
+          },
+        }),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Live thinking check" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(controller).not.toBeNull());
+    controller!.enqueue(
+      encoder.encode(
+        [
+          'event: assistant.start\ndata: {"conversation_id":"c-live-thinking","state":"thinking"}',
+        ].join("\n\n") + "\n\n",
+      ),
+    );
+    expect(screen.queryByTestId("assistant-thinking-indicator")).not.toBeInTheDocument();
+
+    controller!.enqueue(
+      encoder.encode(
+        'event: assistant.runtime_state\ndata: {"phase":"thinking.started","state":"thinking"}\n\n',
+      ),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("assistant-thinking-indicator")).toBeInTheDocument();
+    });
+
+    controller!.enqueue(
+      encoder.encode(
+        'event: assistant.runtime_state\ndata: {"phase":"thinking.completed","state":"thinking"}\n\n',
+      ),
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId("assistant-thinking-indicator")).not.toBeInTheDocument();
+    });
+    controller!.close();
+  });
+
   it("submits a prompt once when Enter is pressed", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -349,6 +401,94 @@ describe("AIAssistantPanel", () => {
     await waitFor(() => {
       expect(requestSignal?.aborted).toBe(true);
     });
+  });
+
+  it("merges a durable tool result into the live card when replay omits the call id", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-merge-tool","runtime_run_id":"run-merge-tool","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"runtime_run_id":"run-merge-tool","tool_name":"search_projects","tool_call_id":"call-live","state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"runtime_run_id":"run-merge-tool","tool_name":"search_projects","summary":"已完成项目检索。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-merge-tool","runtime_run_id":"run-merge-tool","state":"completed"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Merge the durable tool result" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("assistant-activity-step-call-live")).toHaveAttribute("data-status", "succeeded");
+    });
+    expect(screen.getAllByTestId("assistant-activity-step-call-live")).toHaveLength(1);
+  });
+
+  it("does not fabricate a failed tool row when the stream ends without a tool result", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-no-ghost","runtime_run_id":"run-no-ghost","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"runtime_run_id":"run-no-ghost","tool_name":"search_projects","tool_call_id":"call-no-ghost","state":"executing_tool"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-no-ghost","runtime_run_id":"run-no-ghost","state":"failed"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "No ghost tool" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument());
+    expect(screen.queryByTestId("assistant-activity-step-call-no-ghost")).not.toBeInTheDocument();
+    expect(screen.queryByText("本轮已结束（工具未收到完成事件）")).not.toBeInTheDocument();
+  });
+
+  it("keeps separate Pi tool calls separate when the same capability runs twice", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-same-tool","runtime_run_id":"run-same-tool","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"runtime_run_id":"run-same-tool","tool_name":"search_projects","tool_call_id":"call-a","state":"executing_tool"}',
+            'event: assistant.tool_started\ndata: {"runtime_run_id":"run-same-tool","tool_name":"search_projects","tool_call_id":"call-b","state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"runtime_run_id":"run-same-tool","tool_name":"search_projects","tool_call_id":"call-a","summary":"第一项已完成。","state":"completed"}',
+            'event: assistant.tool_succeeded\ndata: {"runtime_run_id":"run-same-tool","tool_name":"search_projects","tool_call_id":"call-b","summary":"第二项已完成。","state":"completed"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Run the same read twice" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("assistant-activity-step-call-a")).toHaveAttribute("data-status", "succeeded");
+      expect(screen.getByTestId("assistant-activity-step-call-b")).toHaveAttribute("data-status", "succeeded");
+    });
+    expect(screen.getAllByTestId("assistant-activity-step-call-a")).toHaveLength(1);
+    expect(screen.getAllByTestId("assistant-activity-step-call-b")).toHaveLength(1);
   });
 
   it("renders the workspace variant without opening the side panel", async () => {
@@ -599,12 +739,12 @@ describe("AIAssistantPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-    await expandAllActivityDetails();
     expect(
-      await screen.findAllByText(
+      await screen.findByText(
         "所选模型配置已不可用，已切回平台默认模型。请确认后重新发送。",
       ),
-    ).not.toHaveLength(0);
+    ).toBeInTheDocument();
+    expect(document.querySelector(".cr-task-turn-summary")).not.toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 

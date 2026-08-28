@@ -213,6 +213,8 @@ export interface AIAssistantState {
   assistantContentBuffers: Record<string, string>;
   /** True only while this browser is consuming an assistant SSE response. */
   isStreaming: boolean;
+  /** True only after Pi reports a live model-turn/thinking boundary. */
+  isThinking: boolean;
   status: AssistantStatus;
   executionItems: AssistantExecutionItem[];
   pendingConfirmation: AssistantConfirmationRequest | null;
@@ -258,6 +260,7 @@ type Action =
   | { type: "FLUSH_READY_ASSISTANT_CONTENT" }
   | { type: "SET_ACTIVE_ASSISTANT_MESSAGE"; messageId: string | null }
   | { type: "SET_STREAMING"; streaming: boolean }
+  | { type: "SET_THINKING"; thinking: boolean }
   | { type: "STOP_ACTIVE_RESPONSE" }
   | { type: "SET_STATUS"; status: AssistantStatus }
   | { type: "ADD_EXECUTION_ITEM"; item: AssistantExecutionItem }
@@ -300,6 +303,7 @@ const initialState: AIAssistantState = {
   activeAssistantMessageId: null,
   assistantContentBuffers: {},
   isStreaming: false,
+  isThinking: false,
   status: "idle",
   executionItems: [],
   pendingConfirmation: null,
@@ -361,7 +365,7 @@ function matchExecutionItem(
   if (action.toolCallId && item.toolCallId) {
     return item.toolCallId === action.toolCallId;
   }
-  if (action.runId && item.runId === action.runId) {
+  if (action.runId && item.runId === action.runId && (!action.toolName || item.toolName === action.toolName)) {
     return true;
   }
 
@@ -389,6 +393,48 @@ function matchExecutionItem(
   }
 
   return sameTool && item.messageId === activeAssistantMessageId && !action.toolCallId;
+}
+
+function findExecutionItemIndex(
+  items: AssistantExecutionItem[],
+  action: {
+    toolName: string;
+    toolCallId?: string;
+    turnId?: string;
+    runId?: string;
+    runtimeRunId?: string;
+  },
+  activeAssistantMessageId: string | null,
+): number {
+  if (action.toolCallId) {
+    const exactToolCall = items.findIndex((item) => item.toolCallId === action.toolCallId);
+    if (exactToolCall >= 0) return exactToolCall;
+  }
+  if (action.runId) {
+    const exactRun = items.findIndex(
+      (item) =>
+        item.runId === action.runId &&
+        (!action.toolName || item.toolName === action.toolName),
+    );
+    if (exactRun >= 0) return exactRun;
+  }
+
+  // Older durable events predate persisted tool_call_id. If there is exactly
+  // one open item in the same run/message/tool scope, it is the live Pi card
+  // that this durable event completes. Never guess when multiple same-named
+  // tools are running concurrently.
+  const candidates = items.reduce<number[]>((matches, item, index) => {
+    if (action.toolCallId && item.toolCallId) return matches;
+    if (isOpenExecutionStatus(item.status) && matchExecutionItem(
+      { ...item, toolCallId: undefined },
+      { ...action, toolCallId: undefined },
+      activeAssistantMessageId,
+    )) {
+      matches.push(index);
+    }
+    return matches;
+  }, []);
+  return candidates.length === 1 ? candidates[0] : -1;
 }
 
 function getLastAssistantMessageId(state: AIAssistantState) {
@@ -547,6 +593,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         pendingConfirmation: null,
         pendingInput: null,
         sessionError: null,
+        isThinking: false,
       };
     case "SET_LAST_USER_DURABLE_ID": {
       let messageIndex = -1;
@@ -580,10 +627,19 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "ENSURE_TRANSCRIPT_TURN":
       return ensureAssistantTurnPart(state, action.turnId);
     case "FINALIZE_OPEN_EXECUTION_ITEMS": {
-      const executionItems = state.executionItems.map((item) => {
-        if (!isOpenExecutionStatus(item.status)) return item;
+      const executionItems = state.executionItems.filter((item) => {
+        if (!isOpenExecutionStatus(item.status)) return true;
+        // A linked workflow/subagent continues after the parent Pi turn ends.
+        // Its durable child run owns the later terminal update, so it must not
+        // be treated as an orphaned browser-only tool card.
+        if (
+          (item.kind === "workflow" || item.kind === "subagent") &&
+          Boolean(item.runId || item.runtimeRunId)
+        ) {
+          return true;
+        }
         if (action.runtimeRunId && item.runtimeRunId && item.runtimeRunId !== action.runtimeRunId) {
-          return item;
+          return true;
         }
         if (
           !action.runtimeRunId &&
@@ -591,17 +647,12 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           state.activeAssistantMessageId &&
           item.messageId !== state.activeAssistantMessageId
         ) {
-          return item;
+          return true;
         }
-        const nextStatus: AssistantExecutionItem["status"] = action.failed ? "failed" : "succeeded";
-        return {
-          ...item,
-          status: nextStatus,
-          isRunning: false,
-          summary:
-            item.summary ||
-            (action.failed ? "本轮已结束（工具未收到完成事件）" : "本轮已结束"),
-        };
+        // A closed browser stream is not evidence that the provider tool
+        // finished. Durable runtime events are the source of truth, so discard
+        // an unconfirmed live card instead of inventing a result or failure.
+        return false;
       });
       return flushReadyAssistantBuffers({ ...state, executionItems });
     }
@@ -610,7 +661,9 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "SET_ACTIVE_ASSISTANT_MESSAGE":
       return { ...state, activeAssistantMessageId: action.messageId };
     case "SET_STREAMING":
-      return { ...state, isStreaming: action.streaming };
+      return { ...state, isStreaming: action.streaming, isThinking: action.streaming ? state.isThinking : false };
+    case "SET_THINKING":
+      return { ...state, isThinking: action.thinking };
     case "STOP_ACTIVE_RESPONSE": {
       const activeMessageId = state.activeAssistantMessageId;
       const executionItems = state.executionItems.map((item) => {
@@ -638,6 +691,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       return flushReadyAssistantBuffers({
         ...state,
         isStreaming: false,
+        isThinking: false,
         status: hasBackgroundWorkflow ? "running_workflow" : "completed",
         activeAssistantMessageId: null,
         executionItems,
@@ -697,32 +751,32 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       const stateWithClosedReasoning = executionStarted
         ? completeAssistantReasoning(state, action.turnId ?? action.patch.turnId)
         : state;
-      let updated = false;
-      const executionItems = stateWithClosedReasoning.executionItems.map((item) => {
-        const matches = matchExecutionItem(item, action, stateWithClosedReasoning.activeAssistantMessageId);
-        if (matches) {
-          updated = true;
-          // Preserve the first stable ids when later durable events omit them.
-          const mergedPatch = { ...action.patch };
-          if (Object.prototype.hasOwnProperty.call(action.patch, "result")) {
-            mergedPatch.result = {
-              ...(item.result ?? {}),
-              ...(action.patch.result ?? {}),
-            };
-          }
-          return {
-            ...item,
-            ...mergedPatch,
-            toolCallId: mergedPatch.toolCallId ?? item.toolCallId,
-            turnId: item.turnId ?? mergedPatch.turnId ?? action.turnId,
-            runtimeRunId: item.runtimeRunId ?? mergedPatch.runtimeRunId ?? action.runtimeRunId,
-            runId: item.runId ?? mergedPatch.runId ?? action.runId,
-            messageId: item.messageId ?? stateWithClosedReasoning.activeAssistantMessageId ?? undefined,
+      const existingIndex = findExecutionItemIndex(
+        stateWithClosedReasoning.executionItems,
+        action,
+        stateWithClosedReasoning.activeAssistantMessageId,
+      );
+      const executionItems = [...stateWithClosedReasoning.executionItems];
+      if (existingIndex >= 0) {
+        const item = executionItems[existingIndex];
+        // Preserve the first stable ids when later durable events omit them.
+        const mergedPatch = { ...action.patch };
+        if (Object.prototype.hasOwnProperty.call(action.patch, "result")) {
+          mergedPatch.result = {
+            ...(item.result ?? {}),
+            ...(action.patch.result ?? {}),
           };
         }
-        return item;
-      });
-      if (!updated) {
+        executionItems[existingIndex] = {
+          ...item,
+          ...mergedPatch,
+          toolCallId: mergedPatch.toolCallId ?? item.toolCallId,
+          turnId: item.turnId ?? mergedPatch.turnId ?? action.turnId,
+          runtimeRunId: item.runtimeRunId ?? mergedPatch.runtimeRunId ?? action.runtimeRunId,
+          runId: item.runId ?? mergedPatch.runId ?? action.runId,
+          messageId: item.messageId ?? stateWithClosedReasoning.activeAssistantMessageId ?? undefined,
+        };
+      } else {
         executionItems.push({
           id: createExecutionId("exec", action.toolCallId ?? action.runId ?? action.toolName),
           messageId: stateWithClosedReasoning.activeAssistantMessageId ?? undefined,
@@ -799,18 +853,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         ...state,
         status: "failed",
         sessionError: action.message,
-        executionItems: [
-          ...state.executionItems,
-          {
-            id: createExecutionId("exec-error", action.errorCode),
-            kind: "tool",
-            status: "failed",
-            title: action.errorCode ?? "assistant_error",
-            errorMessage: action.message,
-            errorCode: action.errorCode,
-            timestamp: Date.now(),
-          },
-        ],
+        isThinking: false,
       };
     case "CLEAR_TRANSIENT_STATE":
       return {
@@ -818,6 +861,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         pendingConfirmation: null,
         pendingInput: null,
         sessionError: null,
+        isThinking: false,
       };
     case "CLEAR_MESSAGES":
       return {
@@ -829,6 +873,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         pendingConfirmation: null,
         pendingInput: null,
         sessionError: null,
+        isThinking: false,
       };
     case "SET_CONTEXT":
       return { ...state, currentContext: action.context };
@@ -943,6 +988,7 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === "assistant.confirmation_requested") {
+    dispatch({ type: "SET_THINKING", thinking: false });
     const toolName = String(parsed.tool_name ?? "");
     const args = asRecord(parsed.arguments);
     dispatch({
@@ -976,6 +1022,7 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === "assistant.missing_input") {
+    dispatch({ type: "SET_THINKING", thinking: false });
     const missingFields = Array.isArray(parsed.missing_fields)
       ? parsed.missing_fields.filter((field): field is string => typeof field === "string" && field.trim().length > 0)
       : [];
@@ -998,13 +1045,31 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === "assistant.turn_started") {
-    // A turn becomes visible with its first reasoning or tool event. Creating
-    // an empty block here would place the tool timeline before streamed
-    // provider reasoning and turn a live trace into a replay.
+    // Pi emits turn.started before model output. This is the legitimate live
+    // signal for the short window before the first text or tool event arrives.
+    dispatch({ type: "SET_THINKING", thinking: true });
+    return;
+  }
+
+  if (eventType === "assistant.turn_finished") {
+    dispatch({ type: "SET_THINKING", thinking: false });
+    return;
+  }
+
+  if (eventType === "assistant.runtime_state") {
+    // Queue, retry and compaction frames describe session lifecycle, not a
+    // user-visible reasoning phase. Only native Pi thinking boundaries may
+    // drive the thinking indicator.
+    if (parsed.phase === "thinking.started") {
+      dispatch({ type: "SET_THINKING", thinking: true });
+    } else if (parsed.phase === "thinking.completed") {
+      dispatch({ type: "SET_THINKING", thinking: false });
+    }
     return;
   }
 
   if (eventType === "assistant.task_started") {
+    dispatch({ type: "SET_THINKING", thinking: false });
     const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
     const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : title;
     if (title || summary) {
@@ -1022,6 +1087,7 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === "assistant.reasoning" && typeof parsed.content === "string") {
+    dispatch({ type: "SET_THINKING", thinking: false });
     // Only the Harness may publish user-facing reasoning. Provider thinking
     // tokens are private model state and must never become transcript text.
     if (parsed.source !== "harness") return;
@@ -1045,6 +1111,7 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === "assistant.tool_started") {
+    dispatch({ type: "SET_THINKING", thinking: false });
     const toolName = String(parsed.tool_name ?? "");
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
     const resourceKind = parsed.resource_kind === "skill" || parsed.resource_kind === "mcp" || parsed.resource_kind === "tool"
@@ -1162,6 +1229,7 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === "assistant.tool_succeeded") {
+    dispatch({ type: "SET_THINKING", thinking: false });
     const toolName = String(parsed.tool_name ?? "");
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
     const resourceKind = parsed.resource_kind === "skill" || parsed.resource_kind === "mcp" || parsed.resource_kind === "tool"
@@ -1197,9 +1265,9 @@ function handleAssistantSseEvent(
         provider: typeof parsed.provider === "string" ? parsed.provider : undefined,
       },
     });
-    // A completed tool is not necessarily a completed turn: the harness may
-    // still be deciding on the next action or composing the final response.
-    dispatch({ type: "SET_STATUS", status: "thinking" });
+    // A completed tool is not necessarily a completed turn. Pi will emit the
+    // next turn/thinking boundary if it continues; an open stream alone is not
+    // evidence that the model is thinking.
     if (typeof result.run_id === "string" || typeof result.runtime_run_id === "string") {
       return;
     }
@@ -1215,6 +1283,7 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === "assistant.tool_failed") {
+    dispatch({ type: "SET_THINKING", thinking: false });
     const toolName = String(parsed.tool_name ?? "");
     const toolCallId = typeof parsed.tool_call_id === "string" ? parsed.tool_call_id : undefined;
     const resourceKind = parsed.resource_kind === "skill" || parsed.resource_kind === "mcp" || parsed.resource_kind === "tool"
@@ -1371,12 +1440,25 @@ function handleAssistantSseEvent(
     return;
   }
 
+  if (eventType === "assistant.session_error") {
+    dispatch({
+      type: "SET_SESSION_ERROR",
+      message: typeof parsed.message === "string" && parsed.message.trim()
+        ? parsed.message
+        : "本次回复未能完成，已安全停止。",
+      errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
+    });
+    return;
+  }
+
   if (eventType === "assistant.message" && typeof parsed.content === "string") {
+    dispatch({ type: "SET_THINKING", thinking: false });
     dispatch({ type: "UPDATE_LAST_ASSISTANT", content: parsed.content });
     return;
   }
 
   if (eventType === "assistant.end") {
+    dispatch({ type: "SET_THINKING", thinking: false });
     const conversationId = parsed.conversation_id;
     if (typeof conversationId === "string") {
       const accepted = options?.onConversation?.(conversationId);
@@ -2079,7 +2161,8 @@ export function AIAssistantProvider({
                 compatibilityEvent.eventType !== "assistant.turn_finished" &&
                 compatibilityEvent.eventType !== "assistant.task_started" &&
                 compatibilityEvent.eventType !== "assistant.reasoning" &&
-                compatibilityEvent.eventType !== "assistant.reasoning_completed"
+                compatibilityEvent.eventType !== "assistant.reasoning_completed" &&
+                compatibilityEvent.eventType !== "assistant.session_error"
               ) {
                 continue;
               }

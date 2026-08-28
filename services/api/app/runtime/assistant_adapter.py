@@ -686,7 +686,9 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
         RuntimeEventType.MESSAGE_DELTA.value,
         RuntimeEventType.MESSAGE_COMPLETED.value,
     }:
-        if event.event_type == RuntimeEventType.MESSAGE_COMPLETED.value and payload.get("delta_emitted"):
+        if event.event_type == RuntimeEventType.MESSAGE_COMPLETED.value and (
+            payload.get("delta_emitted") or payload.get("terminal_failure")
+        ):
             return []
         return [
             _sse(
@@ -698,6 +700,26 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
                     "state": "thinking" if event.event_type == RuntimeEventType.MESSAGE_DELTA.value else "completed",
                 },
             )
+        ]
+    if event.event_type == RuntimeEventType.RUN_FAILED.value and payload.get("kind") == "assistant_turn":
+        return [
+            _sse(
+                "assistant.session_error",
+                {
+                    **runtime_metadata,
+                    "message": payload.get("message") or "本次回复未能完成，已安全停止。",
+                    "error_code": payload.get("error_code"),
+                    "state": "failed",
+                },
+            ),
+            _sse(
+                "assistant.end",
+                {
+                    **runtime_metadata,
+                    "conversation_id": conversation_id,
+                    "state": "failed",
+                },
+            ),
         ]
     if event.event_type in {
         RuntimeEventType.RUN_COMPLETED.value,

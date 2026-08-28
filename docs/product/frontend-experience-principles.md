@@ -124,6 +124,26 @@ The interface should satisfy practical accessibility expectations from the start
 - reflow-friendly layout
 - semantic form and dialog behavior
 
+### 8. Loading and navigation should preserve context
+
+The workbench must stay usable while a route chunk or server query is loading:
+
+- keep the authenticated shell mounted during route-level lazy loading
+- prefetch route chunks on navigation intent, including keyboard focus and touch
+  press where possible
+- distinguish loading from an actually empty result; never render a transient
+  zero count or empty state as if it were business truth
+- use the shared query cache for short-lived page transitions and keep visible
+  prior data while a background refresh is in progress
+- use shadcn `Skeleton` for structural loading placeholders and reserve motion
+  for explaining a live workflow, upload, or state transition
+
+The first implementation pass is frontend-owned. Dashboard, knowledge, and
+project workspaces still have dependent query fan-out (for example readiness
+per project or documents per bundle); backend aggregation and query-plan
+measurement remain a separate performance follow-up rather than being hidden
+inside route loading code.
+
 ## Layout strategy
 
 ### Primary shell

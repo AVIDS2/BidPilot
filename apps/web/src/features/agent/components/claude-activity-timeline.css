@@ -622,6 +622,16 @@
 
 .assistant-claude-timeline .cr-public-muted { color: #999791; }
 
+.cr-session-error {
+  margin: 10px 0 0;
+  border-left: 2px solid color-mix(in oklch, var(--destructive, #b5544b) 72%, transparent);
+  padding-left: 10px;
+  color: var(--destructive, #b5544b);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .assistant-claude-timeline .cr-analysis-runtime { margin: 0; }
 
 /* Evidence appears only when the search adapter returned public sources. The

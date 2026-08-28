@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.models import RuntimeRun
+from app.runtime.assistant_adapter import _render_runtime_event
 
 
 class _FakePiResponse:
@@ -53,6 +54,43 @@ def _sse_events(response_text: str) -> list[tuple[str, dict]]:
         if event_type and payload:
             events.append((event_type, json.loads(payload)))
     return events
+
+
+def test_partial_pi_failure_is_projected_as_a_separate_session_error() -> None:
+    event = SimpleNamespace(
+        id="failed-event",
+        parent_event_id=None,
+        sequence=4,
+        event_type="run.failed",
+        public_summary="任务未能完成。",
+        payload_json={
+            "kind": "assistant_turn",
+            "message": "助手运行未完成，已安全停止。",
+            "message_delta_emitted": True,
+            "error_code": "assistant_stream_incomplete",
+        },
+        created_at=None,
+    )
+
+    events = _sse_events("".join(_render_runtime_event(event, "conversation-1")))
+
+    assert [event_type for event_type, _payload in events] == ["assistant.session_error", "assistant.end"]
+    assert events[0][1]["message"] == "助手运行未完成，已安全停止。"
+    assert events[1][1]["state"] == "failed"
+
+
+def test_terminal_failure_message_is_not_replayed_as_a_normal_assistant_answer() -> None:
+    event = SimpleNamespace(
+        id="failed-message",
+        parent_event_id=None,
+        sequence=3,
+        event_type="message.completed",
+        public_summary="模型运行未能完成。",
+        payload_json={"terminal_failure": True, "delta_emitted": False},
+        created_at=None,
+    )
+
+    assert _render_runtime_event(event, "conversation-1") == []
 
 
 def test_pi_bridge_configuration_failure_stays_inside_sse_contract(

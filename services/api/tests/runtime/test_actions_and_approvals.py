@@ -174,6 +174,7 @@ def test_runtime_action_events_keep_turn_and_parent_lineage(
         action_key="lineage-tool-call",
         parent_event_id="turn-event-1",
         turn_id="turn-1",
+        tool_call_id="pi-call-1",
         executor=lambda _db, _user, arguments: {
             "id": "lineage-project",
             "name": arguments["name"],
@@ -183,6 +184,7 @@ def test_runtime_action_events_keep_turn_and_parent_lineage(
 
     assert execution.action.parent_event_id == "turn-event-1"
     assert execution.action.turn_id == "turn-1"
+    assert execution.action.tool_call_id == "pi-call-1"
     action_events = [
         event
         for event in list_events_after(test_db, run.id)
@@ -195,6 +197,7 @@ def test_runtime_action_events_keep_turn_and_parent_lineage(
     assert all(event.parent_event_id == "turn-event-1" for event in action_events)
     assert all(event.payload_json["action_id"] == execution.action.id for event in action_events)
     assert all(event.payload_json["turn_id"] == "turn-1" for event in action_events)
+    assert all(event.payload_json["tool_call_id"] == "pi-call-1" for event in action_events)
 
 
 def test_capability_success_keeps_a_result_title_without_breaking_the_trace(

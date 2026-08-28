@@ -325,6 +325,7 @@ class BidPilotToolExecutor:
                 action_key=action_key,
                 parent_event_id=(self.parent_event_id_provider() if self.parent_event_id_provider else None),
                 turn_id=context.turn_id,
+                tool_call_id=call.id,
             )
         except Exception as exc:  # noqa: BLE001 - only public failure crosses the port
             failure = classify_capability_failure(exc)

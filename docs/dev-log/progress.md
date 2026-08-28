@@ -1,5 +1,54 @@
 # Progress Log
 
+## 2026-08-28 workbench navigation and UI consistency pass
+
+- Added shared route loaders and intent-based prefetching for authenticated
+  workbench navigation. Nested route Suspense now preserves the shell and
+  renders shadcn Skeleton structure during chunk loading.
+- Added bounded query defaults (`30s` stale window, `5m` cache lifetime, one
+  retry, and no focus-triggered refetch) and removed transient zero/empty
+  presentation from dashboard, inbox, my work, runs, knowledge, projects,
+  radar, deliverables, reviews, and project-detail loading states.
+- Converted the active Agent Composer menus to shadcn `DropdownMenu` and
+  `DropdownMenuRadioItem`, and converted its common history, preview, and
+  composer controls to `Button`, `Input`, and `Textarea`. The legacy floating
+  panel still has a separate hand-built menu path and remains an explicit
+  follow-up audit item.
+- Replaced project-detail inspector loading markup with shadcn `Skeleton` and
+  added browser coverage proving delayed project data does not render a false
+  empty state or zero tab count.
+- The Agent entry chunk is now about `55 KB` minified; the build still reports
+  a separate roughly `512 KB` Markdown/rendering dependency chunk. Further
+  lazy loading of rich-message rendering is intentionally left as a focused
+  follow-up so the active transcript behavior is not destabilized.
+- Verification: TypeScript, Agent/workbench focused tests, production Vite
+  build, and Chromium/Pixel 7 UI flows passed. API PostgreSQL tests remain
+  gated by the unavailable Docker engine and dedicated `_test` database.
+
+## 2026-08-27 Pi failure and live thinking projection fix
+
+- Persisted `RuntimeAction.tool_call_id` and carried it through capability
+  events so the immediate Pi `tool.started` frame and durable success/failure
+  replay update one execution item instead of rendering duplicate rows.
+- Removed the synthetic `本轮已结束（工具未收到完成事件）` fallback. An
+  interrupted browser stream now drops only unconfirmed transient tool cards;
+  real durable capability failures remain visible with their actual public
+  failure state.
+- Separated `isThinking` from transport `isStreaming`. The UI shows the live
+  thinking indicator only after Pi emits `turn.started` or
+  `thinking.started`, and clears it on native completion, text, tool, or
+  terminal events.
+- Terminal assistant failures are projected as a dedicated session error;
+  failure messages are not replayed as ordinary assistant answers, while any
+  already-streamed public text remains separate and recoverable.
+- Added regression coverage for duplicate tool correlation, ghost-tool
+  suppression, terminal failure replay, and native thinking boundaries.
+- Verification: Web `38` test files / `175` tests, Agent workspace Playwright
+  `8/8` on desktop and mobile Chromium, TypeScript/Vite build, Pi sidecar
+  tests/build, API/Worker Ruff and Python compile checks passed. Full API
+  PostgreSQL tests were not run because Docker and the required dedicated
+  `_test` database were unavailable locally.
+
 ## 2026-08-25 user-facing Agent workspace context
 
 - Reworked the right-side Agent context panel from a developer-facing runtime

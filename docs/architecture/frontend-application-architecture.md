@@ -162,6 +162,22 @@ the production runtime, and may only be revived for an explicit compatibility
 experiment. The production Agent surface is `features/agent` and the product
 shell is `features/workbench`.
 
+### Navigation and server-state loading
+
+The active Vite route composition uses route-level lazy chunks, but the
+workbench shell owns the nested route boundary so the navigation and context
+bars remain mounted while a screen loads. `app-route-loaders.ts` shares the
+same dynamic import functions with `React.lazy` and warms a target chunk from
+navigation intent. The application query client uses a short default stale
+window, bounded retry behavior, and no focus-triggered refetch; feature queries
+can override those defaults for live execution surfaces.
+
+Screens must treat `isLoading`/`isPending` as a first-class display state. A
+query-backed count is not `0` until its request has completed, and an empty
+state is only rendered after the relevant dependent queries have settled.
+This is a presentation and caching concern, not a replacement for measuring
+slow API TTFB or reducing backend query fan-out.
+
 ## State strategy
 
 ### Server state

@@ -128,6 +128,8 @@ def _action_event_payload(action: RuntimeAction, **payload: Any) -> dict[str, An
     }
     if action.turn_id:
         value["turn_id"] = action.turn_id
+    if action.tool_call_id:
+        value["tool_call_id"] = action.tool_call_id
     # RuntimeAction stores redacted arguments for audit and operator diagnosis.
     # Do not replay them through every ordinary conversation event. Approval
     # events explicitly add the small, editable subset they need to render.
@@ -532,6 +534,7 @@ def fail_runtime_run(
     error_code: str = "runtime_failed",
     result_json: dict[str, Any] | None = None,
     parent_event_id: str | None = None,
+    message_delta_emitted: bool = False,
 ) -> RuntimeRun:
     """Record a safe terminal failure without leaking provider or tool details."""
     return _finish_runtime_run(
@@ -545,6 +548,7 @@ def fail_runtime_run(
         result_json=result_json,
         error_code=error_code,
         parent_event_id=parent_event_id,
+        message_delta_emitted=message_delta_emitted,
     )
 
 
@@ -772,7 +776,11 @@ def _finish_runtime_run(
                 type=RuntimeEventType.MESSAGE_COMPLETED,
                 parent_event_id=parent_event_id,
                 public_summary=safe_message,
-                payload={"message": safe_message, "delta_emitted": message_delta_emitted},
+                payload={
+                    "message": safe_message,
+                    "delta_emitted": message_delta_emitted,
+                    "terminal_failure": terminal_event is RuntimeEventType.RUN_FAILED,
+                },
             ),
             RuntimeEventDraft(
                 type=terminal_event,
@@ -782,6 +790,9 @@ def _finish_runtime_run(
                     "status": terminal_status,
                     "state": terminal_state
                     or ("failed" if terminal_event is RuntimeEventType.RUN_FAILED else "completed"),
+                    "kind": run.kind,
+                    "message_delta_emitted": message_delta_emitted,
+                    **({"message": safe_message} if terminal_event is RuntimeEventType.RUN_FAILED else {}),
                     **({"error_code": error_code} if error_code else {}),
                 },
             ),
@@ -929,6 +940,7 @@ def execute_capability(
     action_key: str,
     parent_event_id: str | None = None,
     turn_id: str | None = None,
+    tool_call_id: str | None = None,
     executor: CapabilityExecutor | None = None,
 ) -> RuntimeCapabilityExecution:
     """Prepare and execute one capability at most once for an action key.
@@ -946,6 +958,7 @@ def execute_capability(
         action_key=action_key,
         parent_event_id=parent_event_id,
         turn_id=turn_id,
+        tool_call_id=tool_call_id,
     )
     if (
         prepared.approval is not None
@@ -970,6 +983,7 @@ def prepare_capability_execution(
     action_key: str,
     parent_event_id: str | None = None,
     turn_id: str | None = None,
+    tool_call_id: str | None = None,
 ) -> RuntimeCapabilityExecution:
     """Persist one action and its initial event without running side effects."""
     run = get_visible_runtime_run(db, run_id, user)
@@ -996,6 +1010,7 @@ def prepare_capability_execution(
         run_id=run.id,
         parent_event_id=parent_event_id,
         turn_id=turn_id,
+        tool_call_id=tool_call_id,
         action_key=action_key,
         capability_name=definition.name,
         status=initial_status,

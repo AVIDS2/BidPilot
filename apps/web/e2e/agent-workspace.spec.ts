@@ -110,6 +110,13 @@ test("keeps the Agent composer inside the conversation pane at every viewport", 
   // Idle is the absence of a run, not a decorative status tag in the header.
   await expect(page.getByText("就绪", { exact: true })).toHaveCount(0);
 
+  await page.getByRole("button", { name: "Add attachment" }).click();
+  await expect(page.getByRole("menuitem", { name: "Upload file" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Select model" }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Platform default" })).toBeVisible();
+  await page.keyboard.press("Escape");
+
   const [paneBox, composerBox, textareaBox, sendBox] = await Promise.all([
     conversationPane.boundingBox(),
     composer.boundingBox(),
