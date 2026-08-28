@@ -170,7 +170,7 @@ function coreEvent(event: AgentSessionEvent): AgentEvent | null {
     event.type === "compaction_end" ||
     event.type === "auto_retry_start" ||
     event.type === "auto_retry_end" ||
-    event.type === "agent_settled" ||
+    event.type === "agent_end" ||
     event.type === "entry_appended" ||
     event.type === "session_info_changed" ||
     event.type === "thinking_level_changed" ||
@@ -283,6 +283,16 @@ function enrichToolLifecycleEvent(
   return enriched;
 }
 
+export function agentTerminalEvent(
+  eventType: AgentSessionEvent["type"],
+  errorMessage?: string,
+): PiRuntimeEvent | null {
+  if (eventType !== "agent_end") return null;
+  return errorMessage
+    ? { type: "agent.failed", error: errorMessage }
+    : { type: "agent.completed" };
+}
+
 export async function runPiAgent(
   request: PiRunRequest,
   sink: EventSink,
@@ -366,14 +376,11 @@ export async function runPiAgent(
       turnState.step += 1;
       turnState.id = `turn-${turnState.step}`;
     }
-    if (event.type === "agent_settled") {
+    const terminal = agentTerminalEvent(event.type, session.state.errorMessage);
+    if (terminal) {
       if (!terminalEmitted) {
         terminalEmitted = true;
-        await sink(
-          session.state.errorMessage
-            ? { type: "agent.failed", error: session.state.errorMessage }
-            : { type: "agent.completed" },
-        );
+        await sink(terminal);
       }
       return;
     }

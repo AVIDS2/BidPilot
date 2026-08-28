@@ -137,6 +137,18 @@ describe("AIAssistantPanel", () => {
     expect(screen.getAllByText(/Acme Bid/).length).toBeGreaterThan(0);
   });
 
+  it("keeps the Linear composer focus state restrained", () => {
+    render(
+      <AIAssistantProvider>
+        <AIAssistantPanel variant="linear-agent" />
+      </AIAssistantProvider>,
+    );
+
+    const textarea = screen.getByRole("textbox", { name: "Ask me anything..." });
+    expect(textarea).toHaveClass("focus-visible:ring-0", "focus-visible:ring-offset-0");
+    expect(screen.getByTestId("linear-agent-composer")).not.toHaveClass("focus-within:ring-2");
+  });
+
   it("keeps an approval pause actionable when the SSE closes without assistant.end", async () => {
     vi.stubGlobal(
       "fetch",

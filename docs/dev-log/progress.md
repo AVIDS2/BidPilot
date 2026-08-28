@@ -1,5 +1,21 @@
 # Progress Log
 
+## 2026-08-28 Pi terminal boundary and composer regression fix
+
+- Fixed the production Pi integration to consume the official
+  `AgentSessionEvent` `agent_end` event. The previous listener used a nonexistent
+  `agent_settled` event, so ordinary text replies were persisted and then
+  incorrectly marked `assistant_stream_incomplete` when the sidecar closed.
+- Confirmed from the deployed runtime records that the affected `你好` and
+  `逆天` turns made no tool calls; the failure was in terminal-event projection,
+  not keyword intent routing. The public path remains Pi-only and does not
+  inspect user wording to select tools.
+- Removed the composer `ring-2` focus halo. Focus now uses a restrained border
+  color change without the oversized purple outline shown on mobile.
+- Added Pi regression coverage for a plain conversational response and the
+  official terminal event boundary. Updated the runtime architecture note to
+  keep this contract explicit.
+
 ## 2026-08-28 workbench navigation and UI consistency pass
 
 - Added shared route loaders and intent-based prefetching for authenticated

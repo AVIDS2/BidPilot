@@ -1758,7 +1758,7 @@ export function AIAssistantPanel({
             if (isStreaming) stopAssistantResponse();
             else handleSend();
           }}
-          className="bp-linear-agent-textarea"
+          className="bp-linear-agent-textarea focus-visible:ring-0 focus-visible:ring-offset-0"
         />
         <div className="bp-linear-agent-composer-footer">
           <div className="bp-linear-agent-composer-left">
@@ -2175,7 +2175,7 @@ export function AIAssistantPanel({
             <ComposerFrame
               className={cn("w-full", isWorkspace && "mx-auto max-w-4xl")}
             >
-              <div className="rounded-xl border bg-card px-2 py-2 shadow-sm transition-shadow focus-within:border-ring/50 focus-within:ring-2 focus-within:ring-ring/10">
+              <div className="rounded-xl border bg-card px-2 py-2 shadow-sm transition-colors focus-within:border-muted-foreground/35">
                 {(attachments.length > 0 || queuedPrompts.length > 0) && (
                   <div className="mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pb-2 pt-1">
                     {attachments.map((attachment) => (

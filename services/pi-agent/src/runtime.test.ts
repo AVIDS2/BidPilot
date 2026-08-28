@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
-import { runPiAgent } from "./runtime.js";
+import { agentTerminalEvent, runPiAgent } from "./runtime.js";
 import type { PiRunRequest } from "./contracts.js";
 
 function request(): PiRunRequest {
@@ -48,6 +48,15 @@ function request(): PiRunRequest {
     maxTurns: 4,
   };
 }
+
+test("Pi uses the official agent_end event as its terminal boundary", () => {
+  assert.deepEqual(agentTerminalEvent("agent_end"), { type: "agent.completed" });
+  assert.deepEqual(agentTerminalEvent("agent_end", "provider failed"), {
+    type: "agent.failed",
+    error: "provider failed",
+  });
+  assert.equal(agentTerminalEvent("turn_end"), null);
+});
 
 async function testRuntime(streamSimple: ReturnType<typeof createFauxCore>["streamSimple"]): Promise<ModelRuntime> {
   const runtime = await ModelRuntime.create({
@@ -111,6 +120,34 @@ test("Pi AgentSession completes a tool turn and returns native lifecycle events"
   const started = projected.find((event) => event.type === "tool.started");
   assert.equal(started?.resource_kind, "tool");
   assert.equal(started?.title, "读取项目状态");
+});
+
+test("a plain conversational response completes without selecting a tool", async () => {
+  const faux = createFauxCore({ api: "openai-completions", provider: "test-provider", models: [{ id: "test-model" }] });
+  faux.setResponses([fauxAssistantMessage("你好，今天我可以先听你说。")]);
+  const runtime = await testRuntime(faux.streamSimple);
+  const projected: Array<Record<string, unknown>> = [];
+
+  await runPiAgent(request(), (event) => {
+    projected.push(event);
+  }, {
+    createModelRuntime: async () => runtime,
+  });
+
+  assert.equal(faux.state.callCount, 1);
+  assert.equal(
+    projected.filter((event) => event.type === "tool.started").length,
+    0,
+  );
+  assert.equal(
+    projected
+      .filter((event) => event.type === "text.delta")
+      .map((event) => String(event.delta ?? ""))
+      .join(""),
+    "你好，今天我可以先听你说。",
+  );
+  assert.ok(projected.some((event) => event.type === "agent.completed"));
+  assert.equal(projected.some((event) => event.type === "agent.failed"), false);
 });
 
 test("private provider thinking is never projected as text", async () => {
