@@ -171,6 +171,7 @@ function coreEvent(event: AgentSessionEvent): AgentEvent | null {
     event.type === "auto_retry_start" ||
     event.type === "auto_retry_end" ||
     event.type === "agent_end" ||
+    event.type === "agent_settled" ||
     event.type === "entry_appended" ||
     event.type === "session_info_changed" ||
     event.type === "thinking_level_changed" ||
@@ -287,7 +288,7 @@ export function agentTerminalEvent(
   eventType: AgentSessionEvent["type"],
   errorMessage?: string,
 ): PiRuntimeEvent | null {
-  if (eventType !== "agent_end") return null;
+  if (eventType !== "agent_settled") return null;
   return errorMessage
     ? { type: "agent.failed", error: errorMessage }
     : { type: "agent.completed" };
@@ -351,6 +352,14 @@ export async function runPiAgent(
 
   let turns = 0;
   let terminalEmitted = false;
+  let terminalDelivery: Promise<void> | null = null;
+  const emitTerminal = () => {
+    if (terminalEmitted) return;
+    const terminal = agentTerminalEvent("agent_settled", session.state.errorMessage);
+    if (!terminal) return;
+    terminalEmitted = true;
+    terminalDelivery = Promise.resolve().then(() => sink(terminal));
+  };
   session.agent.afterToolCall = async ({ result }) => {
     const outcome = result.details as PiToolBridgeResponse | undefined;
     // Preserve Pi's native termination hint for governance blocks. A blocked
@@ -376,12 +385,8 @@ export async function runPiAgent(
       turnState.step += 1;
       turnState.id = `turn-${turnState.step}`;
     }
-    const terminal = agentTerminalEvent(event.type, session.state.errorMessage);
-    if (terminal) {
-      if (!terminalEmitted) {
-        terminalEmitted = true;
-        await sink(terminal);
-      }
+    if (event.type === "agent_settled") {
+      emitTerminal();
       return;
     }
     const projected = publicSessionEvent(event);
@@ -397,14 +402,8 @@ export async function runPiAgent(
   try {
     await session.prompt(request.userMessage, { expandPromptTemplates: false, source: "rpc" });
     await session.waitForIdle();
-    if (!terminalEmitted) {
-      terminalEmitted = true;
-      await sink(
-        session.state.errorMessage
-          ? { type: "agent.failed", error: session.state.errorMessage }
-          : { type: "agent.completed" },
-      );
-    }
+    emitTerminal();
+    await terminalDelivery;
   } finally {
     unsubscribe();
     session.dispose();

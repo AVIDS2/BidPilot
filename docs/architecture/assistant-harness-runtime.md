@@ -116,9 +116,11 @@ lease. Reusing those local files as a second source of truth would violate the
 control-plane boundary and make horizontal deployment inconsistent.
 
 The sidecar uses Pi's native `ModelRuntime`, `SettingsManager`, resource loader,
-extension hooks, retry/compaction lifecycle and the official `agent_end` terminal
-signal. The API must not treat a closed transport as a successful Pi turn or
-invent a second terminal boundary around the session.
+extension hooks, retry/compaction lifecycle and the official `agent_settled`
+terminal signal. `agent_end` is only the end of one low-level attempt and may be
+followed by retry, compaction or queued continuation. The API must not treat a
+closed transport as a successful Pi turn or invent a second terminal boundary
+around the session.
 New turns do not call the retired Python ReAct loop or a locally reimplemented
 model loop. The Pi session receives only server-defined BidPilot tools;
 built-in host `bash`, `read`, `write`, `edit`, `grep`, `find`, and `ls` tools are

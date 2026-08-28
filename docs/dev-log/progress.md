@@ -3,9 +3,9 @@
 ## 2026-08-28 Pi terminal boundary and composer regression fix
 
 - Fixed the production Pi integration to consume the official
-  `AgentSessionEvent` `agent_end` event. The previous listener used a nonexistent
-  `agent_settled` event, so ordinary text replies were persisted and then
-  incorrectly marked `assistant_stream_incomplete` when the sidecar closed.
+  `AgentSessionEvent` `agent_settled` event and await its asynchronous delivery.
+  `agent_end` is only one low-level attempt and may be followed by retry,
+  compaction or queued continuation.
 - Confirmed from the deployed runtime records that the affected `你好` and
   `逆天` turns made no tool calls; the failure was in terminal-event projection,
   not keyword intent routing. The public path remains Pi-only and does not

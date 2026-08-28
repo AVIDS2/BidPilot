@@ -49,12 +49,13 @@ function request(): PiRunRequest {
   };
 }
 
-test("Pi uses the official agent_end event as its terminal boundary", () => {
-  assert.deepEqual(agentTerminalEvent("agent_end"), { type: "agent.completed" });
-  assert.deepEqual(agentTerminalEvent("agent_end", "provider failed"), {
+test("Pi uses the official agent_settled event as its terminal boundary", () => {
+  assert.deepEqual(agentTerminalEvent("agent_settled"), { type: "agent.completed" });
+  assert.deepEqual(agentTerminalEvent("agent_settled", "provider failed"), {
     type: "agent.failed",
     error: "provider failed",
   });
+  assert.equal(agentTerminalEvent("agent_end"), null);
   assert.equal(agentTerminalEvent("turn_end"), null);
 });
 
@@ -146,7 +147,10 @@ test("a plain conversational response completes without selecting a tool", async
       .join(""),
     "你好，今天我可以先听你说。",
   );
-  assert.ok(projected.some((event) => event.type === "agent.completed"));
+  assert.equal(
+    projected.filter((event) => event.type === "agent.completed").length,
+    1,
+  );
   assert.equal(projected.some((event) => event.type === "agent.failed"), false);
 });
 
