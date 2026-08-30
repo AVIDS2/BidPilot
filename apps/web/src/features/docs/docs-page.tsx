@@ -358,18 +358,8 @@ function QuickStartSection() {
           <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
             {t("quickstart.installDesc")}
           </p>
-          <CodeBlock language="bash" filename="terminal">
-{`git clone https://github.com/your-org/BidPilot.git
-cd BidPilot
-
-# Copy environment template
-cp .env.example .env
-
-# Start all services
-docker compose up -d
-
-# Verify health
-curl http://localhost:8000/health`}
+          <CodeBlock language="flow" filename={t("quickstart.installation")}>
+            {t("quickstart.workflowCode")}
           </CodeBlock>
         </ScrollReveal>
 
@@ -379,27 +369,10 @@ curl http://localhost:8000/health`}
             {t("quickstart.envConfig")}
           </h3>
           <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
-            {t("quickstart.envDesc1")} <code className="px-1.5 py-0.5 text-xs font-mono" style={{ background: "var(--muted)", color: "var(--primary)" }}>.env</code> {t("quickstart.envDesc2")}
+            {t("quickstart.envDesc1")} {t("quickstart.envDesc2")}
           </p>
-          <CodeBlock language="env" filename=".env">
-{`# Database
-DATABASE_URL=postgresql+asyncpg://BidPilot:secret@postgres:5432/BidPilot
-
-# Redis (task queue + cache)
-REDIS_URL=redis://redis:6379/0
-
-# MinIO (document storage)
-MINIO_ENDPOINT=minio:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-
-# LLM Provider
-OPENAI_API_KEY=<server-side-openai-api-key>
-# or
-ANTHROPIC_API_KEY=<server-side-anthropic-api-key>
-
-# Vector Store (pgvector)
-EMBEDDING_MODEL=text-embedding-3-small`}
+          <CodeBlock language="security" filename={t("quickstart.envConfig")}>
+            {t("quickstart.securityCode")}
           </CodeBlock>
         </ScrollReveal>
 
@@ -513,6 +486,9 @@ function CoreFeaturesSection() {
 // ---------- Section 4: Architecture ----------
 function ArchitectureSection() {
   const { t } = useTranslation("docs");
+  const workflowStages = t("architecture.workflowStages", {
+    returnObjects: true,
+  }) as unknown as string[];
   return (
     <section id="architecture" className="py-20">
       <SectionHeading
@@ -604,55 +580,33 @@ function ArchitectureSection() {
             {t("architecture.langgraphDesc")}
           </p>
 
-          <CodeBlock language="python" filename="services/worker/app/graph/builder.py">
-{`from langgraph.graph import StateGraph, START, END
-
-# Define the agent workflow graph
-workflow = StateGraph(BidPilotState)
-
-# Add agent nodes
-workflow.add_node("supervisor", supervisor_node)
-workflow.add_node("rfp_parser", rfp_parser_node)
-workflow.add_node("knowledge_retriever", knowledge_retriever_node)
-workflow.add_node("section_drafter", section_drafter_node)
-workflow.add_node("quality_reviewer", quality_reviewer_node)
-workflow.add_node("human_approval", human_approval_node)
-workflow.add_node("persist_result", persist_result_node)
-
-# Define edges (workflow routing)
-workflow.add_edge(START, "supervisor")
-workflow.add_conditional_edges("supervisor", route_next_agent)
-workflow.add_edge("rfp_parser", "knowledge_retriever")
-workflow.add_edge("knowledge_retriever", "section_drafter")
-workflow.add_edge("section_drafter", "quality_reviewer")
-workflow.add_conditional_edges("quality_reviewer", quality_gate)
-workflow.add_edge("human_approval", "persist_result")
-workflow.add_edge("persist_result", END)
-
-# Compile with checkpointing
-graph = workflow.compile(checkpointer=PostgresSaver())`}
+          <CodeBlock language="flow" filename={t("architecture.workflowFilename")}>
+            {t("architecture.workflowCode")}
           </CodeBlock>
 
           {/* Agent Pipeline Visualization */}
           <div className="mt-8 flex flex-wrap items-center gap-2">
-            {["supervisor", "rfp_parser", "knowledge_retriever", "section_drafter", "quality_reviewer", "human_approval", "persist_result"].map(
-              (agent, i, arr) => (
-                <div key={agent} className="flex items-center gap-2">
+            {workflowStages.map(
+              (stage, i, arr) => {
+                const isApprovalStage = i === arr.length - 2;
+                return (
+                <div key={stage} className="flex items-center gap-2">
                   <div
                     className="px-3 py-1.5 text-xs font-mono"
                     style={{
-                      background: agent === "human_approval" ? "rgba(132, 204, 22, 0.15)" : "var(--border)",
-                      border: `1px solid ${agent === "human_approval" ? "var(--border)" : "var(--border)"}`,
-                      color: agent === "human_approval" ? "var(--primary)" : "var(--muted-foreground)",
+                      background: isApprovalStage ? "rgba(132, 204, 22, 0.15)" : "var(--border)",
+                      border: "1px solid var(--border)",
+                      color: isApprovalStage ? "var(--primary)" : "var(--muted-foreground)",
                     }}
                   >
-                    {agent}
+                    {stage}
                   </div>
                   {i < arr.length - 1 && (
                     <ChevronRightIcon className="size-3.5 shrink-0" style={{ color: "var(--muted-foreground)" }} />
                   )}
                 </div>
-              )
+                );
+              }
             )}
           </div>
         </div>
@@ -774,115 +728,59 @@ function DeploymentSection() {
       />
 
       <div className="space-y-10">
-        {/* Docker Compose */}
+        {/* Platform safeguards */}
         <ScrollReveal>
           <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
-            {t("deployment.dockerTitle")}
+            {t("deployment.platformTitle")}
           </h3>
           <p className="text-sm mb-4" style={{ color: "var(--muted-foreground)" }}>
-            {t("deployment.dockerDesc")}
+            {t("deployment.platformDesc")}
           </p>
-          <CodeBlock language="yaml" filename="docker-compose.yml">
-{`services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U BidPilot"]
-
-  redis:
-    image: redis:7-alpine
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
-
-  api:
-    build: ./services/api
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-
-  worker:
-    build: ./services/worker
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
-
-  web:
-    build: ./apps/web
-    ports: ["3000:3000"]`}
-          </CodeBlock>
-        </ScrollReveal>
-
-        {/* Health Checks */}
-        <ScrollReveal>
-          <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
-            {t("deployment.healthTitle")}
-          </h3>
           <div
             className="grid gap-4"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
           >
             {[
-              { endpoint: "/health", desc: t("deployment.liveness") },
-              { endpoint: "/health/db", desc: t("deployment.dbConnectivity") },
-              { endpoint: "/health/redis", desc: t("deployment.redisConnectivity") },
-              { endpoint: "/health/storage", desc: t("deployment.storageConnectivity") },
-            ].map((item) => (
+              { icon: CheckCircleIcon, title: t("deployment.availability"), desc: t("deployment.availabilityDesc") },
+              { icon: ShieldCheckIcon, title: t("deployment.dataIsolation"), desc: t("deployment.dataIsolationDesc") },
+              { icon: BrainCircuitIcon, title: t("deployment.executionTrace"), desc: t("deployment.executionTraceDesc") },
+              { icon: DownloadIcon, title: t("deployment.deliveryHistory"), desc: t("deployment.deliveryHistoryDesc") },
+            ].map(({ icon: Icon, title, desc }) => (
               <div
-                key={item.endpoint}
-                className="flex items-center gap-4 p-4"
+                key={title}
+                className="flex items-start gap-4 p-5"
                 style={{
                   background: "var(--card)",
                   border: "1px solid var(--border)",
                 }}
               >
-                <code
-                  className="text-xs font-mono px-2 py-1 shrink-0"
-                  style={{ background: "var(--muted)", color: "var(--primary)" }}
-                >
-                  {item.endpoint}
-                </code>
-                <span className="text-sm" style={{ color: "var(--muted-foreground)" }}>
-                  {item.desc}
-                </span>
+                <Icon className="size-5 shrink-0" style={{ color: "var(--primary)" }} />
+                <div>
+                  <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
+                    {title}
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: "var(--muted-foreground)" }}>
+                    {desc}
+                  </p>
+                </div>
               </div>
             ))}
           </div>
         </ScrollReveal>
 
-        {/* Project Structure */}
+        {/* User-facing workflow */}
         <ScrollReveal>
           <h3 className="text-xl font-medium mb-4" style={{ color: "var(--foreground)" }}>
             {t("deployment.structureTitle")}
           </h3>
-          <CodeBlock language="text" filename="directory tree">
-{`BidPilot/
-  apps/
-    web/                  # React frontend
-      src/
-        features/         # Feature modules
-        components/       # Shared UI components
-        lib/              # Utilities and API client
-  services/
-    api/                  # FastAPI backend
-      app/
-        models.py         # SQLAlchemy models
-        routers/          # API route handlers
-    worker/               # Celery + LangGraph
-      app/
-        graph/
-          builder.py      # LangGraph graph definition
-          state.py        # Agent state schema
-          nodes/          # Agent node implementations
-  infra/
-    docker-compose.yml    # Production stack
-    alembic/              # Database migrations
-  docs/                   # Project documentation`}
+          <div
+            className="mb-4 text-sm"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            {t("deployment.structureDesc")}
+          </div>
+          <CodeBlock language="flow" filename={t("deployment.structureTitle")}>
+            {t("architecture.workflowCode")}
           </CodeBlock>
         </ScrollReveal>
       </div>

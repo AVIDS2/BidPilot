@@ -28,6 +28,16 @@
   mapping. A real low-token MiMo request returned HTTP 200. Full authenticated
   conversation acceptance was not fabricated because no production login
   credentials were available in the browser session.
+- Audited the public `/docs` route after promotion. Replaced stale developer
+  setup instructions, placeholder provider credentials, and obsolete health
+  endpoints with the real user workflow, server-side MiMo/Pi boundary, and
+  platform safeguards. Fixed `AnimatedContent` so animation-only props do not
+  leak into DOM attributes; local browser reload now reports zero console
+  errors at desktop and 390px mobile widths.
+- Post-fix verification: Web `40` test files / `195` tests passed, production
+  Vite build passed, public release smoke from the VPS returned `30/30` with
+  zero failures and p95 `543.70ms`, and the native Pi/MiMo smoke emitted the
+  complete thinking and agent settlement lifecycle without a failure event.
 
 ## 2026-08-29 account settings shadcn alignment
 
