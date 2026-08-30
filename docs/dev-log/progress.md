@@ -13,7 +13,10 @@
 - Verification before production promotion: API provider/runtime/chat target
   `69 passed`, Worker adapter target `37 passed`, Pi `17 passed`, Web account
   `4 passed`, Python compile, TypeScript check, and provider contract checks
-  passed. Production deployment and real provider smoke remain the next gate.
+  passed. MiMo direct-balance probe returned HTTP 200. The first VPS build
+  attempt was stopped by a concurrent Web Vite `SIGSEGV` under the host's
+  memory pressure; old containers stayed up, and the deploy script now builds
+  application images sequentially with restore-on-failure behavior.
 
 ## 2026-08-29 account settings shadcn alignment
 

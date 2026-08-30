@@ -164,7 +164,23 @@ fi
 if [[ "$use_full_compose" -eq 1 ]]; then
   echo "deploy_mode=full_production_compose"
   mv "$NEXT_COMPOSE_FILE" "$COMPOSE_FILE"
-  docker compose up -d --build
+  # This VPS has limited RAM and no swap. Compose's default parallel build can
+  # run several uv/pnpm/Vite processes at once and kill the web build before
+  # any new container is started. Keep storage services running, free memory
+  # from application containers, then build each image in a deterministic
+  # sequence. A failed build restores the previous application containers.
+  application_services=(api worker worker-beat pi-agent web)
+  docker compose stop "${application_services[@]}" || true
+  restore_application_services() {
+    docker compose up -d --no-build "${application_services[@]}" || true
+  }
+  trap restore_application_services ERR
+  for service in pi-agent api worker worker-beat web readiness migrate checkpoints; do
+    echo "building_service=$service"
+    docker compose build "$service"
+  done
+  trap - ERR
+  docker compose up -d --no-build
 else
   assistant_engine="$(python3 - <<'PY'
 from pathlib import Path

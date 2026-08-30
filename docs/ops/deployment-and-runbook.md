@@ -64,6 +64,12 @@ then atomically replaces the outer Compose file before rebuilding containers.
 This prevents application code and production topology from silently diverging;
 the outer `.env` is never copied, committed, or changed by the script.
 
+The production script builds application images sequentially because the pilot
+VPS has limited memory and no swap. It keeps PostgreSQL, Redis, and MinIO up,
+stops only the application containers while building, and restores them if a
+build fails. Local development must use direct Node/Python processes; Docker is
+reserved for this VPS production topology.
+
 Pi releases are fail-closed: when `DOCPILOT_ASSISTANT_ENGINE=pi`, deployment
 must use the complete production Compose topology, including the healthy
 `pi-agent` sidecar. A missing `DOCPILOT_PI_INTERNAL_SECRET` or an invalid
