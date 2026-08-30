@@ -356,7 +356,12 @@
 .bidpilot-claude-thread .cr-thinking-copy {
   display: inline-block;
   min-height: 24px;
-  color: #777570;
+  color: transparent;
+  background: linear-gradient(100deg, #777570 12%, #8ea34c 46%, #b08b5b 62%, #777570 88%);
+  background-size: 240% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: bp-claude-thinking-shimmer 2.2s ease-in-out infinite;
   font-size: 13px;
 }
 
@@ -376,6 +381,10 @@
 .bidpilot-claude-thread .cr-approval-actions button:disabled { cursor: default; opacity: 0.4; }
 
 @keyframes bp-claude-reasoning-spin { to { transform: rotate(360deg); } }
+@keyframes bp-claude-thinking-shimmer {
+  0%, 100% { background-position: 100% 50%; }
+  50% { background-position: 0% 50%; }
+}
 
 @media (max-width: 720px) {
   .bidpilot-claude-thread .cr-thread-inner { width: min(100% - 32px, 720px); padding-top: 22px; }
@@ -388,4 +397,5 @@
   .bidpilot-claude-thread .cr-thread { scroll-behavior: auto; }
   .bidpilot-claude-thread .cr-scroll-to-bottom { transition: none; }
   .bidpilot-claude-thread .cr-reasoning-status i { animation: none; }
+  .bidpilot-claude-thread .cr-thinking-copy { animation: none; color: #777570; }
 }

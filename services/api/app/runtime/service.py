@@ -26,6 +26,7 @@ from contracts.runtime import (
     RuntimeApprovalStatus,
     RuntimeEventType,
     RuntimePolicyOutcome,
+    RuntimeRunStatus,
 )
 
 from .failures import classify_capability_failure
@@ -526,6 +527,26 @@ def complete_runtime_run(
     )
 
 
+def await_runtime_input(
+    db: Session,
+    run_id: str,
+) -> RuntimeRun:
+    """Persist a structured user-input pause without faking a successful run."""
+    run = get_runtime_run_for_update(db, run_id)
+    if run is None:
+        raise ValueError("Runtime run not found")
+    if run.status == RuntimeRunStatus.AWAITING_INPUT.value:
+        return run
+    if run.status in {"succeeded", "failed", "cancelled", "expired"}:
+        return run
+    if run.status != RuntimeRunStatus.RUNNING.value:
+        raise ValueError(f"Cannot await input for runtime run in status: {run.status}")
+    run.status = RuntimeRunStatus.AWAITING_INPUT.value
+    db.commit()
+    db.refresh(run)
+    return run
+
+
 def fail_runtime_run(
     db: Session,
     run_id: str,
@@ -544,7 +565,7 @@ def fail_runtime_run(
         terminal_status="failed",
         terminal_event=RuntimeEventType.RUN_FAILED,
         terminal_summary="任务未能完成。",
-        allowed_statuses={"queued", "running", "awaiting_approval", "cancel_requested"},
+        allowed_statuses={"queued", "running", "awaiting_approval", "awaiting_input", "cancel_requested"},
         result_json=result_json,
         error_code=error_code,
         parent_event_id=parent_event_id,
@@ -567,7 +588,7 @@ def cancel_runtime_run(
         terminal_status="cancelled",
         terminal_event=RuntimeEventType.RUN_CANCELLED,
         terminal_summary="任务已取消。",
-        allowed_statuses={"queued", "running", "awaiting_approval", "cancel_requested"},
+        allowed_statuses={"queued", "running", "awaiting_approval", "awaiting_input", "cancel_requested"},
         parent_event_id=parent_event_id,
     )
 
@@ -597,7 +618,7 @@ def request_runtime_cancellation(
         raise ValueError("Runtime run not found")
     if run.status in {"succeeded", "failed", "cancelled", "expired", "cancel_requested"}:
         return run
-    if run.status == "awaiting_approval":
+    if run.status in {"awaiting_approval", "awaiting_input"}:
         return cancel_runtime_run(db, run.id, "已取消这次操作。")
     if run.status not in {"queued", "running"}:
         raise ValueError(f"Cannot request cancellation for runtime run in status: {run.status}")
@@ -789,7 +810,13 @@ def _finish_runtime_run(
                 payload={
                     "status": terminal_status,
                     "state": terminal_state
-                    or ("failed" if terminal_event is RuntimeEventType.RUN_FAILED else "completed"),
+                    or (
+                        "failed"
+                        if terminal_event is RuntimeEventType.RUN_FAILED
+                        else "cancelled"
+                        if terminal_event is RuntimeEventType.RUN_CANCELLED
+                        else "completed"
+                    ),
                     "kind": run.kind,
                     "message_delta_emitted": message_delta_emitted,
                     **({"message": safe_message} if terminal_event is RuntimeEventType.RUN_FAILED else {}),

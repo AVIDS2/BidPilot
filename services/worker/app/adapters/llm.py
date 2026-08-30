@@ -10,7 +10,7 @@ from typing import Literal
 
 import httpx
 
-from app.adapters.provider_env import chat_api_key, chat_api_url, chat_model
+from app.adapters.provider_env import chat_api_key, chat_api_url, chat_model, chat_provider_id
 from app.adapters.provider_errors import (
     ProviderInvocationError,
     allow_stub_llm,
@@ -188,7 +188,7 @@ def draft_section(
         api_key = _api_key()
         raw_url = _api_url()
         model = _api_model()
-        provider_id = "custom-openai"
+        provider_id = chat_provider_id()
 
     if not api_key:
         if allow_stub_llm():

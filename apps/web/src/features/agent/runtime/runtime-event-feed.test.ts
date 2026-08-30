@@ -225,6 +225,23 @@ describe("runtime event feed", () => {
     ).toMatchObject({ runId: "runtime-1", content: "回复的一部分" });
   });
 
+  it("preserves provider whitespace kept in the durable delta payload", () => {
+    const recovered = recoverRuntimeMessageFromEvents("runtime-1", [
+      runtimeEvent({
+        type: "message.delta",
+        public_summary: "你好",
+        payload: { delta: "你好" },
+      }),
+      runtimeEvent({
+        type: "message.delta",
+        public_summary: "世界",
+        payload: { delta: " 世界" },
+      }),
+    ]);
+
+    expect(recovered).toMatchObject({ runId: "runtime-1", content: "你好 世界" });
+  });
+
   it("maps Harness-authored reasoning into chronological assistant events", () => {
     const delta = runtimeEventToAssistantEvents(
       runtimeEvent({

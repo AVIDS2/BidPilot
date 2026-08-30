@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.chat.service import save_message
 from app.models import RuntimeRun
-from contracts.pi_runtime import pi_model_api, pi_thinking_level
+from contracts.pi_runtime import pi_model_api, pi_model_provider, pi_thinking_level
 from contracts.runtime import RuntimeEventType
 
 from .assistant_adapter import _render_runtime_events, _sse
@@ -29,7 +29,13 @@ from .pi_config import pi_resources as _pi_resources
 from .pi_config import pi_sandbox as _pi_sandbox
 from .pi_config import pi_tools_for_run as _pi_tools_for_run
 from .prompt_assembly import ConversationContextWindow, assemble_harness_prompt
-from .service import complete_runtime_run, fail_runtime_run, get_previous_terminal_action_context
+from .service import (
+    complete_runtime_run,
+    await_runtime_input,
+    fail_runtime_run,
+    finalize_requested_runtime_cancellation,
+    get_previous_terminal_action_context,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +49,16 @@ def _content(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False)
+
+
+def _text_delta(value: Any) -> str | None:
+    """Normalize a provider text frame without discarding meaningful spaces."""
+    delta = str(value or "")
+    return delta if delta else None
+
+
+def _has_visible_text(value: str) -> bool:
+    return bool(value.strip())
 
 
 def _assembled_prompt(
@@ -213,7 +229,7 @@ async def stream_pi_assistant_response(
         "systemPrompt": prompt_system,
         "userMessage": prompt_user,
         "model": {
-            "provider": provider_id or provider_type,
+            "provider": pi_model_provider(provider_type, provider_id, base_url),
             "id": model,
             "name": model,
             "api": _pi_api(provider_type, provider_id),
@@ -228,13 +244,17 @@ async def stream_pi_assistant_response(
         "toolCallback": {"url": callback_url, "token": bridge_token},
         "maxTurns": 24,
     }
+    pi_internal_secret = (os.getenv("DOCPILOT_PI_INTERNAL_SECRET") or os.getenv("DOCPILOT_JWT_SECRET") or "").strip()
+    pi_headers = {"authorization": f"Bearer {pi_internal_secret}"} if pi_internal_secret else {}
 
     cursor = latest_event_sequence(db, run.id)
     text_parts: list[str] = []
+    pending_delta = ""
     current_turn_id: str | None = None
     terminal_type: str | None = None
     terminal_error: str | None = None
     terminal_tool_failure: dict[str, Any] | None = None
+    terminal_tool_pause: dict[str, Any] | None = None
     projected_terminal = False
 
     def flush_events() -> list[str]:
@@ -257,10 +277,31 @@ async def stream_pi_assistant_response(
             payload["error_code"] = error_code
         return _sse("assistant.end", payload)
 
+    def cancel_requested() -> bool:
+        db.refresh(run)
+        if run.status == "cancel_requested":
+            finalize_requested_runtime_cancellation(db, run.id)
+            return True
+        return run.status == "cancelled"
+
     try:
+        # Cancellation can arrive while the API is assembling context or while
+        # the Worker is waiting for the sidecar connection. Do not start Pi
+        # after the durable run has already been cancelled.
+        if cancel_requested():
+            for rendered in flush_events():
+                yield await emit_live(rendered)
+            if rendered_terminal := terminal_event("cancelled"):
+                yield await emit_live(rendered_terminal)
+            return
         timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=30.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", f"{sidecar_url}/v1/runs", json=request) as response:
+            async with client.stream(
+                "POST",
+                f"{sidecar_url}/v1/runs",
+                json=request,
+                headers=pi_headers,
+            ) as response:
                 if response.status_code >= 400:
                     raise RuntimeError(f"Pi runtime rejected the run ({response.status_code})")
                 async for line in response.aiter_lines():
@@ -269,16 +310,29 @@ async def stream_pi_assistant_response(
                     event = json.loads(line)
                     event_type = str(event.get("type") or "")
                     if event_type == "text.delta":
-                        delta = str(event.get("delta") or "")
-                        if delta:
+                        delta = _text_delta(event.get("delta"))
+                        if delta is not None:
                             text_parts.append(delta)
+                            pending_delta += delta
+                            # Provider streams can emit formatting-only chunks.
+                            # Keep them for the final message and fold them into
+                            # the next visible event so RuntimeEventDraft never
+                            # receives a whitespace-only public summary.
+                            if not _has_visible_text(pending_delta):
+                                continue
+                            event_delta = pending_delta
+                            pending_delta = ""
                             row = publish_event(
                                 db,
                                 run.id,
                                 RuntimeEventDraft(
                                     type=RuntimeEventType.MESSAGE_DELTA,
-                                    public_summary=delta,
-                                    payload={"turn_id": current_turn_id, "visible": True},
+                                    public_summary=event_delta,
+                                    payload={
+                                        "turn_id": current_turn_id,
+                                        "visible": True,
+                                        "delta": event_delta,
+                                    },
                                 ),
                             )
                             cursor = max(cursor, row.sequence)
@@ -290,7 +344,7 @@ async def stream_pi_assistant_response(
                                         "runtime_sequence": row.sequence,
                                         "runtime_event_id": row.id,
                                         "turn_id": current_turn_id,
-                                        "content": delta,
+                                        "content": event_delta,
                                         "state": "thinking",
                                     },
                                 )
@@ -333,6 +387,18 @@ async def stream_pi_assistant_response(
                                 result.get("kind") == "failed" and result.get("recoverable") is False
                             ):
                                 terminal_tool_failure = result
+                            elif result.get("kind") == "paused":
+                                terminal_tool_pause = result
+                            elif event.get("is_error") is True and event.get("terminate") is True:
+                                terminal_tool_failure = {
+                                    "publicSummary": "工具调用被安全策略阻止，本轮已停止。",
+                                    "errorCode": "pi_tool_blocked",
+                                    "recoverable": False,
+                                    "native": True,
+                                    "capability": event.get("name"),
+                                    "tool_call_id": event.get("tool_call_id"),
+                                    "turn_id": event.get("turn_id") or current_turn_id,
+                                }
                         if event_type == "tool.started":
                             # Pi emits this before the bridge request starts.
                             # Project it immediately so a slow Skill/MCP call
@@ -363,6 +429,14 @@ async def stream_pi_assistant_response(
             raise RuntimeError("Pi runtime stream ended without a terminal event")
 
         db.refresh(run)
+        if run.status in {"cancel_requested", "cancelled"}:
+            if run.status == "cancel_requested":
+                finalize_requested_runtime_cancellation(db, run.id)
+            for rendered in flush_events():
+                yield await emit_live(rendered)
+            if rendered_terminal := terminal_event("cancelled"):
+                yield await emit_live(rendered_terminal)
+            return
         final_text = "".join(text_parts).strip()
         if run.status == "awaiting_approval":
             if final_text:
@@ -372,9 +446,38 @@ async def stream_pi_assistant_response(
             if rendered_terminal := terminal_event("needs_confirmation"):
                 yield await emit_live(rendered_terminal)
             return
+        if terminal_tool_pause is not None and terminal_tool_pause.get("pauseReason") == "needs_input":
+            await_runtime_input(db, run.id)
+            for rendered in flush_events():
+                yield await emit_live(rendered)
+            if rendered_terminal := terminal_event("needs_input"):
+                yield await emit_live(rendered_terminal)
+            return
+        if terminal_tool_pause is not None:
+            terminal_tool_failure = {
+                "publicSummary": "工具请求了无法恢复的暂停状态，本轮已停止。",
+                "errorCode": "pi_pause_state_invalid",
+                "recoverable": False,
+            }
         if terminal_tool_failure is not None:
             summary = str(terminal_tool_failure.get("publicSummary") or "本轮操作未能完成。")
             has_partial_text = bool(final_text)
+            if terminal_tool_failure.get("native") is True:
+                row = publish_event(
+                    db,
+                    run.id,
+                    RuntimeEventDraft(
+                        type=RuntimeEventType.CAPABILITY_FAILED,
+                        public_summary=summary,
+                        payload={
+                            "capability": terminal_tool_failure.get("capability") or "unknown",
+                            "tool_call_id": terminal_tool_failure.get("tool_call_id"),
+                            "turn_id": terminal_tool_failure.get("turn_id"),
+                            "reason_code": terminal_tool_failure.get("errorCode") or "pi_tool_blocked",
+                        },
+                    ),
+                )
+                cursor = max(cursor, row.sequence)
             save_message(db, conversation_id, "assistant", final_text, runtime_run_id=run.id)
             fail_runtime_run(
                 db,
@@ -420,6 +523,18 @@ async def stream_pi_assistant_response(
         if rendered_terminal := terminal_event(state):
             yield await emit_live(rendered_terminal)
     except Exception as exc:  # noqa: BLE001 - public boundary classifies details
+        try:
+            db.refresh(run)
+        except Exception:  # noqa: BLE001 - preserve the original stream failure path
+            pass
+        if run.status in {"cancel_requested", "cancelled"}:
+            if run.status == "cancel_requested":
+                finalize_requested_runtime_cancellation(db, run.id)
+            for rendered in flush_events():
+                yield await emit_live(rendered)
+            if rendered_terminal := terminal_event("cancelled"):
+                yield await emit_live(rendered_terminal)
+            return
         logger.exception("Pi assistant stream failed: run=%s error_type=%s", run.id, type(exc).__name__)
         message = "助手运行未完成，已安全停止。请稍后重试或查看运行记录。"
         has_partial_text = bool(text_parts)

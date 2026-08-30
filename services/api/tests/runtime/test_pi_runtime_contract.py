@@ -7,6 +7,42 @@ from uuid import uuid4
 
 from app.models import RuntimeRun
 from app.runtime.assistant_adapter import _render_runtime_event
+from app.runtime.pi_adapter import _has_visible_text, _text_delta
+from app.runtime.service import await_runtime_input
+from contracts.pi_runtime import pi_model_provider
+
+
+def test_whitespace_only_pi_delta_is_not_persisted_as_a_public_event() -> None:
+    assert _text_delta(" \t\n") == " \t\n"
+    assert _has_visible_text(" \t\n") is False
+    assert _has_visible_text("  可展示的文本  ") is True
+
+
+def test_mimo_direct_balance_uses_pi_builtin_xiaomi_provider() -> None:
+    assert pi_model_provider("openai", "mimo", "https://api.xiaomimimo.com/v1") == "xiaomi"
+    assert pi_model_provider("openai", "mimo", "https://mimo-gateway.example.test/v1") == "mimo"
+
+
+def test_runtime_run_waiting_for_input_is_not_marked_as_success(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    run = RuntimeRun(
+        kind="assistant_turn",
+        status="running",
+        org_id=default_org_id,
+        user_id=default_user_id,
+        engine="pi",
+        trace_id=f"trace-{uuid4().hex}",
+    )
+    test_db.add(run)
+    test_db.commit()
+
+    await_runtime_input(test_db, run.id)
+
+    test_db.refresh(run)
+    assert run.status == "awaiting_input"
 
 
 class _FakePiResponse:
@@ -59,6 +95,7 @@ def _sse_events(response_text: str) -> list[tuple[str, dict]]:
 def test_partial_pi_failure_is_projected_as_a_separate_session_error() -> None:
     event = SimpleNamespace(
         id="failed-event",
+        run_id="runtime-failed",
         parent_event_id=None,
         sequence=4,
         event_type="run.failed",
@@ -82,6 +119,7 @@ def test_partial_pi_failure_is_projected_as_a_separate_session_error() -> None:
 def test_terminal_failure_message_is_not_replayed_as_a_normal_assistant_answer() -> None:
     event = SimpleNamespace(
         id="failed-message",
+        run_id="runtime-failed-message",
         parent_event_id=None,
         sequence=3,
         event_type="message.completed",

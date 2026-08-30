@@ -1,5 +1,6 @@
 import os
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -50,12 +51,17 @@ for _provider_env_name in (
     "DEEPSEEK_MODEL",
     "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
     "DOCPILOT_PROVIDER_DOMESTIC_BASE_URL",
+    "DOCPILOT_PROVIDER_DOMESTIC_MODEL",
     "DOCPILOT_LLM_MODEL_PRIMARY",
     "ALIYUN_API_KEY",
     "DASHSCOPE_API_KEY",
     "DOCPILOT_PROVIDER_OPENAI_API_KEY",
     "DOCPILOT_PROVIDER_OPENAI_BASE_URL",
     "OPENAI_API_KEY",
+    "MIMO_API_KEY",
+    "MIMO_BASE_URL",
+    "MIMO_MODEL",
+    "XIAOMI_API_KEY",
 ):
     os.environ.pop(_provider_env_name, None)
 
@@ -121,6 +127,18 @@ def client():
     from fastapi.testclient import TestClient
 
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolate_assistant_live_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep API endpoint tests deterministic without a Worker live consumer."""
+    monkeypatch.setattr("app.runtime.queue.request_task_outbox_dispatch", lambda _event_id: True)
+
+    @asynccontextmanager
+    async def no_live_subscription(_run_id: str):
+        yield None
+
+    monkeypatch.setattr("app.runtime.operator_adapter.open_live_run", no_live_subscription)
 
 
 @pytest.fixture(autouse=True)

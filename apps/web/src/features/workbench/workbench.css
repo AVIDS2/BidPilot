@@ -2538,3 +2538,258 @@
   .wb-webhook-empty { align-items: flex-start; flex-wrap: wrap; }
   .wb-webhook-empty [data-slot="button"] { margin-left: 34px; }
 }
+
+/* Account settings use the same restrained workbench surface as Agent while
+   delegating interaction states to the shadcn primitives in the page. */
+.wb-account-settings {
+  background: var(--background);
+}
+
+.wb-account-settings .wb-settings-main {
+  background: var(--background);
+}
+
+.wb-account-settings .wb-settings-content {
+  width: min(100%, 1040px);
+  padding: 38px clamp(22px, 4vw, 64px) 72px;
+}
+
+.wb-account-settings .wb-settings-content-head {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.wb-account-settings .wb-settings-content-head h1 {
+  color: var(--foreground);
+  font-size: 24px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+}
+
+.wb-account-settings .wb-settings-content-head > div > p:last-child {
+  max-width: 640px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.wb-account-settings .wb-account-tabs {
+  width: min(100%, 820px);
+  gap: 0;
+  margin-top: 24px;
+}
+
+.wb-account-settings .wb-account-tabs > [data-slot="tabs-list"] {
+  max-width: 100%;
+  gap: 3px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.wb-account-settings .wb-account-tabs > [data-slot="tabs-list"][data-variant="line"] > [data-slot="tabs-trigger"] {
+  flex: none;
+  height: 42px;
+  border-radius: 0;
+  padding: 0 12px;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+}
+
+.wb-account-settings .wb-account-tabs > [data-slot="tabs-list"][data-variant="line"] > [data-slot="tabs-trigger"]:first-child {
+  padding-left: 0;
+}
+
+.wb-account-settings .wb-account-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 24px;
+  outline: none;
+}
+
+.wb-account-settings .wb-account-tab-content [data-slot="card-title"] {
+  color: var(--foreground);
+}
+
+.wb-account-settings .wb-account-tab-content [data-slot="card-description"] {
+  max-width: 620px;
+  line-height: 1.55;
+}
+
+.wb-account-settings .wb-account-form {
+  width: min(100%, 620px);
+}
+
+.wb-account-settings .wb-account-form [data-slot="field-label"] {
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.wb-account-settings .wb-account-form [data-slot="field-description"] {
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.wb-account-settings .wb-account-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--border);
+}
+
+.wb-account-settings .wb-account-usage-meter,
+.wb-account-settings .wb-account-plan {
+  display: grid;
+  min-height: 116px;
+  align-content: center;
+  gap: 9px;
+  border: 0;
+  background: var(--card);
+  padding: 16px;
+}
+
+.wb-account-settings .wb-account-usage-meter > div > span,
+.wb-account-settings .wb-account-plan > div > span,
+.wb-account-settings .wb-account-plan > span {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.wb-account-settings .wb-account-usage-meter > div > strong {
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-account-settings .wb-account-usage-meter [data-slot="progress"] {
+  gap: 0;
+}
+
+.wb-account-settings .wb-account-usage-meter p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+}
+
+.wb-account-settings .wb-account-plan > strong {
+  color: var(--foreground);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.wb-account-settings .wb-account-plan [data-slot="badge"] {
+  font-size: 0.7rem;
+}
+
+.wb-account-settings .wb-account-plan [data-slot="button"] {
+  margin-top: 2px;
+}
+
+.wb-account-settings .wb-account-organization-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--border);
+}
+
+.wb-account-settings .wb-account-organization-facts > div,
+.wb-account-settings .wb-account-organization-facts > div:first-child,
+.wb-account-settings .wb-account-organization-facts > div:last-child {
+  display: grid;
+  gap: 5px;
+  border: 0;
+  background: var(--card);
+  padding: 14px 16px;
+}
+
+.wb-account-settings .wb-account-organization-facts dt {
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+}
+
+.wb-account-settings .wb-account-organization-facts dd {
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-account-settings .wb-account-preference-row {
+  min-height: 70px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 16px;
+}
+
+.wb-account-settings .wb-account-preference-row [data-slot="field-content"] {
+  min-width: 0;
+}
+
+.wb-account-settings .wb-account-preference-row [data-slot="field-label"] {
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.wb-account-settings .wb-account-preference-row [data-slot="field-description"] {
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .wb-account-settings .wb-settings-content {
+    padding: 28px 18px 48px;
+  }
+
+  .wb-account-settings .wb-account-tabs {
+    width: 100%;
+    margin-top: 20px;
+  }
+
+  .wb-account-settings .wb-account-tabs > [data-slot="tabs-list"] {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .wb-account-settings .wb-account-tabs > [data-slot="tabs-list"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  .wb-account-settings .wb-account-tabs > [data-slot="tabs-list"][data-variant="line"] > [data-slot="tabs-trigger"] {
+    padding-inline: 10px;
+  }
+
+  .wb-account-settings .wb-account-tabs > [data-slot="tabs-list"][data-variant="line"] > [data-slot="tabs-trigger"]:first-child {
+    padding-left: 0;
+  }
+
+  .wb-account-settings .wb-account-tab-content {
+    padding-top: 18px;
+  }
+
+  .wb-account-settings .wb-account-usage-grid,
+  .wb-account-settings .wb-account-organization-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .wb-account-settings .wb-account-preference-row {
+    align-items: flex-start;
+  }
+
+  .wb-account-settings .wb-account-preference-row [data-slot="switch"] {
+    margin-top: 2px;
+  }
+}

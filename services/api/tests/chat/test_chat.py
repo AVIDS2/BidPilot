@@ -391,6 +391,26 @@ class TestChatService:
         assert provider.base_url == "https://opencode.ai/zen/go/v1"
         assert provider.model == "deepseek-v4-flash"
 
+    def test_resolve_platform_chat_provider_uses_mimo_direct_balance_profile(self, monkeypatch):
+        import importlib
+        from app.chat import service as chat_service
+
+        monkeypatch.setenv("DOCPILOT_ASSISTANT_API_KEY", "mimo-test-key")
+        monkeypatch.setenv("DOCPILOT_ASSISTANT_PROVIDER_ID", "mimo")
+        monkeypatch.delenv("DOCPILOT_ASSISTANT_BASE_URL", raising=False)
+        monkeypatch.delenv("DOCPILOT_ASSISTANT_MODEL", raising=False)
+        monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        monkeypatch.delenv("DOCPILOT_PROVIDER_DOMESTIC_API_KEY", raising=False)
+
+        reloaded = importlib.reload(chat_service)
+        provider = reloaded._resolve_platform_chat_provider()
+
+        assert provider is not None
+        assert provider.provider_id == "mimo"
+        assert provider.base_url == "https://api.xiaomimimo.com/v1"
+        assert provider.model == "mimo-v2.5-pro"
+
     def test_resolve_platform_chat_provider_prefers_deepseek_over_legacy_domestic_env(self, monkeypatch):
         """One official platform model keeps chat and workflow defaults aligned."""
         import importlib

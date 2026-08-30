@@ -29,6 +29,8 @@ from app.security.secrets import decrypt_secret
 from contracts.chat_config import (
     DEEPSEEK_CHAT_COMPLETIONS_BASE_URL,
     DEEPSEEK_V4_FLASH_MODEL,
+    MIMO_CHAT_COMPLETIONS_BASE_URL,
+    MIMO_V2_5_PRO_MODEL,
     OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL,
     OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL,
 )
@@ -63,6 +65,16 @@ class PlatformChatProvider:
 
 def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
     """Resolve the platform-owned chat provider from server env."""
+    assistant_key = os.getenv("DOCPILOT_ASSISTANT_API_KEY")
+    assistant_provider_id = (os.getenv("DOCPILOT_ASSISTANT_PROVIDER_ID") or "").strip().casefold()
+    if assistant_key and assistant_provider_id in {"mimo", "xiaomi"}:
+        return PlatformChatProvider(
+            api_key=assistant_key,
+            base_url=os.getenv("DOCPILOT_ASSISTANT_BASE_URL") or MIMO_CHAT_COMPLETIONS_BASE_URL,
+            model=os.getenv("DOCPILOT_ASSISTANT_MODEL") or MIMO_V2_5_PRO_MODEL,
+            provider_id="mimo",
+        )
+
     api_key = os.getenv("OPENCODE_API_KEY")
     if api_key:
         return PlatformChatProvider(

@@ -127,7 +127,7 @@ export function recoverRuntimeMessageFromEvents(
     );
   const deltas = events
     .filter((event) => event.type === "message.delta")
-    .map((event) => event.public_summary)
+    .map((event) => typeof event.payload?.delta === "string" ? event.payload.delta : event.public_summary)
     .join("")
     .trim();
   const content = (completed?.public_summary ?? deltas).trim();
@@ -457,11 +457,13 @@ export function runtimeEventToAssistantEvents(
           state: "thinking",
         },
       }];
-    case "message.delta":
+    case "message.delta": {
+      const content = typeof payload.delta === "string" ? payload.delta : event.public_summary;
       return [{
         eventType: "assistant.message",
-        data: { ...metadata, turn_id: turnId, content: event.public_summary, state: "thinking" },
+        data: { ...metadata, turn_id: turnId, content, state: "thinking" },
       }];
+    }
     case "message.completed":
       if (payload.delta_emitted === true || payload.terminal_failure === true) return [];
       return [{

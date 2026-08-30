@@ -1,4 +1,4 @@
-"""Assistant API router for the governed server-side Harness."""
+"""Assistant API router for the governed server-side Pi runtime."""
 
 from __future__ import annotations
 
@@ -136,9 +136,9 @@ async def assistant_stream(
 ):
     """Queue one governed Pi turn and project its durable events over SSE.
 
-    The Harness owns conversational tool selection and durable execution
-    records. Long-running bid pipelines remain separate LangGraph workflows
-    linked from the resulting runtime run.
+    Pi's ``AgentSession`` owns conversational tool selection and the model/tool
+    loop. PostgreSQL owns durable execution records; long-running bid pipelines
+    remain separate LangGraph workflows linked from the resulting runtime run.
 
     SSE event types:
     - ``assistant.start``: runtime run created (usually ``queued``)

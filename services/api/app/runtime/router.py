@@ -25,12 +25,14 @@ from .schemas import (
 from .service import (
     RuntimeApprovalExpiredError,
     RuntimeApprovalResolvedError,
+    finalize_requested_runtime_cancellation,
     list_linked_workflow_runs,
     list_runtime_child_runs,
     list_runtime_runs_query,
     request_runtime_cancellation,
     resolve_approval,
 )
+from .pi_control import cancel_active_pi_execution, request_pi_abort
 
 
 router = APIRouter(prefix="/runtime", tags=["runtime"])
@@ -163,7 +165,7 @@ def replay_runtime_events(
 
 
 @router.post("/runs/{run_id}/cancel", response_model=RuntimeRunRead)
-def cancel_runtime_run_request(
+async def cancel_runtime_run_request(
     run_id: str,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_auth),
@@ -172,6 +174,16 @@ def cancel_runtime_run_request(
         run = request_runtime_cancellation(db, current_user, run_id=run_id)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if run.kind == "assistant_turn" and run.status == "cancel_requested":
+        await request_pi_abort(run.id)
+        cancel_active_pi_execution(run.id)
+        # The durable cancellation is the user-visible boundary. The sidecar
+        # has received the official abort request when it is reachable, and a
+        # same-process API execution is interrupted as well. Either way, a
+        # late provider response cannot publish success over this terminal
+        # state, while the Pi session can finish its own cleanup in the
+        # background.
+        run = finalize_requested_runtime_cancellation(db, run.id)
     return RuntimeRunRead(
         id=run.id,
         kind=run.kind,

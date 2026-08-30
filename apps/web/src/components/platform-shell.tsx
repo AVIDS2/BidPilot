@@ -28,9 +28,13 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { useAIAssistantHotkeys } from "@/hooks/use-ai-assistant-hotkeys";
 import { cn } from "@/lib/utils";
 import { assistantContextForLocation } from "@/features/agent/runtime/assistant-route-context";
+import { loadWithChunkRecovery } from "@/app-route-loaders";
 
 const AIAssistantPanel = lazy(() =>
-  import("@/features/agent/components/AIAssistantPanel").then(({ AIAssistantPanel }) => ({
+  loadWithChunkRecovery(
+    () => import("@/features/agent/components/AIAssistantPanel"),
+    "assistant-panel",
+  ).then(({ AIAssistantPanel }) => ({
     default: AIAssistantPanel,
   })),
 );

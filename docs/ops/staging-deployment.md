@@ -62,10 +62,12 @@ VITE_API_URL=http://localhost:8000 pnpm dev
 | `DOCPILOT_MINIO_SECRET_KEY` | `docpilot123` | MinIO secret key |
 | `DOCPILOT_JWT_SECRET` | `dev-secret-change-in-production-32bytes!` | JWT signing key |
 | `DOCPILOT_AUTH_REQUIRED` | `false` | Set `true` to enforce Bearer token auth |
-| `DEEPSEEK_API_KEY` | _(none)_ | Preferred platform drafting/assistant key; stays server-side |
-| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` | DeepSeek Chat Completions base URL |
-| `DEEPSEEK_MODEL` | `deepseek-v4-flash` | DeepSeek Chat Completions model; platform default when unset |
-| `OPENCODE_API_KEY` | _(none)_ | OpenCode Go platform key; when configured it is the preferred official Chat Completions provider |
+| `DOCPILOT_ASSISTANT_API_KEY` | _(none)_ | Preferred MiMo direct-balance key; stays server-side |
+| `DOCPILOT_ASSISTANT_PROVIDER_ID` | `mimo` | Product provider profile mapped to Pi's built-in Xiaomi provider |
+| `DOCPILOT_ASSISTANT_BASE_URL` | `https://api.xiaomimimo.com/v1` | MiMo OpenAI-compatible Chat Completions base URL |
+| `DOCPILOT_ASSISTANT_MODEL` | `mimo-v2.5-pro` | MiMo direct-balance model |
+| `DEEPSEEK_API_KEY` | _(none)_ | Legacy DeepSeek platform key; do not set when MiMo is selected |
+| `OPENCODE_API_KEY` | _(none)_ | Legacy OpenCode Go platform key; do not set when MiMo is selected |
 | `OPENCODE_BASE_URL` | `https://opencode.ai/zen/go/v1` | OpenCode Go OpenAI-compatible base URL |
 | `OPENCODE_MODEL` | `deepseek-v4-flash` | OpenCode Go model name |
 | `LLM_API_KEY` / `OPENAI_API_KEY` | _(none)_ | Legacy or custom workflow LLM key |

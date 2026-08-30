@@ -231,6 +231,10 @@ Only add a dedicated client-state library if repeated cross-feature coordination
 - do not create dozens of one-off design abstractions too early
 - do not scatter layout logic across unrelated leaf components
 - keep feature state close to the feature boundary
+- settings screens should compose the installed shadcn primitives for tabs,
+  cards, fields, actions, and async states before adding local control markup
+- server-backed settings should keep query keys scoped to their user or
+  organization and update the shared query cache after mutations
 
 ## Screen architecture
 

@@ -1,5 +1,66 @@
 type RouteLoader = () => Promise<unknown>;
 
+const CHUNK_RECOVERY_PARAM = "__docpilot_chunk_recovery";
+const CHUNK_RECOVERY_KEY_PREFIX = "docpilot:chunk-recovery:";
+
+/** Identify the browser errors raised when an old HTML/JS shell asks for a removed Vite chunk. */
+export function isDynamicImportError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /failed to fetch dynamically imported module|importing a module script failed|loading chunk|chunkloaderror/i.test(message);
+}
+
+function chunkRecoveryKey(chunkName: string): string {
+  return `${CHUNK_RECOVERY_KEY_PREFIX}${chunkName}:${window.location.pathname}`;
+}
+
+function clearChunkRecoveryState(chunkName: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(chunkRecoveryKey(chunkName));
+    const url = new URL(window.location.href);
+    if (url.searchParams.has(CHUNK_RECOVERY_PARAM)) {
+      url.searchParams.delete(CHUNK_RECOVERY_PARAM);
+      window.history.replaceState({}, "", url);
+    }
+  } catch {
+    // Storage and history are best-effort browser recovery helpers.
+  }
+}
+
+function reloadForChunkRecovery(chunkName: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const key = chunkRecoveryKey(chunkName);
+    if (sessionStorage.getItem(key)) return false;
+    sessionStorage.setItem(key, "1");
+    const url = new URL(window.location.href);
+    url.searchParams.set(CHUNK_RECOVERY_PARAM, String(Date.now()));
+    window.location.replace(url.href);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Load a lazy module and recover once when a browser still holds an obsolete build shell. */
+export async function loadWithChunkRecovery<T>(
+  loader: () => Promise<T>,
+  chunkName: string,
+): Promise<T> {
+  try {
+    const module = await loader();
+    clearChunkRecoveryState(chunkName);
+    return module;
+  } catch (error) {
+    if (isDynamicImportError(error) && reloadForChunkRecovery(chunkName)) {
+      // Navigation will replace the stale document. Throwing as a fallback
+      // keeps the boundary finite if the browser refuses the reload.
+      throw error;
+    }
+    throw error;
+  }
+}
+
 export const routeLoaders = {
   agent: () => import("./features/agent/agent-workspace-page"),
   account: () => import("./features/workbench/account-page"),

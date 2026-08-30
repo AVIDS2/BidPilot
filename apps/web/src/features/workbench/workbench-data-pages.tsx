@@ -94,7 +94,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type RunFilter = "all" | "active" | "approval" | "failed" | "completed";
 
-const ACTIVE_RUN_STATUSES = new Set(["queued", "running", "cancel_requested"]);
+const ACTIVE_RUN_STATUSES = new Set(["queued", "running", "awaiting_approval", "awaiting_input", "cancel_requested"]);
 const COMPLETED_RUN_STATUSES = new Set(["succeeded", "cancelled", "expired"]);
 const EMPTY_DASHBOARD_PROJECTS: ProjectRead[] = [];
 const EMPTY_DASHBOARD_RUNS: RuntimeRunListItem[] = [];
@@ -139,6 +139,7 @@ function formatInboxTime(value: string | null) {
 function runStatusMeta(status: string) {
   const normalized = status.toLowerCase();
   if (normalized === "awaiting_approval") return { label: "等待审批", tone: "approval" };
+  if (normalized === "awaiting_input") return { label: "需要补充信息", tone: "approval" };
   if (normalized === "failed") return { label: "失败", tone: "failed" };
   if (ACTIVE_RUN_STATUSES.has(normalized)) return { label: normalized === "queued" ? "排队中" : "运行中", tone: "active" };
   if (COMPLETED_RUN_STATUSES.has(normalized)) return { label: normalized === "succeeded" ? "已完成" : "已停止", tone: "complete" };

@@ -77,6 +77,7 @@ def isolate_provider_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
         "DEEPSEEK_MODEL",
         "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
         "DOCPILOT_PROVIDER_DOMESTIC_BASE_URL",
+        "DOCPILOT_PROVIDER_DOMESTIC_MODEL",
         "DOCPILOT_LLM_MODEL_PRIMARY",
         "ALIYUN_API_KEY",
         "DASHSCOPE_API_KEY",
@@ -85,6 +86,14 @@ def isolate_provider_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
         "OPENAI_API_KEY",
         "DOCPILOT_PROVIDER_ANTHROPIC_API_KEY",
         "ANTHROPIC_API_KEY",
+        "DOCPILOT_ASSISTANT_API_KEY",
+        "DOCPILOT_ASSISTANT_PROVIDER_ID",
+        "DOCPILOT_ASSISTANT_BASE_URL",
+        "DOCPILOT_ASSISTANT_MODEL",
+        "MIMO_API_KEY",
+        "MIMO_BASE_URL",
+        "MIMO_MODEL",
+        "XIAOMI_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
     # Ingestion tests monkeypatch the provider call itself, but still need a

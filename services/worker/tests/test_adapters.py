@@ -63,6 +63,7 @@ _CHAT_ENV_NAMES = (
     "DOCPILOT_PROVIDER_OPENAI_BASE_URL",
     "DOCPILOT_PROVIDER_DOMESTIC_API_KEY",
     "DOCPILOT_PROVIDER_DOMESTIC_BASE_URL",
+    "DOCPILOT_PROVIDER_DOMESTIC_MODEL",
     "DOCPILOT_LLM_MODEL_PRIMARY",
     "DEEPSEEK_API_KEY",
     "DEEPSEEK_BASE_URL",
@@ -70,6 +71,14 @@ _CHAT_ENV_NAMES = (
     "OPENCODE_API_KEY",
     "OPENCODE_BASE_URL",
     "OPENCODE_MODEL",
+    "DOCPILOT_ASSISTANT_API_KEY",
+    "DOCPILOT_ASSISTANT_PROVIDER_ID",
+    "DOCPILOT_ASSISTANT_BASE_URL",
+    "DOCPILOT_ASSISTANT_MODEL",
+    "MIMO_API_KEY",
+    "MIMO_BASE_URL",
+    "MIMO_MODEL",
+    "XIAOMI_API_KEY",
     "ALIYUN_API_KEY",
     "DASHSCOPE_API_KEY",
 )
@@ -445,6 +454,15 @@ class TestLLMAdapter:
 
         assert llm_adapter._api_url() == "https://opencode.ai/zen/go/v1/chat/completions"
         assert llm_adapter._api_model() == "deepseek-v4-flash"
+
+    def test_mimo_direct_balance_env_uses_official_endpoint_and_model(self, monkeypatch) -> None:
+        _clear_chat_env(monkeypatch)
+        monkeypatch.setenv("DOCPILOT_ASSISTANT_API_KEY", "test-mimo-key")
+        monkeypatch.setenv("DOCPILOT_ASSISTANT_PROVIDER_ID", "mimo")
+
+        assert llm_adapter._api_key() == "test-mimo-key"
+        assert llm_adapter._api_url() == "https://api.xiaomimimo.com/v1/chat/completions"
+        assert llm_adapter._api_model() == "mimo-v2.5-pro"
 
     def test_timeout_raises_a_retryable_provider_error(self, monkeypatch) -> None:
         _clear_chat_env(monkeypatch)

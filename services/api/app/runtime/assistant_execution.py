@@ -73,7 +73,7 @@ def _request_from_run(run: RuntimeRun) -> AssistantRequest:
 async def execute_queued_assistant_run(db: Session, run: RuntimeRun) -> str:
     """Run Pi to a durable terminal state; no browser or SSE is required."""
 
-    if run.status in {"succeeded", "failed", "cancelled", "expired"}:
+    if run.status in {"succeeded", "failed", "cancelled", "expired", "awaiting_approval", "awaiting_input"}:
         return run.status
     if run.status == "cancel_requested":
         cancel_runtime_run(db, run.id)
@@ -117,6 +117,12 @@ async def execute_queued_assistant_run(db: Session, run: RuntimeRun) -> str:
         )
     else:
         resolved = resolve_agent_model()
+
+    db.refresh(run)
+    if run.status in {"cancel_requested", "cancelled"}:
+        if run.status == "cancel_requested":
+            cancel_runtime_run(db, run.id)
+        return "cancelled"
 
     run.status = "running"
     run.started_at = run.started_at or datetime.now(UTC).replace(tzinfo=None)

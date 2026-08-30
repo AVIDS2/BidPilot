@@ -77,6 +77,7 @@
     "processing": "Processing",
     "running": "Running",
     "awaiting_approval": "Awaiting approval",
+    "awaiting_input": "Awaiting information",
     "cancel_requested": "Cancelling",
     "cancelled": "Cancelled",
     "expired": "Expired",
@@ -93,6 +94,7 @@
   "error": {
     "title": "Something went wrong",
     "fallback": "An unexpected error occurred.",
+    "chunk": "This page was updated. Reload it to continue.",
     "reload": "Reload Page"
   },
   "user": {

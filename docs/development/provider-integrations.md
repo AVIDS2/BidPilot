@@ -32,7 +32,7 @@ active form submission. Saved keys are encrypted by the backend secret layer.
 | MiniMax | OpenAI-compatible | `https://api.minimax.io/v1` | `MiniMax-M3` | [MiniMax platform docs](https://platform.minimaxi.com/document/) | Local unauthenticated probe hit an SSL/proxy issue on this machine; verify from VPS when needed. |
 | SiliconFlow | OpenAI-compatible | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V3` | [SiliconFlow chat completions](https://docs.siliconflow.cn/api-reference/chat-completions/chat-completions) | Official docs expose `/v1/chat/completions`. |
 | OpenRouter | OpenAI-compatible | `https://openrouter.ai/api/v1` | `openai/gpt-4o-mini` | [OpenRouter API reference](https://openrouter.ai/docs/api-reference/overview) | `/api/v1/models` returned `200` in the no-key probe. |
-| Xiaomi MiMo | OpenAI-compatible | `https://api.xiaomimimo.com/v1` | `mimo-v2.5-pro` | [MiMo platform](https://mimo.mi.com/) | No-key chat endpoint probe returned `405`, which confirms the host/path is reachable but requires the proper method and auth. |
+| Xiaomi MiMo direct balance | OpenAI-compatible | `https://api.xiaomimimo.com/v1` | `mimo-v2.5-pro` | [MiMo OpenAI Chat Completions docs](https://mimo.mi.com/docs/en-US/api/chat/openai-api) | Uses the documented `api-key` or Bearer header. No-key chat endpoint probe returned `405`, confirming the host/path is reachable but requires the proper method and auth. |
 | Custom Claude Protocol | Anthropic Messages-compatible | User supplied | `claude-sonnet-4-20250514` | User gateway docs | For Claude proxies, enterprise gateways, and protocol adapters. |
 
 ## Logo Policy

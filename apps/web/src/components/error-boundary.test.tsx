@@ -33,6 +33,18 @@ describe("ErrorBoundary", () => {
     spy.mockRestore();
   });
 
+  it("hides a stale chunk URL behind the localized recovery message", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <ErrorBoundary>
+        <ThrowChunkError />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByText("This page was updated. Reload it to continue.")).toBeDefined();
+    expect(screen.queryByText(/assets\/project-workspace/)).toBeNull();
+    spy.mockRestore();
+  });
+
   it("renders custom fallback when provided", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     render(
@@ -44,3 +56,9 @@ describe("ErrorBoundary", () => {
     spy.mockRestore();
   });
 });
+
+function ThrowChunkError(): null {
+  throw new Error(
+    "Failed to fetch dynamically imported module: https://bidpilot.example/assets/project-workspace-page-old.js",
+  );
+}

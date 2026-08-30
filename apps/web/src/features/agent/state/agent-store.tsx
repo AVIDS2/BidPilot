@@ -215,11 +215,14 @@ export interface AIAssistantState {
   isStreaming: boolean;
   /** True only after Pi reports a live model-turn/thinking boundary. */
   isThinking: boolean;
+  /** True after the user requests a durable Pi cancellation until terminal state. */
+  cancellationRequested: boolean;
   status: AssistantStatus;
   executionItems: AssistantExecutionItem[];
   pendingConfirmation: AssistantConfirmationRequest | null;
   pendingInput: AssistantInputRequest | null;
   sessionError: string | null;
+  sessionErrorRuntimeRunId: string | null;
   selectedProviderConfigId: string | null;
   reasoningEffort: AssistantReasoningEffort;
   approvalMode: AssistantApprovalMode;
@@ -256,13 +259,19 @@ type Action =
     }
   | { type: "COMPLETE_VISIBLE_REASONING"; turnId?: string }
   | { type: "ENSURE_TRANSCRIPT_TURN"; turnId: string }
-  | { type: "FINALIZE_OPEN_EXECUTION_ITEMS"; runtimeRunId?: string; failed?: boolean }
+  | {
+      type: "FINALIZE_OPEN_EXECUTION_ITEMS";
+      runtimeRunId?: string;
+      failed?: boolean;
+      terminalState?: "completed" | "failed" | "cancelled" | "needs_confirmation" | "needs_input";
+    }
   | { type: "FLUSH_READY_ASSISTANT_CONTENT" }
   | { type: "SET_ACTIVE_ASSISTANT_MESSAGE"; messageId: string | null }
   | { type: "SET_STREAMING"; streaming: boolean }
   | { type: "SET_THINKING"; thinking: boolean }
+  | { type: "SET_CANCELLATION_REQUESTED"; requested: boolean }
   | { type: "STOP_ACTIVE_RESPONSE" }
-  | { type: "SET_STATUS"; status: AssistantStatus }
+  | { type: "SET_STATUS"; status: AssistantStatus; runtimeRunId?: string }
   | { type: "ADD_EXECUTION_ITEM"; item: AssistantExecutionItem }
   | {
       type: "UPDATE_EXECUTION_ITEM";
@@ -280,7 +289,7 @@ type Action =
       node: WorkflowNodeProgress;
       currentNode?: string | null;
     }
-  | { type: "SET_SESSION_ERROR"; message: string; errorCode?: string }
+  | { type: "SET_SESSION_ERROR"; message: string; errorCode?: string; runtimeRunId?: string }
   | { type: "SET_PENDING_CONFIRMATION"; confirmation: AssistantConfirmationRequest | null }
   | { type: "SET_PENDING_INPUT"; request: AssistantInputRequest | null }
   | { type: "SET_SELECTED_PROVIDER_CONFIG"; providerConfigId: string | null }
@@ -304,11 +313,13 @@ const initialState: AIAssistantState = {
   assistantContentBuffers: {},
   isStreaming: false,
   isThinking: false,
+  cancellationRequested: false,
   status: "idle",
   executionItems: [],
   pendingConfirmation: null,
   pendingInput: null,
   sessionError: null,
+  sessionErrorRuntimeRunId: null,
   selectedProviderConfigId: getStoredValue("assistantProviderConfigId"),
   reasoningEffort: parseReasoningEffort(getStoredValue("assistantReasoningEffort")),
   approvalMode: parseApprovalMode(getStoredValue("assistantApprovalMode")),
@@ -341,6 +352,53 @@ function createExecutionId(prefix: string, key?: string) {
 
 function isOpenExecutionStatus(status: AssistantExecutionItem["status"]) {
   return status === "running" || status === "pending";
+}
+
+/**
+ * Accept one projected frame from a durable runtime event.
+ *
+ * Sequence is the replay cursor, not a unique UI-frame identity: one source
+ * event can intentionally produce multiple compatibility events. Event ID and
+ * projected event type make live delivery and replay idempotent without
+ * dropping the second projection.
+ */
+export function acceptRuntimeProjection(
+  cursors: RuntimeEventCursor,
+  seen: Set<string>,
+  eventType: string,
+  data: Record<string, unknown>,
+): boolean {
+  const runId = typeof data.runtime_run_id === "string" ? data.runtime_run_id : undefined;
+  const sequence = typeof data.runtime_sequence === "number" ? data.runtime_sequence : undefined;
+  if (!runId) return true;
+  const eventId = typeof data.runtime_event_id === "string" ? data.runtime_event_id : undefined;
+  const toolCallId = typeof data.tool_call_id === "string" ? data.tool_call_id : undefined;
+  const projectionKeys: string[] = [];
+  if (eventId) projectionKeys.push(`${runId}:event:${eventId}:${eventType}`);
+  if (sequence !== undefined && Number.isInteger(sequence) && sequence > 0) {
+    projectionKeys.push(`${runId}:sequence:${sequence}:${eventType}`);
+  }
+  // The live Pi adapter can emit tool.started before the durable capability
+  // event exists, so that frame has no event id or sequence. Pi's native
+  // tool_call_id is the stable bridge identity for live-versus-replay frames.
+  if (toolCallId && [
+    "assistant.tool_started",
+    "assistant.tool_succeeded",
+    "assistant.tool_failed",
+    "assistant.workflow_started",
+    "assistant.workflow_node_progressed",
+    "assistant.workflow_node_completed",
+    "assistant.workflow_node_failed",
+    "assistant.confirmation_requested",
+  ].includes(eventType)) {
+    projectionKeys.push(`${runId}:tool:${toolCallId}:${eventType}`);
+  }
+  const duplicate = projectionKeys.some((projectionKey) => seen.has(projectionKey));
+  for (const projectionKey of projectionKeys) seen.add(projectionKey);
+  if (sequence !== undefined && Number.isInteger(sequence) && sequence > 0 && isRuntimeSequenceNewer(cursors, runId, sequence)) {
+    Object.assign(cursors, advanceRuntimeSequenceCursor(cursors, runId, sequence));
+  }
+  return !duplicate;
 }
 
 function executionIdentity(item: AssistantExecutionItem) {
@@ -594,6 +652,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         pendingInput: null,
         sessionError: null,
         isThinking: false,
+        cancellationRequested: false,
       };
     case "SET_LAST_USER_DURABLE_ID": {
       let messageIndex = -1;
@@ -627,8 +686,8 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
     case "ENSURE_TRANSCRIPT_TURN":
       return ensureAssistantTurnPart(state, action.turnId);
     case "FINALIZE_OPEN_EXECUTION_ITEMS": {
-      const executionItems = state.executionItems.filter((item) => {
-        if (!isOpenExecutionStatus(item.status)) return true;
+      const executionItems = state.executionItems.map((item) => {
+        if (!isOpenExecutionStatus(item.status)) return item;
         // A linked workflow/subagent continues after the parent Pi turn ends.
         // Its durable child run owns the later terminal update, so it must not
         // be treated as an orphaned browser-only tool card.
@@ -636,10 +695,10 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           (item.kind === "workflow" || item.kind === "subagent") &&
           Boolean(item.runId || item.runtimeRunId)
         ) {
-          return true;
+          return item;
         }
         if (action.runtimeRunId && item.runtimeRunId && item.runtimeRunId !== action.runtimeRunId) {
-          return true;
+          return item;
         }
         if (
           !action.runtimeRunId &&
@@ -647,12 +706,27 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
           state.activeAssistantMessageId &&
           item.messageId !== state.activeAssistantMessageId
         ) {
-          return true;
+          return item;
         }
         // A closed browser stream is not evidence that the provider tool
-        // finished. Durable runtime events are the source of truth, so discard
-        // an unconfirmed live card instead of inventing a result or failure.
-        return false;
+        // finished. Keep the card and make missing terminal evidence visible
+        // instead of silently deleting the user's execution history.
+        if (action.terminalState === "needs_confirmation" || action.terminalState === "needs_input") {
+          return item;
+        }
+        const cancelled = action.terminalState === "cancelled";
+        return {
+          ...item,
+          status: cancelled ? "cancelled" as const : "failed" as const,
+          isRunning: false,
+          isWaitingApproval: false,
+          errorMessage: item.errorMessage || (cancelled
+            ? "本轮响应已停止。"
+            : "工具执行未收到完成事件，本轮未能确认结果。"),
+          summary: item.summary || (cancelled
+            ? "本轮响应已停止"
+            : "工具执行未收到完成事件"),
+        };
       });
       return flushReadyAssistantBuffers({ ...state, executionItems });
     }
@@ -664,6 +738,8 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       return { ...state, isStreaming: action.streaming, isThinking: action.streaming ? state.isThinking : false };
     case "SET_THINKING":
       return { ...state, isThinking: action.thinking };
+    case "SET_CANCELLATION_REQUESTED":
+      return { ...state, cancellationRequested: action.requested };
     case "STOP_ACTIVE_RESPONSE": {
       const activeMessageId = state.activeAssistantMessageId;
       const executionItems = state.executionItems.map((item) => {
@@ -692,23 +768,30 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         ...state,
         isStreaming: false,
         isThinking: false,
+        cancellationRequested: false,
         status: hasBackgroundWorkflow ? "running_workflow" : "completed",
         activeAssistantMessageId: null,
         executionItems,
       });
     }
-    case "SET_STATUS":
+    case "SET_STATUS": {
       // A late generic SSE terminator must not convert a failure or a durable
       // human-input pause into a completed turn. The next user turn resumes it.
+      const terminalStatusBelongsToExistingFailure =
+        !state.sessionErrorRuntimeRunId ||
+        !action.runtimeRunId ||
+        state.sessionErrorRuntimeRunId === action.runtimeRunId;
       if (
         action.status === "completed" &&
         (state.status === "failed" ||
           state.status === "needs_input" ||
-          state.status === "needs_confirmation")
+          state.status === "needs_confirmation") &&
+        terminalStatusBelongsToExistingFailure
       ) {
         return state;
       }
       return { ...state, status: action.status };
+    }
     case "ADD_EXECUTION_ITEM":
       {
         const incoming = {
@@ -853,7 +936,9 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         ...state,
         status: "failed",
         sessionError: action.message,
+        sessionErrorRuntimeRunId: action.runtimeRunId ?? null,
         isThinking: false,
+        cancellationRequested: false,
       };
     case "CLEAR_TRANSIENT_STATE":
       return {
@@ -861,7 +946,9 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         pendingConfirmation: null,
         pendingInput: null,
         sessionError: null,
+        sessionErrorRuntimeRunId: null,
         isThinking: false,
+        cancellationRequested: false,
       };
     case "CLEAR_MESSAGES":
       return {
@@ -873,7 +960,9 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         pendingConfirmation: null,
         pendingInput: null,
         sessionError: null,
+        sessionErrorRuntimeRunId: null,
         isThinking: false,
+        cancellationRequested: false,
       };
     case "SET_CONTEXT":
       return { ...state, currentContext: action.context };
@@ -913,11 +1002,13 @@ export function mergeAssistantMessages(current: ChatMessage[], incoming: ChatMes
 }
 
 interface AssistantSseHandlingOptions {
-  shouldHandleRuntimeEvent?: (data: Record<string, unknown>) => boolean;
+  shouldHandleRuntimeEvent?: (eventType: string, data: Record<string, unknown>) => boolean;
   onRuntimeRun?: (runId: string) => void;
   /** Return false when a late event belongs to a conversation no longer visible. */
   onConversation?: (conversationId: string) => boolean | void;
   onTerminal?: () => void;
+  /** Keep polling until a durable terminal event is observed. */
+  waitForDurableTerminal?: boolean;
   navigate?: (path: string) => void;
 }
 
@@ -939,13 +1030,13 @@ function handleAssistantSseEvent(
 ) {
   const runtimeRunId = typeof parsed.runtime_run_id === "string" ? parsed.runtime_run_id : undefined;
   if (runtimeRunId) {
+    if (options?.shouldHandleRuntimeEvent && !options.shouldHandleRuntimeEvent(eventType, parsed)) return;
     options?.onRuntimeRun?.(runtimeRunId);
-    if (options?.shouldHandleRuntimeEvent && !options.shouldHandleRuntimeEvent(parsed)) return;
   }
 
   const state = asAssistantStatus(parsed.state);
   if (state) {
-    dispatch({ type: "SET_STATUS", status: state });
+    dispatch({ type: "SET_STATUS", status: state, runtimeRunId });
   }
 
   if (eventType === "assistant.start") {
@@ -1240,6 +1331,7 @@ function handleAssistantSseEvent(
       (typeof parsed.turn_id === "string" && parsed.turn_id) ||
       (runtimeRunId ? `run:${runtimeRunId}` : undefined);
     const result = asRecord(parsed.result);
+    const linkedRun = typeof result.run_id === "string" || typeof result.runtime_run_id === "string";
     if (turnId) {
       dispatch({ type: "ENSURE_TRANSCRIPT_TURN", turnId });
     }
@@ -1250,10 +1342,11 @@ function handleAssistantSseEvent(
       turnId,
       runtimeRunId,
       patch: {
-        status: "succeeded",
+        kind: linkedRun ? "workflow" : "tool",
+        status: linkedRun ? "running" : "succeeded",
         result,
         summary: String(parsed.summary ?? ""),
-        isRunning: false,
+        isRunning: linkedRun,
         toolCallId,
         turnId,
         runtimeRunId,
@@ -1269,7 +1362,7 @@ function handleAssistantSseEvent(
     // A completed tool is not necessarily a completed turn. Pi will emit the
     // next turn/thinking boundary if it continues; an open stream alone is not
     // evidence that the model is thinking.
-    if (typeof result.run_id === "string" || typeof result.runtime_run_id === "string") {
+    if (linkedRun) {
       return;
     }
     // Structured UI actions require an explicit user click. This prevents a
@@ -1448,6 +1541,7 @@ function handleAssistantSseEvent(
         ? parsed.message
         : "本次回复未能完成，已安全停止。",
       errorCode: typeof parsed.error_code === "string" ? parsed.error_code : undefined,
+      runtimeRunId,
     });
     return;
   }
@@ -1460,16 +1554,24 @@ function handleAssistantSseEvent(
 
   if (eventType === "assistant.end") {
     dispatch({ type: "SET_THINKING", thinking: false });
+    dispatch({ type: "SET_CANCELLATION_REQUESTED", requested: false });
     const conversationId = parsed.conversation_id;
     if (typeof conversationId === "string") {
       const accepted = options?.onConversation?.(conversationId);
       if (accepted === false) return;
       dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
     }
-    // Close any tool cards still "running" after the stream ends. Duplicate
-    // CAPABILITY_* events previously left a ghost running card beside the
-    // completed one.
-    dispatch({ type: "FINALIZE_OPEN_EXECUTION_ITEMS", runtimeRunId, failed: parsed.state === "failed" });
+    // Resolve any tool cards still "running" after the stream ends. A missing
+    // terminal event is a visible failure, never a reason to erase history.
+    dispatch({
+      type: "FINALIZE_OPEN_EXECUTION_ITEMS",
+      runtimeRunId,
+      failed: parsed.state === "failed",
+      terminalState:
+        state === "failed" || state === "needs_confirmation" || state === "needs_input"
+          ? state
+          : parsed.state === "cancelled" ? "cancelled" : "completed",
+    });
     // A terminal event without an explicit state is still a completed turn.
     // Keeping the previous `thinking` state here leaves the composer stuck
     // even though the server has closed the response successfully.
@@ -1788,8 +1890,16 @@ async function replayRuntimeEvents(
   return { replayed, terminal };
 }
 
-function isActiveRuntimeRun(run: RuntimeRunListItem): boolean {
-  return ["queued", "running", "awaiting_approval", "cancel_requested"].includes(run.status);
+function isRuntimeRunVisibleOpen(run: RuntimeRunListItem): boolean {
+  return ["queued", "running", "awaiting_approval", "awaiting_input", "cancel_requested"].includes(run.status);
+}
+
+function isRuntimeRunInProgress(run: RuntimeRunListItem): boolean {
+  return ["queued", "running", "cancel_requested"].includes(run.status);
+}
+
+function isRuntimeRunPaused(run: RuntimeRunListItem): boolean {
+  return run.status === "awaiting_approval" || run.status === "awaiting_input";
 }
 
 function normalizeRuntimeRuns(value: unknown): RuntimeRunListItem[] {
@@ -1808,6 +1918,8 @@ function assistantStatusForRuntimeRun(run: RuntimeRunListItem): AssistantStatus 
       return "thinking";
     case "awaiting_approval":
       return "needs_confirmation";
+    case "awaiting_input":
+      return "needs_input";
     case "cancel_requested":
       return "thinking";
     case "succeeded":
@@ -1935,10 +2047,17 @@ export function AIAssistantProvider({
   const currentConversationIdRef = useRef<string | null>(state.currentConversationId);
   currentConversationIdRef.current = state.currentConversationId;
   const runtimeEventCursorsRef = useRef<RuntimeEventCursor>({});
+  // A single durable RuntimeEvent may intentionally fan out to multiple UI
+  // frames (for example workflow_started + tool_succeeded). The fetch cursor
+  // still advances by sequence, but live/replay de-duplication must include
+  // the projected event type so those frames are both retained.
+  const runtimeProjectionKeysRef = useRef<Set<string>>(new Set());
   const activeStreamAbortRef = useRef<AbortController | null>(null);
   const runtimeWatchAbortRef = useRef<AbortController | null>(null);
   const activeAssistantRuntimeRunRef = useRef<string | null>(null);
   const watchedRuntimeRunRef = useRef<string | null>(null);
+  const pendingAssistantCancellationRef = useRef(false);
+  const pendingAssistantCancellationTimerRef = useRef<number | null>(null);
   // A conversation owns its run and its cancel affordance. The provider is
   // shared by the shell, so a single global run id would make switching
   // conversations cancel whichever task happened to start last.
@@ -1955,17 +2074,13 @@ export function AIAssistantProvider({
   // the busy state reaches the composer.
   const assistantRequestInFlightRef = useRef(false);
 
-  const shouldHandleRuntimeEvent = useCallback((data: Record<string, unknown>) => {
-    const runId = typeof data.runtime_run_id === "string" ? data.runtime_run_id : undefined;
-    const sequence = typeof data.runtime_sequence === "number" ? data.runtime_sequence : undefined;
-    if (!runId || sequence === undefined || !Number.isInteger(sequence) || sequence < 1) return true;
-    if (!isRuntimeSequenceNewer(runtimeEventCursorsRef.current, runId, sequence)) return false;
-    runtimeEventCursorsRef.current = advanceRuntimeSequenceCursor(
+  const shouldHandleRuntimeEvent = useCallback((eventType: string, data: Record<string, unknown>) => {
+    return acceptRuntimeProjection(
       runtimeEventCursorsRef.current,
-      runId,
-      sequence,
+      runtimeProjectionKeysRef.current,
+      eventType,
+      data,
     );
-    return true;
   }, []);
 
   const watchConversationRuntime = useCallback(async (
@@ -1979,12 +2094,13 @@ export function AIAssistantProvider({
     const scopedDispatch: Dispatch<Action> = (action) => {
       // A late poll from an old conversation must never turn the current
       // conversation's composer into a shared stop button.
-      if (isVisibleConversation()) dispatch(action);
+      if (!controller.signal.aborted && isVisibleConversation()) dispatch(action);
     };
     const watchOptions: AssistantSseHandlingOptions = {
       ...options,
       shouldHandleRuntimeEvent,
       onRuntimeRun: (runId) => {
+        if (controller.signal.aborted) return;
         runtimeRunByConversationRef.current[conversationId] = runId;
         if (currentConversationIdRef.current === conversationId) {
           watchedRuntimeRunRef.current = runId;
@@ -2003,21 +2119,41 @@ export function AIAssistantProvider({
           await waitForAssistantRuntimePoll(controller.signal, Math.min(5000, 1000 + attempt * 100));
           continue;
         }
-        const activeRuns = runs.filter(isActiveRuntimeRun);
-        const candidates = activeRuns.length > 0 ? [...activeRuns].reverse() : runs.slice(0, 1);
+        const activeRuns = runs.filter(isRuntimeRunInProgress);
+        const pausedRuns = runs.filter(isRuntimeRunPaused);
+        const candidates = activeRuns.length > 0
+          ? [...activeRuns].reverse()
+          : pausedRuns.length > 0 ? [...pausedRuns].reverse() : runs.slice(0, 1);
+        let replayedTerminal = false;
         for (const run of candidates) {
           if (controller.signal.aborted) return;
-          await replayRuntimeEvents(
+          replayedTerminal ||= ["succeeded", "failed", "cancelled", "expired"].includes(run.status);
+          const replay = await replayRuntimeEvents(
             run.id,
             runtimeEventCursorsRef.current,
             conversationId,
             scopedDispatch,
             watchOptions,
           );
+          replayedTerminal ||= replay.terminal;
         }
         if (!isVisibleConversation()) return;
         const active = activeRuns[0];
         if (!active) {
+          const paused = pausedRuns[0];
+          if (paused) {
+            scopedDispatch({ type: "SET_STREAMING", streaming: false });
+            scopedDispatch({ type: "SET_CANCELLATION_REQUESTED", requested: false });
+            scopedDispatch({ type: "SET_STATUS", status: assistantStatusForRuntimeRun(paused) });
+            delete runtimeRunByConversationRef.current[conversationId];
+            watchedRuntimeRunRef.current = null;
+            return;
+          }
+          if (options?.waitForDurableTerminal && !replayedTerminal) {
+            await waitForAssistantRuntimePoll(controller.signal);
+            continue;
+          }
+          if (replayedTerminal) options?.onTerminal?.();
           try {
             const history = await getChatConversationMessages(conversationId);
             scopedDispatch({ type: "MERGE_MESSAGES", messages: toStoredChatMessages(history.items) });
@@ -2027,6 +2163,7 @@ export function AIAssistantProvider({
           }
           const latest = runs[0];
           scopedDispatch({ type: "SET_STREAMING", streaming: false });
+          scopedDispatch({ type: "SET_CANCELLATION_REQUESTED", requested: false });
           scopedDispatch({ type: "SET_STATUS", status: latest ? assistantStatusForRuntimeRun(latest) : "idle" });
           delete runtimeRunByConversationRef.current[conversationId];
           watchedRuntimeRunRef.current = null;
@@ -2035,6 +2172,10 @@ export function AIAssistantProvider({
         watchedRuntimeRunRef.current = active.id;
         runtimeRunByConversationRef.current[conversationId] = active.id;
         scopedDispatch({ type: "SET_STATUS", status: assistantStatusForRuntimeRun(active) });
+        scopedDispatch({
+          type: "SET_CANCELLATION_REQUESTED",
+          requested: active.status === "cancel_requested",
+        });
         scopedDispatch({ type: "SET_STREAMING", streaming: true });
         await waitForAssistantRuntimePoll(controller.signal);
       }
@@ -2078,6 +2219,13 @@ export function AIAssistantProvider({
     activeStreamAbortRef.current?.abort();
     activeAssistantRuntimeRunRef.current = null;
     watchedRuntimeRunRef.current = null;
+    runtimeEventCursorsRef.current = {};
+    runtimeProjectionKeysRef.current = new Set();
+    pendingAssistantCancellationRef.current = false;
+    if (pendingAssistantCancellationTimerRef.current !== null) {
+      window.clearTimeout(pendingAssistantCancellationTimerRef.current);
+      pendingAssistantCancellationTimerRef.current = null;
+    }
     currentConversationIdRef.current = conversationId;
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId });
     dispatch({ type: "CLEAR_MESSAGES" });
@@ -2105,7 +2253,7 @@ export function AIAssistantProvider({
       try {
         const runs = normalizeRuntimeRuns(await listRuntimeRuns(12, conversationId));
         if (!isCurrentLoad()) return;
-        for (const activeRun of runs.filter(isActiveRuntimeRun)) {
+        for (const activeRun of runs.filter(isRuntimeRunVisibleOpen)) {
           if (!restoredMessages.some((message) => message.runtimeRunId === activeRun.id)) {
             restoredMessages = [
               ...restoredMessages,
@@ -2160,10 +2308,13 @@ export function AIAssistantProvider({
                 compatibilityEvent.eventType !== "assistant.tool_failed" &&
                 compatibilityEvent.eventType !== "assistant.turn_started" &&
                 compatibilityEvent.eventType !== "assistant.turn_finished" &&
-                compatibilityEvent.eventType !== "assistant.task_started" &&
-                compatibilityEvent.eventType !== "assistant.reasoning" &&
-                compatibilityEvent.eventType !== "assistant.reasoning_completed" &&
-                compatibilityEvent.eventType !== "assistant.session_error"
+                 compatibilityEvent.eventType !== "assistant.task_started" &&
+                 compatibilityEvent.eventType !== "assistant.reasoning" &&
+                 compatibilityEvent.eventType !== "assistant.reasoning_completed" &&
+                 compatibilityEvent.eventType !== "assistant.session_error" &&
+                 compatibilityEvent.eventType !== "assistant.confirmation_requested" &&
+                 compatibilityEvent.eventType !== "assistant.missing_input" &&
+                 compatibilityEvent.eventType !== "assistant.end"
               ) {
                 continue;
               }
@@ -2171,6 +2322,7 @@ export function AIAssistantProvider({
                 compatibilityEvent.eventType,
                 compatibilityEvent.data,
                 dispatch,
+                { shouldHandleRuntimeEvent },
               );
             }
           }
@@ -2183,20 +2335,36 @@ export function AIAssistantProvider({
       if (!isCurrentLoad()) return;
       // Terminal history must not leave stale live rows. Active queued/running
       // runs remain open and are completed by the durable poller below.
-      for (const run of normalizeRuntimeRuns(await listRuntimeRuns(12, conversationId)).filter((item) => !isActiveRuntimeRun(item))) {
-        dispatch({ type: "FINALIZE_OPEN_EXECUTION_ITEMS", runtimeRunId: run.id, failed: run.status === "failed" });
+      for (const run of normalizeRuntimeRuns(await listRuntimeRuns(12, conversationId)).filter((item) => !isRuntimeRunVisibleOpen(item))) {
+        dispatch({
+          type: "FINALIZE_OPEN_EXECUTION_ITEMS",
+          runtimeRunId: run.id,
+          failed: run.status === "failed",
+          terminalState: run.status === "cancelled" || run.status === "expired" ? "cancelled" : run.status === "failed" ? "failed" : "completed",
+        });
       }
       const currentRuns = normalizeRuntimeRuns(await listRuntimeRuns(12, conversationId));
-      const activeRun = currentRuns.find(isActiveRuntimeRun);
+      const activeRun = currentRuns.find(isRuntimeRunVisibleOpen);
       if (activeRun) {
-        runtimeRunByConversationRef.current[conversationId] = activeRun.id;
-        activeAssistantRuntimeRunRef.current = activeRun.id;
-        watchedRuntimeRunRef.current = activeRun.id;
+        if (isRuntimeRunInProgress(activeRun)) {
+          runtimeRunByConversationRef.current[conversationId] = activeRun.id;
+          activeAssistantRuntimeRunRef.current = activeRun.id;
+          watchedRuntimeRunRef.current = activeRun.id;
+        } else {
+          delete runtimeRunByConversationRef.current[conversationId];
+          activeAssistantRuntimeRunRef.current = null;
+          watchedRuntimeRunRef.current = null;
+        }
         dispatch({ type: "SET_STATUS", status: assistantStatusForRuntimeRun(activeRun) });
-        dispatch({ type: "SET_STREAMING", streaming: true });
-        void watchConversationRuntime(conversationId);
+        dispatch({
+          type: "SET_CANCELLATION_REQUESTED",
+          requested: activeRun.status === "cancel_requested",
+        });
+        dispatch({ type: "SET_STREAMING", streaming: isRuntimeRunInProgress(activeRun) });
+        if (isRuntimeRunInProgress(activeRun)) void watchConversationRuntime(conversationId);
       } else {
         delete runtimeRunByConversationRef.current[conversationId];
+        dispatch({ type: "SET_CANCELLATION_REQUESTED", requested: false });
         dispatch({ type: "SET_STATUS", status: "idle" });
       }
       dispatch({ type: "SET_ACTIVE_ASSISTANT_MESSAGE", messageId: null });
@@ -2222,7 +2390,7 @@ export function AIAssistantProvider({
       // The loaded run status (or its watcher) owns the final UI state. Do not
       // blindly reset it to idle after restoring a queued/running run.
     }
-  }, [watchConversationRuntime]);
+  }, [shouldHandleRuntimeEvent, watchConversationRuntime]);
 
   const updateConversationTitle = useCallback((conversationId: string, title: string) => {
     dispatch({ type: "UPDATE_CONVERSATION_TITLE", conversationId, title });
@@ -2247,6 +2415,38 @@ export function AIAssistantProvider({
     dispatch({ type: "SET_APPROVAL_MODE", mode });
   }, []);
 
+  const requestAssistantCancellation = useCallback(
+    (
+      runtimeRunId: string,
+      conversationId: string | null,
+      streamController: AbortController | null,
+    ) => {
+      void Promise.resolve()
+        .then(() => cancelRuntimeWorkflow(runtimeRunId))
+        .then((run) => {
+          if (run.status === "cancelled") {
+            streamController?.abort();
+            dispatch({ type: "STOP_ACTIVE_RESPONSE" });
+            return;
+          }
+          if (conversationId) {
+            void watchConversationRuntime(conversationId, {
+              onTerminal: () => streamController?.abort(),
+              waitForDurableTerminal: true,
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          // Keep the server-side run visible if the control request itself
+          // fails. The user can retry the stop action instead of silently
+          // detaching from a still-running Pi session.
+          console.error("Failed to cancel assistant runtime:", error);
+          dispatch({ type: "SET_CANCELLATION_REQUESTED", requested: false });
+        });
+    },
+    [watchConversationRuntime],
+  );
+
   const cancelWorkflow = useCallback(async (runtimeRunId: string) => {
     const run = await cancelRuntimeWorkflow(runtimeRunId);
     const cancelled = run.status === "cancelled";
@@ -2269,23 +2469,35 @@ export function AIAssistantProvider({
 
   const stopAssistantResponse = useCallback(() => {
     const conversationId = currentConversationIdRef.current;
-    const controller = conversationId
+    const streamController = conversationId
       ? streamAbortByConversationRef.current[conversationId] ?? activeStreamAbortRef.current
       : activeStreamAbortRef.current;
     const runtimeRunId = conversationId
       ? runtimeRunByConversationRef.current[conversationId]
         ?? (conversationId === currentConversationIdRef.current ? activeAssistantRuntimeRunRef.current ?? watchedRuntimeRunRef.current : undefined)
       : activeAssistantRuntimeRunRef.current ?? watchedRuntimeRunRef.current;
+    dispatch({ type: "SET_CANCELLATION_REQUESTED", requested: true });
     if (!runtimeRunId) {
-      // The request has not exposed a durable run ID yet.
-      if (controller && !controller.signal.aborted) controller.abort();
+      // The initial SSE frame normally carries the durable id immediately.
+      // Keep consuming until it arrives so a fast click cannot detach the
+      // browser before the server-side run can be cancelled.
+      pendingAssistantCancellationRef.current = true;
+      if (pendingAssistantCancellationTimerRef.current === null) {
+        pendingAssistantCancellationTimerRef.current = window.setTimeout(() => {
+          pendingAssistantCancellationTimerRef.current = null;
+          if (!pendingAssistantCancellationRef.current) return;
+          pendingAssistantCancellationRef.current = false;
+          const activeController = currentConversationIdRef.current
+            ? streamAbortByConversationRef.current[currentConversationIdRef.current] ?? activeStreamAbortRef.current
+            : activeStreamAbortRef.current;
+          if (activeController && !activeController.signal.aborted) activeController.abort();
+          dispatch({ type: "STOP_ACTIVE_RESPONSE" });
+        }, 500);
+      }
       return;
     }
-    void cancelRuntimeWorkflow(runtimeRunId).catch((error: unknown) => {
-      console.error("Failed to cancel assistant runtime:", error);
-      controller?.abort();
-    });
-  }, []);
+    requestAssistantCancellation(runtimeRunId, conversationId, streamController);
+  }, [requestAssistantCancellation]);
 
   useEffect(
     () => () => {
@@ -2305,6 +2517,11 @@ export function AIAssistantProvider({
     activeStreamAbortRef.current?.abort();
     activeAssistantRuntimeRunRef.current = null;
     watchedRuntimeRunRef.current = null;
+    pendingAssistantCancellationRef.current = false;
+    if (pendingAssistantCancellationTimerRef.current !== null) {
+      window.clearTimeout(pendingAssistantCancellationTimerRef.current);
+      pendingAssistantCancellationTimerRef.current = null;
+    }
     didAutoRestoreRef.current = true;
     removeSessionStoredValue("lastAssistantConversationId");
     dispatch({ type: "SET_CURRENT_CONVERSATION", conversationId: null });
@@ -2363,6 +2580,7 @@ export function AIAssistantProvider({
         targetHasKnownRun
       ) return;
       assistantRequestInFlightRef.current = true;
+      pendingAssistantCancellationRef.current = false;
       if (targetConversationId && targetConversationId !== state.currentConversationId) {
         setSessionStoredValue("lastAssistantConversationId", targetConversationId);
         currentConversationIdRef.current = targetConversationId;
@@ -2411,6 +2629,14 @@ export function AIAssistantProvider({
           if (!activeConversationId || currentConversationIdRef.current === activeConversationId) {
             activeAssistantRuntimeRunRef.current = runId;
           }
+          if (pendingAssistantCancellationRef.current && activeConversationId) {
+            pendingAssistantCancellationRef.current = false;
+            if (pendingAssistantCancellationTimerRef.current !== null) {
+              window.clearTimeout(pendingAssistantCancellationTimerRef.current);
+              pendingAssistantCancellationTimerRef.current = null;
+            }
+            requestAssistantCancellation(runId, activeConversationId, abortController);
+          }
         },
         onConversation: (conversationId) => {
           activeConversationId = conversationId;
@@ -2425,6 +2651,14 @@ export function AIAssistantProvider({
           currentConversationIdRef.current = conversationId;
           streamAbortByConversationRef.current[conversationId] = abortController;
           setSessionStoredValue("lastAssistantConversationId", conversationId);
+          if (pendingAssistantCancellationRef.current && activeRuntimeRunId) {
+            pendingAssistantCancellationRef.current = false;
+            if (pendingAssistantCancellationTimerRef.current !== null) {
+              window.clearTimeout(pendingAssistantCancellationTimerRef.current);
+              pendingAssistantCancellationTimerRef.current = null;
+            }
+            requestAssistantCancellation(activeRuntimeRunId, conversationId, abortController);
+          }
           return true;
         },
         onTerminal: () => {
@@ -2432,12 +2666,16 @@ export function AIAssistantProvider({
         },
       };
       const recoverDurableTimeline = async () => {
-        if (!activeRuntimeRunId || receivedTerminalEvent) {
-          return { replayed: false, terminal: receivedTerminalEvent };
-        }
+        if (!activeRuntimeRunId) return { replayed: false, terminal: receivedTerminalEvent };
+        // Redis is an ephemeral fast path. A terminal frame can arrive even
+        // when an earlier tool frame was missed, and its high sequence would
+        // otherwise make `after_sequence=<terminal>` skip that missing event.
+        // Replay the complete run after a terminal boundary; projection keys
+        // make already-rendered frames idempotent.
+        const replayCursor = receivedTerminalEvent ? {} : runtimeEventCursorsRef.current;
         const recovered = await replayRuntimeEvents(
           activeRuntimeRunId,
-          runtimeEventCursorsRef.current,
+          replayCursor,
           activeConversationId,
           dispatch,
           sseOptions,
@@ -2529,6 +2767,7 @@ export function AIAssistantProvider({
               type: "SET_SESSION_ERROR",
               message: "助手连接已结束，暂时没有拿到可恢复的运行记录。请稍后重试。",
               errorCode: "assistant_stream_incomplete",
+              runtimeRunId: activeRuntimeRunId ?? undefined,
             });
           }
         }
@@ -2563,7 +2802,12 @@ export function AIAssistantProvider({
             : providerSelectionUnavailable
               ? "所选模型配置已不可用，已切回平台默认模型。请确认后重新发送。"
             : message;
-        dispatch({ type: "SET_SESSION_ERROR", message: friendly, errorCode });
+        dispatch({
+          type: "SET_SESSION_ERROR",
+          message: friendly,
+          errorCode,
+          runtimeRunId: activeRuntimeRunId ?? undefined,
+        });
       } finally {
         assistantRequestInFlightRef.current = false;
         if (activeConversationId && receivedTerminalEvent && runtimeRunByConversationRef.current[activeConversationId] === activeRuntimeRunId) {
@@ -2581,6 +2825,14 @@ export function AIAssistantProvider({
         if (activeConversationId && streamAbortByConversationRef.current[activeConversationId] === abortController) {
           delete streamAbortByConversationRef.current[activeConversationId];
         }
+        if (receivedTerminalEvent) {
+          runtimeWatchAbortRef.current?.abort();
+        }
+        pendingAssistantCancellationRef.current = false;
+        if (pendingAssistantCancellationTimerRef.current !== null) {
+          window.clearTimeout(pendingAssistantCancellationTimerRef.current);
+          pendingAssistantCancellationTimerRef.current = null;
+        }
         void refreshConversations();
       }
     },
@@ -2592,6 +2844,7 @@ export function AIAssistantProvider({
       state.approvalMode,
       state.selectedProviderConfigId,
       state.status,
+      requestAssistantCancellation,
       watchConversationRuntime,
       shouldHandleRuntimeEvent,
     ],

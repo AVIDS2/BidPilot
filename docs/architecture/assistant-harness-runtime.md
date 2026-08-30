@@ -104,6 +104,33 @@ run ID for the currently selected conversation, so two open conversations (or
 two tabs) cannot share one stop target. Late replay events from an old
 conversation are ignored by the visible projection.
 
+### Cancellation and release recovery
+
+Assistant cancellation is a durable control-plane operation. The API first
+records `cancel_requested` in PostgreSQL, then sends an authenticated internal
+abort request to the Pi sidecar. The sidecar maps the run ID to its active
+official `AgentSession` and calls `AgentSession.abort()`; it does not interrupt
+the browser stream as a substitute for stopping the model loop. Once the
+control request is accepted (or the run is already known to be outside the
+sidecar), the API immediately commits `run.cancelled` so the user-facing state
+does not wait for an upstream provider that ignores abort signals. A same-
+process Worker execution waiter is cancelled as well; a separate Worker still
+rechecks the durable status before committing and cannot overwrite cancellation
+with success. If cancellation arrives before the Worker starts Pi, the Worker
+closes the run without creating a model session.
+
+The web stop control therefore has three explicit states: normal generation,
+stop requested, and terminal. A click before the first run ID is received is
+held briefly for that ID, with a bounded transport fallback only when the
+server never exposes one. Reloading a conversation derives the same state from
+`RuntimeRun.status`, so a refresh cannot make a cancelled run look active.
+
+The web release serves `index.html` without a cache lifetime while hashed JS/CSS
+assets remain immutable. This prevents a browser from pairing a new HTML shell
+with an old chunk manifest. A lazy route that still encounters a removed chunk
+performs one cache-busting reload per path/session and then shows the generic
+localized recovery boundary instead of exposing an internal asset URL.
+
 ### Pi integration boundary
 
 Each Worker-delivered assistant turn creates a real Pi `AgentSession` with an
@@ -259,6 +286,27 @@ appearing only after its result arrives. Skill and MCP rows carry structured
 label can therefore say that a named Skill is being used or that an external
 provider is being queried without exposing Skill instructions, raw arguments,
 or internal prompts.
+
+PostgreSQL is the recovery authority when the Redis live channel misses a
+frame. After a terminal frame, the browser replays the complete run from
+sequence zero and de-duplicates by durable event identity plus projected event
+type; a high terminal sequence therefore cannot hide an earlier tool start or
+success. Open execution rows are retained on terminal failure or cancellation
+and receive an explicit failed/cancelled state rather than disappearing.
+
+Cancellation is also split into two boundaries. The API first commits
+`cancel_requested` and sends an authenticated abort command to the sidecar.
+The sidecar calls Pi's official `AgentSession.abort()` and closes only that
+run's HTTP transport immediately, so an upstream provider that ignores an
+abort signal cannot keep the user-facing composer locked. The API then writes
+`run.cancelled` and interrupts any same-process Worker waiter; the Pi session
+cleanup remains isolated to that run and cannot commit a successful answer or
+business side effect over the durable terminal state.
+
+The web runtime watcher belongs to a conversation generation. Aborted watchers
+cannot dispatch late status updates after a conversation switch or a newer
+terminal run, which prevents a stale cancellation from restoring a global
+`正在停止` state.
 
 Skill/MCP presentation follows three rules: a Skill is shown when its
 `read_skill` call actually loads it, an MCP row is shown for the configured

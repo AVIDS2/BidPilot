@@ -110,6 +110,7 @@ services:
     environment:
       NODE_ENV: production
       PI_AGENT_PORT: "8787"
+      DOCPILOT_PI_INTERNAL_SECRET: ${DOCPILOT_PI_INTERNAL_SECRET:?DOCPILOT_PI_INTERNAL_SECRET is required}
     expose:
       - "8787"
     healthcheck:
@@ -175,6 +176,7 @@ services:
       DOCPILOT_LANGGRAPH_CHECKPOINTER: postgres
       DOCPILOT_AGENT_CHECKPOINTER: postgres
       USE_LANGGRAPH: "true"
+      DOCPILOT_PI_INTERNAL_SECRET: ${DOCPILOT_PI_INTERNAL_SECRET:?DOCPILOT_PI_INTERNAL_SECRET is required}
       DOCPILOT_INTERNAL_UNLIMITED_USAGE: ${DOCPILOT_INTERNAL_UNLIMITED_USAGE:-false}
     depends_on:
       checkpoints:

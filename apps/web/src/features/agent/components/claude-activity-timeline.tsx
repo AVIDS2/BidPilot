@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { downloadAssistantArtifact, listRuntimeChildRuns, listRuntimeEvents, type RuntimeChildRunRead } from "@/lib/api";
 import type {
   AssistantExecutionItem,
@@ -442,11 +443,13 @@ function RuntimeTimeline({
 
   return (
     <section className="cr-analysis-runtime" data-testid={`assistant-runtime-${item.id}`}>
-      <button
+      <Button
         type="button"
         className="cr-runtime-summary"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
+        size="default"
+        variant="ghost"
       >
         <span>
           <TimerIcon size={15} />
@@ -456,7 +459,7 @@ function RuntimeTimeline({
           </small>
         </span>
         <ChevronDownIcon size={14} />
-      </button>
+      </Button>
       <div className={`cr-runtime-grid${open ? " is-open" : ""}`}>
         <div className="cr-runtime-grid-inner">
           <div className={`cr-runtime-timeline${hasRunningNode ? " is-running" : ""}`}>
@@ -501,7 +504,7 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
       </div>
       <div className="cr-inline-actions">
       {actions.map(([format, path]) => (
-        <button
+        <Button
           key={path}
           type="button"
           disabled={downloading !== null}
@@ -510,21 +513,25 @@ function ArtifactActions({ item, t }: { item: AssistantExecutionItem; t: Transla
             void downloadAssistantArtifact(path, `bidpilot-${format.toLowerCase()}.${format.toLowerCase()}`)
               .finally(() => setDownloading(null));
           }}
+          size="sm"
+          variant="ghost"
         >
           <DownloadIcon size={13} />
           {downloading === path
             ? t("activity.downloading", { defaultValue: "Downloading" })
             : t(`activity.download.${format.toLowerCase()}`, { defaultValue: `Download ${format}` })}
-        </button>
+        </Button>
       ))}
       {projectId && deliverableId && (
-        <button
+        <Button
           type="button"
           onClick={() => navigateToInternalRoute(`/projects/${projectId}?surface=deliverables${deliverableId ? `&deliverable_id=${deliverableId}` : ""}`)}
+          size="sm"
+          variant="ghost"
         >
           <FolderOpenIcon size={13} />
           查看交付物
-        </button>
+        </Button>
       )}
       </div>
     </div>
@@ -549,7 +556,7 @@ function WorkflowCanvasAction({
         <span><strong>响应工作流</strong><small>{sectionKey ? `章节：${sectionKey}` : "项目任务编排"}</small></span>
       </div>
       <div className="cr-inline-actions">
-        <button
+        <Button
           type="button"
           onClick={() => {
             if (onOpenWorkflowCanvas) {
@@ -558,10 +565,12 @@ function WorkflowCanvasAction({
             }
             navigateToInternalRoute(`/projects/${projectId}?surface=workflow`);
           }}
+          size="sm"
+          variant="ghost"
         >
           <TimerIcon size={13} />
           打开响应工作流
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -580,7 +589,7 @@ function StructuredUiAction({
   if (action.type === "canvas") {
     return (
       <div className="cr-inline-actions cr-structured-action">
-        <button
+        <Button
           type="button"
           onClick={() => {
             if (onOpenWorkflowCanvas) {
@@ -589,10 +598,12 @@ function StructuredUiAction({
             }
             navigateToInternalRoute(action.route);
           }}
+          size="sm"
+          variant="outline"
         >
           <TimerIcon size={13} />
           {action.label}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -633,9 +644,9 @@ function StepDetail({
     <div className="cr-run-step-expand">
       {summary && <p className="cr-public-summary">{summary}</p>}
       {providerFailure && onConfigureProvider && (
-        <button type="button" className="cr-inline-action" onClick={onConfigureProvider}>
+        <Button type="button" className="cr-inline-action" onClick={onConfigureProvider} size="sm" variant="ghost">
           {t("activity.openProviderSettings", { defaultValue: "Open model settings" })}
-        </button>
+        </Button>
       )}
       <RuntimeTimeline item={item} nodes={nodes} t={t} />
       <WebSearchSources item={item} t={t} />
@@ -646,16 +657,18 @@ function StepDetail({
       <ArtifactActions item={item} t={t} />
       <WorkflowCanvasAction item={item} onOpenWorkflowCanvas={onOpenWorkflowCanvas} />
       {canCancel && onCancelWorkflow && (
-        <button
+        <Button
           type="button"
           className="cr-inline-action"
           disabled={isCancelling}
           onClick={() => void onCancelWorkflow(item.runtimeRunId!)}
+          size="sm"
+          variant="ghost"
         >
           {isCancelling
             ? t("activity.cancelling", { defaultValue: "Cancelling..." })
             : t("activity.cancelWorkflow", { defaultValue: "Cancel workflow" })}
-        </button>
+        </Button>
       )}
       {item.isCancellationRequested && item.status !== "cancelled" && (
         <p className="cr-public-muted">
@@ -719,20 +732,22 @@ function ToolStep({
     <div className={`cr-run-step${open ? " is-expanded" : ""}${active ? " is-live" : ""}`} data-testid={`assistant-activity-step-${item.toolCallId || item.id}`} data-status={item.status}>
       <div className="cr-run-step-row">
         <StepSymbol item={item} />
-        <button
+        <Button
           type="button"
           className="cr-run-step-button"
           aria-expanded={open}
           aria-busy={active || undefined}
           aria-label={open ? `Hide ${label} details` : `Show ${label} details`}
           onClick={toggleDetail}
+          size="default"
+          variant="ghost"
         >
           <span>
             <Icon className="cr-step-icon" size={13} />
             <span className={active ? "cr-live-label" : undefined}>{label}</span>
           </span>
           <ChevronDownIcon size={14} />
-        </button>
+        </Button>
       </div>
       <div className={`cr-command-grid${open ? " is-open" : ""}`}>
         <div className="cr-command-grid-inner">
@@ -822,8 +837,8 @@ function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
       )}
       {children.length > 1 && (
         <div className="cr-subagent-viewer-actions">
-          <button type="button" disabled={selected === 0} onClick={() => setSelected((value) => Math.max(0, value - 1))}>查看上一个子 Agent</button>
-          <button type="button" disabled={selected === children.length - 1} onClick={() => setSelected((value) => Math.min(children.length - 1, value + 1))}>查看下一个子 Agent</button>
+          <Button type="button" disabled={selected === 0} onClick={() => setSelected((value) => Math.max(0, value - 1))} size="sm" variant="outline">查看上一个子 Agent</Button>
+          <Button type="button" disabled={selected === children.length - 1} onClick={() => setSelected((value) => Math.min(children.length - 1, value + 1))} size="sm" variant="outline">查看下一个子 Agent</Button>
         </div>
       )}
     </section>
@@ -963,12 +978,14 @@ function TaskTurn({
 
   return (
     <section className={`cr-task-turn is-${tone}${active ? " is-live" : ""}`} data-status={tone}>
-      <button
+      <Button
         type="button"
         className={`cr-task-turn-summary${active ? " is-live" : ""}`}
         aria-expanded={open}
         aria-busy={active || undefined}
         onClick={() => setOpen((current) => !current)}
+        size="default"
+        variant="ghost"
         >
         <span>
           <span className={active ? "cr-live-label" : undefined}>{actionTitle}</span>
@@ -978,7 +995,7 @@ function TaskTurn({
           {active && <Loader2Icon className="cr-group-spinner" size={13} />}
           <ChevronDownIcon size={14} />
         </span>
-      </button>
+      </Button>
       <div className={`cr-command-grid${open ? " is-open" : ""}`}>
         <div className="cr-command-grid-inner">
           <div className="cr-run-detail">

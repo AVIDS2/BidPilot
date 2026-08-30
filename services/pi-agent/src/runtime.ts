@@ -20,6 +20,8 @@ import { buildTrustedExtensions, resolveSandbox, type ResolvedSandbox } from "./
 
 type EventSink = (event: PiRuntimeEvent) => void | Promise<void>;
 
+const ABORT_GRACE_MS = 1_500;
+
 export interface PiRuntimeDependencies {
   fetch?: typeof globalThis.fetch;
   createModelRuntime?: () => Promise<ModelRuntime>;
@@ -87,6 +89,54 @@ function toolObservation(response: PiToolBridgeResponse, sandbox: ResolvedSandbo
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function normalizePiSessionId(value: string): string {
+  const normalized = value
+    .replace(/[^A-Za-z0-9._-]/g, "_")
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .replace(/[^A-Za-z0-9]+$/, "")
+    .slice(0, 180);
+  return normalized || "bidpilot-session";
+}
+
+function normalizeBridgeResponse(value: unknown, toolName: string): PiToolBridgeResponse {
+  if (!isRecord(value)) {
+    return {
+      kind: "failed",
+      publicSummary: "执行服务返回了无效结果，本轮已停止。",
+      modelPayload: { tool: toolName, failure: "invalid_bridge_response" },
+      errorCode: "pi_bridge_invalid_response",
+      recoverable: false,
+    };
+  }
+  const kind = value.kind;
+  if (kind !== "succeeded" && kind !== "failed" && kind !== "paused" && kind !== "blocked") {
+    return {
+      kind: "failed",
+      publicSummary: "执行服务返回了无效状态，本轮已停止。",
+      modelPayload: { tool: toolName, failure: "invalid_bridge_status" },
+      errorCode: "pi_bridge_invalid_response",
+      recoverable: false,
+    };
+  }
+  const publicSummary = typeof value.publicSummary === "string" && value.publicSummary.trim()
+    ? value.publicSummary
+    : kind === "succeeded" ? "工具已完成。" : "工具未能完成，本轮已停止。";
+  const result: PiToolBridgeResponse = {
+    kind,
+    publicSummary,
+    modelPayload: isRecord(value.modelPayload) ? value.modelPayload : {},
+  };
+  if (isRecord(value.publicPayload)) result.publicPayload = value.publicPayload;
+  if (typeof value.errorCode === "string" && value.errorCode.trim()) result.errorCode = value.errorCode;
+  if (typeof value.pauseReason === "string" && value.pauseReason.trim()) result.pauseReason = value.pauseReason;
+  if (typeof value.recoverable === "boolean") result.recoverable = value.recoverable;
+  return result;
+}
+
 type TurnState = { id: string; step: number };
 
 function createTools(
@@ -131,7 +181,7 @@ function createTools(
               recoverable: false,
             };
           } else {
-            outcome = (await response.json()) as PiToolBridgeResponse;
+            outcome = normalizeBridgeResponse(await response.json(), definition.name);
           }
         } catch (error) {
           if (signal?.aborted) throw error;
@@ -214,11 +264,13 @@ function publicCoreEvent(event: AgentEvent): PiRuntimeEvent | null {
     return { type: "tool.updated", tool_call_id: event.toolCallId, name: event.toolName };
   }
   if (event.type === "tool_execution_end") {
+    const nativeImmediateFailure = event.isError && isRecord(event.result.details) && Object.keys(event.result.details).length === 0;
     return {
       type: "tool.completed",
       tool_call_id: event.toolCallId,
       name: event.toolName,
       is_error: event.isError,
+      terminate: event.result.terminate === true || nativeImmediateFailure,
       result: event.result.details,
     };
   }
@@ -298,6 +350,7 @@ export async function runPiAgent(
   request: PiRunRequest,
   sink: EventSink,
   dependencies: PiRuntimeDependencies = {},
+  abortSignal?: AbortSignal,
 ): Promise<void> {
   const fetchImpl = dependencies.fetch ?? globalThis.fetch;
   const sandbox = resolveSandbox(request);
@@ -346,41 +399,79 @@ export async function runPiAgent(
     noTools: "builtin",
     customTools: tools,
     resourceLoader,
-    sessionManager: SessionManager.inMemory(cwd),
+    sessionManager: SessionManager.inMemory(cwd, { id: normalizePiSessionId(request.sessionId) }),
     settingsManager,
   });
 
   let turns = 0;
   let terminalEmitted = false;
   let terminalDelivery: Promise<void> | null = null;
+  let sinkError: unknown;
+  let sinkTail = Promise.resolve();
+  const enqueueSink = (event: PiRuntimeEvent) => {
+    const delivery = sinkTail.then(() => sink(event));
+    sinkTail = delivery.catch((error) => {
+      sinkError ??= error;
+    });
+    return delivery;
+  };
+  const drainSink = async () => {
+    await sinkTail;
+    if (sinkError) throw sinkError;
+  };
   const emitTerminal = () => {
     if (terminalEmitted) return;
     const terminal = agentTerminalEvent("agent_settled", session.state.errorMessage);
     if (!terminal) return;
     terminalEmitted = true;
-    terminalDelivery = Promise.resolve().then(() => sink(terminal));
+    terminalDelivery = enqueueSink(terminal);
   };
-  session.agent.afterToolCall = async ({ result }) => {
-    const outcome = result.details as PiToolBridgeResponse | undefined;
+  let abortPromise: Promise<void> | null = null;
+  const abortSession = () => {
+    abortPromise ??= session.abort();
+    return abortPromise;
+  };
+  const abortSessionWithGrace = async () => {
+    const abort = abortSession().catch(() => undefined);
+    await Promise.race([
+      abort,
+      new Promise<void>((resolve) => setTimeout(resolve, ABORT_GRACE_MS)),
+    ]);
+  };
+  const handleAbort = () => {
+    void abortSession().catch(() => undefined);
+  };
+  abortSignal?.addEventListener("abort", handleAbort, { once: true });
+  const nativeAfterToolCall = session.agent.afterToolCall;
+  session.agent.afterToolCall = async (context, signal) => {
+    const nativeResult = await nativeAfterToolCall?.(context, signal);
+    const outcome = context.result.details as PiToolBridgeResponse | undefined;
     // Preserve Pi's native termination hint for governance blocks. A blocked
     // call has an empty details object rather than a bridge outcome.
     if (!outcome || !["succeeded", "failed", "paused", "blocked"].includes(outcome.kind)) {
-      return { isError: true, terminate: result.terminate === true };
+      return {
+        ...nativeResult,
+        isError: nativeResult?.isError ?? context.isError ?? true,
+        terminate: nativeResult?.terminate ?? context.result.terminate === true,
+      };
     }
     const failed = outcome.kind === "failed" || outcome.kind === "blocked";
+    const terminate = nativeResult?.terminate ?? (
+      outcome.kind === "paused" ||
+      outcome.kind === "blocked" ||
+      (outcome.kind === "failed" && outcome.recoverable === false)
+    );
     return {
-      isError: failed,
-      terminate:
-        outcome.kind === "paused" ||
-        outcome.kind === "blocked" ||
-        (outcome.kind === "failed" && outcome.recoverable === false),
+      ...nativeResult,
+      isError: failed || nativeResult?.isError === true,
+      terminate,
     };
   };
   session.agent.shouldStopAfterTurn = () => {
     turns += 1;
     return turns >= (request.maxTurns ?? 24);
   };
-  const unsubscribe = session.subscribe(async (event) => {
+  const unsubscribe = session.subscribe((event) => {
     if (event.type === "turn_start") {
       turnState.step += 1;
       turnState.id = `turn-${turnState.step}`;
@@ -395,16 +486,27 @@ export async function runPiAgent(
       if (event.type === "turn_start" || event.type.startsWith("tool_execution_")) {
         enriched.turn_id = turnState.id;
       }
-      await sink(enriched);
+      enqueueSink(enriched);
     }
   });
 
   try {
-    await session.prompt(request.userMessage, { expandPromptTemplates: false, source: "rpc" });
-    await session.waitForIdle();
+    if (!abortSignal?.aborted) {
+      try {
+        await session.prompt(request.userMessage, { expandPromptTemplates: false, source: "rpc" });
+        await session.waitForIdle();
+      } catch (error) {
+        if (!abortSignal?.aborted) throw error;
+        await abortSessionWithGrace();
+      }
+    } else {
+      await abortSessionWithGrace();
+    }
     emitTerminal();
     await terminalDelivery;
+    await drainSink();
   } finally {
+    abortSignal?.removeEventListener("abort", handleAbort);
     unsubscribe();
     session.dispose();
   }

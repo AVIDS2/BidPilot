@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import "./assistant-activity-indicator.css";
 
 export function AssistantActivityIndicator({
   phase,
@@ -18,7 +19,7 @@ export function AssistantActivityIndicator({
         data-testid="assistant-thinking-indicator"
         role="status"
       >
-        {label}
+        <span className="assistant-thinking-indicator__label">{label}</span>
       </span>
     );
   }

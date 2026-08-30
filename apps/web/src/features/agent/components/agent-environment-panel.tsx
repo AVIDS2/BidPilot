@@ -29,7 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { listProjects, listRuntimeRuns, type ProjectRead, type RuntimeRunListItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-const ACTIVE_STATUSES = new Set(["queued", "running", "awaiting_approval", "cancel_requested"]);
+const ACTIVE_STATUSES = new Set(["queued", "running", "awaiting_approval", "awaiting_input", "cancel_requested"]);
 
 interface AgentEnvironmentPanelProps {
   currentProjectId?: string | null;
@@ -58,6 +58,7 @@ function runIcon(run: RuntimeRunListItem): LucideIcon {
 function statusLabel(status: string) {
   if (status === "queued") return "准备开始";
   if (status === "awaiting_approval") return "需要确认";
+  if (status === "awaiting_input") return "需要补充信息";
   if (status === "cancel_requested") return "正在停止";
   if (status === "running") return "处理中";
   if (status === "succeeded" || status === "completed") return "已结束";
@@ -68,7 +69,7 @@ function statusLabel(status: string) {
 function statusVariant(status: string): "default" | "secondary" | "outline" | "destructive" {
   if (status === "failed") return "destructive";
   if (status === "running") return "default";
-  if (status === "awaiting_approval") return "secondary";
+  if (status === "awaiting_approval" || status === "awaiting_input") return "secondary";
   return "outline";
 }
 

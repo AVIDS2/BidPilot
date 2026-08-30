@@ -8,7 +8,9 @@ def test_pi_resources_only_expose_server_owned_extensions_and_skill_metadata() -
 
     assert resources["extensions"] == ["bidpilot-governance", "bidpilot-skills", "bidpilot-subagents"]
     assert resources["skills"]
-    assert all(set(skill) == {"name", "description"} for skill in resources["skills"])
+    assert all({"name", "description"} <= set(skill) for skill in resources["skills"])
+    assert all(set(skill) <= {"name", "description", "version", "resources"} for skill in resources["skills"])
+    assert all(isinstance(skill["resources"], list) for skill in resources["skills"])
     assert all("content" not in skill and "path" not in skill for skill in resources["skills"])
 
 

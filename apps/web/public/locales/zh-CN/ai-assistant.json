@@ -244,7 +244,8 @@
     "howToUsePrompt": "怎么使用BidPilot？",
     "send": "发送",
     "stop": "停止",
-    "stopGenerating": "停止本轮响应"
+    "stopGenerating": "停止本轮响应",
+    "stopRequested": "正在停止"
   },
   "attachments": {
     "add": "添加附件",

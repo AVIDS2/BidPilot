@@ -3,7 +3,9 @@ import { CheckIcon, ChevronDownIcon, CopyIcon, FileIcon, ImageIcon, PencilIcon, 
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
 import { MessageContent } from "@/components/ui/message";
+import { Textarea } from "@/components/ui/textarea";
 import { AssistantActivityIndicator } from "@/features/agent/components/assistant-activity-indicator";
 import { ClaudeActivityTimeline } from "@/features/agent/components/claude-activity-timeline";
 import { AssistantInputRequestForm } from "@/features/agent/components/assistant-input-request";
@@ -54,12 +56,14 @@ function UserAttachments({ message }: { message: ChatMessage }) {
     <>
       <div className="cr-user-attachments" aria-label="Attached files">
         {message.attachments.map((attachment) => (
-          <button
+          <Button
             type="button"
             className="cr-user-attachment"
             key={attachment.id}
             onClick={() => attachment.previewUrl && setPreviewUrl(attachment.previewUrl)}
             aria-label={attachment.previewUrl ? `预览 ${attachment.name}` : attachment.name}
+            size="sm"
+            variant="ghost"
           >
             {attachment.kind === "image" && attachment.previewUrl ? (
               <img alt="" src={attachment.previewUrl} />
@@ -69,7 +73,7 @@ function UserAttachments({ message }: { message: ChatMessage }) {
               <FileIcon size={15} />
             )}
             <span>{attachment.name}</span>
-          </button>
+          </Button>
         ))}
       </div>
       {previewUrl && (
@@ -128,7 +132,7 @@ function ClaudeUserMessage({
       <UserAttachments message={message} />
       {editing ? (
         <div className="cr-user-message-editor">
-          <textarea
+          <Textarea
             aria-label="编辑此消息"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -144,12 +148,13 @@ function ClaudeUserMessage({
               }
             }}
             autoFocus
+            className="cr-user-message-editor-textarea focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           <div className="cr-user-message-editor-actions">
-            <button type="button" title="保存并重新执行" aria-label="保存并重新执行" onClick={saveEdit}>
+            <Button type="button" title="保存并重新执行" aria-label="保存并重新执行" onClick={saveEdit} size="icon-sm" variant="ghost">
               <CheckIcon size={14} />
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               title="取消编辑"
               aria-label="取消编辑"
@@ -157,9 +162,11 @@ function ClaudeUserMessage({
                 setDraft(message.content);
                 setEditing(false);
               }}
+              size="icon-sm"
+              variant="ghost"
             >
               <XIcon size={14} />
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
@@ -168,33 +175,39 @@ function ClaudeUserMessage({
       {!editing && (message.content || canRetryFromCheckpoint) && (
         <div className="cr-user-message-actions" aria-label="消息操作">
           {message.content && (
-            <button
+            <Button
               type="button"
               title={copied ? "已复制" : "复制"}
               aria-label={copied ? "已复制" : "复制消息"}
               onClick={copyMessage}
+              size="icon-sm"
+              variant="ghost"
             >
               {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-            </button>
+            </Button>
           )}
           {canRetryFromCheckpoint && (
             <>
-          <button
-            type="button"
-            title="从此处重新执行"
-            aria-label="从此处重新执行"
-            onClick={() => retry(message.content)}
-          >
-            <RotateCcwIcon size={14} />
-          </button>
-          <button
-            type="button"
-            title="编辑并重新执行"
-            aria-label="编辑并重新执行"
-            onClick={() => setEditing(true)}
-          >
-            <PencilIcon size={14} />
-          </button>
+              <Button
+                type="button"
+                title="从此处重新执行"
+                aria-label="从此处重新执行"
+                onClick={() => retry(message.content)}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <RotateCcwIcon size={14} />
+              </Button>
+              <Button
+                type="button"
+                title="编辑并重新执行"
+                aria-label="编辑并重新执行"
+                onClick={() => setEditing(true)}
+                size="icon-sm"
+                variant="ghost"
+              >
+                <PencilIcon size={14} />
+              </Button>
             </>
           )}
         </div>
@@ -276,23 +289,23 @@ function ClaudeApproval({
         <p>{confirmation.message}</p>
       </div>
       {requiresTypedConfirmation && (
-        <input
+        <Input
           value={typedConfirmation}
           onChange={(event) => setTypedConfirmation(event.target.value)}
           placeholder={confirmation.expectedText ?? ""}
           aria-label="Confirmation text"
-          className="cr-approval-input"
+          className="cr-approval-input h-auto border-0 border-b border-[#d4d2cc] rounded-none bg-transparent px-0 py-1 text-[13px] shadow-none focus-visible:border-[#777570] focus-visible:ring-0"
         />
       )}
       <div className="cr-approval-actions">
-        <button type="button" disabled={!canConfirm} onClick={() => onConfirm(typedConfirmation)}>
+        <Button type="button" disabled={!canConfirm} onClick={() => onConfirm(typedConfirmation)} size="sm" variant="default">
           <CheckIcon size={14} />
           确认执行
-        </button>
-        <button type="button" onClick={onCancel}>
+        </Button>
+        <Button type="button" onClick={onCancel} size="sm" variant="ghost">
           <XIcon size={14} />
           取消
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -464,9 +477,9 @@ function ClaudeAssistantMessage({
       {sessionError && <p className="cr-session-error" role="alert">{sessionError}</p>}
       {!isStreaming && (message.content || parts.some((part) => part.kind === "narrative" && part.text)) && (
         <div className="cr-message-actions" aria-label="Message actions">
-          <button type="button" title="Copy" onClick={copyResponse}>
+          <Button type="button" title="Copy" aria-label="Copy" onClick={copyResponse} size="icon-sm" variant="ghost">
             {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
-          </button>
+          </Button>
           <span>{copied ? t("actions.copied", { defaultValue: "Copied" }) : ""}</span>
         </div>
       )}
@@ -583,7 +596,9 @@ export function ClaudeAgentThread({
                 isThinking={state.isThinking && state.activeAssistantMessageId === message.id}
                 sessionError={
                   state.sessionError &&
-                  (state.activeAssistantMessageId ?? latestAssistantMessageId) === message.id
+                  (state.sessionErrorRuntimeRunId
+                    ? state.sessionErrorRuntimeRunId === message.runtimeRunId
+                    : (state.activeAssistantMessageId ?? latestAssistantMessageId) === message.id)
                     ? state.sessionError
                     : null
                 }

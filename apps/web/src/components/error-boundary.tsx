@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AlertTriangleIcon } from "lucide-react";
 import i18n from "@/lib/i18n";
+import { isDynamicImportError } from "@/app-route-loaders";
 
 interface Props {
   children: ReactNode;
@@ -24,6 +25,9 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
+      const message = isDynamicImportError(this.state.error)
+        ? i18n.t("error.chunk")
+        : this.state.error?.message ?? i18n.t("error.fallback");
       return (
         <div className="flex min-h-svh items-center justify-center p-6">
           <Card className="max-w-md w-full">
@@ -33,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 <CardTitle>{i18n.t("error.title")}</CardTitle>
               </div>
               <CardDescription>
-                {this.state.error?.message ?? i18n.t("error.fallback")}
+                {message}
               </CardDescription>
             </CardHeader>
             <CardContent>

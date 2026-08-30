@@ -72,7 +72,7 @@ async def stream_operator_assistant_response(
     base_url: str | None,
     model: str | None,
 ) -> AsyncGenerator[str, None]:
-    """Run one governed Harness turn or resume its pending approval."""
+    """Run one governed Pi turn or resume its pending approval."""
     # Check retries before allocating a conversation. The first SSE response may
     # be interrupted before the browser receives its conversation ID; creating
     # one here would leave an orphan conversation for every retry.
@@ -265,6 +265,7 @@ async def _replay_existing_run(
         "queued": "queued",
         "running": "thinking",
         "awaiting_approval": "needs_confirmation",
+        "awaiting_input": "needs_input",
         "failed": "failed",
         "expired": "failed",
         "cancelled": "completed",
@@ -290,7 +291,17 @@ async def _replay_existing_run(
         if event.startswith("event: assistant.end"):
             emitted_end = True
         yield event
-    if not emitted_end and run.status in {"succeeded", "failed", "cancelled", "expired"}:
+    if not emitted_end and run.status == "awaiting_input":
+        yield _sse(
+            "assistant.end",
+            {
+                "conversation_id": conversation_id,
+                "runtime_run_id": run.id,
+                "state": "needs_input",
+                "replayed": True,
+            },
+        )
+    elif not emitted_end and run.status in {"succeeded", "failed", "cancelled", "expired"}:
         yield _sse(
             "assistant.end",
             {

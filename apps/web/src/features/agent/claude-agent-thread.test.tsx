@@ -50,6 +50,7 @@ function createState(): AIAssistantState {
     assistantContentBuffers: {},
     isStreaming: false,
     isThinking: false,
+    cancellationRequested: false,
     status: "completed",
     executionItems: [
       {
@@ -66,6 +67,7 @@ function createState(): AIAssistantState {
     pendingConfirmation: null,
     pendingInput: null,
     sessionError: null,
+    sessionErrorRuntimeRunId: null,
     selectedProviderConfigId: null,
     reasoningEffort: "medium",
     approvalMode: "full_access",
@@ -150,6 +152,56 @@ describe("ClaudeAgentThread", () => {
 
     expect(screen.getByText("我已找到可引用的证据。")).toBeInTheDocument();
     expect(screen.getByTestId("assistant-timeline")).toBeInTheDocument();
+  });
+
+  it("attaches a replayed error to its failed run instead of the latest reply", () => {
+    const state = createState();
+    state.messages = [
+      {
+        id: "user-failed",
+        role: "user",
+        content: "旧请求",
+        timestamp: 1,
+      },
+      {
+        id: "assistant-failed",
+        role: "assistant",
+        content: "旧请求未完成",
+        runtimeRunId: "run-failed",
+        timestamp: 2,
+      },
+      {
+        id: "user-succeeded",
+        role: "user",
+        content: "新请求",
+        timestamp: 3,
+      },
+      {
+        id: "assistant-succeeded",
+        role: "assistant",
+        content: "新的成功结果",
+        runtimeRunId: "run-succeeded",
+        timestamp: 4,
+      },
+    ];
+    state.sessionError = "旧运行失败";
+    state.sessionErrorRuntimeRunId = "run-failed";
+    state.executionItems = [];
+
+    render(
+      <ClaudeAgentThread
+        state={state}
+        onCancelWorkflow={vi.fn().mockResolvedValue(undefined)}
+        onConfigureProvider={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancelConfirmation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("旧运行失败")).toBeInTheDocument();
+    expect(screen.getByText("新的成功结果").closest("article")).not.toContainElement(
+      screen.getByText("旧运行失败"),
+    );
   });
 
   it("uses a titled public narration once as its tool-turn title", () => {
@@ -331,6 +383,42 @@ describe("ClaudeAgentThread", () => {
 
     expect(screen.getByText("公开回答")).toBeInTheDocument();
     expect(screen.queryByText("private provider thought")).not.toBeInTheDocument();
+  });
+
+  it("keeps a prior run error attached to its own assistant response", () => {
+    const state = createState();
+    state.messages = [
+      {
+        id: "assistant-failed",
+        role: "assistant",
+        content: "失败前的部分结果",
+        runtimeRunId: "run-failed",
+        timestamp: 2,
+      },
+      {
+        id: "assistant-succeeded",
+        role: "assistant",
+        content: "新的成功结果",
+        runtimeRunId: "run-succeeded",
+        timestamp: 3,
+      },
+    ];
+    state.sessionError = "旧运行失败";
+    state.sessionErrorRuntimeRunId = "run-failed";
+
+    render(
+      <ClaudeAgentThread
+        state={state}
+        onCancelWorkflow={vi.fn().mockResolvedValue(undefined)}
+        onConfigureProvider={vi.fn()}
+        onConfirm={vi.fn()}
+        onCancelConfirmation={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("旧运行失败")).toBeInTheDocument();
+    expect(screen.getAllByText("新的成功结果")).toHaveLength(1);
+    expect(screen.getByText("新的成功结果").closest("article")).not.toContainElement(screen.getByText("旧运行失败"));
   });
 
   it("sends user retry through the durable checkpoint action", () => {

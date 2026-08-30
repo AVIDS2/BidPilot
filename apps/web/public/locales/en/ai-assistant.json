@@ -244,7 +244,8 @@
     "howToUsePrompt": "How to use BidPilot?",
     "send": "Send",
     "stop": "Stop",
-    "stopGenerating": "Stop generating"
+    "stopGenerating": "Stop generating",
+    "stopRequested": "Stopping"
   },
   "attachments": {
     "add": "Add attachment",

@@ -19,6 +19,7 @@ import {
   Trash2Icon,
   MessageSquareIcon,
   ChevronDownIcon,
+  MoreHorizontalIcon,
   PencilIcon,
   ArrowUpIcon,
   FileIcon,
@@ -460,13 +461,16 @@ function QuickActions({ onSelect }: { onSelect: (text: string) => void }) {
   return (
     <div className="flex flex-wrap gap-2 px-1">
       {actions.map((a) => (
-        <button
+        <Button
+          type="button"
           key={a.key}
           onClick={() => onSelect(a.text)}
-          className="text-xs px-3 py-1.5 rounded-full transition-all duration-200 hover:scale-105 bg-muted text-muted-foreground border border-border"
+          className="h-8 rounded-full border-border bg-muted px-3 text-xs text-muted-foreground transition-all duration-200 hover:scale-105 hover:bg-accent hover:text-accent-foreground"
+          size="sm"
+          variant="outline"
         >
           {t(`actions.${a.key}`)}
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -626,17 +630,19 @@ function AttachmentPreviewCard({
         </div>
       )}
       {onRemove && (
-        <button
+        <Button
           type="button"
           aria-label={`Remove ${name}`}
           onClick={(event) => {
             event.stopPropagation();
             onRemove();
           }}
-          className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-background/95 text-muted-foreground shadow-sm transition hover:bg-foreground hover:text-background"
+          className="absolute right-1.5 top-1.5 size-5 rounded-full bg-background/95 text-muted-foreground shadow-sm hover:bg-foreground hover:text-background"
+          size="icon-xs"
+          variant="ghost"
         >
           <XIcon className="h-3 w-3" />
-        </button>
+        </Button>
       )}
       {isImage ? (
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
@@ -1002,15 +1008,19 @@ function HistorySidebar({
                           )}
                           onMouseEnter={() => setHoveredId(conversation.id)}
                           onMouseLeave={() => setHoveredId(null)}
-                          onClick={() => {
-                            if (!isEditing) {
-                              onSelect(conversation.id);
-                              onClose();
+                          onClick={(event) => {
+                            if (
+                              isEditing ||
+                              (event.target instanceof Element && event.target.closest("button"))
+                            ) {
+                              return;
                             }
+                            onSelect(conversation.id);
+                            onClose();
                           }}
                         >
                           {isEditing ? (
-                            <input
+                            <Input
                               ref={renameInputRef}
                               aria-label={t("history.rename", {
                                 defaultValue: "Rename conversation",
@@ -1032,8 +1042,7 @@ function HistorySidebar({
                                   onCancelRename();
                                 }
                               }}
-                              className="w-full rounded border bg-background px-1.5 py-0.5 text-xs font-medium outline-none"
-                              style={{ borderColor: "var(--border)" }}
+                              className="h-7 w-full rounded-md border-border bg-background px-1.5 py-0.5 text-xs font-medium shadow-none focus-visible:ring-2 focus-visible:ring-ring/20"
                               disabled={!!renamingId}
                             />
                           ) : (
@@ -1068,34 +1077,46 @@ function HistorySidebar({
                                   </span>
                                 ) : null}
                               </div>
-                              <button
-                                className={cn(
-                                  "absolute right-7 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground/50 transition-all hover:bg-background hover:text-foreground",
-                                  actionVisibility,
-                                )}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onRename(conversation.id, conversation.title);
-                                }}
-                                title={t("panel.renameConversation")}
-                                aria-label={t("panel.renameConversation")}
-                              >
-                                <PencilIcon className="size-3" />
-                              </button>
-                              <button
-                                className={cn(
-                                  "absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground/40 transition-all hover:bg-destructive/10 hover:text-destructive",
-                                  actionVisibility,
-                                )}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDelete(conversation.id);
-                                }}
-                                title={t("history.delete")}
-                                aria-label={t("history.delete")}
-                              >
-                                <Trash2Icon className="size-3" />
-                              </button>
+                              <div onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={(
+                                      <Button
+                                        aria-label={t("panel.conversationActions", { defaultValue: "Conversation actions" })}
+                                        className={cn(
+                                          "absolute right-1.5 top-1/2 size-7 -translate-y-1/2 text-muted-foreground/60",
+                                          actionVisibility,
+                                        )}
+                                        size="icon-xs"
+                                        type="button"
+                                        variant="ghost"
+                                      />
+                                    )}
+                                  >
+                                    <MoreHorizontalIcon className="size-3.5" />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-44">
+                                    <DropdownMenuGroup>
+                                      <DropdownMenuLabel>{t("panel.conversationActions", { defaultValue: "Conversation actions" })}</DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() => onRename(conversation.id, conversation.title)}
+                                      >
+                                        <PencilIcon />
+                                        {t("panel.renameConversation")}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() => onDelete(conversation.id)}
+                                        variant="destructive"
+                                      >
+                                        <Trash2Icon />
+                                        {t("history.delete")}
+                                      </DropdownMenuItem>
+                                    </DropdownMenuGroup>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </>
                           )}
                         </div>
@@ -1177,6 +1198,7 @@ export function AIAssistantPanel({
   const queueDrainingRef = useRef(false);
   const isBusy = isAssistantBusy(state.status);
   const isStreaming = state.isStreaming;
+  const isStopping = state.cancellationRequested;
   const isUploadingAttachments = attachments.some(
     (attachment) => attachment.status === "uploading",
   );
@@ -1705,26 +1727,28 @@ export function AIAssistantPanel({
               {queuedPrompts.map((queued, index) => (
                 <li key={queued.id}>
                   <span className="bp-linear-agent-queue-order" aria-hidden="true">{index + 1}</span>
-                  <button
+                  <Button
                     type="button"
                     className="bp-linear-agent-queue-copy"
                     onClick={() => handleEditQueuedPrompt(queued.id)}
                     title="编辑待发送消息"
+                    size="sm"
+                    variant="ghost"
                   >
                     {queued.displayContent}
-                  </button>
+                  </Button>
                   <div className="bp-linear-agent-queue-actions">
                     {index > 0 && (
-                      <button type="button" onClick={() => handlePrioritizeQueuedPrompt(queued.id)} title="移到队列最前" aria-label="移到队列最前">
+                      <Button type="button" onClick={() => handlePrioritizeQueuedPrompt(queued.id)} title="移到队列最前" aria-label="移到队列最前" size="icon-xs" variant="ghost">
                         <ArrowUpIcon size={14} />
-                      </button>
+                      </Button>
                     )}
-                    <button type="button" onClick={() => handleEditQueuedPrompt(queued.id)} title="编辑待发送消息" aria-label="编辑待发送消息">
+                    <Button type="button" onClick={() => handleEditQueuedPrompt(queued.id)} title="编辑待发送消息" aria-label="编辑待发送消息" size="icon-xs" variant="ghost">
                       <PencilIcon size={13} />
-                    </button>
-                    <button type="button" onClick={() => handleCancelQueuedPrompt(queued.id)} title="取消待发送消息" aria-label="取消待发送消息">
+                    </Button>
+                    <Button type="button" onClick={() => handleCancelQueuedPrompt(queued.id)} title="取消待发送消息" aria-label="取消待发送消息" size="icon-xs" variant="ghost">
                       <XIcon size={14} />
-                    </button>
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -1744,8 +1768,11 @@ export function AIAssistantPanel({
           onKeyDown={(event) => {
             if (event.key !== "Enter" || event.shiftKey) return;
             event.preventDefault();
-            if (isStreaming) stopAssistantResponse();
-            else handleSend();
+            if (isStreaming) {
+              if (!isStopping) stopAssistantResponse();
+              return;
+            }
+            handleSend();
           }}
           className="bp-linear-agent-textarea focus-visible:ring-0 focus-visible:ring-offset-0"
         />
@@ -1801,13 +1828,13 @@ export function AIAssistantPanel({
             <Button
               type="button"
               className="bp-linear-agent-send"
-              onClick={isStreaming ? stopAssistantResponse : handleSend}
-              disabled={isStreaming ? false : !canSend}
-              aria-label={isStreaming ? t("actions.stopGenerating") : t("actions.send")}
+              onClick={isStopping ? undefined : isStreaming ? stopAssistantResponse : handleSend}
+              disabled={isStopping || (!isStreaming && !canSend)}
+              aria-label={isStopping ? t("actions.stopRequested") : isStreaming ? t("actions.stopGenerating") : t("actions.send")}
               size="icon-sm"
               variant="ghost"
             >
-              {isStreaming ? <SquareIcon aria-hidden="true" fill="currentColor" /> : isUploadingAttachments ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : <SendIcon aria-hidden="true" />}
+              {isStopping ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : isStreaming ? <SquareIcon aria-hidden="true" fill="currentColor" /> : isUploadingAttachments ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : <SendIcon aria-hidden="true" />}
             </Button>
           </div>
         </div>
@@ -2088,7 +2115,9 @@ export function AIAssistantPanel({
                               state.activeAssistantMessageId === msg.id
                             }
                             sessionError={
-                              (state.activeAssistantMessageId ?? latestAssistantMessageId) === msg.id
+                              (state.sessionErrorRuntimeRunId
+                                ? state.sessionErrorRuntimeRunId === msg.runtimeRunId
+                                : (state.activeAssistantMessageId ?? latestAssistantMessageId) === msg.id)
                                 ? state.sessionError
                                 : null
                             }
@@ -2240,23 +2269,29 @@ export function AIAssistantPanel({
                     <PromptInputActions className="shrink-0">
                       <PromptInputAction
                         tooltip={
-                          isStreaming
+                          isStopping
+                            ? t("actions.stopRequested")
+                            : isStreaming
                             ? t("actions.stopGenerating")
                             : t("actions.send")
                         }
                       >
                         <Button
                           type="button"
-                          onClick={isStreaming ? stopAssistantResponse : handleSend}
-                          disabled={isStreaming ? false : !canSend}
+                          onClick={isStopping ? undefined : isStreaming ? stopAssistantResponse : handleSend}
+                          disabled={isStopping || (!isStreaming && !canSend)}
                           aria-label={
-                            isStreaming
+                            isStopping
+                              ? t("actions.stopRequested")
+                              : isStreaming
                               ? t("actions.stopGenerating")
                               : t("actions.send")
                           }
                           className={cn(
                             "relative flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
-                            isStreaming
+                            isStopping
+                              ? "bg-muted text-muted-foreground"
+                              : isStreaming
                               ? "bg-foreground text-background shadow-[0_8px_20px_oklch(0_0_0/0.2)] hover:scale-[1.03] active:scale-95"
                               : canSend
                               ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
@@ -2265,7 +2300,9 @@ export function AIAssistantPanel({
                           size="icon"
                           variant="ghost"
                         >
-                          {isStreaming ? (
+                          {isStopping ? (
+                            <Loader2Icon className="size-4 animate-spin" />
+                          ) : isStreaming ? (
                             <>
                               <Loader2Icon className="absolute size-[1.15rem] animate-spin opacity-45" />
                               <SquareIcon className="relative size-2.5 fill-current" />
@@ -2285,7 +2322,7 @@ export function AIAssistantPanel({
                     {isStreaming ? (
                       <>
                         <Loader2Icon className="size-3 animate-spin" />
-                        {t("panel.running")}
+                        {isStopping ? t("actions.stopRequested") : t("panel.running")}
                       </>
                     ) : (
                       <>

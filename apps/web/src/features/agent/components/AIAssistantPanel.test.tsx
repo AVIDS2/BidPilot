@@ -277,6 +277,9 @@ describe("AIAssistantPanel", () => {
     await waitFor(() => {
       expect(screen.getByTestId("assistant-thinking-indicator")).toBeInTheDocument();
     });
+    expect(screen.getByTestId("assistant-thinking-indicator").querySelector(".assistant-thinking-indicator__label")).toHaveClass(
+      "assistant-thinking-indicator__label",
+    );
 
     controller!.enqueue(
       encoder.encode(
@@ -355,6 +358,64 @@ describe("AIAssistantPanel", () => {
       expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
     });
     expect(screen.queryByText("Aborted")).not.toBeInTheDocument();
+  });
+
+  it("requests durable Pi cancellation and keeps the stop control locked until terminal state", async () => {
+    const { cancelRuntimeWorkflow } = await import("@/lib/api");
+    vi.mocked(cancelRuntimeWorkflow).mockResolvedValue({
+      id: "assistant-runtime-1",
+      kind: "assistant_turn",
+      status: "cancel_requested",
+      project_id: null,
+      conversation_id: "c-runtime-stop",
+      execution_run_id: null,
+      engine: "pi",
+      trace_id: "trace-runtime-stop",
+      parent_run_id: null,
+    });
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            streamController = controller;
+            controller.enqueue(
+              encoder.encode(
+                'event: assistant.start\ndata: {"conversation_id":"c-runtime-stop","runtime_run_id":"assistant-runtime-1","state":"thinking"}\n\n',
+              ),
+            );
+          },
+        }),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Long-running Pi request" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Stop generating" }),
+    );
+    await waitFor(() => {
+      expect(cancelRuntimeWorkflow).toHaveBeenCalledWith("assistant-runtime-1");
+    });
+    expect(screen.getByRole("button", { name: "Stopping" })).toBeDisabled();
+
+    streamController?.enqueue(
+      encoder.encode(
+        'event: assistant.end\ndata: {"conversation_id":"c-runtime-stop","runtime_run_id":"assistant-runtime-1","state":"completed"}\n\n',
+      ),
+    );
+    streamController?.close();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+    });
   });
 
   it("keeps a live tool run collapsed until the reader opens it", async () => {
@@ -446,7 +507,86 @@ describe("AIAssistantPanel", () => {
     expect(screen.getAllByTestId("assistant-activity-step-call-live")).toHaveLength(1);
   });
 
-  it("does not fabricate a failed tool row when the stream ends without a tool result", async () => {
+  it("replays missed durable tool frames after a live terminal frame", async () => {
+    const { listRuntimeEvents } = await import("@/lib/api");
+    vi.mocked(listRuntimeEvents).mockResolvedValue({
+      items: [
+        {
+          event_id: "event-tool-started",
+          run_id: "run-live-terminal",
+          parent_event_id: null,
+          sequence: 2,
+          type: "capability.started",
+          public_summary: "正在搜索项目。",
+          payload: {
+            capability: "search_projects",
+            tool_call_id: "call-live-terminal",
+            turn_id: "turn-1",
+            title: "搜索项目",
+          },
+          schema_version: "1.2",
+          timestamp: "2026-08-29T00:00:02Z",
+        },
+        {
+          event_id: "event-tool-succeeded",
+          run_id: "run-live-terminal",
+          parent_event_id: null,
+          sequence: 3,
+          type: "capability.succeeded",
+          public_summary: "找到 0 个项目。",
+          payload: {
+            capability: "search_projects",
+            tool_call_id: "call-live-terminal",
+            turn_id: "turn-1",
+            count: 0,
+          },
+          schema_version: "1.2",
+          timestamp: "2026-08-29T00:00:03Z",
+        },
+        {
+          event_id: "event-run-completed",
+          run_id: "run-live-terminal",
+          parent_event_id: null,
+          sequence: 4,
+          type: "run.completed",
+          public_summary: "任务已完成。",
+          payload: { status: "succeeded", state: "completed", kind: "assistant_turn" },
+          schema_version: "1.2",
+          timestamp: "2026-08-29T00:00:04Z",
+        },
+      ],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-live-terminal","runtime_run_id":"run-live-terminal","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"runtime_run_id":"run-live-terminal","tool_name":"search_projects","tool_call_id":"call-live-terminal","state":"executing_tool"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-live-terminal","runtime_run_id":"run-live-terminal","runtime_sequence":4,"state":"completed"}',
+          ].join("\n\n") + "\n\n",
+        ),
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    fireEvent.change(screen.getByPlaceholderText("Ask me anything..."), {
+      target: { value: "Replay the missed tool result" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("assistant-activity-step-call-live-terminal")).toHaveAttribute(
+        "data-status",
+        "succeeded",
+      );
+    });
+    expect(listRuntimeEvents).toHaveBeenCalledWith("run-live-terminal", 0);
+  });
+
+  it("surfaces a failed tool row when the stream ends without a tool result", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -469,8 +609,7 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument());
-    expect(screen.queryByTestId("assistant-activity-step-call-no-ghost")).not.toBeInTheDocument();
-    expect(screen.queryByText("本轮已结束（工具未收到完成事件）")).not.toBeInTheDocument();
+    expect(screen.getByTestId("assistant-activity-step-call-no-ghost")).toHaveAttribute("data-status", "failed");
   });
 
   it("keeps separate Pi tool calls separate when the same capability runs twice", async () => {
@@ -679,7 +818,7 @@ describe("AIAssistantPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(fetch).toHaveBeenCalled());
-    expect(listRuntimeEvents).toHaveBeenCalledWith("run-terminal-sequence", 14);
+    expect(listRuntimeEvents).not.toHaveBeenCalledWith("run-terminal-sequence", 14);
     expect(screen.queryByText(/助手连接已结束/)).not.toBeInTheDocument();
   });
 
@@ -1463,7 +1602,12 @@ describe("AIAssistantPanel", () => {
       .closest("[data-conversation-row]");
     expect(row).not.toBeNull();
     fireEvent.mouseEnter(row as HTMLElement);
-    fireEvent.click(screen.getByTitle("Rename conversation"));
+    fireEvent.click(
+      within(row as HTMLElement).getByRole("button", {
+        name: "Conversation actions",
+      }),
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename conversation" }));
 
     const input = await screen.findByLabelText("Rename conversation");
     fireEvent.change(input, { target: { value: "Renamed from button" } });
@@ -1503,7 +1647,12 @@ describe("AIAssistantPanel", () => {
       .closest("[data-conversation-row]");
     expect(row).not.toBeNull();
     fireEvent.mouseEnter(row as HTMLElement);
-    fireEvent.click(screen.getByTitle("Delete conversation"));
+    fireEvent.click(
+      within(row as HTMLElement).getByRole("button", {
+        name: "Conversation actions",
+      }),
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete conversation" }));
 
     await waitFor(() => {
       expect(deleteChatConversation).toHaveBeenCalledWith("c-delete");

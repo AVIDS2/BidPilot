@@ -56,6 +56,13 @@ names stay out of the user surface. They belong in the operations and
 observability views. The overview must still be backed by live project/run APIs,
 not demo counters or replay-only UI state.
 
+Account and workspace settings should use the official shadcn composition already
+installed in the application: line tabs for sections, cards for bounded settings
+groups, `Field` for form rows, and `Avatar`, `Badge`, `Switch`, `Progress`,
+`Skeleton`, and `Empty` for identity, preferences, usage, and async states. Use
+the shared `Button` and menu primitives for actions instead of bespoke control
+markup when the primitive already covers the interaction.
+
 ### 2. Dense, but navigable
 
 The product will carry a lot of information.

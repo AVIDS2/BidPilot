@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { isAssistantBusy, useAIAssistant } from "@/features/agent/state/agent-store";
 import { cn } from "@/lib/utils";
 import { AgentMark } from "@/components/brand";
+import { Button } from "@/components/ui/button";
 
 /**
  * Floating assistant ball.
@@ -101,7 +102,8 @@ export function FloatingAssistant() {
       )}
 
       {/* ─── Floating button ─── */}
-      <button
+      <Button
+        type="button"
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onPointerDown={handlePointerDown}
@@ -115,6 +117,8 @@ export function FloatingAssistant() {
           "shadow-lg hover:shadow-xl",
           "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         )}
+        size="icon"
+        variant="ghost"
       >
         {/* Spinning ring when processing */}
         {isProcessing && (
@@ -129,7 +133,7 @@ export function FloatingAssistant() {
           />
         )}
         <AgentMark decorative className="relative z-10 size-full" />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -146,9 +150,12 @@ function MenuAction({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
+      type="button"
       onClick={onClick}
       className="flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-xl px-3 py-2 text-sm whitespace-nowrap transition-all duration-200 hover:scale-105"
+      size="sm"
+      variant="outline"
       style={{
         background: "var(--card)",
         border: "1px solid var(--border)",
@@ -158,6 +165,6 @@ function MenuAction({
     >
       {icon}
       {label}
-    </button>
+    </Button>
   );
 }

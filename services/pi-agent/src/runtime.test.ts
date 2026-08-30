@@ -129,7 +129,7 @@ test("a plain conversational response completes without selecting a tool", async
   const runtime = await testRuntime(faux.streamSimple);
   const projected: Array<Record<string, unknown>> = [];
 
-  await runPiAgent(request(), (event) => {
+  await runPiAgent({ ...request(), sessionId: "bidpilot:user:conversation" }, (event) => {
     projected.push(event);
   }, {
     createModelRuntime: async () => runtime,
@@ -151,6 +151,24 @@ test("a plain conversational response completes without selecting a tool", async
     projected.filter((event) => event.type === "agent.completed").length,
     1,
   );
+  assert.equal(projected.some((event) => event.type === "agent.failed"), false);
+});
+
+test("an external cancellation is delegated to the official AgentSession abort", async () => {
+  const faux = createFauxCore({ api: "openai-completions", provider: "test-provider", models: [{ id: "test-model" }] });
+  faux.setResponses([fauxAssistantMessage("这次响应不会继续展示。")]);
+  const runtime = await testRuntime(faux.streamSimple);
+  const controller = new AbortController();
+  controller.abort();
+  const projected: Array<Record<string, unknown>> = [];
+
+  await runPiAgent(request(), (event) => {
+    projected.push(event);
+  }, {
+    createModelRuntime: async () => runtime,
+  }, controller.signal);
+
+  assert.ok(projected.some((event) => event.type === "agent.completed"));
   assert.equal(projected.some((event) => event.type === "agent.failed"), false);
 });
 
@@ -302,8 +320,8 @@ test("governance extension blocks oversized tool input without calling the bridg
   governed.sandbox.maxToolInputBytes = 1024;
   let bridgeCalls = 0;
 
-  const events: string[] = [];
-  await runPiAgent(governed, (event) => { events.push(event.type); }, {
+  const projected: Array<Record<string, unknown>> = [];
+  await runPiAgent(governed, (event) => { projected.push(event); }, {
     createModelRuntime: async () => runtime,
     fetch: async () => {
       bridgeCalls += 1;
@@ -312,7 +330,9 @@ test("governance extension blocks oversized tool input without calling the bridg
   });
 
   assert.equal(bridgeCalls, 0);
-  assert.ok(events.includes("tool.completed"));
+  const completed = projected.find((event) => event.type === "tool.completed");
+  assert.equal(completed?.is_error, true);
+  assert.equal(completed?.terminate, true);
 });
 
 test("first-party subagents extension delegates through the governed bridge", async () => {

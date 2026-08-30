@@ -1,5 +1,92 @@
 # Progress Log
 
+## 2026-08-30 MiMo direct-balance provider switch
+
+- Confirmed the production environment was still resolving the old DeepSeek
+  configuration, not OpenCode Go. Switched the documented platform profile to
+  Xiaomi MiMo direct balance at `https://api.xiaomimimo.com/v1` with model
+  `mimo-v2.5-pro`; the API keeps the product profile `mimo` and the Pi sidecar
+  uses Pi's built-in `xiaomi` provider.
+- Kept MiMo credentials server-side. Assistant, Worker fallback adapters, and
+  legacy title generation resolve the same profile; no key is included in the
+  repository or browser bundle. No local Docker or sub-agent process is used.
+- Verification before production promotion: API provider/runtime/chat target
+  `69 passed`, Worker adapter target `37 passed`, Pi `17 passed`, Web account
+  `4 passed`, Python compile, TypeScript check, and provider contract checks
+  passed. Production deployment and real provider smoke remain the next gate.
+
+## 2026-08-29 account settings shadcn alignment
+
+- Rebuilt the active `/account` route around the installed shadcn/base-nova
+  primitives: line tabs and tab panels, cards, fields, avatar and badges,
+  switches, progress, skeletons, and empty states. Replaced the page's bespoke
+  action and form markup without changing its existing account APIs.
+- Kept notification preferences in the user-scoped TanStack Query cache after
+  a mutation so a successful switch does not immediately revert to stale data.
+  The real QA account was toggled and restored through the browser.
+- Verified profile, notification, security, and organization tabs at desktop
+  and 390px mobile widths; the mobile settings navigation remains intentionally
+  horizontally scrollable and the document has no horizontal overflow.
+- Verification: focused account tests `4 passed`, Web full suite `194 passed`,
+  production build passed, and lint passed with zero errors and five existing
+  hook-dependency warnings. No public deployment was performed.
+
+## 2026-08-29 Pi runtime and browser acceptance pass
+
+- Completed the Pi runtime correction across the sidecar, API bridge, Worker,
+  and web projection. New assistant turns continue through Pi's official
+  `AgentSession` path; no message keyword classifier or automatic legacy
+  fallback was added. Native `thinking.started/completed`, tool lifecycle,
+  `agent_settled`, approval, missing-input, retry, and failure states are
+  projected from structured runtime events.
+- Kept durable tool rows visible after a terminal event, replayed the complete
+  PostgreSQL run after a Redis terminal frame, correlated duplicate live/durable
+  projections, scoped stale watchers by conversation and generation, and
+  associated session errors with their own runtime run.
+- Fixed active cancellation at the transport boundary. The API records the
+  durable request, Pi receives the official abort signal, the affected sidecar
+  response is closed, and the API interrupts its same-process Worker waiter
+  before committing `run.cancelled`. A clean v8 stack was tested with a real QA
+  account: an immediate stop click restored the composer in under two seconds,
+  the page showed `已取消这次操作`, the database run was `cancelled`, and the
+  work overview returned to `目前没有后台工作`.
+- Real browser checks also covered a plain `你好` response with no tool call,
+  native thinking lifecycle frames with the animated `assistant-thinking-shimmer`
+  label, a read-only `search_projects` call whose tool card survived reload,
+  and production-preview navigation/hard reload across the workbench routes
+  at desktop and mobile widths without a dynamic-import boundary or horizontal
+  overflow.
+- Converted the active Agent thread controls to the existing shadcn `Button`,
+  `Input`, `Textarea`, and `DropdownMenu` primitives, and removed the purple
+  focus halo from the composer. The legacy floating panel remains a separate
+  compatibility surface documented for a later focused audit.
+- Verification: API focused cancellation/runtime suites `26 passed`, Worker
+  `197 passed`, Pi `17 passed`, Web `190 passed` plus the projection-focused
+  regression suite `67 passed`; Web lint has no errors and retains five existing
+  hook-dependency warnings; Pi TypeScript/build, Web production build,
+  `git diff --check`, and local readiness checks passed. Docker image rebuild
+  was not used because Docker Hub anonymous token retrieval was unavailable;
+  the runtime/browser acceptance used isolated local API, Worker, Pi, Redis,
+  PostgreSQL, and Vite processes instead.
+
+## 2026-08-28 Pi cancellation and stale-release recovery
+
+- Traced the reported long-running `你好` failure to a whitespace-only Pi
+  `text.delta` being rejected by the public runtime event schema. Formatting-only
+  chunks are now buffered into the next visible delta without losing word
+  spacing or allowing an empty public summary.
+- Wired the user stop control to the durable runtime cancel endpoint and Pi's
+  official `AgentSession.abort()`. Queued runs are rechecked before startup;
+  running runs receive a sidecar abort; the browser stays in `正在停止` until a
+  durable terminal event is observed.
+- Added the same internal sidecar authentication to subagent requests, and
+  added release-cache recovery for Vite dynamic imports: HTML is no-store,
+  hashed assets remain immutable, and one stale-chunk reload is attempted.
+- Verification: Web full suite `184 passed`, Agent stop/runtime focused tests,
+  TypeScript and ESLint, Pi sidecar `17 passed` plus production build, API
+  runtime tests `25 passed`, Worker subagent tests `2 passed`, API full suite
+  `839 passed / 60 skipped`, and API/Worker Ruff/Python checks passed.
+
 ## 2026-08-28 Pi terminal boundary and composer regression fix
 
 - Fixed the production Pi integration to consume the official

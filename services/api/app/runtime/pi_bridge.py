@@ -7,6 +7,7 @@ policy, approval, idempotency and audit boundaries remain authoritative.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from hashlib import sha256
 from typing import Any
@@ -34,6 +35,7 @@ from .registry import CAPABILITY_REGISTRY
 from .subagent_control import create_subagent_runs
 from .tool_catalog import _TOOL_PARAMETER_SCHEMAS
 from .service import create_or_get_runtime_run
+from .pi_control import register_pi_execution, unregister_pi_execution
 
 
 router = APIRouter(prefix="/internal/pi", tags=["internal-pi"])
@@ -223,8 +225,6 @@ def execute_pi_tool(
             reasoning_effort=run.reasoning_effort,
         )
 
-        import asyncio
-
         prepared = asyncio.run(executor.prepare(call, context))
         if prepared is not None:
             return _outcome_payload(prepared)
@@ -251,15 +251,29 @@ async def execute_queued_pi_run(
             raise HTTPException(status_code=404, detail="Assistant runtime run not found")
         if run.kind != "assistant_turn" or run.engine != "pi":
             raise HTTPException(status_code=409, detail="Runtime run is not a queued Pi assistant turn")
-        if run.status in {"succeeded", "failed", "cancelled", "expired"}:
+        if run.status in {"succeeded", "failed", "cancelled", "expired", "awaiting_approval", "awaiting_input"}:
             return {"status": run.status, "run_id": run.id}
         if run.status == "running":
             # A duplicate broker delivery must not start a second model loop.
             raise HTTPException(status_code=409, detail="Assistant runtime run is already executing")
         from .assistant_execution import execute_queued_assistant_run
 
-        status = await execute_queued_assistant_run(db, run)
-        return {"status": status, "run_id": run.id}
+        execution_task = asyncio.current_task()
+        if execution_task is not None:
+            register_pi_execution(run.id, execution_task)
+        try:
+            status = await execute_queued_assistant_run(db, run)
+            return {"status": status, "run_id": run.id}
+        except asyncio.CancelledError:
+            # The runtime control endpoint cancels this local waiter after it
+            # has persisted the user's terminal cancellation. Return a normal
+            # result to the Worker instead of turning a deliberate stop into
+            # a transport retry.
+            db.rollback()
+            return {"status": "cancelled", "run_id": run.id}
+        finally:
+            if execution_task is not None:
+                unregister_pi_execution(run.id, execution_task)
     finally:
         db.close()
 

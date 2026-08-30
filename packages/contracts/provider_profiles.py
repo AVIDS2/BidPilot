@@ -180,11 +180,10 @@ PROVIDER_PROFILES: dict[str, ProviderProfile] = {
         id="mimo",
         protocol="openai",
         auth_scheme="api-key",
-        default_base_url=None,
+        default_base_url="https://api.xiaomimimo.com/v1",
         default_model="mimo-v2.5-pro",
-        docs_url="https://mimo.mi.com/docs/en-US/tokenplan/Token%20Plan/quick-access",
+        docs_url="https://mimo.mi.com/docs/en-US/api/chat/openai-api",
         model_discovery="manual",
-        requires_api_url=True,
     ),
     "custom-anthropic": ProviderProfile(
         id="custom-anthropic",

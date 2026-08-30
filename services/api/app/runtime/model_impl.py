@@ -27,6 +27,8 @@ from app.runtime.model_limits import OPERATOR_PLANNER_MAX_OUTPUT_TOKENS
 from contracts.chat_config import (
     DEEPSEEK_CHAT_COMPLETIONS_BASE_URL,
     DEEPSEEK_V4_FLASH_MODEL,
+    MIMO_CHAT_COMPLETIONS_BASE_URL,
+    MIMO_V2_5_PRO_MODEL,
     OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL,
     OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL,
 )
@@ -147,6 +149,13 @@ def resolve_agent_model(
     if assistant_key:
         assistant_provider_id = _env_value(env, "DOCPILOT_ASSISTANT_PROVIDER_ID") or "deepseek"
         uses_opencode_go = assistant_provider_id.casefold() == "opencode-go"
+        uses_mimo = assistant_provider_id.casefold() in {
+            "mimo",
+            "xiaomi",
+            "xiaomi-token-plan-cn",
+            "xiaomi-token-plan-ams",
+            "xiaomi-token-plan-sgp",
+        }
         return _platform_model(
             api_key=assistant_key,
             provider_type=_env_value(env, "DOCPILOT_ASSISTANT_PROTOCOL") or "openai",
@@ -156,6 +165,8 @@ def resolve_agent_model(
                 or (
                     _env_value(env, "OPENCODE_BASE_URL") or OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL
                     if uses_opencode_go
+                    else _env_value(env, "MIMO_BASE_URL") or MIMO_CHAT_COMPLETIONS_BASE_URL
+                    if uses_mimo
                     else _env_value(env, "DEEPSEEK_BASE_URL") or DEEPSEEK_CHAT_COMPLETIONS_BASE_URL
                 )
             ),
@@ -164,11 +175,24 @@ def resolve_agent_model(
                 or (
                     _env_value(env, "OPENCODE_MODEL") or OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL
                     if uses_opencode_go
+                    else _env_value(env, "MIMO_MODEL") or MIMO_V2_5_PRO_MODEL
+                    if uses_mimo
                     else _env_value(env, "DEEPSEEK_MODEL")
                     or (DEEPSEEK_V4_FLASH_MODEL if assistant_provider_id == "deepseek" else None)
                 )
             ),
             source_name="DOCPILOT_ASSISTANT_*",
+        )
+
+    mimo_key = _env_value(env, "MIMO_API_KEY") or _env_value(env, "XIAOMI_API_KEY")
+    if mimo_key:
+        return _platform_model(
+            api_key=mimo_key,
+            provider_type="openai",
+            provider_id="mimo",
+            base_url=_env_value(env, "MIMO_BASE_URL") or MIMO_CHAT_COMPLETIONS_BASE_URL,
+            model=_env_value(env, "MIMO_MODEL") or MIMO_V2_5_PRO_MODEL,
+            source_name="MIMO_API_KEY",
         )
 
     opencode_key = _env_value(env, "OPENCODE_API_KEY")

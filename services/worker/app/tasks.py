@@ -49,7 +49,7 @@ from app.runtime.events import (
     publish_node_succeeded,
 )
 from contracts.document_ingestion import MAX_SOURCE_DOCUMENT_BYTES, canonical_source_document_mime_type, source_document_is_parseable
-from contracts.pi_runtime import pi_model_api, pi_thinking_level
+from contracts.pi_runtime import pi_model_api, pi_model_provider, pi_thinking_level
 from contracts.pi_bridge import encode_agent_wake_token, encode_assistant_task_token, encode_pi_bridge_token
 from contracts.runtime import RuntimeEventType, RuntimeRunStatus
 
@@ -60,6 +60,23 @@ logger = logging.getLogger(__name__)
 _USE_LANGGRAPH = os.getenv("USE_LANGGRAPH", "1").lower() in ("1", "true", "yes")
 _INDEX_RETRY_MAX_ATTEMPTS = 3
 _INDEX_RETRY_BASE_DELAY_SECONDS = 5
+_ASSISTANT_TASK_MAX_RETRIES = 8
+
+
+def _fail_assistant_task_after_retries(
+    runtime_run_id: str,
+    outbox_event_id: str | None,
+    *,
+    error_code: str,
+    message: str,
+) -> dict[str, object]:
+    """Make transport exhaustion terminal instead of leaving a run running forever."""
+    try:
+        fail_runtime_run(runtime_run_id, message, error_code=error_code)
+    except Exception:  # noqa: BLE001 - preserve the original task failure
+        logger.exception("Assistant runtime failure reconciliation failed", extra={"runtime_run_id": runtime_run_id})
+    fail_workflow_task_delivery(outbox_event_id, error_code)
+    return {"status": "failed", "runtime_run_id": runtime_run_id}
 
 
 def _retry_transient_bundle_index(task, bundle_id: str) -> bool:
@@ -241,7 +258,7 @@ def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = Non
             "systemPrompt": system_prompt,
             "userMessage": prompt,
             "model": {
-                "provider": resolved.provider_id or resolved.provider_type,
+                "provider": pi_model_provider(resolved.provider_type, resolved.provider_id, resolved.base_url),
                 "id": resolved.model,
                 "name": resolved.model,
                 "api": pi_model_api(resolved.provider_type, resolved.provider_id),
@@ -276,7 +293,12 @@ def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = Non
             terminal: str | None = None
             timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=30.0)
             async with httpx.AsyncClient(timeout=timeout) as client:
-                async with client.stream("POST", f"{sidecar_url}/v1/runs", json=request) as response:
+                async with client.stream(
+                    "POST",
+                    f"{sidecar_url}/v1/runs",
+                    json=request,
+                    headers={"Authorization": f"Bearer {bridge_secret}"},
+                ) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
                         if not line.strip():
@@ -356,7 +378,7 @@ def run_assistant_turn(self, runtime_run_id: str, *, outbox_event_id: str | None
             if claim_workflow_task_delivery(outbox_event_id):
                 complete_workflow_task_delivery(outbox_event_id)
             return {"status": "missing", "runtime_run_id": runtime_run_id}
-        if runtime_run.status in {"succeeded", "failed", "cancelled", "expired"}:
+        if runtime_run.status in {"succeeded", "failed", "cancelled", "expired", "awaiting_approval", "awaiting_input"}:
             if claim_workflow_task_delivery(outbox_event_id):
                 complete_workflow_task_delivery(outbox_event_id)
             return {"status": runtime_run.status, "runtime_run_id": runtime_run_id}
@@ -381,15 +403,46 @@ def run_assistant_turn(self, runtime_run_id: str, *, outbox_event_id: str | None
                 timeout=httpx.Timeout(connect=10, read=900, write=30, pool=30),
             )
             if response.status_code == 409:
+                if int(getattr(self.request, "retries", 0) or 0) >= _ASSISTANT_TASK_MAX_RETRIES:
+                    return _fail_assistant_task_after_retries(
+                        runtime_run_id,
+                        outbox_event_id,
+                        error_code="assistant_task_busy_exhausted",
+                        message="助手运行长时间未能取得执行权，已安全停止。请重新发送。",
+                    )
                 retry_workflow_task_delivery(outbox_event_id, "assistant_task_busy", delay_seconds=15)
-                raise self.retry(countdown=15, max_retries=8)
+                raise self.retry(countdown=15, max_retries=_ASSISTANT_TASK_MAX_RETRIES)
             response.raise_for_status()
             result = response.json()
         except Retry:
             raise
-        except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
+        except httpx.HTTPStatusError as exc:
+            if exc.response is not None and exc.response.status_code < 500:
+                return _fail_assistant_task_after_retries(
+                    runtime_run_id,
+                    outbox_event_id,
+                    error_code="assistant_task_rejected",
+                    message="助手执行服务拒绝了本次运行，请稍后重试。",
+                )
+            if int(getattr(self.request, "retries", 0) or 0) >= _ASSISTANT_TASK_MAX_RETRIES:
+                return _fail_assistant_task_after_retries(
+                    runtime_run_id,
+                    outbox_event_id,
+                    error_code="assistant_task_transport_exhausted",
+                    message="助手运行等待时间过长，已安全停止。请稍后重试。",
+                )
             retry_workflow_task_delivery(outbox_event_id, "assistant_task_transport_retry")
-            raise self.retry(exc=exc, countdown=min(120, 2 ** int(self.request.retries)))
+            raise self.retry(exc=exc, countdown=min(120, 2 ** int(self.request.retries)), max_retries=_ASSISTANT_TASK_MAX_RETRIES)
+        except (httpx.TimeoutException, httpx.RequestError) as exc:
+            if int(getattr(self.request, "retries", 0) or 0) >= _ASSISTANT_TASK_MAX_RETRIES:
+                return _fail_assistant_task_after_retries(
+                    runtime_run_id,
+                    outbox_event_id,
+                    error_code="assistant_task_transport_exhausted",
+                    message="助手运行等待时间过长，已安全停止。请稍后重试。",
+                )
+            retry_workflow_task_delivery(outbox_event_id, "assistant_task_transport_retry")
+            raise self.retry(exc=exc, countdown=min(120, 2 ** int(self.request.retries)), max_retries=_ASSISTANT_TASK_MAX_RETRIES)
         try:
             capture_mem0_profile.delay(runtime_run_id)
         except Exception:  # noqa: BLE001 - optional profile capture is fail-open
@@ -400,7 +453,12 @@ def run_assistant_turn(self, runtime_run_id: str, *, outbox_event_id: str | None
         raise
     except Exception:
         logger.exception("Assistant task execution failed", extra={"runtime_run_id": runtime_run_id})
-        fail_workflow_task_delivery(outbox_event_id, "assistant_task_failed")
+        _fail_assistant_task_after_retries(
+            runtime_run_id,
+            outbox_event_id,
+            error_code="assistant_task_failed",
+            message="助手执行服务发生异常，已安全停止。请稍后重试。",
+        )
         raise
     finally:
         db.close()

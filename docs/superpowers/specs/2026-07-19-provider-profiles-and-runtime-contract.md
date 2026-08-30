@@ -71,7 +71,7 @@ configuration.
 | `minimax` | OpenAI compatible | Bearer | Manual model selection |
 | `siliconflow` | OpenAI compatible | Bearer | Supported |
 | `openrouter` | OpenAI compatible | Bearer | Supported |
-| `mimo` | OpenAI compatible | `api-key` | Manual model selection |
+| `mimo` | OpenAI compatible | `api-key` or Bearer | Manual model selection; direct-balance default |
 | `custom-anthropic` | Anthropic Messages | `x-api-key` plus `anthropic-version` | Standard `GET /v1/models`, best effort |
 
 "Manual" is an explicit product state, not a failed `GET /models` request.

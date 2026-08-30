@@ -30,7 +30,7 @@ import {
 
 type RunFilter = "all" | "active" | "approval" | "failed" | "completed";
 
-const ACTIVE_STATUSES = new Set(["queued", "running", "cancel_requested"]);
+const ACTIVE_STATUSES = new Set(["queued", "running", "awaiting_approval", "awaiting_input", "cancel_requested"]);
 const COMPLETED_STATUSES = new Set(["succeeded", "cancelled", "expired"]);
 
 function filterRuns(runs: RuntimeRunListItem[], filter: RunFilter) {
@@ -44,6 +44,7 @@ function filterRuns(runs: RuntimeRunListItem[], filter: RunFilter) {
 function statusIcon(status: string) {
   if (status === "failed") return <CircleAlertIcon className="size-4 text-destructive" />;
   if (status === "awaiting_approval") return <ShieldCheckIcon className="size-4 text-amber-500" />;
+  if (status === "awaiting_input") return <Clock3Icon className="size-4 text-amber-500" />;
   if (ACTIVE_STATUSES.has(status)) return <ActivityIcon className="size-4 text-primary" />;
   if (COMPLETED_STATUSES.has(status)) return <CheckCircle2Icon className="size-4 text-emerald-500" />;
   return <Clock3Icon className="size-4 text-muted-foreground" />;
@@ -249,7 +250,7 @@ function RunListItem({
 function StatusBadge({ status, t }: { status: string; t: (key: string, options?: Record<string, unknown>) => string }) {
   const className = status === "failed"
     ? "border-destructive/25 bg-destructive/10 text-destructive"
-    : status === "awaiting_approval"
+    : status === "awaiting_approval" || status === "awaiting_input"
       ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400"
       : ACTIVE_STATUSES.has(status)
         ? "border-primary/25 bg-primary/10 text-primary"

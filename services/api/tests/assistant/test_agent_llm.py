@@ -114,6 +114,20 @@ def test_resolve_agent_model_uses_opencode_defaults_for_explicit_assistant_profi
     assert resolved.model == "deepseek-v4-flash"
 
 
+def test_resolve_agent_model_uses_mimo_direct_balance_defaults_for_explicit_assistant_profile() -> None:
+    resolved = resolve_agent_model(
+        environment={
+            "DOCPILOT_ASSISTANT_API_KEY": "platform-key",
+            "DOCPILOT_ASSISTANT_PROVIDER_ID": "mimo",
+        }
+    )
+
+    assert resolved.provider_type == "openai"
+    assert resolved.provider_id == "mimo"
+    assert resolved.base_url == "https://api.xiaomimimo.com/v1"
+    assert resolved.model == "mimo-v2.5-pro"
+
+
 def test_deepseek_client_preserves_visible_reasoning_content() -> None:
     from langchain_core.messages import AIMessageChunk
 

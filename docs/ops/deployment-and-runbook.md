@@ -111,7 +111,15 @@ Required secret-backed values:
   `RESEND_API_KEY` (preferred) with optional `DOCPILOT_RESEND_FROM`, or the
   complete SMTP set `DOCPILOT_SMTP_HOST`, `DOCPILOT_SMTP_USER`,
   `DOCPILOT_SMTP_PASS`, and `DOCPILOT_SMTP_FROM`
-- one workflow LLM provider API key such as `OPENCODE_API_KEY` (recommended platform profile: OpenCode Go Chat Completions at `https://opencode.ai/zen/go/v1`, model `deepseek-v4-flash`), `DEEPSEEK_API_KEY`, `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `DOCPILOT_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY`, or `LLM_API_KEY`. Set either the dedicated `DOCPILOT_ASSISTANT_*` profile or the selected provider variables, not conflicting values from several providers.
+- one workflow LLM provider API key. The current production profile is MiMo
+  direct balance through `DOCPILOT_ASSISTANT_API_KEY`, with
+  `DOCPILOT_ASSISTANT_PROVIDER_ID=mimo`, base URL
+  `https://api.xiaomimimo.com/v1`, and model `mimo-v2.5-pro`. The compatibility
+  aliases `MIMO_API_KEY` / `XIAOMI_API_KEY`, `DEEPSEEK_API_KEY`,
+  `OPENCODE_API_KEY`, `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`,
+  `DOCPILOT_PROVIDER_OPENAI_API_KEY`, `OPENAI_API_KEY`, and `LLM_API_KEY`
+  remain supported. Set one platform profile, not conflicting values from
+  several providers.
 - `OPENROUTER_API_KEY` for official embeddings, with `OPENROUTER_EMBEDDING_MODEL=qwen/qwen3-embedding-8b` and `OPENROUTER_EMBEDDING_DIMENSIONS=1536`
 - `DOCPILOT_ENV=production`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres`

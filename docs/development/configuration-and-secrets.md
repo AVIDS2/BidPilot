@@ -74,6 +74,9 @@ These names are the preferred starting point for implementation.
 - `DOCPILOT_PROVIDER_OPENAI_API_KEY`
 - `DOCPILOT_PROVIDER_DOMESTIC_BASE_URL`
 - `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`
+- `DOCPILOT_PROVIDER_DOMESTIC_MODEL`
+- `MIMO_API_KEY` / `XIAOMI_API_KEY` as server-only MiMo direct-balance aliases
+- `MIMO_BASE_URL` / `MIMO_MODEL` as optional MiMo overrides
 - `ALIYUN_API_KEY` / `DASHSCOPE_API_KEY` as local compatibility aliases for Aliyun Bailian/DashScope only
 - `DOCPILOT_SECRETS_KEY`
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER`
@@ -153,7 +156,20 @@ uv run --directory services/api python -c "from cryptography.fernet import Ferne
 
 Never commit this value. For Aliyun Bailian/DashScope keys, remove the default `0.0.0.0/0` and `::/0` API key whitelist entries and allow only known server egress IPs.
 
-Official platform provider keys must stay server-side. The preferred BidPilot platform profile is `OPENCODE_API_KEY`, which resolves to OpenCode Go's OpenAI-compatible Chat Completions endpoint `https://opencode.ai/zen/go/v1` and `deepseek-v4-flash`; optional overrides are `OPENCODE_BASE_URL` and `OPENCODE_MODEL`. It can be used directly, or explicitly through `DOCPILOT_ASSISTANT_PROVIDER_ID=opencode-go` with `DOCPILOT_ASSISTANT_API_KEY`. In local development the worker also accepts `DOCPILOT_PROVIDER_DOMESTIC_API_KEY`, `ALIYUN_API_KEY`, or `DASHSCOPE_API_KEY` for Aliyun-compatible chat calls. Choose one platform profile per deployment to keep API, Worker, and assistant runs consistent. Never expose official or user-supplied provider keys to the browser.
+Official platform provider keys must stay server-side. The current preferred
+BidPilot platform profile is Xiaomi MiMo direct balance: set
+`DOCPILOT_ASSISTANT_PROVIDER_ID=mimo`,
+`DOCPILOT_ASSISTANT_API_KEY`,
+`DOCPILOT_ASSISTANT_BASE_URL=https://api.xiaomimimo.com/v1`, and
+`DOCPILOT_ASSISTANT_MODEL=mimo-v2.5-pro`. MiMo uses OpenAI-compatible Chat
+Completions and documents both `api-key` and Bearer authentication. The Pi
+sidecar maps this product profile to its built-in `xiaomi` provider. The
+shorter `MIMO_API_KEY` or `XIAOMI_API_KEY` aliases are supported for platform
+fallbacks; `MIMO_BASE_URL` and `MIMO_MODEL` are optional overrides. OpenCode Go
+and DeepSeek remain supported compatibility profiles, but must not be left in
+the production environment when MiMo is selected. Choose one platform profile
+per deployment to keep API, Worker, and assistant runs consistent. Never expose
+official or user-supplied provider keys to the browser.
 
 `DOCPILOT_OFFICIAL_MONTHLY_TOKEN_CEILING` is a required non-secret server-side
 integer in staging and production. It is the per-workspace hard maximum for

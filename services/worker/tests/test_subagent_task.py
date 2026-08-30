@@ -43,8 +43,15 @@ class _FakeAsyncClient:
     async def __aexit__(self, *_args) -> None:
         return None
 
-    def stream(self, method: str, url: str, *, json: dict[str, object]):
-        self._captured.append({"method": method, "url": url, "request": json})
+    def stream(
+        self,
+        method: str,
+        url: str,
+        *,
+        json: dict[str, object],
+        headers: dict[str, str] | None = None,
+    ):
+        self._captured.append({"method": method, "url": url, "request": json, "headers": headers or {}})
         return _FakeStreamResponse(self._events)
 
 
@@ -161,6 +168,9 @@ def test_chain_subagent_receives_previous_result_and_persists_terminal_state(mon
     assert completed_deliveries == ["outbox-test"]
     assert observed_start_statuses == ["running"]
     request = captured[0]["request"]
+    assert captured[0]["headers"] == {
+        "Authorization": "Bearer test-only-pi-bridge-secret-at-least-32-bytes",
+    }
     assert request["userMessage"] == "复核这份结论：已核实公告原文和截止时间。"
     assert request["model"]["thinkingLevel"] == "high"
     assert request["maxTurns"] == 6

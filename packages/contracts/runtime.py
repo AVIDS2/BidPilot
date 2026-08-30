@@ -29,6 +29,7 @@ class RuntimeRunStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     AWAITING_APPROVAL = "awaiting_approval"
+    AWAITING_INPUT = "awaiting_input"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCEL_REQUESTED = "cancel_requested"

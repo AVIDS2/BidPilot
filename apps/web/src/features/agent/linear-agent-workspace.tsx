@@ -59,9 +59,15 @@ import {
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { loadWithChunkRecovery } from "@/app-route-loaders";
 import "./linear-agent-workspace.css";
 
-const LazyAIAssistantPanel = lazy(() => import("@/features/agent/components/AIAssistantPanel").then(({ AIAssistantPanel }) => ({ default: AIAssistantPanel })));
+const LazyAIAssistantPanel = lazy(() =>
+  loadWithChunkRecovery(
+    () => import("@/features/agent/components/AIAssistantPanel"),
+    "assistant-panel",
+  ).then(({ AIAssistantPanel }) => ({ default: AIAssistantPanel })),
+);
 
 function AgentComposerLoading() {
   return (
@@ -428,11 +434,11 @@ function AgentWelcome({ onExample, onPreviewAttachment }: { onExample: (prompt: 
             {examples.map((example) => {
               const Icon = example.icon;
               return (
-              <button type="button" className="example-card" key={example.title} onClick={() => onExample(example.prompt)}>
+              <Button type="button" className="example-card" key={example.title} onClick={() => onExample(example.prompt)} size="sm" variant="outline">
                 <Icon size={15} />
                 <strong>{example.title}</strong>
                 <span>{example.copy}</span>
-              </button>
+              </Button>
               );
             })}
           </div>

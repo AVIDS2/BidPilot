@@ -543,14 +543,25 @@ def test_runtime_cancel_api_accepts_an_assistant_turn(
     test_db,
     default_org_id: str,
     default_user_id: str,
+    monkeypatch,
 ) -> None:
     run = _runtime_run(test_db, default_org_id, default_user_id, approval_mode="full_access")
+    abort_calls: list[str] = []
+
+    async def request_pi_abort(run_id: str) -> bool:
+        abort_calls.append(run_id)
+        return True
+
+    monkeypatch.setattr("app.runtime.router.request_pi_abort", request_pi_abort)
 
     response = client.post(f"/runtime/runs/{run.id}/cancel")
 
     assert response.status_code == 200
     assert response.json()["id"] == run.id
-    assert response.json()["status"] == "cancel_requested"
+    assert response.json()["status"] == "cancelled"
+    assert abort_calls == [run.id]
+    test_db.refresh(run)
+    assert run.status == "cancelled"
 
 
 def test_pending_approval_is_reused_and_expired_approval_cannot_execute(

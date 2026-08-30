@@ -251,6 +251,7 @@ async def _replay_existing_run(
     run = reconcile_runtime_run_for_replay(db, run.id)
     state_by_status = {
         "awaiting_approval": "needs_confirmation",
+        "awaiting_input": "needs_input",
         "failed": "failed",
         "expired": "failed",
         "cancelled": "completed",
@@ -276,7 +277,17 @@ async def _replay_existing_run(
         if event.startswith("event: assistant.end"):
             emitted_end = True
         yield event
-    if not emitted_end:
+    if not emitted_end and run.status == "awaiting_input":
+        yield _sse(
+            "assistant.end",
+            {
+                "conversation_id": conversation_id,
+                "runtime_run_id": run.id,
+                "state": "needs_input",
+                "replayed": True,
+            },
+        )
+    elif not emitted_end:
         yield _sse(
             "assistant.end",
             {
@@ -690,13 +701,14 @@ def _render_runtime_event(event: RuntimeEvent, conversation_id: str) -> list[str
             payload.get("delta_emitted") or payload.get("terminal_failure")
         ):
             return []
+        content = payload.get("delta") if isinstance(payload.get("delta"), str) else event.public_summary
         return [
             _sse(
                 "assistant.message",
                 {
                     **runtime_metadata,
                     "turn_id": turn_id,
-                    "content": event.public_summary,
+                    "content": content,
                     "state": "thinking" if event.event_type == RuntimeEventType.MESSAGE_DELTA.value else "completed",
                 },
             )

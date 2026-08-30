@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeAssistantMessages, type ChatMessage } from "./agent-store";
+import { acceptRuntimeProjection, mergeAssistantMessages, type ChatMessage } from "./agent-store";
 
 const message = (overrides: Partial<ChatMessage>): ChatMessage => ({
   id: "local",
@@ -29,5 +29,48 @@ describe("mergeAssistantMessages", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].id).toBe("assistant-1");
     expect(merged[0].content).toBe("你好！");
+  });
+});
+
+describe("acceptRuntimeProjection", () => {
+  it("keeps multiple projections from one durable event idempotent", () => {
+    const cursors: Record<string, number> = {};
+    const seen = new Set<string>();
+    const base = {
+      runtime_run_id: "run-1",
+      runtime_event_id: "event-1",
+      runtime_sequence: 2,
+    };
+
+    expect(acceptRuntimeProjection(cursors, seen, "assistant.workflow_started", base)).toBe(true);
+    expect(acceptRuntimeProjection(cursors, seen, "assistant.tool_succeeded", base)).toBe(true);
+    expect(acceptRuntimeProjection(cursors, seen, "assistant.workflow_started", base)).toBe(false);
+    expect(cursors).toEqual({ "run-1": 2 });
+  });
+
+  it("allows a missed lower-sequence frame during full replay", () => {
+    const cursors: Record<string, number> = { "run-1": 4 };
+    const seen = new Set<string>();
+    expect(acceptRuntimeProjection(cursors, seen, "assistant.tool_succeeded", {
+      runtime_run_id: "run-1",
+      runtime_event_id: "event-3",
+      runtime_sequence: 3,
+    })).toBe(true);
+  });
+
+  it("collapses a live Pi tool frame into its durable replay frame", () => {
+    const cursors: Record<string, number> = {};
+    const seen = new Set<string>();
+    expect(acceptRuntimeProjection(cursors, seen, "assistant.tool_started", {
+      runtime_run_id: "run-1",
+      tool_call_id: "call-1",
+    })).toBe(true);
+    expect(acceptRuntimeProjection(cursors, seen, "assistant.tool_started", {
+      runtime_run_id: "run-1",
+      runtime_event_id: "event-1",
+      runtime_sequence: 9,
+      tool_call_id: "call-1",
+    })).toBe(false);
+    expect(cursors).toEqual({ "run-1": 9 });
   });
 });
