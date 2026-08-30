@@ -17,6 +17,17 @@
   attempt was stopped by a concurrent Web Vite `SIGSEGV` under the host's
   memory pressure; old containers stayed up, and the deploy script now builds
   application images sequentially with restore-on-failure behavior.
+- Production promotion completed at commit `6128f63` using the sequential VPS
+  Compose path. API, Pi, Web, Worker, PostgreSQL, Redis, and MinIO containers
+  are running; migration, readiness, and checkpoint one-shot services exited
+  successfully. The public API `/health` and `/health/ready` endpoints returned
+  HTTP 200 with all dependency checks ready, and the public Web/login routes
+  loaded without browser console errors.
+- The production environment is configured for MiMo direct balance through the
+  official OpenAI-compatible endpoint and Pi's built-in `xiaomi` provider
+  mapping. A real low-token MiMo request returned HTTP 200. Full authenticated
+  conversation acceptance was not fabricated because no production login
+  credentials were available in the browser session.
 
 ## 2026-08-29 account settings shadcn alignment
 
