@@ -14,16 +14,18 @@ from contracts.runtime import (
 
 
 def test_runtime_event_requires_a_monotonic_sequence_and_public_summary() -> None:
+    long_summary = "完整回答" * 800
     event = RuntimeEventRecord(
         run_id="run-1",
         sequence=2,
         type=RuntimeEventType.CAPABILITY_SUCCEEDED,
-        public_summary="已找到 2 个项目。",
+        public_summary=long_summary,
         payload={"count": 2},
     )
 
     assert event.sequence == 2
     assert event.payload["count"] == 2
+    assert event.public_summary == long_summary
     assert event.event_id
     assert event.schema_version == "1.2"
     assert RUNTIME_EVENT_SCHEMA_VERSION == "1.2"

@@ -1,5 +1,19 @@
 # Progress Log
 
+## 2026-08-31 Pi full-access false failure fix
+
+- Reproduced the reported `full_access` failure from the production runtime
+  record. Pi completed the model/tool loop and all observed business tools
+  succeeded, but the final answer exceeded an accidental `2000`-character
+  Pydantic limit on `RuntimeEventDraft.public_summary`.
+- Removed that artificial response cap from the API event draft and shared
+  runtime contract. Full assistant replies remain intact in chat messages,
+  runtime results, and completed-message event payloads; no Pi/Harness prompt,
+  turn, or reply truncation was added.
+- Verification: API runtime/contract/event suites `36 passed`, API Ruff and
+  compile checks passed, and the dedicated long `full_access` regression now
+  finishes as `succeeded` with the exact full response preserved.
+
 ## 2026-08-30 MiMo direct-balance provider switch
 
 - Confirmed the production environment was still resolving the old DeepSeek

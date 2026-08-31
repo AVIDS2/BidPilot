@@ -21,7 +21,7 @@ class RuntimeEventDraft(BaseModel):
 
     type: RuntimeEventType
     parent_event_id: str | None = Field(default=None, min_length=1, max_length=36)
-    public_summary: str = Field(min_length=1, max_length=2000)
+    public_summary: str = Field(min_length=1)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 

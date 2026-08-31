@@ -138,7 +138,7 @@ class RuntimeEventRecord(_RuntimeContract):
     parent_event_id: str | None = Field(default=None, min_length=1, max_length=36)
     sequence: int = Field(ge=1)
     type: RuntimeEventType
-    public_summary: str = Field(min_length=1, max_length=2000)
+    public_summary: str = Field(min_length=1)
     payload: dict[str, Any] = Field(default_factory=dict)
     schema_version: Literal["1.0", "1.1", "1.2"] = RUNTIME_EVENT_SCHEMA_VERSION
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

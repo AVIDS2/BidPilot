@@ -421,6 +421,38 @@ def test_complete_runtime_run_persists_message_and_terminal_event(
     ]
 
 
+def test_complete_runtime_run_preserves_a_long_pi_answer_without_an_artificial_cap(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    run = create_runtime_run(
+        test_db,
+        _user(default_org_id, default_user_id),
+        kind="assistant_turn",
+        engine="pi",
+        approval_mode="full_access",
+    )
+    answer = "资料检查结果：" + "已核实。" * 700
+
+    complete_runtime_run(test_db, run.id, answer, message_delta_emitted=True)
+
+    test_db.refresh(run)
+    message_event = next(
+        event
+        for event in list_events_after(test_db, run.id)
+        if event.event_type == "message.completed"
+    )
+    assert run.status == "succeeded"
+    assert run.result_json == {"message": answer}
+    assert message_event.public_summary == answer
+    assert message_event.payload_json == {
+        "message": answer,
+        "delta_emitted": True,
+        "terminal_failure": False,
+    }
+
+
 def test_failed_and_cancelled_runtime_runs_preserve_distinct_terminal_evidence(
     test_db,
     default_org_id: str,
