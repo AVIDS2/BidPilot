@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Sequence
 
 from fastapi import HTTPException
 from sqlalchemy import and_, false, or_, select
@@ -50,6 +51,7 @@ def list_visible_runtime_runs(
     current_user: CurrentUser,
     limit: int,
     conversation_id: str | None = None,
+    kinds: Sequence[str] | None = None,
 ) -> list[RuntimeRunListRow]:
     """List only RuntimeRuns that the caller can already open individually.
 
@@ -78,6 +80,8 @@ def list_visible_runtime_runs(
     )
     if conversation_id:
         stmt = stmt.where(RuntimeRun.conversation_id == conversation_id)
+    if kinds:
+        stmt = stmt.where(RuntimeRun.kind.in_(tuple(kinds)))
 
     if current_user.role != "admin":
         accessible_project_ids = [

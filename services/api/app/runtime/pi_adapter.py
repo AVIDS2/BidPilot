@@ -242,7 +242,6 @@ async def stream_pi_assistant_response(
         "resources": _pi_resources(),
         "sandbox": _pi_sandbox(),
         "toolCallback": {"url": callback_url, "token": bridge_token},
-        "maxTurns": 24,
     }
     pi_internal_secret = (os.getenv("DOCPILOT_PI_INTERNAL_SECRET") or os.getenv("DOCPILOT_JWT_SECRET") or "").strip()
     pi_headers = {"authorization": f"Bearer {pi_internal_secret}"} if pi_internal_secret else {}

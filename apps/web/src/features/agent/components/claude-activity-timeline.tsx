@@ -699,7 +699,6 @@ function ToolStep({
   const [open, setOpen] = useState(false);
   const [renderDetail, setRenderDetail] = useState(false);
   const detailCloseTimer = useRef<number | null>(null);
-  const previousStatus = useRef(item.status);
   const Icon: LucideIcon = getAssistantToolIcon(item);
   const label = item.toolName
     ? getAssistantActivityLabel(item, t)
@@ -707,15 +706,10 @@ function ToolStep({
   const active = statusIsActive(item.status);
 
   useEffect(() => {
-    if (!active && statusIsActive(previousStatus.current)) {
-      setOpen(false);
-      detailCloseTimer.current = window.setTimeout(() => setRenderDetail(false), 320);
-    }
-    previousStatus.current = item.status;
     return () => {
       if (detailCloseTimer.current !== null) window.clearTimeout(detailCloseTimer.current);
     };
-  }, [active, item.status]);
+  }, []);
 
   const toggleDetail = () => {
     if (!open) {

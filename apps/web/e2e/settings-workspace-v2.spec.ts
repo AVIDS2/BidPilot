@@ -157,7 +157,7 @@ test("keeps account, organization, and model settings as a single useful workben
   await prepareAdminWorkspace(page);
 
   const pages = [
-    { path: "/account", title: "账户与个性化", evidence: "个人资料", evidenceRole: "heading", screenshot: "account" },
+    { path: "/account", title: "账户与个性化", evidence: "个人资料", evidenceRole: "card-title", screenshot: "account" },
     { path: "/administration", title: "组织设置", evidence: "组织操作", evidenceRole: "heading", screenshot: "organization" },
     { path: "/settings/providers", title: "集成与模型", evidence: "OpenAI production", evidenceRole: "heading", screenshot: "providers" },
     { path: "/settings/webhooks", title: "Webhook", evidence: "飞书招采通知", evidenceRole: "text", screenshot: "webhooks" },
@@ -169,7 +169,9 @@ test("keeps account, organization, and model settings as a single useful workben
     await expect(page.locator(".wb-settings-page")).toBeVisible();
     const evidence = current.evidenceRole === "heading"
       ? page.getByRole("heading", { name: current.evidence, exact: true })
-      : page.getByText(current.evidence, { exact: true });
+      : current.evidenceRole === "card-title"
+        ? page.getByTestId("account-profile-card").getByText(current.evidence, { exact: true })
+        : page.getByText(current.evidence, { exact: true });
     await expect(evidence).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath(`settings-${current.screenshot}-${testInfo.project.name}.png`),

@@ -56,6 +56,12 @@ names stay out of the user surface. They belong in the operations and
 observability views. The overview must still be backed by live project/run APIs,
 not demo counters or replay-only UI state.
 
+The authenticated workbench uses one consistent navigation model: a desktop
+sidebar can be collapsed with its existing control and restored by clicking the
+visible Logo, while mobile replaces that sidebar with an accessible shadcn
+`Sheet` opened from the topbar. Long workspace names must shrink with an
+ellipsis instead of pushing controls out of the container.
+
 Account and workspace settings should use the official shadcn composition already
 installed in the application: line tabs for sections, cards for bounded settings
 groups, `Field` for form rows, and `Avatar`, `Badge`, `Switch`, `Progress`,

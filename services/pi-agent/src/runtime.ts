@@ -467,10 +467,12 @@ export async function runPiAgent(
       terminate,
     };
   };
-  session.agent.shouldStopAfterTurn = () => {
-    turns += 1;
-    return turns >= (request.maxTurns ?? 24);
-  };
+  if (request.maxTurns !== undefined) {
+    session.agent.shouldStopAfterTurn = () => {
+      turns += 1;
+      return turns >= request.maxTurns!;
+    };
+  }
   const unsubscribe = session.subscribe((event) => {
     if (event.type === "turn_start") {
       turnState.step += 1;

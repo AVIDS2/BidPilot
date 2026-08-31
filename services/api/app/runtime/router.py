@@ -42,6 +42,7 @@ router = APIRouter(prefix="/runtime", tags=["runtime"])
 def list_runtime_runs(
     limit: int = Query(default=50, ge=1, le=100),
     conversation_id: str | None = Query(default=None),
+    kind: list[str] | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_auth),
 ) -> list[RuntimeRunListItem]:
@@ -63,6 +64,7 @@ def list_runtime_runs(
             current_user,
             limit=limit,
             conversation_id=conversation_id,
+            kinds=kind,
         )
     ]
 

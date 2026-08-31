@@ -76,11 +76,14 @@ inventory is the current authority.
    event replay is used only after reconnect, refresh, or a missed live
    channel, and closing the browser does not cancel the Worker task.
 
-The assistant response has no product-imposed character cap. The chat message,
+The assistant response has no product-imposed character or turn cap. The chat message,
 runtime result, and completed-message event retain the full redacted response;
 the `runtime_event.public_summary` column is PostgreSQL `TEXT` and must not add
 an artificial Pydantic length limit. Tool input/observation bounds are separate
-security controls for the governed bridge and do not truncate model replies.
+security controls for the governed bridge and do not truncate model replies. The
+Pi adapter leaves `AgentSession` continuation behavior unchanged; an explicit
+`maxTurns` is accepted only for a caller that intentionally opts into that
+policy, and is not sent by the public assistant route.
 
 ### Queue and reconnect contract
 

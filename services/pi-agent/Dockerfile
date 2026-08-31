@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /app/
 COPY services/pi-agent/package.json /app/services/pi-agent/package.json
 
-RUN corepack enable && pnpm install --frozen-lockfile --prod=false --filter @docpilot/pi-agent...
+RUN corepack enable && corepack prepare pnpm@11.19.0 --activate && pnpm install --frozen-lockfile --prod=false --filter @docpilot/pi-agent...
 
 COPY services/pi-agent/tsconfig.json /app/services/pi-agent/tsconfig.json
 COPY services/pi-agent/src /app/services/pi-agent/src

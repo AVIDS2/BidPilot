@@ -1015,6 +1015,14 @@ def recover_task_outbox_events() -> dict[str, str]:
     return recover_pending_task_outbox_events()
 
 
+@celery_app.task(name="worker.reconcile_runtime_runs")
+def reconcile_runtime_runs_task() -> dict[str, str]:
+    """Close stale runtime rows after outbox and approval reconciliation."""
+    from app.execution.runtime_reconciliation import reconcile_runtime_runs
+
+    return reconcile_runtime_runs()
+
+
 def _execute_resume_draft(
     run_id: str,
     decision: str,

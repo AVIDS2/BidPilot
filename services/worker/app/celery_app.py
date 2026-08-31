@@ -60,6 +60,10 @@ celery_app.conf.beat_schedule = {
         "task": "worker.recover_task_outbox_events",
         "schedule": crontab(minute="*"),
     },
+    "reconcile-runtime-runs-minutely": {
+        "task": "worker.reconcile_runtime_runs",
+        "schedule": crontab(minute="*"),
+    },
     "cleanup-assistant-attachments-hourly": {
         "task": "worker.cleanup_assistant_attachments",
         "schedule": crontab(minute=17),

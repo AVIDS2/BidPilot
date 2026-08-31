@@ -818,11 +818,14 @@ export interface RuntimeChildRunRead {
   latest_event_summary: string | null;
 }
 
-export function listRuntimeRuns(limit = 50, conversationId?: string | null) {
+export function listRuntimeRuns(limit = 50, conversationId?: string | null, kinds?: readonly string[]) {
   const params = new URLSearchParams({
     limit: String(Math.min(Math.max(limit, 1), 100)),
   });
   if (conversationId) params.set("conversation_id", conversationId);
+  for (const kind of kinds ?? []) {
+    if (kind) params.append("kind", kind);
+  }
   return request<RuntimeRunListItem[]>(`/runtime/runs?${params.toString()}`);
 }
 

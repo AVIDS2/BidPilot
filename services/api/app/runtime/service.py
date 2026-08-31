@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -144,6 +145,7 @@ def list_runtime_runs_query(
     *,
     limit: int = 50,
     conversation_id: str | None = None,
+    kinds: Sequence[str] | None = None,
 ) -> list[RuntimeRunListRow]:
     """Return a bounded, permission-scoped list for the Run Center / history restore."""
 
@@ -152,6 +154,7 @@ def list_runtime_runs_query(
         current_user=current_user,
         limit=max(1, min(limit, 100)),
         conversation_id=conversation_id,
+        kinds=kinds,
     )
 
 

@@ -178,6 +178,15 @@ state is only rendered after the relevant dependent queries have settled.
 This is a presentation and caching concern, not a replacement for measuring
 slow API TTFB or reducing backend query fan-out.
 
+The authenticated Workbench keeps one navigation model across breakpoints. On
+desktop, the sidebar collapse control remains in the workspace header while
+the collapsed Logo is the single accessible affordance for restoring it. On
+mobile, the sidebar becomes a shadcn `Sheet` opened by a topbar control; the
+same navigation entries are reused, and selecting an entry closes the Sheet.
+The browser favicon is the same current BidPilot Logo asset as the workbench
+brand, with a versioned URL in `index.html` so a release cannot retain the
+previous tab icon indefinitely.
+
 ## State strategy
 
 ### Server state

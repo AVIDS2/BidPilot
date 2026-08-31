@@ -1,5 +1,49 @@
 # Progress Log
 
+## 2026-08-31 workbench branding and responsive navigation
+
+- Replaced the stale browser favicon with the current BidPilot Logo and added
+  a versioned favicon URL to invalidate old tab-icon caches.
+- Made long workspace names shrink and ellipsize inside the header controls.
+  Desktop sidebar collapse now keeps only the existing collapse button; in the
+  collapsed state the Logo is the sole expand action.
+- Added a shadcn `Sheet` navigation drawer and topbar trigger for mobile. The
+  desktop and mobile menus share the same route model, and mobile navigation
+  closes after a route is selected.
+- Added Playwright coverage for desktop collapse/Logo restore and Pixel 7
+  mobile open/close behavior. Full Web E2E passed `40` tests with `24` opt-in
+  backend/demo scenarios skipped.
+
+## 2026-08-31 runtime lifecycle, Pi alignment and acceptance hardening
+
+- Removed the public Pi adapter's implicit `maxTurns=24` stop policy. The
+  official `AgentSession` now keeps its native continuation behavior; an
+  explicit caller may still opt into `maxTurns` for a deliberate bounded run.
+- Added Worker Beat reconciliation for expired approvals and active runtime
+  rows that have no live transactional-outbox delivery. Stale assistant turns
+  are closed as durable failures, while live leases and recent missing-input
+  pauses remain protected. The user-facing Work Overview requests only
+  background-run kinds and renders loading/error states instead of stale
+  assistant rows or false empty states.
+- Kept completed tool details mounted after Pi emits terminal lifecycle events,
+  normalized API 404/422 errors with `code`, `message`, `details` and
+  `request_id`, and corrected the release readiness fixture from `harness` to
+  `pi`. The active administration detail pages now use shadcn/Base UI
+  Button/Input/Select/Field/AlertDialog primitives.
+- Fixed the dashboard's project error path so an unresolved project query does
+  not become a fake zero-project onboarding state. Added Pi sidecar tests and
+  build to CI/release gates.
+- Updated the workspace lock with patched dependency resolutions. Verified the
+  actual installed graph with `pnpm audit --prod`: `high=0`, `critical=0`.
+- Pinned the repository, CI and Node image installs to `pnpm@11.19.0` so the
+  workspace override configuration and frozen lockfile are checked by the same
+  toolchain. Final local acceptance: Web `198` tests passed, Pi `18` tests and
+  build passed, Worker `203` tests passed, Ruff passed, and Playwright passed
+  `40` desktop/mobile tests with `24` opt-in backend/demo tests skipped. The
+  full API suite reached `836 passed / 62 skipped`; its `9` failures are the
+  pre-existing MinIO integration cases blocked by the unavailable local
+  `localhost:9000` service.
+
 ## 2026-08-31 Pi full-access false failure fix
 
 - Reproduced the reported `full_access` failure from the production runtime

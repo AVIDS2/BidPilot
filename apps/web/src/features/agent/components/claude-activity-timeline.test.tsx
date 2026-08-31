@@ -105,6 +105,33 @@ describe("ClaudeActivityTimeline", () => {
     vi.useRealTimers();
   });
 
+  it("keeps an expanded tool detail visible after the tool completes", () => {
+    const runningTool: AssistantExecutionItem = {
+      id: "search-running",
+      kind: "tool",
+      toolName: "search_projects",
+      status: "running",
+      title: "Search projects",
+      timestamp: 1,
+    };
+    const { container, rerender } = renderTimeline([runningTool]);
+
+    fireEvent.click(container.querySelector(".cr-task-turn-summary")!);
+    fireEvent.click(screen.getByRole("button", { name: "Show Search projects details" }));
+    expect(container.querySelector(".cr-public-summary")).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <ClaudeActivityTimeline
+          items={[{ ...runningTool, status: "succeeded", summary: "Found 3 projects." }]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Hide Search projects details" })).toHaveAttribute("aria-expanded", "true");
+    expect(container.querySelector(".cr-public-summary")).toHaveTextContent("Found 3 projects.");
+  });
+
   it("renders public web search sources from the capability result", () => {
     const searchTool: AssistantExecutionItem = {
       id: "web-search-completed",

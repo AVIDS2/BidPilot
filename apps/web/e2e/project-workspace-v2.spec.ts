@@ -252,17 +252,12 @@ test("项目工作台展示真实就绪度并将缺口带入要求矩阵", async
     const collapseButton = page.getByRole("button", { name: "收起侧栏" });
     await expect(collapseButton).toBeVisible();
     await collapseButton.click();
-    const logoBox = await page.locator(".wb-workspace-mark").boundingBox();
-    const toggleBox = await page.getByRole("button", { name: "展开侧栏" }).boundingBox();
-    expect(logoBox).not.toBeNull();
-    expect(toggleBox).not.toBeNull();
-    const overlaps =
-      logoBox!.x < toggleBox!.x + toggleBox!.width &&
-      logoBox!.x + logoBox!.width > toggleBox!.x &&
-      logoBox!.y < toggleBox!.y + toggleBox!.height &&
-      logoBox!.y + logoBox!.height > toggleBox!.y;
-    expect(overlaps).toBe(false);
-    await page.getByRole("button", { name: "展开侧栏" }).click();
+    await expect(page.locator(".workbench.is-sidebar-collapsed .wb-workspace-actions")).toBeHidden();
+    const logoButton = page.getByRole("button", { name: "展开侧栏" });
+    await expect(logoButton).toHaveCount(1);
+    await expect(logoButton.locator(".wb-workspace-mark")).toBeVisible();
+    await logoButton.click();
+    await expect(page.getByRole("button", { name: "收起侧栏" })).toBeVisible();
   }
   await page.screenshot({ path: testInfo.outputPath(`project-workspace-${testInfo.project.name}.png`), fullPage: true });
 

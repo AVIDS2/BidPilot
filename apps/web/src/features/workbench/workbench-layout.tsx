@@ -40,6 +40,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AIAssistantProvider } from "@/features/agent/state/agent-store";
 import { useAuth } from "@/lib/auth";
@@ -127,6 +134,51 @@ function WorkbenchRouteLoading() {
   );
 }
 
+function WorkbenchNavigation({
+  groups,
+  pathname,
+  translate,
+  onNavigate,
+}: {
+  groups: WorkbenchNavGroup[];
+  pathname: string;
+  translate: (key: string) => string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <nav className="wb-navigation">
+      {groups.map((group) => (
+        <section className="wb-nav-group" key={group.label || "priority"}>
+          {group.label && (
+            <p className="wb-nav-group-label">
+              {translate(group.label)}
+              <ChevronDownIcon aria-hidden="true" />
+            </p>
+          )}
+          {group.items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink
+                className={cn("wb-nav-link", isPathActive(pathname, item.to) && "is-active")}
+                key={`${group.label}-${item.label}`}
+                onClick={onNavigate}
+                onFocus={() => prefetchRoute(item.to)}
+                onMouseEnter={() => prefetchRoute(item.to)}
+                onPointerDown={() => prefetchRoute(item.to)}
+                to={item.to}
+              >
+                <Icon aria-hidden="true" />
+                <span>{translate(item.label)}</span>
+                {item.count ? <small>{item.count}</small> : null}
+              </NavLink>
+            );
+          })}
+        </section>
+      ))}
+    </nav>
+  );
+}
+
 export function WorkbenchLayout() {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
@@ -135,6 +187,7 @@ export function WorkbenchLayout() {
   const [sidebarWidth, setSidebarWidth] = useState(getSavedSidebarWidth);
   const [isResizing, setIsResizing] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true");
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const navGroups = useMemo<WorkbenchNavGroup[]>(() => [
     {
@@ -165,6 +218,9 @@ export function WorkbenchLayout() {
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(sidebarCollapsed));
   }, [sidebarCollapsed]);
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname]);
 
   const finishResize = () => {
     setIsResizing(false);
@@ -206,7 +262,15 @@ export function WorkbenchLayout() {
         >
           <aside className="wb-sidebar" aria-label="BidPilot workspace navigation">
             <div className="wb-workspace-row">
-              <Button className="wb-workspace-switcher" size="sm" type="button" variant="ghost" aria-label="切换工作区">
+              <Button
+                aria-label={sidebarCollapsed ? "展开侧栏" : "切换工作区"}
+                className="wb-workspace-switcher"
+                onClick={sidebarCollapsed ? () => setSidebarCollapsed(false) : undefined}
+                size="sm"
+                title={sidebarCollapsed ? "展开侧栏" : undefined}
+                type="button"
+                variant="ghost"
+              >
                 <img alt="BidPilot" className="wb-workspace-mark" src={bidpilotLogo} />
                 <span className="wb-workspace-name">{user?.org_slug || "BidPilot workspace"}</span>
                 <ChevronDownIcon aria-hidden="true" />
@@ -214,43 +278,13 @@ export function WorkbenchLayout() {
               <div className="wb-workspace-actions">
                 <Tooltip><TooltipTrigger render={<Button aria-label="搜索工作区" className="wb-icon-button" size="icon-sm" type="button" variant="ghost" />}><SearchIcon aria-hidden="true" /></TooltipTrigger><TooltipContent>搜索工作区</TooltipContent></Tooltip>
                 <Tooltip><TooltipTrigger render={<Button aria-label="新建投标项目" className="wb-icon-button wb-icon-button--raised" onClick={openNewProject} size="icon-sm" type="button" variant="ghost" />}><PlusIcon aria-hidden="true" /></TooltipTrigger><TooltipContent>新建投标项目</TooltipContent></Tooltip>
-                <Tooltip><TooltipTrigger render={<Button aria-label={sidebarCollapsed ? "展开侧栏" : "收起侧栏"} aria-pressed={sidebarCollapsed} className="wb-icon-button wb-sidebar-toggle" data-state={sidebarCollapsed ? "collapsed" : "expanded"} onClick={() => setSidebarCollapsed((value) => !value)} size="icon-sm" type="button" variant="ghost" />}>
-                  {sidebarCollapsed ? <PanelLeftOpenIcon aria-hidden="true" /> : <PanelLeftCloseIcon aria-hidden="true" />}
-                </TooltipTrigger><TooltipContent>{sidebarCollapsed ? "展开侧栏" : "收起侧栏"}</TooltipContent></Tooltip>
+                <Tooltip><TooltipTrigger render={<Button aria-label="收起侧栏" aria-pressed={false} className="wb-icon-button wb-sidebar-toggle" data-state="expanded" onClick={() => setSidebarCollapsed(true)} size="icon-sm" type="button" variant="ghost" />}>
+                  <PanelLeftCloseIcon aria-hidden="true" />
+                </TooltipTrigger><TooltipContent>收起侧栏</TooltipContent></Tooltip>
               </div>
             </div>
 
-            <nav className="wb-navigation">
-              {visibleGroups.map((group) => (
-                <section className="wb-nav-group" key={group.label || "priority"}>
-                  {group.label && (
-                    <p className="wb-nav-group-label">
-                      {t(group.label)}
-                      <ChevronDownIcon aria-hidden="true" />
-                    </p>
-                  )}
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    const active = isPathActive(location.pathname, item.to);
-                    return (
-                      <NavLink
-                        className={cn("wb-nav-link", active && "is-active")}
-                        key={`${group.label}-${item.label}`}
-                        onFocus={() => prefetchRoute(item.to)}
-                        onMouseEnter={() => prefetchRoute(item.to)}
-                        onPointerDown={() => prefetchRoute(item.to)}
-                        to={item.to}
-                      >
-                        <Icon aria-hidden="true" />
-                        <span>{t(item.label)}</span>
-                        {item.count ? <small>{item.count}</small> : null}
-                      </NavLink>
-                    );
-                  })}
-                </section>
-              ))}
-
-            </nav>
+            <WorkbenchNavigation groups={visibleGroups} pathname={location.pathname} translate={t} />
 
             <div className="wb-sidebar-spacer" />
 
@@ -286,6 +320,40 @@ export function WorkbenchLayout() {
             </DropdownMenu>
           </aside>
 
+          <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+            <SheetContent aria-label="BidPilot 工作区导航" className="wb-mobile-sidebar" side="left">
+              <SheetHeader className="wb-mobile-sidebar-header">
+                <div className="wb-mobile-sidebar-brand">
+                  <img alt="BidPilot" className="wb-workspace-mark" src={bidpilotLogo} />
+                  <div className="wb-mobile-sidebar-brand-copy">
+                    <SheetTitle>BidPilot 工作区</SheetTitle>
+                    <SheetDescription>{user?.org_slug || "工作区导航"}</SheetDescription>
+                  </div>
+                </div>
+              </SheetHeader>
+              <WorkbenchNavigation groups={visibleGroups} onNavigate={() => setMobileSidebarOpen(false)} pathname={location.pathname} translate={t} />
+              <div className="wb-mobile-sidebar-footer">
+                <Button
+                  aria-label="打开账户设置"
+                  className="wb-user-menu"
+                  onClick={() => {
+                    setMobileSidebarOpen(false);
+                    navigate("/account");
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <span className="wb-user-avatar">{getInitials(userName)}</span>
+                  <span className="wb-user-copy">
+                    <strong>{userName}</strong>
+                    <small>账户设置</small>
+                  </span>
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+
           <div
             aria-label="调整侧栏宽度"
             aria-orientation="vertical"
@@ -305,9 +373,21 @@ export function WorkbenchLayout() {
           <main className="wb-main">
             <section className="wb-canvas" aria-label="BidPilot 工作区">
               <header className="wb-topbar">
-                <div className="wb-breadcrumb">
-                  <span>/</span>
-                  <b>{t(pageLabel)}</b>
+                <div className="wb-topbar-leading">
+                  <div className="wb-mobile-sidebar-trigger-wrap">
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<Button aria-expanded={mobileSidebarOpen} aria-label={mobileSidebarOpen ? "收起侧栏" : "打开侧栏"} className="wb-mobile-sidebar-trigger" onClick={() => setMobileSidebarOpen((value) => !value)} size="icon-sm" type="button" variant="ghost" />}
+                      >
+                        {mobileSidebarOpen ? <PanelLeftCloseIcon aria-hidden="true" /> : <PanelLeftOpenIcon aria-hidden="true" />}
+                      </TooltipTrigger>
+                      <TooltipContent>{mobileSidebarOpen ? "收起侧栏" : "打开侧栏"}</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="wb-breadcrumb">
+                    <span>/</span>
+                    <b>{t(pageLabel)}</b>
+                  </div>
                 </div>
                 <div className="wb-topbar-actions">
                   <Tooltip><TooltipTrigger render={<Button aria-label="切换语言" onClick={() => i18n.changeLanguage(i18n.language === "zh-CN" ? "en" : "zh-CN")} size="icon-sm" type="button" variant="ghost" />}><LanguagesIcon aria-hidden="true" /></TooltipTrigger><TooltipContent>切换语言</TooltipContent></Tooltip>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import {
   createFauxCore,
   fauxAssistantMessage,
@@ -57,6 +58,12 @@ test("Pi uses the official agent_settled event as its terminal boundary", () => 
   });
   assert.equal(agentTerminalEvent("agent_end"), null);
   assert.equal(agentTerminalEvent("turn_end"), null);
+});
+
+test("Pi does not install a project turn cap unless the caller opts in", () => {
+  const source = readFileSync(new URL("./runtime.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(request\.maxTurns !== undefined\)/);
+  assert.doesNotMatch(source, /request\.maxTurns \?\? 24/);
 });
 
 async function testRuntime(streamSimple: ReturnType<typeof createFauxCore>["streamSimple"]): Promise<ModelRuntime> {

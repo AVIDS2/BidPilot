@@ -153,6 +153,14 @@ test("keeps the Agent composer inside the conversation pane at every viewport", 
     await expect(page.locator(".agent-environment-panel")).toBeVisible();
     await expect(page.getByText("工作概览", { exact: true })).toBeVisible();
     await expect(page.getByText("项目工作区", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "收起侧栏" }).click();
+    await expect(page.locator(".workbench.is-sidebar-collapsed")).toBeVisible();
+    await expect(page.locator(".workbench.is-sidebar-collapsed .wb-workspace-actions")).toBeHidden();
+    await expect(page.getByRole("button", { name: "展开侧栏" })).toHaveCount(1);
+    await page.getByRole("button", { name: "展开侧栏" }).click();
+    await expect(page.getByRole("button", { name: "收起侧栏" })).toBeVisible();
+
     await page.getByRole("button", { name: "Chat history" }).click();
     await expect(page.locator(".bp-linear-history").getByText("常州招标响应", { exact: true })).toBeVisible();
     await expect(page.locator(".bp-linear-history").getByText("个人会话", { exact: true })).toBeVisible();
@@ -174,6 +182,15 @@ test("keeps the Agent composer inside the conversation pane at every viewport", 
       path: testInfo.outputPath("agent-workspace-account-menu.png"),
       fullPage: true,
     });
+  } else {
+    const mobileSidebarTrigger = page.getByRole("button", { name: "打开侧栏" });
+    await expect(mobileSidebarTrigger).toBeVisible();
+    await mobileSidebarTrigger.click();
+    await expect(page.locator(".wb-mobile-sidebar")).toBeVisible();
+    await expect(page.locator(".wb-mobile-sidebar .wb-navigation")).toBeVisible();
+    await expect(page.getByText("BidPilot 工作区", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect(page.locator(".wb-mobile-sidebar")).toHaveCount(0);
   }
 
   await page.screenshot({

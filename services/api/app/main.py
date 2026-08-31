@@ -3,10 +3,12 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-from fastapi import FastAPI, Depends, Request, HTTPException
+from fastapi import FastAPI, Depends, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import uuid
 import time
@@ -62,6 +64,7 @@ setup_logging()
 class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         request_id = str(uuid.uuid4())[:8]
+        request.state.request_id = request_id
         structlog.contextvars.bind_contextvars(request_id=request_id)
         start = time.time()
         response = await call_next(request)
@@ -93,39 +96,133 @@ app.add_middleware(GlobalApiRateLimitMiddleware, limiter=api_rate_limiter)
 app.add_middleware(RequestContextMiddleware)
 
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    """Standardized error format with backward-compatible 'detail' key."""
+def _request_id(request: Request) -> str:
+    value = getattr(request.state, "request_id", None)
+    return value if isinstance(value, str) and value else str(uuid.uuid4())[:8]
+
+
+def _status_error_code(status_code: int) -> str:
+    return {
+        400: "validation_error",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+        413: "validation_error",
+        422: "validation_error",
+        429: "rate_limited",
+        502: "upstream_failure",
+        503: "upstream_failure",
+        504: "upstream_failure",
+    }.get(status_code, "internal_error")
+
+
+def _error_content(
+    request: Request,
+    *,
+    code: str,
+    message: str,
+    details: object | None,
+    detail: object | None = None,
+) -> dict[str, object | None]:
+    request_id = _request_id(request)
+    return {
+        "code": code,
+        "error": code,
+        "message": message,
+        "details": details,
+        "request_id": request_id,
+        # Keep this alias while older web clients still read `detail`.
+        "detail": message if detail is None else detail,
+    }
+
+
+def _json_error(
+    request: Request,
+    *,
+    status_code: int,
+    content: dict[str, object | None],
+) -> JSONResponse:
     return JSONResponse(
+        status_code=status_code,
+        content=content,
+        headers={"X-Request-ID": _request_id(request)},
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Normalize FastAPI and Starlette HTTP errors, including router 404s."""
+    detail = exc.detail
+    if isinstance(detail, str):
+        message = detail
+        details = None
+    else:
+        message = "Request error"
+        details = detail
+    return _json_error(
+        request,
         status_code=exc.status_code,
-        content={
-            "error": f"http_{exc.status_code}",
-            "message": exc.detail if isinstance(exc.detail, str) else "Request error",
-            "detail": exc.detail,
-            "details": exc.detail if not isinstance(exc.detail, str) else None,
-        },
+        content=_error_content(
+            request,
+            code=_status_error_code(exc.status_code),
+            message=message,
+            details=details,
+            detail=detail,
+        ),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(request: Request, exc: RequestValidationError):
+    """Expose field locations without echoing submitted values or credentials."""
+    details = [
+        {
+            "loc": [str(part) for part in error.get("loc", ())],
+            "message": str(error.get("msg") or "Invalid value"),
+            "type": str(error.get("type") or "value_error"),
+        }
+        for error in exc.errors()
+    ]
+    return _json_error(
+        request,
+        status_code=422,
+        content=_error_content(
+            request,
+            code="validation_error",
+            message="请求参数无效",
+            details=details,
+            detail=details,
+        ),
     )
 
 
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
-    return JSONResponse(
+    return _json_error(
+        request,
         status_code=400,
-        content={
-            "error": "bad_request",
-            "message": str(exc),
-            "detail": str(exc),
-            "details": None,
-        },
+        content=_error_content(
+            request,
+            code="validation_error",
+            message=str(exc),
+            details=None,
+        ),
     )
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception", path=request.url.path, method=request.method)
-    return JSONResponse(
+    return _json_error(
+        request,
         status_code=500,
-        content={"error": "internal_error", "message": "An internal error occurred", "details": None},
+        content=_error_content(
+            request,
+            code="internal_error",
+            message="An internal error occurred",
+            details=None,
+        ),
     )
 
 

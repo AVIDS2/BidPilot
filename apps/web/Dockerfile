@@ -13,7 +13,7 @@ COPY apps/web/playwright.config.ts /app/apps/web/playwright.config.ts
 COPY apps/web/public /app/apps/web/public
 COPY apps/web/src /app/apps/web/src
 
-RUN corepack enable && corepack prepare pnpm@10.0.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.19.0 --activate
 RUN pnpm install --frozen-lockfile
 
 ARG VITE_API_URL=http://localhost:8000

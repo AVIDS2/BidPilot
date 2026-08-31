@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ActivityIcon,
   BotIcon,
@@ -26,10 +27,15 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { listProjects, listRuntimeRuns, type ProjectRead, type RuntimeRunListItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const ACTIVE_STATUSES = new Set(["queued", "running", "awaiting_approval", "awaiting_input", "cancel_requested"]);
+const BACKGROUND_RUN_KINDS = new Set(["subagent", "deep_research", "workflow_bridge", "remote_import", "system_recovery"]);
+const BACKGROUND_RUN_KIND_LIST = ["subagent", "deep_research", "workflow_bridge", "remote_import", "system_recovery"];
+const EMPTY_RUNS: RuntimeRunListItem[] = [];
+const EMPTY_PROJECTS: ProjectRead[] = [];
 
 interface AgentEnvironmentPanelProps {
   currentProjectId?: string | null;
@@ -115,29 +121,28 @@ function ProjectRow({ project, current, onOpen }: { project: ProjectRead; curren
 }
 
 export function AgentEnvironmentPanel({ currentProjectId, onClose, onOpenProject, onOpenRun }: AgentEnvironmentPanelProps) {
-  const [runs, setRuns] = useState<RuntimeRunListItem[]>([]);
-  const [projects, setProjects] = useState<ProjectRead[]>([]);
-  const [loadError, setLoadError] = useState(false);
-
-  const refreshWorkspace = useCallback(async () => {
-    try {
-      const [nextRuns, nextProjects] = await Promise.all([listRuntimeRuns(30), listProjects()]);
-      setRuns(nextRuns);
-      setProjects(nextProjects);
-      setLoadError(false);
-    } catch {
-      setLoadError(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshWorkspace();
-    const timer = window.setInterval(() => void refreshWorkspace(), 4_000);
-    return () => window.clearInterval(timer);
-  }, [refreshWorkspace]);
-
-  const activeRuns = useMemo(() => runs.filter((run) => ACTIVE_STATUSES.has(run.status)), [runs]);
-  const completedRuns = useMemo(() => runs.filter((run) => run.status === "succeeded" || run.status === "completed"), [runs]);
+  const runsQuery = useQuery<RuntimeRunListItem[]>({
+    queryKey: ["agent-environment-runs"],
+    queryFn: () => listRuntimeRuns(30, null, BACKGROUND_RUN_KIND_LIST),
+    refetchInterval: 4_000,
+    staleTime: 2_000,
+  });
+  const projectsQuery = useQuery<ProjectRead[]>({
+    queryKey: ["projects"],
+    queryFn: listProjects,
+    staleTime: 30_000,
+  });
+  const runs = runsQuery.data ?? EMPTY_RUNS;
+  const projects = projectsQuery.data ?? EMPTY_PROJECTS;
+  const loadError = runsQuery.isError || projectsQuery.isError;
+  const activeRuns = useMemo(
+    () => runs.filter((run) => BACKGROUND_RUN_KINDS.has(run.kind) && ACTIVE_STATUSES.has(run.status)),
+    [runs],
+  );
+  const completedRuns = useMemo(
+    () => runs.filter((run) => BACKGROUND_RUN_KINDS.has(run.kind) && (run.status === "succeeded" || run.status === "completed")),
+    [runs],
+  );
   const currentProject = projects.find((project) => project.id === currentProjectId) ?? null;
 
   return (
@@ -173,7 +178,14 @@ export function AgentEnvironmentPanel({ currentProjectId, onClose, onOpenProject
               <div className="flex items-center gap-2 text-xs font-medium"><ActivityIcon className="size-3.5 text-muted-foreground" />正在处理</div>
               {activeRuns.length ? <Badge variant="default">{activeRuns.length}</Badge> : null}
             </div>
-            {activeRuns.length ? (
+            {runsQuery.isLoading ? (
+              <div aria-busy="true" className="flex flex-col gap-2 rounded-md bg-muted/40 px-2.5 py-2" role="status" aria-label="正在加载后台工作">
+                <Skeleton className="h-3 w-2/3" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ) : runsQuery.isError && !runsQuery.data ? (
+              <div className="rounded-md bg-destructive/10 px-2.5 py-2 text-xs text-destructive" role="alert">后台工作暂时无法读取。</div>
+            ) : activeRuns.length ? (
               <div className="flex flex-col gap-1">
                 {activeRuns.slice(0, 8).map((run) => <ActiveRunRow key={run.id} onOpen={() => onOpenRun(run.id)} run={run} />)}
               </div>
@@ -204,7 +216,14 @@ export function AgentEnvironmentPanel({ currentProjectId, onClose, onOpenProject
               <div className="flex items-center gap-2 text-xs font-medium"><FolderKanbanIcon className="size-3.5 text-muted-foreground" />项目工作区</div>
               <a className="text-[11px] text-muted-foreground underline-offset-4 hover:underline" href="/projects">查看全部</a>
             </div>
-            {projects.length ? (
+            {projectsQuery.isLoading ? (
+              <div aria-busy="true" className="flex flex-col gap-2 rounded-md bg-muted/40 px-2.5 py-2" role="status" aria-label="正在加载项目工作区">
+                <Skeleton className="h-3 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ) : projectsQuery.isError && !projectsQuery.data ? (
+              <div className="rounded-md bg-destructive/10 px-2.5 py-2 text-xs text-destructive" role="alert">项目工作区暂时无法读取。</div>
+            ) : projects.length ? (
               <div className="flex flex-col gap-1">
                 {projects.slice(0, 5).map((project) => <ProjectRow current={project.id === currentProjectId} key={project.id} onOpen={onOpenProject ? () => onOpenProject(project.id) : undefined} project={project} />)}
               </div>

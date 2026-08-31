@@ -92,14 +92,14 @@ export function DashboardPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  const { data: projects, isLoading: projectsLoading } = useQuery<ProjectRead[]>({
+  const { data: projects, isLoading: projectsLoading, isError: projectsError } = useQuery<ProjectRead[]>({
     queryKey: ["projects"],
     queryFn: listProjects,
     staleTime: 5 * 60 * 1000,
     retry: 2,
   });
 
-  const { data: allRuns } = useQuery<RuntimeRunListItem[]>({
+  const { data: allRuns, isLoading: allRunsLoading, isError: allRunsError } = useQuery<RuntimeRunListItem[]>({
     queryKey: ["dashboard-runs"],
     queryFn: () => listRuntimeRuns(10),
     staleTime: 2 * 60 * 1000,
@@ -107,7 +107,7 @@ export function DashboardPage() {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  const { data: providerData } = useQuery({
+  const { data: providerData, isLoading: providerDataLoading, isError: providerDataError } = useQuery({
     queryKey: ["provider-configs"],
     queryFn: listProviderConfigs,
     staleTime: 5 * 60 * 1000,
@@ -156,6 +156,20 @@ export function DashboardPage() {
   const projectUsagePct = planLimit > 0 ? Math.min(100, (statusCounts.total / planLimit) * 100) : -1;
 
   if (projectsLoading) return <DashboardSkeleton />;
+
+  if (projectsError || !projects) {
+    return (
+      <Card role="alert">
+        <CardHeader>
+          <CardTitle>项目暂时无法加载</CardTitle>
+          <CardDescription>项目数据没有成功返回，当前不会显示空项目统计。</CardDescription>
+        </CardHeader>
+        <CardFooter>
+          <Button onClick={() => window.location.reload()} variant="outline">重新加载</Button>
+        </CardFooter>
+      </Card>
+    );
+  }
 
   const greeting = user?.display_name ? t("dashboard:greeting", { name: user.display_name }) : t("dashboard:greetingDefault");
 
@@ -235,7 +249,9 @@ export function DashboardPage() {
                   </div>
                   <div className="flex items-center justify-between rounded-xl bg-muted/50 p-3 text-sm">
                     <span className="text-muted-foreground">{t("dashboard:aiUsage.activeProviders")}</span>
-                    <span className="font-semibold tabular-nums">{activeProviders} / {totalProviders}</span>
+                    <span className="font-semibold tabular-nums">
+                      {providerDataLoading ? <Skeleton className="ml-auto h-5 w-14" /> : providerDataError ? "—" : `${activeProviders} / ${totalProviders}`}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between rounded-xl bg-muted/50 p-3 text-sm">
                     <span className="text-muted-foreground">{t("dashboard:stats.totalProjects")}</span>
@@ -465,22 +481,24 @@ export function DashboardPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-muted/50 p-3 text-center">
                       <p className="text-2xl font-bold tabular-nums">
-                        <CountUp to={activeProviders} duration={1.2} />
+                        {providerDataLoading ? <Skeleton className="mx-auto h-7 w-10" /> : providerDataError ? "—" : <CountUp to={activeProviders} duration={1.2} />}
                       </p>
                       <p className="text-xs text-muted-foreground">{t("dashboard:aiUsage.activeProviders")}</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-center">
                       <p className="text-2xl font-bold tabular-nums">
-                        <CountUp to={totalDrafts} duration={1.2} />
+                        {allRunsLoading ? <Skeleton className="mx-auto h-7 w-10" /> : allRunsError ? "—" : <CountUp to={totalDrafts} duration={1.2} />}
                       </p>
                       <p className="text-xs text-muted-foreground">{t("dashboard:aiUsage.totalDrafts")}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">{t("dashboard:aiUsage.totalRuns")}</span>
-                    <span className="font-medium tabular-nums">{allRuns?.length ?? 0}</span>
+                    <span className="font-medium tabular-nums">
+                      {allRunsLoading ? <Skeleton className="ml-auto h-4 w-8" /> : allRunsError ? "—" : allRuns?.length ?? 0}
+                    </span>
                   </div>
-                  {totalProviders === 0 && (
+                  {!providerDataLoading && !providerDataError && totalProviders === 0 && (
                     <Link to="/settings/providers">
                       <Button variant="link" size="sm" className="px-0 text-xs">
                         {t("dashboard:aiUsage.configureProviders")}

@@ -22,6 +22,8 @@ artifact for each production-promotion item.
   RetrievalBench, MemoryBench, and AssistantBench reports from reviewed
   regression or hidden fixtures; development fixtures are not release evidence
 - release candidate images built
+- Pi sidecar tests and TypeScript build pass from the same frozen lockfile as Web
+- `pnpm audit --prod` reports zero high or critical vulnerabilities
 - migration plan reviewed
 - smoke checks pass
 - one end-to-end BidPilot scenario verified
@@ -43,6 +45,7 @@ artifact for each production-promotion item.
   provider response with usage settles one ledger record and an omitted usage
   remains reserved as uncertain
 - `readiness`, `migrate`, and `checkpoints` one-shot services complete successfully during deployment
+- Worker Beat runtime reconciliation is enabled so orphaned active runs and expired approvals cannot remain visible indefinitely
 - VPS pilot web and API domains resolve over HTTPS
 - an HTTPS API smoke artifact from `scripts/load_smoke.py --require-https --output-file <artifact>` is retained with the release record
 - email links point at the deployed app domain

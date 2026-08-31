@@ -216,6 +216,31 @@ def test_runtime_run_list_endpoint_exposes_only_public_fields(
     assert "policy_snapshot_json" not in item
 
 
+def test_runtime_run_list_can_filter_background_kinds(
+    client,
+    test_db: Session,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = CurrentUser(
+        id=default_user_id,
+        email="dev@docpilot.local",
+        display_name="Dev User",
+        role="admin",
+        org_id=default_org_id,
+    )
+    assistant = create_runtime_run(test_db, user, kind="assistant_turn", engine="pi")
+    background = create_runtime_run(test_db, user, kind="subagent", engine="pi_subagent_worker")
+
+    response = client.get("/runtime/runs?limit=10&kind=subagent")
+
+    assert response.status_code == 200
+    items = response.json()
+    assert background.id in {item["id"] for item in items}
+    assert {item["kind"] for item in items} == {"subagent"}
+    assert assistant.id not in response.text
+
+
 def test_runtime_child_runs_endpoint_exposes_safe_timeline_projection(
     client,
     test_db: Session,
