@@ -19,8 +19,8 @@ This document prevents future implementation from inventing config ad hoc.
 
 Typical categories:
 
-- API base URL
-- auth and session configuration
+- server-only FastAPI base URL for the Next Route Handler BFF
+- public application URL and cookie/session configuration
 - feature flags for non-production features
 - telemetry browser settings
 
@@ -57,6 +57,17 @@ These names are the preferred starting point for implementation.
 - `DOCPILOT_APP_URL`
 - `DOCPILOT_API_URL`
 - `DOCPILOT_CORS_ORIGINS`
+
+### Next web edge
+
+- `DOCPILOT_API_URL` (server-only URL used by `apps/web/src/lib/backend.ts`;
+  use `http://127.0.0.1:8000` for direct local API and `http://api:8000` in the
+  VPS Compose network)
+- `NEXT_PUBLIC_APP_URL` (public URL used for metadata; never a secret)
+
+The browser calls `/api/auth/*` and `/api/bidpilot/*` on the Next origin. The
+access and refresh tokens are HttpOnly cookies; no browser bundle reads or
+stores bearer tokens.
 
 ### API and worker
 

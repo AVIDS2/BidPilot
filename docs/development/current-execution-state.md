@@ -1,5 +1,24 @@
 # Current Execution State
 
+## 2026-09-01 Kiranism Next migration
+
+- active branch: `codex/kiranism-bidpilot` in the isolated `BidPilot-kiranism`
+  worktree
+- Kiranism dashboard source is now the Next/shadcn/Base UI frontend base
+- FastAPI, Worker, PostgreSQL and the Pi sidecar remain the business/runtime
+  authority
+- Next Route Handlers forward same-origin REST/SSE requests and attach the
+  HttpOnly FastAPI access cookie
+- public landing, auth, dashboard, project, requirements, knowledge, run,
+  deliverable, review, member, account, admin and provider routes are present
+- local verification: Next typecheck, format check, production build, dependency
+  audit, shadcn CLI info, 16-route authenticated browser matrix, desktop/mobile
+  navigation, Pi event projection, completed tool-detail pointer interaction,
+  and delayed native thinking shimmer all passed
+- remaining release gates: run a real authenticated account flow against a
+  dedicated local API test environment, then obtain explicit production
+  promotion approval
+
 ## Goal
 
 Give future implementation sessions one quick status file so work can resume without reconstructing progress from scratch.

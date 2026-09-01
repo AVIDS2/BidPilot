@@ -50,7 +50,11 @@
   max-width: 85%;
   border-radius: 1rem 1rem 0.25rem 1rem;
   padding: 0.625rem 1rem;
-  background: linear-gradient(135deg, var(--primary), oklch(from var(--primary) calc(l + 0.08) c h));
+  background: linear-gradient(
+    135deg,
+    var(--primary),
+    oklch(from var(--primary) calc(l + 0.08) c h)
+  );
   color: var(--primary-foreground);
   font-size: 0.875rem;
   line-height: 1.5;

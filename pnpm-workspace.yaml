@@ -7,8 +7,10 @@ allowBuilds:
   msw: true
   "@google/genai": true
   protobufjs: true
+  sharp: true
 
 overrides:
+  sharp: 0.35.4
   "fast-uri@": 3.1.5
   "ws": 8.21.0
   "postcss": 8.5.23

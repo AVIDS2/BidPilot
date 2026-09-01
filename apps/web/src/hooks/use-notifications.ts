@@ -1,14 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { getStoredValue } from "@/lib/browser-storage";
+import { useState, useEffect, useCallback, useRef } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE = '/api/bidpilot';
 
 export type NotificationType =
-  | "draft_completed"
-  | "review_approved"
-  | "export_ready"
-  | "hitl_required"
-  | "agent_task"
+  | 'draft_completed'
+  | 'review_approved'
+  | 'export_ready'
+  | 'hitl_required'
+  | 'agent_task'
   | string;
 
 export interface Notification {
@@ -33,16 +32,8 @@ interface NotificationApiRow {
   link?: string | null;
 }
 
-function getAuthHeaders(): Record<string, string> {
-  const token = getStoredValue("token");
-  if (token) {
-    return { Authorization: `Bearer ${token}` };
-  }
-  return {};
-}
-
 function normalizeNotification(row: NotificationApiRow): Notification {
-  const description = (row.description || row.body || "").trim();
+  const description = (row.description || row.body || '').trim();
   return {
     id: row.id,
     type: row.type,
@@ -51,16 +42,17 @@ function normalizeNotification(row: NotificationApiRow): Notification {
     body: row.body || undefined,
     read: Boolean(row.read),
     created_at: row.created_at || new Date().toISOString(),
-    link: row.link || undefined,
+    link: row.link || undefined
   };
 }
 
 async function fetchNotifications(): Promise<Notification[]> {
   const res = await fetch(`${API_BASE}/notifications`, {
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include'
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
+    const body = await res.text().catch(() => '');
     throw new Error(`API ${res.status}: ${body}`);
   }
   const data = (await res.json()) as NotificationApiRow[];
@@ -69,22 +61,24 @@ async function fetchNotifications(): Promise<Notification[]> {
 
 async function markAsReadApi(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/notifications/${id}/read`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include'
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
+    const body = await res.text().catch(() => '');
     throw new Error(`API ${res.status}: ${body}`);
   }
 }
 
 async function markAllAsReadApi(): Promise<void> {
   const res = await fetch(`${API_BASE}/notifications/read-all`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include'
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
+    const body = await res.text().catch(() => '');
     throw new Error(`API ${res.status}: ${body}`);
   }
 }
@@ -106,7 +100,7 @@ export function useNotifications(options?: {
 }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [transport, setTransport] = useState<"sse" | "poll">("poll");
+  const [transport, setTransport] = useState<'sse' | 'poll'>('poll');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
   const pollIntervalMs = options?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -132,16 +126,14 @@ export function useNotifications(options?: {
 
   const markAsRead = useCallback(
     async (id: string) => {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
-      );
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
       try {
         await markAsReadApi(id);
       } catch {
         await load();
       }
     },
-    [load],
+    [load]
   );
 
   const markAllAsRead = useCallback(async () => {
@@ -157,12 +149,11 @@ export function useNotifications(options?: {
     if (!enabled) return;
     void load();
 
-    const token = getStoredValue("token");
     let cancelled = false;
 
     const startPolling = () => {
       if (cancelled) return;
-      setTransport("poll");
+      setTransport('poll');
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(() => {
         void load();
@@ -177,24 +168,25 @@ export function useNotifications(options?: {
     };
 
     const startSse = () => {
-      if (!preferSse || !token || typeof EventSource === "undefined") {
+      if (!preferSse || typeof EventSource === 'undefined') {
         startPolling();
         return;
       }
-      // EventSource cannot set Authorization headers; pass token as query for wake stream.
-      // REST endpoints still use Bearer headers.
-      const url = `${API_BASE}/notifications/stream?access_token=${encodeURIComponent(token)}`;
+      const url = `${API_BASE}/notifications/stream`;
       try {
         const source = new EventSource(url);
         sourceRef.current = source;
-        setTransport("sse");
+        setTransport('sse');
         // Keep a slow poll as eventual consistency backup while SSE is primary.
         stopPolling();
-        intervalRef.current = setInterval(() => {
-          void load();
-        }, Math.max(pollIntervalMs, 60_000));
+        intervalRef.current = setInterval(
+          () => {
+            void load();
+          },
+          Math.max(pollIntervalMs, 60_000)
+        );
 
-        source.addEventListener("notification", (event) => {
+        source.addEventListener('notification', (event) => {
           try {
             const raw = JSON.parse((event as MessageEvent).data) as NotificationApiRow;
             const item = normalizeNotification(raw);
@@ -204,7 +196,7 @@ export function useNotifications(options?: {
             // ignore malformed frames
           }
         });
-        source.addEventListener("ready", () => {
+        source.addEventListener('ready', () => {
           setLoading(false);
         });
         source.onerror = () => {
@@ -236,6 +228,6 @@ export function useNotifications(options?: {
     markAsRead,
     markAllAsRead,
     refresh: load,
-    transport,
+    transport
   };
 }

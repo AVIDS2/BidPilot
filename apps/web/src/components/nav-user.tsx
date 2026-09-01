@@ -1,10 +1,8 @@
-"use client"
+'use client';
 
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
+import { Icons } from '@/components/icons';
+
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,36 +10,25 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar"
-import { useAuth } from "@/lib/auth"
-import { useNavigate } from "react-router-dom"
-import { useTranslation } from "react-i18next"
-import { BadgeCheckIcon, Building2Icon, ChevronsUpDownIcon, CpuIcon, LogOutIcon } from "lucide-react"
+  useSidebar
+} from '@/components/ui/sidebar';
 
 export function NavUser({
-  user,
+  user
 }: {
   user: {
-    name: string
-    email: string
-    avatar: string
-  }
+    name: string;
+    email: string;
+    avatar: string;
+  };
 }) {
-  const { isMobile } = useSidebar()
-  const { logout, user: authUser } = useAuth()
-  const navigate = useNavigate()
-  const { t } = useTranslation()
-
-  const handleLogout = () => {
-    logout()
-  }
+  const { isMobile } = useSidebar();
 
   return (
     <SidebarMenu>
@@ -50,106 +37,73 @@ export function NavUser({
           <DropdownMenuTrigger
             render={
               <SidebarMenuButton
-                size="lg"
-                className="justify-start transition-all duration-200 group-data-[collapsible=icon]:justify-center"
-                style={{
-                  background: "var(--muted)",
-                  borderColor: "var(--border)",
-                }}
+                size='lg'
+                className='data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground'
               />
             }
           >
-            <Avatar className="size-8">
+            <Avatar className='h-8 w-8 rounded-lg'>
               <AvatarImage src={user.avatar} alt={user.name} />
-              <AvatarFallback
-                className="text-xs"
-                style={{
-                  background: "rgba(132, 204, 22, 0.15)",
-                  color: "var(--primary)",
-                }}
-              >
-                {user.name?.charAt(0)?.toUpperCase() || "U"}
-              </AvatarFallback>
+              <AvatarFallback className='rounded-lg'>CN</AvatarFallback>
             </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-              <span className="truncate font-medium text-foreground text-xs">{user.name}</span>
-              <span className="truncate text-xs" style={{ color: "var(--text-tertiary)" }}>{user.email}</span>
+            <div className='grid flex-1 text-left text-sm leading-tight'>
+              <span className='truncate font-semibold'>{user.name}</span>
+              <span className='truncate text-xs'>{user.email}</span>
             </div>
-            <ChevronsUpDownIcon className="ml-auto size-3.5 group-data-[collapsible=icon]:hidden" style={{ color: "var(--text-quaternary)" }} />
+            <Icons.chevronsDown className='ml-auto size-4' />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="min-w-56 rounded-lg"
-            side={isMobile ? "bottom" : "right"}
-            align="start"
+            className='w-(--anchor-width) min-w-56 rounded-lg'
+            side={isMobile ? 'bottom' : 'right'}
+            align='end'
             sideOffset={4}
-            style={{
-              background: "var(--card)",
-              borderColor: "var(--border)",
-            }}
           >
             <DropdownMenuGroup>
-              <DropdownMenuLabel className="p-0 font-normal">
-                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <Avatar className="size-8">
+              <DropdownMenuLabel className='p-0 font-normal'>
+                <div className='flex items-center gap-2 px-1 py-1.5 text-left text-sm'>
+                  <Avatar className='h-8 w-8 rounded-lg'>
                     <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback
-                      className="text-xs"
-                      style={{
-                        background: "rgba(132, 204, 22, 0.15)",
-                        color: "var(--primary)",
-                      }}
-                    >
-                      {user.name?.charAt(0)?.toUpperCase() || "U"}
-                    </AvatarFallback>
+                    <AvatarFallback className='rounded-lg'>CN</AvatarFallback>
                   </Avatar>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium text-foreground">{user.name}</span>
-                    <span className="truncate text-xs" style={{ color: "var(--text-tertiary)" }}>{user.email}</span>
+                  <div className='grid flex-1 text-left text-sm leading-tight'>
+                    <span className='truncate font-semibold'>{user.name}</span>
+                    <span className='truncate text-xs'>{user.email}</span>
                   </div>
                 </div>
               </DropdownMenuLabel>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator style={{ background: "var(--border)" }} />
+            <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => navigate("/account")}
-                className="text-muted-foreground focus:bg-accent focus:text-accent-foreground"
-              >
-                <BadgeCheckIcon className="size-4" />
-                {t("user.account")}
+              <DropdownMenuItem>
+                <Icons.sparkles className='mr-2 h-4 w-4' />
+                Upgrade to Pro
               </DropdownMenuItem>
-              {authUser?.role === "admin" ? (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => navigate("/administration")}
-                    className="text-muted-foreground focus:bg-accent focus:text-accent-foreground"
-                  >
-                    <Building2Icon className="size-4" />
-                    组织设置
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => navigate("/settings/providers")}
-                    className="text-muted-foreground focus:bg-accent focus:text-accent-foreground"
-                  >
-                    <CpuIcon className="size-4" />
-                    集成与模型
-                  </DropdownMenuItem>
-                </>
-              ) : null}
             </DropdownMenuGroup>
-            <DropdownMenuSeparator style={{ background: "var(--border)" }} />
+            <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={handleLogout}
-                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-              >
-                <LogOutIcon className="size-4" />
-                {t("user.logOut")}
+              <DropdownMenuItem>
+                <Icons.circleCheck className='mr-2 h-4 w-4' />
+                Account
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Icons.creditCard className='mr-2 h-4 w-4' />
+                Billing
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Icons.notification className='mr-2 h-4 w-4' />
+                Notifications
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem>
+                <Icons.logout className='mr-2 h-4 w-4' />
+                Log out
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  )
+  );
 }

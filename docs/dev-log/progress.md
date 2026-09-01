@@ -1,5 +1,44 @@
 # Progress Log
 
+## 2026-09-01 Kiranism migration acceptance
+
+- Finalized the isolated `codex/kiranism-bidpilot` worktree with the direct
+  Kiranism Next/shadcn Base UI source and the existing FastAPI/Pi business
+  boundary.
+- Fixed a real Agent timeline hit-area bug: the closed child detail grid used
+  `0fr` but still occupied layout space, allowing the parent task button to
+  intercept clicks. `minmax(0, 0fr)` now removes the closed child hit area;
+  completed tool details remain available after terminal events.
+- Removed remaining Base UI `nativeButton={false}` link compositions from
+  deliverables, GitHub CTA and pagination, following the current shadcn Base UI
+  link guidance (`buttonVariants` plus a semantic anchor/link).
+- Added valid `/admin` and `/settings` index routes so Kiranism breadcrumb
+  prefetches no longer produce 404 console errors.
+- Compiled production browser acceptance passed for 16 authenticated routes,
+  desktop/mobile navigation, Agent event projection, tool detail interaction,
+  and delayed native thinking shimmer. `tsc`, format check, production build and
+  `pnpm audit --prod` passed; lint exits 0 with advisory upstream/source warnings.
+- Public readiness remained HTTP 200. Real local authenticated API/Pi testing
+  remains an explicit environment gate because no dedicated local test database
+  or local service processes are configured. Production promotion is still a
+  separate release decision.
+
+## 2026-09-01 Kiranism Next frontend base
+
+- Created isolated branch `codex/kiranism-bidpilot` from production commit
+  `fd2cc21` and imported the MIT Kiranism dashboard source directly.
+- Replaced the active Vite route shell with Next.js 16 App Router routes while
+  retaining FastAPI/Pi/Worker/PostgreSQL as the business runtime.
+- Added same-origin Route Handler BFF endpoints with HttpOnly auth cookies,
+  REST forwarding, multipart forwarding and streaming response preservation.
+- Ported the real BidPilot API client and Pi event-driven Agent state/timeline;
+  there is no keyword intent classifier, scripted model transport or fake
+  thinking state in the new route graph.
+- Added real-data project, requirement, knowledge, run, delivery, review,
+  member, account, admin and provider screens with Kiranism Base UI primitives.
+- Replaced the tab icon using Next `app/icon.svg`, removed Clerk/Sentry runtime
+  coupling, and updated the VPS Next image/compose port and BFF environment.
+
 ## 2026-08-31 workbench branding and responsive navigation
 
 - Replaced the stale browser favicon with the current BidPilot Logo and added

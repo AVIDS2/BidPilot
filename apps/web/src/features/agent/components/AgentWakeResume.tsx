@@ -1,16 +1,18 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from 'react';
 
-import { useNotifications } from "@/hooks/use-notifications";
-import { useAIAssistant } from "@/features/agent/state/agent-store";
-import { useAuth } from "@/lib/auth";
+import { useNotifications } from '@/hooks/use-notifications';
+import { useAIAssistant } from '@/features/agent/state/agent-store';
+import { useAuth } from '@/lib/auth';
 
-const HANDLED_WAKE_KEY = "bidpilot:handled-agent-wakes";
+const HANDLED_WAKE_KEY = 'bidpilot:handled-agent-wakes';
 function readHandledWakeIds(): Set<string> {
   try {
     const raw = sessionStorage.getItem(HANDLED_WAKE_KEY);
     if (!raw) return new Set();
     const parsed = JSON.parse(raw) as unknown;
-    return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : []);
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+    );
   } catch {
     return new Set();
   }
@@ -31,12 +33,12 @@ function parseAgentWakeLink(link: string | undefined): {
   if (!link) return { conversationId: null, wakeId: null };
   try {
     const url = new URL(link, window.location.origin);
-    if (!url.pathname.startsWith("/agent")) {
+    if (!url.pathname.startsWith('/agent')) {
       return { conversationId: null, wakeId: null };
     }
     return {
-      conversationId: url.searchParams.get("conversation"),
-      wakeId: url.searchParams.get("wake"),
+      conversationId: url.searchParams.get('conversation'),
+      wakeId: url.searchParams.get('wake')
     };
   } catch {
     return { conversationId: null, wakeId: null };
@@ -57,7 +59,7 @@ export function AgentWakeResume() {
     enabled: Boolean(user),
     // SSE is primary; poll is backup (60s when SSE healthy, 12s fallback).
     pollIntervalMs: 12_000,
-    preferSse: true,
+    preferSse: true
   });
   const inFlightRef = useRef<string | null>(null);
   const handledRef = useRef<Set<string>>(readHandledWakeIds());
@@ -68,7 +70,7 @@ export function AgentWakeResume() {
 
     const candidate = notifications.find((item) => {
       if (item.read) return false;
-      if (item.type !== "agent_task") return false;
+      if (item.type !== 'agent_task') return false;
       if (handledRef.current.has(item.id)) return false;
       const parsed = parseAgentWakeLink(item.link);
       return Boolean(parsed.conversationId && parsed.wakeId);
@@ -100,12 +102,7 @@ export function AgentWakeResume() {
         inFlightRef.current = null;
       }
     })();
-  }, [
-    loadConversation,
-    notifications,
-    state.currentConversationId,
-    user,
-  ]);
+  }, [loadConversation, notifications, state.currentConversationId, user]);
 
   return null;
 }

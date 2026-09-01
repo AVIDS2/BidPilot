@@ -1,33 +1,31 @@
-FROM node:22-alpine AS build
+FROM node:22-bookworm-slim AS base
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@11.19.0 --activate
 
 WORKDIR /app
 
+FROM base AS dependencies
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/package.json /app/apps/web/package.json
-COPY apps/web/index.html /app/apps/web/index.html
-COPY apps/web/vite.config.ts /app/apps/web/vite.config.ts
-COPY apps/web/tsconfig.json /app/apps/web/tsconfig.json
-COPY apps/web/components.json /app/apps/web/components.json
-COPY apps/web/vitest.setup.ts /app/apps/web/vitest.setup.ts
-COPY apps/web/playwright.config.ts /app/apps/web/playwright.config.ts
-COPY apps/web/public /app/apps/web/public
-COPY apps/web/src /app/apps/web/src
+COPY apps/web/package.json apps/web/package.json
+RUN pnpm install --frozen-lockfile --filter @docpilot/web... --ignore-scripts
 
-RUN corepack enable && corepack prepare pnpm@11.19.0 --activate
-RUN pnpm install --frozen-lockfile
-
-ARG VITE_API_URL=http://localhost:8000
-ARG VITE_TURNSTILE_SITE_KEY
-ENV VITE_API_URL=${VITE_API_URL}
-ENV VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY}
-
+FROM base AS builder
+COPY --from=dependencies /app /app
+COPY . .
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV BUILD_STANDALONE=false
 RUN pnpm --filter @docpilot/web build
 
-FROM nginx:1.27-alpine
-
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/apps/web/dist /usr/share/nginx/html
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=builder /app /app
+USER node
+EXPOSE 3000
+CMD ["pnpm", "--filter", "@docpilot/web", "start"]

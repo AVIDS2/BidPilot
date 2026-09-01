@@ -1,130 +1,101 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
-import { Markdown, type MarkdownProps } from "./markdown"
+import * as React from 'react';
 
-export type MessageProps = {
-  children: React.ReactNode
-  className?: string
-} & React.HTMLProps<HTMLDivElement>
+import { cn } from '@/lib/utils';
+import { Markdown, type MarkdownVariant } from './markdown';
 
-const Message = ({ children, className, ...props }: MessageProps) => (
-  <div className={cn("flex gap-3", className)} {...props}>
-    {children}
-  </div>
-)
-
-export type MessageAvatarProps = {
-  src?: string
-  alt: string
-  fallback?: string
-  delayMs?: number
-  className?: string
-}
-
-const MessageAvatar = ({
-  src,
-  alt,
-  fallback,
-  delayMs,
-  className,
-}: MessageAvatarProps) => {
+function MessageGroup({ className, ...props }: React.ComponentProps<'div'>) {
   return (
-    <Avatar className={cn("h-8 w-8 shrink-0", className)}>
-      <AvatarImage src={src} alt={alt} />
-      {fallback && (
-        <AvatarFallback delay={delayMs}>{fallback}</AvatarFallback>
-      )}
-    </Avatar>
-  )
+    <div
+      data-slot='message-group'
+      className={cn('flex min-w-0 flex-col gap-2', className)}
+      {...props}
+    />
+  );
 }
 
-export type MessageContentProps = {
-  children: React.ReactNode
-  markdown?: boolean
-  className?: string
-  variant?: MarkdownProps["variant"]
-  components?: MarkdownProps["components"]
-} & Omit<React.HTMLProps<HTMLDivElement>, "children">
-
-const MessageContent = ({
-  children,
-  markdown = false,
+function Message({
   className,
-  variant,
-  components,
+  align = 'start',
   ...props
-}: MessageContentProps) => {
-  const classNames = markdown
-    ? cn("break-words whitespace-normal", className)
-    : cn(
-        "rounded-lg bg-secondary p-2 text-foreground break-words whitespace-normal",
+}: React.ComponentProps<'div'> & { align?: 'start' | 'end' }) {
+  return (
+    <div
+      data-slot='message'
+      data-align={align}
+      className={cn(
+        'group/message relative flex w-full min-w-0 gap-2 text-sm data-[align=end]:flex-row-reverse',
         className
-      )
+      )}
+      {...props}
+    />
+  );
+}
 
-  return markdown ? (
-    <Markdown
-      className={classNames}
-      variant={variant}
-      components={components}
+function MessageAvatar({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot='message-avatar'
+      className={cn(
+        'flex w-fit min-w-8 shrink-0 items-center justify-center self-end overflow-hidden rounded-full bg-muted group-has-data-[slot=message-footer]/message:-translate-y-8',
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
+function MessageContent({
+  className,
+  markdown = false,
+  variant = 'default',
+  children,
+  ...props
+}: React.ComponentProps<'div'> & {
+  markdown?: boolean;
+  variant?: MarkdownVariant;
+}) {
+  return (
+    <div
+      data-slot='message-content'
+      className={cn(
+        'flex w-full min-w-0 flex-col gap-2.5 wrap-break-word group-data-[align=end]/message:*:data-slot:self-end',
+        className
+      )}
       {...props}
     >
-      {children as string}
-    </Markdown>
-  ) : (
-    <div className={classNames} {...props}>
-      {children}
+      {markdown && typeof children === 'string' ? (
+        <Markdown variant={variant}>{children}</Markdown>
+      ) : (
+        children
+      )}
     </div>
-  )
+  );
 }
 
-export type MessageActionsProps = {
-  children: React.ReactNode
-  className?: string
-} & React.HTMLProps<HTMLDivElement>
-
-const MessageActions = ({
-  children,
-  className,
-  ...props
-}: MessageActionsProps) => (
-  <div
-    className={cn("text-muted-foreground flex items-center gap-2", className)}
-    {...props}
-  >
-    {children}
-  </div>
-)
-
-export type MessageActionProps = {
-  className?: string
-  tooltip: React.ReactNode
-  children: React.ReactNode
-  side?: "top" | "bottom" | "left" | "right"
-} & React.ComponentProps<typeof Tooltip>
-
-const MessageAction = ({
-  tooltip,
-  children,
-  className,
-  side = "top",
-  ...props
-}: MessageActionProps) => {
+function MessageHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
-    <TooltipProvider>
-      <Tooltip {...props}>
-        <TooltipTrigger>{children}</TooltipTrigger>
-        <TooltipContent side={side} className={className}>
-          {tooltip}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  )
+    <div
+      data-slot='message-header'
+      className={cn(
+        'flex max-w-full min-w-0 items-center px-3 text-xs font-medium text-muted-foreground group-has-data-[variant=ghost]/message:px-0',
+        className
+      )}
+      {...props}
+    />
+  );
 }
 
-export { Message, MessageAvatar, MessageContent, MessageActions, MessageAction }
+function MessageFooter({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot='message-footer'
+      className={cn(
+        'flex max-w-full min-w-0 items-center px-3 text-xs font-medium text-muted-foreground group-has-data-[variant=ghost]/message:px-0 group-data-[align=end]/message:justify-end',
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
+export { MessageGroup, Message, MessageAvatar, MessageContent, MessageFooter, MessageHeader };

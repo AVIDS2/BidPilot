@@ -1,6 +1,6 @@
-import type { AssistantExecutionItem } from "@/features/agent/state/agent-store";
+import type { AssistantExecutionItem } from '@/features/agent/state/agent-store';
 
-export type TranscriptToolStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
+export type TranscriptToolStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 export interface TranscriptTool {
   toolCallId: string;
@@ -13,7 +13,7 @@ export interface TranscriptTool {
 }
 
 export interface TranscriptTurn {
-  kind: "turn";
+  kind: 'turn';
   turnId: string;
   summary: string;
   status: TranscriptToolStatus;
@@ -21,12 +21,12 @@ export interface TranscriptTurn {
 }
 
 export type AssistantTranscriptPart =
-  | { id: string; kind: "narrative"; text: string; timestamp: number }
+  | { id: string; kind: 'narrative'; text: string; timestamp: number }
   | {
       id: string;
-      kind: "reasoning";
+      kind: 'reasoning';
       text: string;
-      source: "provider" | "harness";
+      source: 'provider' | 'harness';
       turnId?: string;
       title?: string;
       completed: boolean;
@@ -34,7 +34,7 @@ export type AssistantTranscriptPart =
     }
   | {
       id: string;
-      kind: "turn";
+      kind: 'turn';
       turnId: string;
       /**
        * Frontend-only projection identity for one continuous tool burst.
@@ -49,11 +49,13 @@ const EMPTY_PUBLIC_TRANSCRIPT_PARTS: AssistantTranscriptPart[] = [];
 
 /** Provider reasoning is private; only Harness-authored explanations are public. */
 export function isPublicTranscriptPart(part: AssistantTranscriptPart): boolean {
-  return part.kind !== "reasoning" || part.source === "harness";
+  return part.kind !== 'reasoning' || part.source === 'harness';
 }
 
 /** Preserve the existing array when it is already fully public. */
-export function publicTranscriptParts(parts?: AssistantTranscriptPart[]): AssistantTranscriptPart[] {
+export function publicTranscriptParts(
+  parts?: AssistantTranscriptPart[]
+): AssistantTranscriptPart[] {
   if (!parts?.length) return EMPTY_PUBLIC_TRANSCRIPT_PARTS;
   return parts.every(isPublicTranscriptPart) ? parts : parts.filter(isPublicTranscriptPart);
 }
@@ -94,11 +96,11 @@ export function buildTranscriptTurns(items: AssistantExecutionItem[]): Transcrip
   return order.map((key) => {
     const tools = (groups.get(key) ?? []).map(toTranscriptTool);
     return {
-      kind: "turn" as const,
+      kind: 'turn' as const,
       turnId: key,
       summary: buildTurnSummary(tools),
       status: aggregateStatus(tools.map((tool) => tool.status)),
-      tools,
+      tools
     };
   });
 }
@@ -107,20 +109,20 @@ export function buildTranscriptTurns(items: AssistantExecutionItem[]): Transcrip
 export function appendNarrativePart(
   parts: AssistantTranscriptPart[] | undefined,
   text: string,
-  now = Date.now(),
+  now = Date.now()
 ): AssistantTranscriptPart[] {
   if (!text) return parts ? [...parts] : [];
   const next = parts ? [...parts] : [];
   const last = next[next.length - 1];
-  if (last?.kind === "narrative") {
+  if (last?.kind === 'narrative') {
     next[next.length - 1] = { ...last, text: last.text + text };
     return next;
   }
   next.push({
     id: `narrative-${now}-${next.length}`,
-    kind: "narrative",
+    kind: 'narrative',
     text,
-    timestamp: now,
+    timestamp: now
   });
   return next;
 }
@@ -130,19 +132,19 @@ export function appendReasoningPart(
   parts: AssistantTranscriptPart[] | undefined,
   text: string,
   options: {
-    source?: "provider" | "harness";
+    source?: 'provider' | 'harness';
     turnId?: string;
     title?: string;
     now?: number;
-  } = {},
+  } = {}
 ): AssistantTranscriptPart[] {
   if (!text) return parts ? [...parts] : [];
   const next = parts ? [...parts] : [];
   // Fail closed: callers must explicitly mark user-facing explanations as
   // Harness-authored before they can enter the visible transcript.
-  const source = options.source ?? "provider";
+  const source = options.source ?? 'provider';
   const normalizedText = normalizeTranscriptText(text);
-  const normalizedTitle = normalizeTranscriptText(options.title ?? "");
+  const normalizedTitle = normalizeTranscriptText(options.title ?? '');
   // Runtime event replay can overlap with the live SSE stream after a
   // reconnect. Public narration is emitted as a complete, titled event, so
   // an identical event must be a no-op rather than a second visual step.
@@ -150,18 +152,18 @@ export function appendReasoningPart(
     options.title &&
     next.some(
       (part) =>
-        part.kind === "reasoning" &&
+        part.kind === 'reasoning' &&
         part.source === source &&
         part.turnId === options.turnId &&
-        normalizeTranscriptText(part.title ?? "") === normalizedTitle &&
-        normalizeTranscriptText(part.text) === normalizedText,
+        normalizeTranscriptText(part.title ?? '') === normalizedTitle &&
+        normalizeTranscriptText(part.text) === normalizedText
     )
   ) {
     return next;
   }
   const last = next[next.length - 1];
   if (
-    last?.kind === "reasoning" &&
+    last?.kind === 'reasoning' &&
     last.source === source &&
     last.turnId === options.turnId &&
     !last.completed
@@ -169,38 +171,38 @@ export function appendReasoningPart(
     next[next.length - 1] = {
       ...last,
       text: last.text + text,
-      title: last.title ?? options.title,
+      title: last.title ?? options.title
     };
     return next;
   }
   const now = options.now ?? Date.now();
   next.push({
     id: `reasoning-${now}-${next.length}`,
-    kind: "reasoning",
+    kind: 'reasoning',
     text,
     source,
     turnId: options.turnId,
     title: options.title,
     completed: false,
-    timestamp: now,
+    timestamp: now
   });
   return next;
 }
 
 function normalizeTranscriptText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 /** Mark the latest visible reasoning block for this model turn as complete. */
 export function completeReasoningPart(
   parts: AssistantTranscriptPart[] | undefined,
-  turnId?: string,
+  turnId?: string
 ): AssistantTranscriptPart[] {
   if (!parts?.length) return [];
   const next = [...parts];
   for (let index = next.length - 1; index >= 0; index -= 1) {
     const part = next[index];
-    if (part.kind !== "reasoning") continue;
+    if (part.kind !== 'reasoning') continue;
     if (turnId && part.turnId && part.turnId !== turnId) continue;
     next[index] = { ...part, completed: true };
     break;
@@ -218,19 +220,19 @@ export function ensureTurnPart(
   parts: AssistantTranscriptPart[] | undefined,
   turnId: string,
   now = Date.now(),
-  identitySeed?: string | number,
+  identitySeed?: string | number
 ): AssistantTranscriptPart[] {
   const next = parts ? [...parts] : [];
   const last = next[next.length - 1];
-  if (last?.kind === "turn" && last.turnId === turnId) return next;
+  if (last?.kind === 'turn' && last.turnId === turnId) return next;
   const seed = identitySeed === undefined ? `${now}-${next.length}` : String(identitySeed);
   const executionGroupId = `execution-group-${turnId}-${seed}`;
   next.push({
     id: executionGroupId,
-    kind: "turn",
+    kind: 'turn',
     turnId,
     executionGroupId,
-    timestamp: now,
+    timestamp: now
   });
   return next;
 }
@@ -242,7 +244,7 @@ export function ensureTurnPart(
  */
 export function projectExecutionItemsOntoTranscript(
   parts: AssistantTranscriptPart[] | undefined,
-  items: AssistantExecutionItem[],
+  items: AssistantExecutionItem[]
 ): TranscriptExecutionProjection {
   // A feature runtime is one visual unit even when Pi narrates between its
   // tool calls. The server-issued presentation session, not chat text or tool
@@ -287,7 +289,7 @@ export function projectExecutionItemsOntoTranscript(
   const consumedGroups = new Set<string>();
   const consumedLegacyTurns = new Set<string>();
   for (const part of parts ?? []) {
-    if (part.kind !== "turn") continue;
+    if (part.kind !== 'turn') continue;
     if (part.executionGroupId) {
       const grouped = itemsByGroup.get(part.executionGroupId) ?? [];
       if (grouped.length > 0) {
@@ -310,45 +312,48 @@ export function projectExecutionItemsOntoTranscript(
       if (item.executionGroupId) return !consumedGroups.has(item.executionGroupId);
       if (item.turnId) return !consumedLegacyTurns.has(item.turnId);
       return true;
-    }),
+    })
   };
 }
 
 export function narrativeTextFromParts(parts: AssistantTranscriptPart[] | undefined): string {
-  if (!parts?.length) return "";
+  if (!parts?.length) return '';
   return parts
-    .filter((part): part is Extract<AssistantTranscriptPart, { kind: "narrative" }> => part.kind === "narrative")
+    .filter(
+      (part): part is Extract<AssistantTranscriptPart, { kind: 'narrative' }> =>
+        part.kind === 'narrative'
+    )
     .map((part) => part.text)
-    .join("");
+    .join('');
 }
 
 function toTranscriptTool(item: AssistantExecutionItem): TranscriptTool {
   return {
     toolCallId: item.toolCallId || item.id,
     name: item.toolName || item.title,
-    title: item.title || item.toolName || "操作",
+    title: item.title || item.toolName || '操作',
     status: item.status,
     summary: item.summary || item.errorMessage,
     detail: item.result ?? item.arguments,
-    errorMessage: item.errorMessage,
+    errorMessage: item.errorMessage
   };
 }
 
 function aggregateStatus(statuses: TranscriptToolStatus[]): TranscriptToolStatus {
-  if (statuses.some((status) => status === "failed")) return "failed";
-  if (statuses.some((status) => status === "running")) return "running";
-  if (statuses.some((status) => status === "pending")) return "pending";
-  if (statuses.some((status) => status === "cancelled")) return "cancelled";
-  return "succeeded";
+  if (statuses.some((status) => status === 'failed')) return 'failed';
+  if (statuses.some((status) => status === 'running')) return 'running';
+  if (statuses.some((status) => status === 'pending')) return 'pending';
+  if (statuses.some((status) => status === 'cancelled')) return 'cancelled';
+  return 'succeeded';
 }
 
 function buildTurnSummary(tools: TranscriptTool[]): string {
-  if (tools.length === 0) return "本轮无工具调用";
+  if (tools.length === 0) return '本轮无工具调用';
   if (tools.length === 1) {
     const tool = tools[0];
-    if (tool.status === "running" || tool.status === "pending") return `正在${tool.title}`;
-    if (tool.status === "failed") return tool.errorMessage || `${tool.title}失败`;
-    if (tool.status === "cancelled") return `${tool.title}已取消`;
+    if (tool.status === 'running' || tool.status === 'pending') return `正在${tool.title}`;
+    if (tool.status === 'failed') return tool.errorMessage || `${tool.title}失败`;
+    if (tool.status === 'cancelled') return `${tool.title}已取消`;
     return tool.summary || `已完成${tool.title}`;
   }
 
@@ -357,13 +362,13 @@ function buildTurnSummary(tools: TranscriptTool[]): string {
     counts.set(tool.title, (counts.get(tool.title) ?? 0) + 1);
   }
   const parts = Array.from(counts.entries()).map(([title, count]) =>
-    count > 1 ? `${title} ×${count}` : title,
+    count > 1 ? `${title} ×${count}` : title
   );
   const status = aggregateStatus(tools.map((tool) => tool.status));
-  if (status === "running" || status === "pending") return `正在处理：${parts.join(" · ")}`;
-  if (status === "failed") return `部分失败：${parts.join(" · ")}`;
+  if (status === 'running' || status === 'pending') return `正在处理：${parts.join(' · ')}`;
+  if (status === 'failed') return `部分失败：${parts.join(' · ')}`;
   const completedSummaries = tools
-    .filter((tool) => tool.status === "succeeded" && tool.summary)
+    .filter((tool) => tool.status === 'succeeded' && tool.summary)
     .map((tool) => tool.summary!);
-  return completedSummaries[completedSummaries.length - 1] || parts.join(" · ");
+  return completedSummaries[completedSummaries.length - 1] || parts.join(' · ');
 }

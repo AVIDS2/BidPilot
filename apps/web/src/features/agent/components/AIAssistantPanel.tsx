@@ -1,3 +1,4 @@
+/* oxlint-disable nextjs/no-img-element -- attachment previews can be blob/data URLs. */
 import {
   useRef,
   useEffect,
@@ -6,8 +7,8 @@ import {
   useMemo,
   type ChangeEvent,
   type ReactNode,
-  type RefObject,
-} from "react";
+  type RefObject
+} from 'react';
 import {
   HistoryIcon,
   PlusIcon,
@@ -28,9 +29,9 @@ import {
   ImageIcon,
   Loader2Icon,
   SquareIcon,
-  XIcon,
-} from "lucide-react";
-import { useTranslation } from "react-i18next";
+  XIcon
+} from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   createBundle,
   deleteChatConversation,
@@ -43,8 +44,8 @@ import {
   type AssistantAttachmentUploadResponse,
   type BundleRead,
   type ChatConversationRead,
-  type ProviderConfig,
-} from "@/lib/api";
+  type ProviderConfig
+} from '@/lib/api';
 import {
   isAssistantBusy,
   useAIAssistant,
@@ -53,32 +54,27 @@ import {
   type AssistantReasoningEffort,
   type AssistantApprovalMode,
   type ChatMessageAttachment,
-  type ChatMessage,
-} from "@/features/agent/state/agent-store";
-import { publicTranscriptParts } from "@/features/agent/runtime/assistant-transcript";
-import { AssistantActivityIndicator } from "@/features/agent/components/assistant-activity-indicator";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+  type ChatMessage
+} from '@/features/agent/state/agent-store';
+import { publicTranscriptParts } from '@/features/agent/runtime/assistant-transcript';
+import { AssistantActivityIndicator } from '@/features/agent/components/assistant-activity-indicator';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   PromptInput,
   PromptInputTextarea,
   PromptInputActions,
-  PromptInputAction,
-} from "@/components/ui/prompt-input";
+  PromptInputAction
+} from '@/components/ui/prompt-input';
 import {
   ChatContainerRoot,
   ChatContainerContent,
-  ChatContainerScrollAnchor,
-} from "@/components/ui/chat-container";
-import { Message, MessageContent } from "@/components/ui/message";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ChatContainerScrollAnchor
+} from '@/components/ui/chat-container';
+import { Message, MessageContent } from '@/components/ui/message';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -88,38 +84,38 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { ScrollButton } from "@/components/ui/scroll-button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { AgentMark } from "@/components/brand";
-import FadeContent from "@/components/FadeContent";
-import { AssistantConfirmationCard } from "./assistant-confirmation-card";
-import { AssistantInputRequestForm } from "./assistant-input-request";
-import { ClaudeActivityTimeline } from "./claude-activity-timeline";
-import { projectExecutionItemsOntoTranscript } from "@/features/agent/runtime/assistant-transcript";
+  SheetTitle
+} from '@/components/ui/sheet';
+import { ScrollButton } from '@/components/ui/scroll-button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { AgentMark } from '@/components/brand';
+import FadeContent from '@/components/FadeContent';
+import { AssistantConfirmationCard } from './assistant-confirmation-card';
+import { AssistantInputRequestForm } from './assistant-input-request';
+import { ClaudeActivityTimeline } from './claude-activity-timeline';
+import { projectExecutionItemsOntoTranscript } from '@/features/agent/runtime/assistant-transcript';
 
 /* ─── Date grouping helpers ─── */
 
 function getDateGroup(dateStr: string | null): string {
-  if (!dateStr) return "earlier";
+  if (!dateStr) return 'earlier';
   const date = new Date(dateStr);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86400000);
   const weekAgo = new Date(today.getTime() - 7 * 86400000);
 
-  if (date >= today) return "today";
-  if (date >= yesterday) return "yesterday";
-  if (date >= weekAgo) return "thisWeek";
-  return "earlier";
+  if (date >= today) return 'today';
+  if (date >= yesterday) return 'yesterday';
+  if (date >= weekAgo) return 'thisWeek';
+  return 'earlier';
 }
 
 function groupConversations(conversations: ChatConversationRead[]) {
@@ -127,7 +123,7 @@ function groupConversations(conversations: ChatConversationRead[]) {
     today: [],
     yesterday: [],
     thisWeek: [],
-    earlier: [],
+    earlier: []
   };
   for (const c of conversations) {
     const group = getDateGroup(c.created_at);
@@ -136,7 +132,7 @@ function groupConversations(conversations: ChatConversationRead[]) {
   return groups;
 }
 
-export type ComposerAttachmentKind = "file" | "image";
+export type ComposerAttachmentKind = 'file' | 'image';
 export interface AttachmentPreviewSelection {
   name: string;
   kind: ComposerAttachmentKind;
@@ -144,11 +140,11 @@ export interface AttachmentPreviewSelection {
   file?: File;
   previewUrl?: string;
 }
-type ComposerAttachmentStatus = "ready" | "uploading" | "uploaded" | "failed";
-type ConfigMenu = "model" | "reasoning" | "approval" | null;
+type ComposerAttachmentStatus = 'ready' | 'uploading' | 'uploaded' | 'failed';
+type ConfigMenu = 'model' | 'reasoning' | 'approval' | null;
 
 type AssistantComposerMenusProps = {
-  variant: "linear" | "panel";
+  variant: 'linear' | 'panel';
   attachmentMenuOpen: boolean;
   configMenuOpen: ConfigMenu;
   modelLabel: string;
@@ -192,78 +188,202 @@ function AssistantComposerMenus({
   onUploadImage,
   onAddFromProject,
   showAttachment = true,
-  showConfig = true,
+  showConfig = true
 }: AssistantComposerMenusProps) {
-  const { t } = useTranslation("ai-assistant");
-  const textTriggerClass = variant === "linear"
-    ? "bp-linear-agent-text-control"
-    : "flex max-w-[7.25rem] items-center gap-1 rounded-full px-2 py-1 min-[420px]:max-w-[9.5rem]";
-  const attachmentTriggerClass = variant === "linear"
-    ? "bp-linear-agent-icon-button"
-    : "flex size-8 items-center justify-center rounded-full text-muted-foreground";
+  const { t } = useTranslation('ai-assistant');
+  const textTriggerClass =
+    variant === 'linear'
+      ? 'bp-linear-agent-text-control'
+      : 'flex max-w-[7.25rem] items-center gap-1 rounded-full px-2 py-1 min-[420px]:max-w-[9.5rem]';
+  const attachmentTriggerClass =
+    variant === 'linear'
+      ? 'bp-linear-agent-icon-button'
+      : 'flex size-8 items-center justify-center rounded-full text-muted-foreground';
 
   return (
     <>
-      {showAttachment ? <DropdownMenu open={attachmentMenuOpen} onOpenChange={onAttachmentMenuOpenChange}>
-        <DropdownMenuTrigger render={<Button aria-label={t("attachments.add", { defaultValue: "Add attachment" })} className={attachmentTriggerClass} size="icon-sm" type="button" variant="ghost" />}>
-          <PlusIcon aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56" side="top" sideOffset={8}>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{t("attachments.menuTitle", { defaultValue: "Add to this message" })}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onUploadFile}><FileIcon aria-hidden="true" />{t("attachments.uploadFile", { defaultValue: "Upload file" })}</DropdownMenuItem>
-            <DropdownMenuItem onClick={onUploadImage}><ImageIcon aria-hidden="true" />{t("attachments.uploadImage", { defaultValue: "Upload image" })}</DropdownMenuItem>
-            <DropdownMenuItem onClick={onAddFromProject}><FolderOpenIcon aria-hidden="true" />{t("attachments.addFromProject", { defaultValue: "Add from project" })}</DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu> : null}
-      {showConfig ? <>
-      <DropdownMenu open={configMenuOpen === "model"} onOpenChange={(open) => onConfigMenuOpenChange("model", open)}>
-        <DropdownMenuTrigger render={<Button aria-label={t("model.select", { defaultValue: "Select model" })} className={textTriggerClass} size="sm" type="button" variant="ghost" />}>
-          <span className="truncate">{modelLabel}</span><ChevronDownIcon aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64" side="top" sideOffset={8}>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{t("model.menuTitle", { defaultValue: "Model" })}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuRadioGroup value={selectedProviderConfigId ?? "official"} onValueChange={(value) => { onSelectProvider(value === "official" ? null : value); onConfigMenuOpenChange("model", false); }}>
-              <DropdownMenuRadioItem value="official">{t("model.platformDefault", { defaultValue: "Platform default" })}</DropdownMenuRadioItem>
-              {providerConfigs.map((provider) => <DropdownMenuRadioItem key={provider.id} value={provider.id}><span className="min-w-0 truncate">{provider.label}</span><span className="min-w-0 truncate text-muted-foreground">{provider.model}</span></DropdownMenuRadioItem>)}
-            </DropdownMenuRadioGroup>
-            {providerConfigs.length === 0 ? <div className="px-1.5 py-1 text-xs text-muted-foreground">{t("model.empty", { defaultValue: "No custom providers yet" })}</div> : null}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <DropdownMenu open={configMenuOpen === "reasoning"} onOpenChange={(open) => onConfigMenuOpenChange("reasoning", open)}>
-        <DropdownMenuTrigger render={<Button aria-label={t("reasoning.select", { defaultValue: "Select reasoning effort" })} className={variant === "linear" ? textTriggerClass : "flex items-center gap-1 rounded-full px-2 py-1"} size="sm" type="button" variant="ghost" />}>
-          <span>{reasoningLabel}</span><ChevronDownIcon aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44" side="top" sideOffset={8}>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{t("reasoning.menuTitle", { defaultValue: "Reasoning" })}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuRadioGroup value={reasoningEffort} onValueChange={(value) => { onSelectReasoning(value as AssistantReasoningEffort); onConfigMenuOpenChange("reasoning", false); }}>
-              {REASONING_OPTIONS.map((effort) => <DropdownMenuRadioItem key={effort} value={effort}>{t(`reasoning.options.${effort}`, { defaultValue: effort })}</DropdownMenuRadioItem>)}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <DropdownMenu open={configMenuOpen === "approval"} onOpenChange={(open) => onConfigMenuOpenChange("approval", open)}>
-        <DropdownMenuTrigger render={<Button aria-label={t("approval.select", { defaultValue: "Select approval mode" })} className={cn(variant === "linear" ? textTriggerClass : "flex max-w-[6.75rem] items-center gap-1 rounded-full px-2 py-1", approvalMode === "full_access" && "text-amber-600 dark:text-amber-300")} title={approvalHint} size="sm" type="button" variant="ghost" />}>
-          <span className="truncate">{approvalLabel}</span><ChevronDownIcon aria-hidden="true" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-60" side="top" sideOffset={8}>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{t("approval.menuTitle", { defaultValue: "Approval" })}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuRadioGroup value={approvalMode} onValueChange={(value) => { onSelectApproval(value as AssistantApprovalMode); onConfigMenuOpenChange("approval", false); }}>
-              {APPROVAL_MODES.map((mode) => <DropdownMenuRadioItem key={mode} value={mode}>{t(`approval.options.${mode}`, { defaultValue: mode })}</DropdownMenuRadioItem>)}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      </> : null}
+      {showAttachment ? (
+        <DropdownMenu open={attachmentMenuOpen} onOpenChange={onAttachmentMenuOpenChange}>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                aria-label={t('attachments.add', { defaultValue: 'Add attachment' })}
+                className={attachmentTriggerClass}
+                size='icon-sm'
+                type='button'
+                variant='ghost'
+              />
+            }
+          >
+            <PlusIcon aria-hidden='true' />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='start' className='w-56' side='top' sideOffset={8}>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>
+                {t('attachments.menuTitle', { defaultValue: 'Add to this message' })}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onUploadFile}>
+                <FileIcon aria-hidden='true' />
+                {t('attachments.uploadFile', { defaultValue: 'Upload file' })}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onUploadImage}>
+                <ImageIcon aria-hidden='true' />
+                {t('attachments.uploadImage', { defaultValue: 'Upload image' })}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onAddFromProject}>
+                <FolderOpenIcon aria-hidden='true' />
+                {t('attachments.addFromProject', { defaultValue: 'Add from project' })}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+      {showConfig ? (
+        <>
+          <DropdownMenu
+            open={configMenuOpen === 'model'}
+            onOpenChange={(open) => onConfigMenuOpenChange('model', open)}
+          >
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  aria-label={t('model.select', { defaultValue: 'Select model' })}
+                  className={textTriggerClass}
+                  size='sm'
+                  type='button'
+                  variant='ghost'
+                />
+              }
+            >
+              <span className='truncate'>{modelLabel}</span>
+              <ChevronDownIcon aria-hidden='true' />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='w-64' side='top' sideOffset={8}>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>
+                  {t('model.menuTitle', { defaultValue: 'Model' })}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={selectedProviderConfigId ?? 'official'}
+                  onValueChange={(value) => {
+                    onSelectProvider(value === 'official' ? null : value);
+                    onConfigMenuOpenChange('model', false);
+                  }}
+                >
+                  <DropdownMenuRadioItem value='official'>
+                    {t('model.platformDefault', { defaultValue: 'Platform default' })}
+                  </DropdownMenuRadioItem>
+                  {providerConfigs.map((provider) => (
+                    <DropdownMenuRadioItem key={provider.id} value={provider.id}>
+                      <span className='min-w-0 truncate'>{provider.label}</span>
+                      <span className='min-w-0 truncate text-muted-foreground'>
+                        {provider.model}
+                      </span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+                {providerConfigs.length === 0 ? (
+                  <div className='px-1.5 py-1 text-xs text-muted-foreground'>
+                    {t('model.empty', { defaultValue: 'No custom providers yet' })}
+                  </div>
+                ) : null}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu
+            open={configMenuOpen === 'reasoning'}
+            onOpenChange={(open) => onConfigMenuOpenChange('reasoning', open)}
+          >
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  aria-label={t('reasoning.select', { defaultValue: 'Select reasoning effort' })}
+                  className={
+                    variant === 'linear'
+                      ? textTriggerClass
+                      : 'flex items-center gap-1 rounded-full px-2 py-1'
+                  }
+                  size='sm'
+                  type='button'
+                  variant='ghost'
+                />
+              }
+            >
+              <span>{reasoningLabel}</span>
+              <ChevronDownIcon aria-hidden='true' />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='w-44' side='top' sideOffset={8}>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>
+                  {t('reasoning.menuTitle', { defaultValue: 'Reasoning' })}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={reasoningEffort}
+                  onValueChange={(value) => {
+                    onSelectReasoning(value as AssistantReasoningEffort);
+                    onConfigMenuOpenChange('reasoning', false);
+                  }}
+                >
+                  {REASONING_OPTIONS.map((effort) => (
+                    <DropdownMenuRadioItem key={effort} value={effort}>
+                      {t(`reasoning.options.${effort}`, { defaultValue: effort })}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu
+            open={configMenuOpen === 'approval'}
+            onOpenChange={(open) => onConfigMenuOpenChange('approval', open)}
+          >
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  aria-label={t('approval.select', { defaultValue: 'Select approval mode' })}
+                  className={cn(
+                    variant === 'linear'
+                      ? textTriggerClass
+                      : 'flex max-w-[6.75rem] items-center gap-1 rounded-full px-2 py-1',
+                    approvalMode === 'full_access' && 'text-amber-600 dark:text-amber-300'
+                  )}
+                  title={approvalHint}
+                  size='sm'
+                  type='button'
+                  variant='ghost'
+                />
+              }
+            >
+              <span className='truncate'>{approvalLabel}</span>
+              <ChevronDownIcon aria-hidden='true' />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end' className='w-60' side='top' sideOffset={8}>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>
+                  {t('approval.menuTitle', { defaultValue: 'Approval' })}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={approvalMode}
+                  onValueChange={(value) => {
+                    onSelectApproval(value as AssistantApprovalMode);
+                    onConfigMenuOpenChange('approval', false);
+                  }}
+                >
+                  {APPROVAL_MODES.map((mode) => (
+                    <DropdownMenuRadioItem key={mode} value={mode}>
+                      {t(`approval.options.${mode}`, { defaultValue: mode })}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      ) : null}
     </>
   );
 }
@@ -275,7 +395,7 @@ interface ComposerAttachment {
   status: ComposerAttachmentStatus;
   assistantAttachmentId?: string;
   mimeType?: string;
-  extractionStatus?: AssistantAttachmentUploadResponse["extraction_status"];
+  extractionStatus?: AssistantAttachmentUploadResponse['extraction_status'];
   extractedText?: string;
   documentId?: string;
   error?: string;
@@ -293,22 +413,16 @@ interface QueuedPrompt {
   composerAttachments: ComposerAttachment[];
 }
 
-const REASONING_OPTIONS: AssistantReasoningEffort[] = [
-  "low",
-  "medium",
-  "high",
-  "extra",
-  "max",
-];
+const REASONING_OPTIONS: AssistantReasoningEffort[] = ['low', 'medium', 'high', 'extra', 'max'];
 const APPROVAL_MODES: AssistantApprovalMode[] = [
-  "request_approval",
-  "risky_only",
-  "full_access",
-  "custom",
+  'request_approval',
+  'risky_only',
+  'full_access',
+  'custom'
 ];
 
 function createAttachmentId(file: File, index: number) {
-  return `att-${Date.now()}-${index}-${file.name.replace(/[^a-zA-Z0-9]/g, "")}`;
+  return `att-${Date.now()}-${index}-${file.name.replace(/[^a-zA-Z0-9]/g, '')}`;
 }
 
 function formatFileSize(size: number) {
@@ -318,23 +432,20 @@ function formatFileSize(size: number) {
 }
 
 function getFileExtension(name: string) {
-  const ext = name.split(".").pop()?.trim().toUpperCase();
-  return ext && ext !== name.toUpperCase() ? ext : "FILE";
+  const ext = name.split('.').pop()?.trim().toUpperCase();
+  return ext && ext !== name.toUpperCase() ? ext : 'FILE';
 }
 
 function getAttachmentPreviewTone(
   name: string,
-  kind: ComposerAttachmentKind | ChatMessageAttachment["kind"],
+  kind: ComposerAttachmentKind | ChatMessageAttachment['kind']
 ) {
   const ext = getFileExtension(name);
-  if (kind === "image")
-    return { label: ext === "FILE" ? "IMG" : ext, tone: "image" as const };
-  if (ext === "PDF") return { label: "PDF", tone: "pdf" as const };
-  if (["DOC", "DOCX", "WPS"].includes(ext))
-    return { label: ext, tone: "doc" as const };
-  if (["XLS", "XLSX", "CSV"].includes(ext))
-    return { label: ext, tone: "sheet" as const };
-  return { label: ext, tone: "file" as const };
+  if (kind === 'image') return { label: ext === 'FILE' ? 'IMG' : ext, tone: 'image' as const };
+  if (ext === 'PDF') return { label: 'PDF', tone: 'pdf' as const };
+  if (['DOC', 'DOCX', 'WPS'].includes(ext)) return { label: ext, tone: 'doc' as const };
+  if (['XLS', 'XLSX', 'CSV'].includes(ext)) return { label: ext, tone: 'sheet' as const };
+  return { label: ext, tone: 'file' as const };
 }
 
 function useObjectUrl(file: File | undefined, enabled: boolean) {
@@ -344,8 +455,8 @@ function useObjectUrl(file: File | undefined, enabled: boolean) {
     if (
       !file ||
       !enabled ||
-      typeof URL === "undefined" ||
-      typeof URL.createObjectURL !== "function"
+      typeof URL === 'undefined' ||
+      typeof URL.createObjectURL !== 'function'
     ) {
       setUrl(undefined);
       return;
@@ -358,72 +469,61 @@ function useObjectUrl(file: File | undefined, enabled: boolean) {
   return url;
 }
 
-async function ensureAssistantUploadBundle(
-  projectId: string,
-): Promise<BundleRead> {
+async function ensureAssistantUploadBundle(projectId: string): Promise<BundleRead> {
   const bundles = await listBundles(projectId);
-  const existing =
-    bundles.find((bundle) => bundle.label === "AI uploads") ?? bundles[0];
+  const existing = bundles.find((bundle) => bundle.label === 'AI uploads') ?? bundles[0];
   if (existing) return existing;
   return createBundle({
     project_id: projectId,
-    label: "AI uploads",
-    source_type: "upload",
+    label: 'AI uploads',
+    source_type: 'upload'
   });
 }
 
-function buildOutgoingPrompt(
-  content: string,
-  attachments: ComposerAttachment[],
-) {
+function buildOutgoingPrompt(content: string, attachments: ComposerAttachment[]) {
   const trimmed = content.trim();
   if (trimmed) return trimmed;
-  if (attachments.length > 0) return "请结合我上传的附件进行分析。";
-  return "";
+  if (attachments.length > 0) return '请结合我上传的附件进行分析。';
+  return '';
 }
 
 function buildDisplayContent(
   content: string,
   attachments: ComposerAttachment[],
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: (key: string, options?: Record<string, unknown>) => string
 ) {
   if (content.trim()) return content.trim();
   if (attachments.length === 1) {
-    return t("attachments.addedOne", {
+    return t('attachments.addedOne', {
       name: attachments[0].file.name,
-      defaultValue: `Added ${attachments[0].file.name}`,
+      defaultValue: `Added ${attachments[0].file.name}`
     });
   }
-  return t("attachments.addedMany", {
+  return t('attachments.addedMany', {
     count: attachments.length,
-    defaultValue: `Added ${attachments.length} attachments`,
+    defaultValue: `Added ${attachments.length} attachments`
   });
 }
 
 function createAttachmentPreviewUrl(attachment: ComposerAttachment) {
-  if (attachment.kind !== "image") return undefined;
-  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function")
-    return undefined;
+  if (attachment.kind !== 'image') return undefined;
+  if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return undefined;
   return URL.createObjectURL(attachment.file);
 }
 
-function toMessageAttachments(
-  attachments: ComposerAttachment[],
-): ChatMessageAttachment[] {
+function toMessageAttachments(attachments: ComposerAttachment[]): ChatMessageAttachment[] {
   return attachments.map((attachment) => ({
     id: attachment.id,
     name: attachment.file.name,
     kind: attachment.kind,
     size: attachment.file.size,
-    status: attachment.status === "uploading" ? "ready" : attachment.status,
+    status: attachment.status === 'uploading' ? 'ready' : attachment.status,
     documentId: attachment.documentId,
-    previewUrl: createAttachmentPreviewUrl(attachment),
+    previewUrl: createAttachmentPreviewUrl(attachment)
   }));
 }
 
-function toRequestAttachments(
-  attachments: ComposerAttachment[],
-): AssistantRequestAttachment[] {
+function toRequestAttachments(attachments: ComposerAttachment[]): AssistantRequestAttachment[] {
   return attachments.map((attachment) => ({
     id: attachment.assistantAttachmentId ?? attachment.id,
     name: attachment.file.name,
@@ -433,41 +533,35 @@ function toRequestAttachments(
     extraction_status: attachment.extractionStatus,
     extracted_text: attachment.extractedText,
     document_id: attachment.documentId,
-    error: attachment.error ?? null,
+    error: attachment.error ?? null
   }));
 }
 
 /** Keeps the composer aligned with the conversation column in every layout. */
-function ComposerFrame({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+function ComposerFrame({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={className}>{children}</div>;
 }
 
 /* ─── Quick action chips shown in empty state ─── */
 
 function QuickActions({ onSelect }: { onSelect: (text: string) => void }) {
-  const { t } = useTranslation("ai-assistant");
+  const { t } = useTranslation('ai-assistant');
   const actions = [
-    { key: "createProject", text: t("actions.createProjectPrompt") },
-    { key: "uploadDoc", text: t("actions.uploadDocPrompt") },
-    { key: "generateSection", text: t("actions.generateSectionPrompt") },
-    { key: "howToUse", text: t("actions.howToUsePrompt") },
+    { key: 'createProject', text: t('actions.createProjectPrompt') },
+    { key: 'uploadDoc', text: t('actions.uploadDocPrompt') },
+    { key: 'generateSection', text: t('actions.generateSectionPrompt') },
+    { key: 'howToUse', text: t('actions.howToUsePrompt') }
   ];
   return (
-    <div className="flex flex-wrap gap-2 px-1">
+    <div className='flex flex-wrap gap-2 px-1'>
       {actions.map((a) => (
         <Button
-          type="button"
+          type='button'
           key={a.key}
           onClick={() => onSelect(a.text)}
-          className="h-8 rounded-full border-border bg-muted px-3 text-xs text-muted-foreground transition-all duration-200 hover:scale-105 hover:bg-accent hover:text-accent-foreground"
-          size="sm"
-          variant="outline"
+          className='h-8 rounded-full border-border bg-muted px-3 text-xs text-muted-foreground transition-all duration-200 hover:scale-105 hover:bg-accent hover:text-accent-foreground'
+          size='sm'
+          variant='outline'
         >
           {t(`actions.${a.key}`)}
         </Button>
@@ -479,36 +573,34 @@ function QuickActions({ onSelect }: { onSelect: (text: string) => void }) {
 /* ─── Single message bubble ─── */
 
 function normalizeAssistantMarkdown(content: string): string {
-  if (!content.includes("\\")) return content;
+  if (!content.includes('\\')) return content;
   let normalized = content;
   normalized = normalized.replace(
     /^\[\s*\n([\s\S]*?\\[a-zA-Z]+[\s\S]*?)\n\]\s*$/gm,
-    (_match, expr) => `$$\n${expr.trim()}\n$$`,
+    (_match, expr) => `$$\n${expr.trim()}\n$$`
   );
   normalized = normalized
-    .split("\n")
+    .split('\n')
     .map((line) => {
       const trimmed = line.trim();
       const looksLikeMath =
         /\\(frac|sum|int|sqrt|alpha|beta|gamma|theta|pi|sin|cos|tan|lim|cdot|times|leq|geq|neq|infty|to)/.test(
-          trimmed,
+          trimmed
         ) || /[=<>]/.test(trimmed);
       const alreadyDelimited =
-        trimmed.startsWith("$") ||
-        trimmed.startsWith("\\(") ||
-        trimmed.startsWith("\\[");
+        trimmed.startsWith('$') || trimmed.startsWith('\\(') || trimmed.startsWith('\\[');
       if (
         trimmed &&
         looksLikeMath &&
         !alreadyDelimited &&
-        !trimmed.startsWith("- ") &&
-        !trimmed.startsWith("* ")
+        !trimmed.startsWith('- ') &&
+        !trimmed.startsWith('* ')
       ) {
         return `$$${trimmed}$$`;
       }
       return line;
     })
-    .join("\n");
+    .join('\n');
   return normalized;
 }
 
@@ -521,39 +613,37 @@ function AttachmentPreviewCard({
   file,
   error,
   onRemove,
-  onPreview,
+  onPreview
 }: {
   name: string;
-  kind: ComposerAttachmentKind | ChatMessageAttachment["kind"];
+  kind: ComposerAttachmentKind | ChatMessageAttachment['kind'];
   size: number;
-  status?: ComposerAttachmentStatus | ChatMessageAttachment["status"];
+  status?: ComposerAttachmentStatus | ChatMessageAttachment['status'];
   previewUrl?: string;
   file?: File;
   error?: string;
   onRemove?: () => void;
   onPreview?: (selection: AttachmentPreviewSelection) => void;
 }) {
-  const { t } = useTranslation("ai-assistant");
-  const isImage = kind === "image";
+  const { t } = useTranslation('ai-assistant');
+  const isImage = kind === 'image';
   const [previewOpen, setPreviewOpen] = useState(false);
   const objectUrl = useObjectUrl(file, isImage && !previewUrl);
   const imageUrl = previewUrl ?? objectUrl;
   const fileUrl = useObjectUrl(file, previewOpen && !isImage);
   const { label, tone } = getAttachmentPreviewTone(name, kind);
-  const statusLabel = status
-    ? t(`attachments.status.${status}`, { defaultValue: status })
-    : null;
+  const statusLabel = status ? t(`attachments.status.${status}`, { defaultValue: status }) : null;
   const iconTone = {
-    image: "bg-emerald-500/12 text-emerald-500 border-emerald-500/20",
-    pdf: "bg-red-500/12 text-red-500 border-red-500/20",
-    doc: "bg-blue-500/12 text-blue-500 border-blue-500/20",
-    sheet: "bg-amber-500/12 text-amber-500 border-amber-500/20",
-    file: "bg-muted text-muted-foreground border-border",
+    image: 'bg-emerald-500/12 text-emerald-500 border-emerald-500/20',
+    pdf: 'bg-red-500/12 text-red-500 border-red-500/20',
+    doc: 'bg-blue-500/12 text-blue-500 border-blue-500/20',
+    sheet: 'bg-amber-500/12 text-amber-500 border-amber-500/20',
+    file: 'bg-muted text-muted-foreground border-border'
   }[tone];
 
   return (
     <div
-      role="button"
+      role='button'
       tabIndex={0}
       onClick={() => {
         if (onPreview) {
@@ -563,29 +653,29 @@ function AttachmentPreviewCard({
         setPreviewOpen(true);
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           if (onPreview) onPreview({ name, kind, size, file, previewUrl: imageUrl });
           else setPreviewOpen(true);
         }
       }}
       className={cn(
-        "group relative flex h-16 max-w-[13.5rem] shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-2xl border px-2.5 text-xs shadow-[0_14px_40px_oklch(0_0_0/0.12)] backdrop-blur-xl transition hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        isImage ? "w-20 justify-center p-1.5" : "w-[min(13.5rem,72vw)]",
+        'group relative flex h-16 max-w-[13.5rem] shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-2xl border px-2.5 text-xs shadow-[0_14px_40px_oklch(0_0_0/0.12)] backdrop-blur-xl transition hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        isImage ? 'w-20 justify-center p-1.5' : 'w-[min(13.5rem,72vw)]'
       )}
       style={{
-        background: "color-mix(in oklch, var(--background) 92%, transparent)",
-        borderColor: "color-mix(in oklch, var(--border) 72%, transparent)",
-        color: "var(--foreground)",
+        background: 'color-mix(in oklch, var(--background) 92%, transparent)',
+        borderColor: 'color-mix(in oklch, var(--border) 72%, transparent)',
+        color: 'var(--foreground)'
       }}
     >
       {isImage ? (
-        <div className="h-full w-full overflow-hidden rounded-xl bg-muted">
+        <div className='h-full w-full overflow-hidden rounded-xl bg-muted'>
           {imageUrl ? (
-            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+            <img src={imageUrl} alt='' className='h-full w-full object-cover' />
           ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <ImageIcon className="h-5 w-5 text-muted-foreground" />
+            <div className='flex h-full w-full items-center justify-center'>
+              <ImageIcon className='h-5 w-5 text-muted-foreground' />
             </div>
           )}
         </div>
@@ -593,89 +683,94 @@ function AttachmentPreviewCard({
         <>
           <div
             className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
-              iconTone,
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border',
+              iconTone
             )}
           >
-            {tone === "pdf" || tone === "doc" ? (
-              <FileTextIcon className="h-5 w-5" />
+            {tone === 'pdf' || tone === 'doc' ? (
+              <FileTextIcon className='h-5 w-5' />
             ) : (
-              <FileIcon className="h-5 w-5" />
+              <FileIcon className='h-5 w-5' />
             )}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[13px] font-semibold tracking-[-0.01em]">
-              {name}
-            </div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className='min-w-0 flex-1'>
+            <div className='truncate text-[13px] font-semibold tracking-[-0.01em]'>{name}</div>
+            <div className='mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground'>
               <span>{label}</span>
-              <span className="h-0.5 w-0.5 rounded-full bg-current opacity-60" />
+              <span className='h-0.5 w-0.5 rounded-full bg-current opacity-60' />
               <span>{formatFileSize(size)}</span>
             </div>
             {error ? (
-              <div className="mt-0.5 truncate text-[10px] text-destructive" title={error}>
+              <div className='mt-0.5 truncate text-[10px] text-destructive' title={error}>
                 {error}
               </div>
-            ) : statusLabel && status !== "ready" && (
-              <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                {statusLabel}
-              </div>
+            ) : (
+              statusLabel &&
+              status !== 'ready' && (
+                <div className='mt-0.5 truncate text-[10px] text-muted-foreground'>
+                  {statusLabel}
+                </div>
+              )
             )}
           </div>
         </>
       )}
       {isImage && (
-        <div className="pointer-events-none absolute inset-x-1.5 bottom-1.5 truncate rounded-b-xl bg-black/45 px-1.5 py-0.5 text-[10px] text-white/90 opacity-0 transition group-hover:opacity-100">
+        <div className='pointer-events-none absolute inset-x-1.5 bottom-1.5 truncate rounded-b-xl bg-black/45 px-1.5 py-0.5 text-[10px] text-white/90 opacity-0 transition group-hover:opacity-100'>
           {name}
         </div>
       )}
       {onRemove && (
         <Button
-          type="button"
+          type='button'
           aria-label={`Remove ${name}`}
           onClick={(event) => {
             event.stopPropagation();
             onRemove();
           }}
-          className="absolute right-1.5 top-1.5 size-5 rounded-full bg-background/95 text-muted-foreground shadow-sm hover:bg-foreground hover:text-background"
-          size="icon-xs"
-          variant="ghost"
+          className='absolute right-1.5 top-1.5 size-5 rounded-full bg-background/95 text-muted-foreground shadow-sm hover:bg-foreground hover:text-background'
+          size='icon-xs'
+          variant='ghost'
         >
-          <XIcon className="h-3 w-3" />
+          <XIcon className='h-3 w-3' />
         </Button>
       )}
       {isImage ? (
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
           <DialogContent
-            className="max-w-[min(92vw,900px)] border-0 bg-black/90 p-2"
+            className='max-w-[min(92vw,900px)] border-0 bg-black/90 p-2'
             onClick={(event) => event.stopPropagation()}
           >
-            <DialogTitle className="sr-only">{name}</DialogTitle>
-            <DialogDescription className="sr-only">Image preview</DialogDescription>
+            <DialogTitle className='sr-only'>{name}</DialogTitle>
+            <DialogDescription className='sr-only'>Image preview</DialogDescription>
             {imageUrl ? (
-              <img src={imageUrl} alt={name} className="max-h-[82vh] w-full object-contain" />
+              <img src={imageUrl} alt={name} className='max-h-[82vh] w-full object-contain' />
             ) : (
-              <div className="flex min-h-48 items-center justify-center text-sm text-white/70">{name}</div>
+              <div className='flex min-h-48 items-center justify-center text-sm text-white/70'>
+                {name}
+              </div>
             )}
           </DialogContent>
         </Dialog>
       ) : (
         <Sheet open={previewOpen} onOpenChange={setPreviewOpen}>
           <SheetContent
-            side="right"
-            className="w-full sm:max-w-xl"
+            side='right'
+            className='w-full sm:max-w-xl'
             onClick={(event) => event.stopPropagation()}
           >
             <SheetHeader>
-              <SheetTitle className="truncate pr-8">{name}</SheetTitle>
-              <SheetDescription>{formatFileSize(size)} · {statusLabel ?? label}</SheetDescription>
+              <SheetTitle className='truncate pr-8'>{name}</SheetTitle>
+              <SheetDescription>
+                {formatFileSize(size)} · {statusLabel ?? label}
+              </SheetDescription>
             </SheetHeader>
-            <div className="min-h-0 flex-1 overflow-auto px-4 pb-6">
+            <div className='min-h-0 flex-1 overflow-auto px-4 pb-6'>
               {fileUrl && /\.pdf$/i.test(name) ? (
-                <iframe title={name} src={fileUrl} className="h-[70vh] w-full rounded-md border" />
+                <iframe title={name} src={fileUrl} className='h-[70vh] w-full rounded-md border' />
               ) : (
-                <div className="rounded-md border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground">
-                  {statusLabel ?? "文件已预解析并在发送前暂存。"}
+                <div className='rounded-md border bg-muted/30 p-4 text-sm leading-6 text-muted-foreground'>
+                  {statusLabel ?? '文件已预解析并在发送前暂存。'}
                 </div>
               )}
             </div>
@@ -693,7 +788,7 @@ function MessageBubble({
   onConfigureProvider,
   isStreaming = false,
   isThinking = false,
-  sessionError = null,
+  sessionError = null
 }: {
   msg: ChatMessage;
   activityItems?: AssistantExecutionItem[];
@@ -703,36 +798,31 @@ function MessageBubble({
   isThinking?: boolean;
   sessionError?: string | null;
 }) {
-  const isUser = msg.role === "user";
+  const isUser = msg.role === 'user';
   // Keep hook order identical for user and assistant messages. A stable empty
   // value also prevents transcript-derived memo dependencies from churning.
   const parts = publicTranscriptParts(msg.transcriptParts);
-  const hasTurnParts = parts.some((part) => part.kind === "turn");
-  const hasNarrativePart = parts.some((part) => part.kind === "narrative" && part.text);
+  const hasTurnParts = parts.some((part) => part.kind === 'turn');
+  const hasNarrativePart = parts.some((part) => part.kind === 'narrative' && part.text);
   const hasLiveTrace =
-    activityItems.some((item) => item.status === "pending" || item.status === "running") ||
-    parts.some((part) => part.kind === "reasoning" && !part.completed);
-  const showActivityIndicator =
-    isStreaming &&
-    !hasLiveTrace &&
-    (isThinking || !msg.content);
+    activityItems.some((item) => item.status === 'pending' || item.status === 'running') ||
+    parts.some((part) => part.kind === 'reasoning' && !part.completed);
+  const showActivityIndicator = isStreaming && !hasLiveTrace && (isThinking || !msg.content);
   const executionProjection = useMemo(
     () => projectExecutionItemsOntoTranscript(parts, activityItems),
-    [activityItems, parts],
+    [activityItems, parts]
   );
 
   if (isUser) {
-    const hasAttachments = Boolean(
-      msg.attachments && msg.attachments.length > 0,
-    );
+    const hasAttachments = Boolean(msg.attachments && msg.attachments.length > 0);
     return (
       <FadeContent
         duration={260}
         threshold={0.02}
-        className="flex animate-fade-in flex-col items-end gap-2"
+        className='flex animate-fade-in flex-col items-end gap-2'
       >
         {hasAttachments && (
-          <div className="flex max-w-[94%] flex-wrap justify-end gap-2 sm:max-w-[88%]">
+          <div className='flex max-w-[94%] flex-wrap justify-end gap-2 sm:max-w-[88%]'>
             {msg.attachments?.map((attachment) => (
               <AttachmentPreviewCard
                 key={attachment.id}
@@ -746,20 +836,16 @@ function MessageBubble({
           </div>
         )}
         {msg.content && (
-          <Message className="w-full max-w-[94%] justify-end sm:max-w-[88%]">
+          <Message className='w-full max-w-[94%] justify-end sm:max-w-[88%]'>
             <MessageContent
-              className="rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 text-[14px] leading-7 shadow-[0_12px_32px_oklch(0_0_0/0.10)]"
+              className='rounded-[1.35rem] rounded-br-[0.55rem] border px-4 py-2.5 text-[14px] leading-7 shadow-[0_12px_32px_oklch(0_0_0/0.10)]'
               style={{
-                background:
-                  "color-mix(in oklch, var(--muted) 82%, var(--background) 18%)",
-                color: "var(--foreground)",
-                borderColor:
-                  "color-mix(in oklch, var(--border) 58%, transparent)",
+                background: 'color-mix(in oklch, var(--muted) 82%, var(--background) 18%)',
+                color: 'var(--foreground)',
+                borderColor: 'color-mix(in oklch, var(--border) 58%, transparent)'
               }}
             >
-              <div className="whitespace-pre-wrap break-words">
-                {msg.content}
-              </div>
+              <div className='whitespace-pre-wrap break-words'>{msg.content}</div>
             </MessageContent>
           </Message>
         )}
@@ -772,27 +858,33 @@ function MessageBubble({
       <MessageContent
         key={key}
         markdown
-        variant="assistant"
-        className="bg-transparent p-0 text-[14px] leading-7 text-foreground [&_code]:break-words"
+        variant='assistant'
+        className='bg-transparent p-0 text-[14px] leading-7 text-foreground [&_code]:break-words'
       >
         {normalizeAssistantMarkdown(text)}
       </MessageContent>
     ) : null;
 
-  if (!msg.content && activityItems.length === 0 && parts.length === 0 && !isStreaming && !sessionError) {
+  if (
+    !msg.content &&
+    activityItems.length === 0 &&
+    parts.length === 0 &&
+    !isStreaming &&
+    !sessionError
+  ) {
     return null;
   }
 
   return (
-    <Message className="w-full max-w-full animate-fade-in flex-col items-start gap-2 sm:max-w-[92%]">
-      <div className="w-full space-y-3 px-1 py-1 text-[14px] leading-7 break-words text-foreground">
+    <Message className='w-full max-w-full animate-fade-in flex-col items-start gap-2 sm:max-w-[92%]'>
+      <div className='w-full space-y-3 px-1 py-1 text-[14px] leading-7 break-words text-foreground'>
         {hasTurnParts ? (
           <>
             {parts.map((part) => {
-              if (part.kind === "narrative") {
+              if (part.kind === 'narrative') {
                 return renderNarrative(part.text, part.id);
               }
-              if (part.kind === "reasoning") {
+              if (part.kind === 'reasoning') {
                 return renderNarrative(part.text, part.id);
               }
               const items = executionProjection.itemsByPartId.get(part.id) ?? [];
@@ -815,7 +907,7 @@ function MessageBubble({
             )}
             {msg.content && !hasNarrativePart && renderNarrative(msg.content, `${msg.id}-durable`)}
             {activityItems.length === 0 && showActivityIndicator && (
-              <AssistantActivityIndicator phase={isThinking ? "thinking" : "waiting"} />
+              <AssistantActivityIndicator phase={isThinking ? 'thinking' : 'waiting'} />
             )}
           </>
         ) : (
@@ -830,18 +922,22 @@ function MessageBubble({
             {msg.content ? (
               <MessageContent
                 markdown
-                variant="assistant"
-                className="bg-transparent p-0 text-[14px] leading-7 text-foreground [&_code]:break-words"
+                variant='assistant'
+                className='bg-transparent p-0 text-[14px] leading-7 text-foreground [&_code]:break-words'
               >
                 {normalizeAssistantMarkdown(msg.content)}
               </MessageContent>
             ) : showActivityIndicator ? (
-              <AssistantActivityIndicator phase={isThinking ? "thinking" : "waiting"} />
+              <AssistantActivityIndicator phase={isThinking ? 'thinking' : 'waiting'} />
             ) : null}
           </>
         )}
       </div>
-      {sessionError && <p className="cr-session-error" role="alert">{sessionError}</p>}
+      {sessionError && (
+        <p className='cr-session-error' role='alert'>
+          {sessionError}
+        </p>
+      )}
     </Message>
   );
 }
@@ -867,7 +963,7 @@ function HistorySidebar({
   renameInputRef,
   t,
   docked = false,
-  isCurrentConversationRunning = false,
+  isCurrentConversationRunning = false
 }: {
   conversations: ChatConversationRead[];
   currentId: string | null;
@@ -894,89 +990,81 @@ function HistorySidebar({
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
     const q = searchQuery.toLowerCase();
-    return conversations.filter((c) =>
-      (c.title || "").toLowerCase().includes(q),
-    );
+    return conversations.filter((c) => (c.title || '').toLowerCase().includes(q));
   }, [conversations, searchQuery]);
 
   const groups = useMemo(() => groupConversations(filtered), [filtered]);
   const groupLabels: Record<string, string> = {
-    today: t("history.today"),
-    yesterday: t("history.yesterday"),
-    thisWeek: t("history.thisWeek"),
-    earlier: t("history.earlier"),
+    today: t('history.today'),
+    yesterday: t('history.yesterday'),
+    thisWeek: t('history.thisWeek'),
+    earlier: t('history.earlier')
   };
 
   return (
     <div
-      data-testid={
-        docked ? "assistant-history-rail" : "assistant-history-drawer"
-      }
+      data-testid={docked ? 'assistant-history-rail' : 'assistant-history-drawer'}
       className={cn(
-        "flex h-full shrink-0 flex-col border-r bg-background",
+        'flex h-full shrink-0 flex-col border-r bg-background',
         docked
-          ? "w-[17rem] border-border/70 shadow-none max-lg:hidden"
-          : "w-[min(20rem,calc(100vw-1.25rem))] shadow-[20px_0_48px_oklch(0_0_0/0.16)]",
+          ? 'w-[17rem] border-border/70 shadow-none max-lg:hidden'
+          : 'w-[min(20rem,calc(100vw-1.25rem))] shadow-[20px_0_48px_oklch(0_0_0/0.16)]'
       )}
-      style={{ borderColor: "var(--border)" }}
+      style={{ borderColor: 'var(--border)' }}
     >
       {/* Header */}
       <div
-        className="flex shrink-0 flex-col gap-2.5 border-b px-3 py-3"
-        style={{ borderColor: "var(--border)" }}
+        className='flex shrink-0 flex-col gap-2.5 border-b px-3 py-3'
+        style={{ borderColor: 'var(--border)' }}
       >
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <span className="text-[11px] font-semibold text-foreground">
-              {t("panel.history")}
-            </span>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">
-              {t("panel.historySubtitle")}
-            </p>
+        <div className='flex items-center justify-between gap-2'>
+          <div className='min-w-0'>
+            <span className='text-[11px] font-semibold text-foreground'>{t('panel.history')}</span>
+            <p className='mt-0.5 text-[10px] text-muted-foreground'>{t('panel.historySubtitle')}</p>
           </div>
           {!docked && (
             <Button
-              variant="ghost"
-              size="icon-xs"
+              variant='ghost'
+              size='icon-xs'
               onClick={onClose}
-              title={t("panel.closeHistory")}
+              title={t('panel.closeHistory')}
             >
-              <PanelRightCloseIcon className="size-3" />
+              <PanelRightCloseIcon className='size-3' />
             </Button>
           )}
         </div>
         <Button
-          variant="outline"
-          size="sm"
-          className="h-8 w-full justify-start gap-2 rounded-md border-border/80 bg-transparent px-2.5 text-xs font-medium shadow-none hover:bg-muted/70"
+          variant='outline'
+          size='sm'
+          className='h-8 w-full justify-start gap-2 rounded-md border-border/80 bg-transparent px-2.5 text-xs font-medium shadow-none hover:bg-muted/70'
           onClick={onNew}
         >
-          <PlusIcon className="size-3.5" />
-          {t("panel.newConversation")}
+          <PlusIcon className='size-3.5' />
+          {t('panel.newConversation')}
         </Button>
       </div>
 
       {/* Search */}
-      <div className="shrink-0 px-3 pb-2 pt-2.5">
-        <div className="relative">
-          <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+      <div className='shrink-0 px-3 pb-2 pt-2.5'>
+        <div className='relative'>
+          <SearchIcon className='absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground' />
           <Input
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={t("history.searchPlaceholder")}
-            className="h-8 rounded-md border-border/70 bg-muted/35 pl-8 text-xs shadow-none placeholder:text-muted-foreground/70 focus-visible:border-ring/70 focus-visible:ring-2 focus-visible:ring-ring/15"
+            placeholder={t('history.searchPlaceholder')}
+            className='h-8 rounded-md border-border/70 bg-muted/35 pl-8 text-xs shadow-none placeholder:text-muted-foreground/70 focus-visible:border-ring/70 focus-visible:ring-2 focus-visible:ring-ring/15'
           />
         </div>
       </div>
 
       {/* Conversation list */}
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="flex flex-col gap-4 px-2 py-2">
+      <ScrollArea className='flex-1 min-h-0'>
+        <div className='flex flex-col gap-4 px-2 py-2'>
           {filtered.length === 0 ? (
-            <div className="text-center py-8">
-              <MessageSquareIcon className="size-8 mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-xs text-muted-foreground">
-                {searchQuery ? t("history.noResults") : t("panel.noHistory")}
+            <div className='text-center py-8'>
+              <MessageSquareIcon className='size-8 mx-auto mb-2 text-muted-foreground/40' />
+              <p className='text-xs text-muted-foreground'>
+                {searchQuery ? t('history.noResults') : t('panel.noHistory')}
               </p>
             </div>
           ) : (
@@ -984,37 +1072,46 @@ function HistorySidebar({
               if (items.length === 0) return null;
               return (
                 <div key={key}>
-                  <p className="mb-1 px-2 text-[10px] font-medium tracking-wide text-muted-foreground/70">
+                  <p className='mb-1 px-2 text-[10px] font-medium tracking-wide text-muted-foreground/70'>
                     {groupLabels[key]}
                   </p>
-                  <div className="space-y-0.5">
+                  <div className='space-y-0.5'>
                     {items.map((conversation) => {
                       const active = conversation.id === currentId;
                       const isRunning = active && isCurrentConversationRunning;
                       const isEditing = editingId === conversation.id;
                       const isHovered = hoveredId === conversation.id;
                       const actionVisibility = isHovered
-                        ? "opacity-100"
-                        : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100";
+                        ? 'opacity-100'
+                        : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100';
                       return (
                         <div
                           key={conversation.id}
                           data-conversation-row
+                          role='button'
+                          tabIndex={0}
                           className={cn(
-                            "group relative min-h-11 cursor-pointer rounded-md px-2.5 py-2 text-left transition-colors",
+                            'group relative min-h-11 cursor-pointer rounded-md px-2.5 py-2 text-left transition-colors',
                             active
-                              ? "bg-muted text-foreground shadow-[inset_0_0_0_1px_oklch(0_0_0/0.035)]"
-                              : "text-foreground/85 hover:bg-muted/65",
+                              ? 'bg-muted text-foreground shadow-[inset_0_0_0_1px_oklch(0_0_0/0.035)]'
+                              : 'text-foreground/85 hover:bg-muted/65'
                           )}
                           onMouseEnter={() => setHoveredId(conversation.id)}
                           onMouseLeave={() => setHoveredId(null)}
                           onClick={(event) => {
                             if (
                               isEditing ||
-                              (event.target instanceof Element && event.target.closest("button"))
+                              (event.target instanceof Element && event.target.closest('button'))
                             ) {
                               return;
                             }
+                            onSelect(conversation.id);
+                            onClose();
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            if (isEditing) return;
+                            event.preventDefault();
                             onSelect(conversation.id);
                             onClose();
                           }}
@@ -1022,101 +1119,100 @@ function HistorySidebar({
                           {isEditing ? (
                             <Input
                               ref={renameInputRef}
-                              aria-label={t("history.rename", {
-                                defaultValue: "Rename conversation",
+                              aria-label={t('history.rename', {
+                                defaultValue: 'Rename conversation'
                               })}
                               value={editingTitle}
-                              onChange={(e) =>
-                                onEditTitleChange(e.target.value)
-                              }
+                              onChange={(e) => onEditTitleChange(e.target.value)}
                               onClick={(e) => e.stopPropagation()}
                               onDoubleClick={(e) => e.stopPropagation()}
                               onBlur={onCommitRename}
                               onKeyDown={(e) => {
-                                if (e.key === "Enter") {
+                                if (e.key === 'Enter') {
                                   e.preventDefault();
                                   onCommitRename();
                                 }
-                                if (e.key === "Escape") {
+                                if (e.key === 'Escape') {
                                   e.preventDefault();
                                   onCancelRename();
                                 }
                               }}
-                              className="h-7 w-full rounded-md border-border bg-background px-1.5 py-0.5 text-xs font-medium shadow-none focus-visible:ring-2 focus-visible:ring-ring/20"
+                              className='h-7 w-full rounded-md border-border bg-background px-1.5 py-0.5 text-xs font-medium shadow-none focus-visible:ring-2 focus-visible:ring-ring/20'
                               disabled={!!renamingId}
                             />
                           ) : (
                             <>
-                              <div className="flex min-w-0 items-center gap-1.5 pr-12">
+                              <div className='flex min-w-0 items-center gap-1.5 pr-12'>
                                 <div
-                                  className="min-w-0 truncate text-[13px] font-medium leading-5"
+                                  className='min-w-0 truncate text-[13px] font-medium leading-5'
                                   onDoubleClick={(e) => {
                                     e.stopPropagation();
                                     onRename(conversation.id, conversation.title);
                                   }}
                                 >
-                                  {conversation.title ||
-                                    t("panel.untitledConversation")}
+                                  {conversation.title || t('panel.untitledConversation')}
                                 </div>
                                 {isRunning && (
                                   <Loader2Icon
-                                    data-testid="conversation-running-indicator"
-                                    aria-label={t("history.running")}
-                                    className="size-3 shrink-0 animate-spin text-muted-foreground"
+                                    data-testid='conversation-running-indicator'
+                                    aria-label={t('history.running')}
+                                    className='size-3 shrink-0 animate-spin text-muted-foreground'
                                   />
                                 )}
                               </div>
-                              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+                              <div className='mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/70'>
                                 {isRunning ? (
-                                  <span>{t("history.running")}</span>
+                                  <span>{t('history.running')}</span>
                                 ) : conversation.created_at ? (
                                   <span>
-                                    {new Date(
-                                      conversation.created_at,
-                                    ).toLocaleDateString()}
+                                    {new Date(conversation.created_at).toLocaleDateString()}
                                   </span>
                                 ) : null}
                               </div>
-                              <div onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger
-                                    render={(
-                                      <Button
-                                        aria-label={t("panel.conversationActions", { defaultValue: "Conversation actions" })}
-                                        className={cn(
-                                          "absolute right-1.5 top-1/2 size-7 -translate-y-1/2 text-muted-foreground/60",
-                                          actionVisibility,
-                                        )}
-                                        size="icon-xs"
-                                        type="button"
-                                        variant="ghost"
-                                      />
-                                    )}
-                                  >
-                                    <MoreHorizontalIcon className="size-3.5" />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuGroup>
-                                      <DropdownMenuLabel>{t("panel.conversationActions", { defaultValue: "Conversation actions" })}</DropdownMenuLabel>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        onClick={() => onRename(conversation.id, conversation.title)}
-                                      >
-                                        <PencilIcon />
-                                        {t("panel.renameConversation")}
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        onClick={() => onDelete(conversation.id)}
-                                        variant="destructive"
-                                      >
-                                        <Trash2Icon />
-                                        {t("history.delete")}
-                                      </DropdownMenuItem>
-                                    </DropdownMenuGroup>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </div>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger
+                                  render={
+                                    <Button
+                                      aria-label={t('panel.conversationActions', {
+                                        defaultValue: 'Conversation actions'
+                                      })}
+                                      className={cn(
+                                        'absolute right-1.5 top-1/2 size-7 -translate-y-1/2 text-muted-foreground/60',
+                                        actionVisibility
+                                      )}
+                                      size='icon-xs'
+                                      type='button'
+                                      variant='ghost'
+                                    />
+                                  }
+                                >
+                                  <MoreHorizontalIcon className='size-3.5' />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align='end' className='w-44'>
+                                  <DropdownMenuGroup>
+                                    <DropdownMenuLabel>
+                                      {t('panel.conversationActions', {
+                                        defaultValue: 'Conversation actions'
+                                      })}
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => onRename(conversation.id, conversation.title)}
+                                    >
+                                      <PencilIcon />
+                                      {t('panel.renameConversation')}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => onDelete(conversation.id)}
+                                      variant='destructive'
+                                    >
+                                      <Trash2Icon />
+                                      {t('history.delete')}
+                                    </DropdownMenuItem>
+                                  </DropdownMenuGroup>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </>
                           )}
                         </div>
@@ -1136,10 +1232,10 @@ function HistorySidebar({
 /* ─── Main Panel Component ─── */
 
 export function AIAssistantPanel({
-  variant = "panel",
-  onPreviewAttachment,
+  variant = 'panel',
+  onPreviewAttachment
 }: {
-  variant?: "panel" | "workspace" | "linear-agent";
+  variant?: 'panel' | 'workspace' | 'linear-agent';
   onPreviewAttachment?: (selection: AttachmentPreviewSelection) => void;
 }) {
   const {
@@ -1156,12 +1252,12 @@ export function AIAssistantPanel({
     setReasoningEffort,
     setApprovalMode,
     cancelWorkflow,
-    stopAssistantResponse,
+    stopAssistantResponse
   } = useAIAssistant();
-  const { t } = useTranslation("ai-assistant");
-  const isWorkspace = variant === "workspace";
-  const isLinearAgent = variant === "linear-agent";
-  const [input, setInput] = useState("");
+  const { t } = useTranslation('ai-assistant');
+  const isWorkspace = variant === 'workspace';
+  const isLinearAgent = variant === 'linear-agent';
+  const [input, setInput] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   useEffect(() => {
     if (isWorkspace) {
@@ -1169,14 +1265,10 @@ export function AIAssistantPanel({
       void refreshConversations();
     }
   }, [isWorkspace, refreshConversations]);
-  const [historySearch, setHistorySearch] = useState("");
-  const [editingConversationId, setEditingConversationId] = useState<
-    string | null
-  >(null);
-  const [editingTitle, setEditingTitle] = useState("");
-  const [renamingConversationId, setRenamingConversationId] = useState<
-    string | null
-  >(null);
+  const [historySearch, setHistorySearch] = useState('');
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [configMenuOpen, setConfigMenuOpen] = useState<ConfigMenu>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -1184,11 +1276,11 @@ export function AIAssistantPanel({
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfig[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const focusComposer = useCallback(() => {
-    if (typeof document === "undefined") return;
+    if (typeof document === 'undefined') return;
     const el =
       inputRef.current ||
       (document.querySelector(
-        '[aria-label="' + t("inputPlaceholder") + '"]',
+        '[aria-label="' + t('inputPlaceholder') + '"]'
       ) as HTMLTextAreaElement | null);
     el?.focus();
   }, [t]);
@@ -1200,38 +1292,33 @@ export function AIAssistantPanel({
   const isStreaming = state.isStreaming;
   const isStopping = state.cancellationRequested;
   const isUploadingAttachments = attachments.some(
-    (attachment) => attachment.status === "uploading",
+    (attachment) => attachment.status === 'uploading'
   );
-  const hasFailedAttachments = attachments.some(
-    (attachment) => attachment.status === "failed",
-  );
+  const hasFailedAttachments = attachments.some((attachment) => attachment.status === 'failed');
   const canSend =
     Boolean(input.trim() || attachments.length > 0) &&
     !isUploadingAttachments &&
     !hasFailedAttachments;
   const selectedProvider = useMemo(
     () =>
-      providerConfigs.find(
-        (provider) => provider.id === state.selectedProviderConfigId,
-      ) ?? null,
-    [providerConfigs, state.selectedProviderConfigId],
+      providerConfigs.find((provider) => provider.id === state.selectedProviderConfigId) ?? null,
+    [providerConfigs, state.selectedProviderConfigId]
   );
   const openProviderSettings = useCallback(() => {
     close();
-    window.history.pushState({}, "", "/settings/providers");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    window.history.pushState({}, '', '/settings/providers');
+    window.dispatchEvent(new PopStateEvent('popstate'));
   }, [close]);
   const modelLabel =
-    selectedProvider?.model ??
-    t("model.platformDefault", { defaultValue: "Platform default" });
+    selectedProvider?.model ?? t('model.platformDefault', { defaultValue: 'Platform default' });
   const reasoningLabel = t(`reasoning.options.${state.reasoningEffort}`, {
-    defaultValue: state.reasoningEffort,
+    defaultValue: state.reasoningEffort
   });
   const approvalLabel = t(`approval.options.${state.approvalMode}`, {
-    defaultValue: state.approvalMode,
+    defaultValue: state.approvalMode
   });
   const approvalHint = t(`approval.hints.${state.approvalMode}`, {
-    defaultValue: "",
+    defaultValue: ''
   });
   const executionItemsByMessageId = useMemo(() => {
     const grouped = new Map<string, AssistantExecutionItem[]>();
@@ -1245,19 +1332,18 @@ export function AIAssistantPanel({
   }, [state.executionItems]);
   const unassignedExecutionItems = useMemo(
     () => state.executionItems.filter((item) => !item.messageId),
-    [state.executionItems],
+    [state.executionItems]
   );
   const latestAssistantMessageId = useMemo(
-    () => [...state.messages].reverse().find((message) => message.role === "assistant")?.id ?? null,
-    [state.messages],
+    () => [...state.messages].reverse().find((message) => message.role === 'assistant')?.id ?? null,
+    [state.messages]
   );
-  const currentConversationIsRunning =
-    isBusy && Boolean(state.currentConversationId);
+  const currentConversationIsRunning = isBusy && Boolean(state.currentConversationId);
 
   const resizeComposer = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
-    el.style.height = "auto";
+    el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
   }, []);
 
@@ -1266,15 +1352,14 @@ export function AIAssistantPanel({
   }, [attachments.length, input, resizeComposer]);
 
   useEffect(() => {
-    const shouldLoadProviderConfigs =
-      isLinearAgent || (state.isOpen && state.mode === "panel");
+    const shouldLoadProviderConfigs = isLinearAgent || (state.isOpen && state.mode === 'panel');
     if (!shouldLoadProviderConfigs) return;
     const timeoutId = window.setTimeout(focusComposer, 150);
     return () => window.clearTimeout(timeoutId);
   }, [focusComposer, isLinearAgent, state.isOpen, state.mode]);
 
   useEffect(() => {
-    if (!state.isOpen || state.mode !== "panel") return;
+    if (!state.isOpen || state.mode !== 'panel') return;
     let cancelled = false;
     void listProviderConfigs()
       .then((result) => {
@@ -1282,15 +1367,13 @@ export function AIAssistantPanel({
         setProviderConfigs(result.data);
         if (
           state.selectedProviderConfigId &&
-          !result.data.some(
-            (provider) => provider.id === state.selectedProviderConfigId,
-          )
+          !result.data.some((provider) => provider.id === state.selectedProviderConfigId)
         ) {
           setSelectedProviderConfig(null);
         }
       })
       .catch((error) => {
-        console.error("Failed to load assistant model configs:", error);
+        console.error('Failed to load assistant model configs:', error);
       });
     return () => {
       cancelled = true;
@@ -1300,13 +1383,13 @@ export function AIAssistantPanel({
     setSelectedProviderConfig,
     state.isOpen,
     state.mode,
-    state.selectedProviderConfigId,
+    state.selectedProviderConfigId
   ]);
 
   useEffect(() => {
     if (!state.isOpen) {
       setHistoryOpen(false);
-      setHistorySearch("");
+      setHistorySearch('');
       setConfigMenuOpen(null);
     }
   }, [state.isOpen]);
@@ -1330,40 +1413,36 @@ export function AIAssistantPanel({
       for (const record of records) {
         let assistantAttachmentId: string | undefined;
         try {
-          const assistantAttachment = await uploadAssistantAttachment(
-            record.file,
-            record.kind,
-          );
+          const assistantAttachment = await uploadAssistantAttachment(record.file, record.kind);
           assistantAttachmentId = assistantAttachment.id;
           setAttachments((current) =>
             current.map((attachment) =>
               attachment.id === record.id
                 ? {
                     ...attachment,
-                    status: "uploaded",
+                    status: 'uploaded',
                     assistantAttachmentId: assistantAttachment.id,
                     mimeType: assistantAttachment.mime_type,
                     extractionStatus: assistantAttachment.extraction_status,
                     extractedText: assistantAttachment.extracted_text,
-                    error: assistantAttachment.error ?? undefined,
+                    error: assistantAttachment.error ?? undefined
                   }
-                : attachment,
-            ),
+                : attachment
+            )
           );
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Attachment upload failed";
+          const message = error instanceof Error ? error.message : 'Attachment upload failed';
           setAttachments((current) =>
             current.map((attachment) =>
               attachment.id === record.id
                 ? {
                     ...attachment,
-                    status: "failed",
-                    extractionStatus: "failed",
-                    error: message,
+                    status: 'failed',
+                    extractionStatus: 'failed',
+                    error: message
                   }
-                : attachment,
-            ),
+                : attachment
+            )
           );
           continue;
         }
@@ -1378,26 +1457,23 @@ export function AIAssistantPanel({
             record.file,
             undefined,
             assistantAttachmentId,
-            true,
+            true
           );
           uploadedProjectDocuments += 1;
           setAttachments((current) =>
             current.map((attachment) =>
-              attachment.id === record.id
-                ? { ...attachment, documentId: document.id }
-                : attachment,
-            ),
+              attachment.id === record.id ? { ...attachment, documentId: document.id } : attachment
+            )
           );
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Upload failed";
+          const message = error instanceof Error ? error.message : 'Upload failed';
           bundlePromise = null;
           setAttachments((current) =>
             current.map((attachment) =>
               attachment.id === record.id
                 ? { ...attachment, error: attachment.error ?? message }
-                : attachment,
-            ),
+                : attachment
+            )
           );
         }
       }
@@ -1405,24 +1481,25 @@ export function AIAssistantPanel({
         try {
           await reingestBundle(targetBundle.id);
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Attachment parsing could not start";
+          const message =
+            error instanceof Error ? error.message : 'Attachment parsing could not start';
           setAttachments((current) =>
             current.map((attachment) =>
               attachment.documentId
                 ? { ...attachment, error: attachment.error ?? message }
-                : attachment,
-            ),
+                : attachment
+            )
           );
         }
       }
     },
-    [],
+    []
   );
 
   const handleAttachmentInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>, kind: ComposerAttachmentKind) => {
       const files = Array.from(event.currentTarget.files ?? []);
-      event.currentTarget.value = "";
+      event.currentTarget.value = '';
       if (files.length === 0) return;
 
       const projectId = state.currentContext.projectId;
@@ -1432,8 +1509,8 @@ export function AIAssistantPanel({
             id: createAttachmentId(file, index),
             file,
             kind,
-            status: "uploading",
-          }) satisfies ComposerAttachment,
+            status: 'uploading'
+          }) satisfies ComposerAttachment
       );
 
       setAttachmentMenuOpen(false);
@@ -1442,13 +1519,11 @@ export function AIAssistantPanel({
       setAttachments((current) => [...current, ...records]);
       void uploadAttachmentRecords(records, projectId);
     },
-    [state.currentContext.projectId, uploadAttachmentRecords],
+    [state.currentContext.projectId, uploadAttachmentRecords]
   );
 
   const handleRemoveAttachment = useCallback((id: string) => {
-    setAttachments((current) =>
-      current.filter((attachment) => attachment.id !== id),
-    );
+    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
   }, []);
 
   const handleAddFromProject = useCallback(() => {
@@ -1456,8 +1531,8 @@ export function AIAssistantPanel({
     setConfigMenuOpen(null);
     setHistoryOpen(false);
     setInput((current) => {
-      const prompt = t("attachments.addFromProjectPrompt", {
-        defaultValue: "请从当前项目资料库中检索并添加相关材料。",
+      const prompt = t('attachments.addFromProjectPrompt', {
+        defaultValue: '请从当前项目资料库中检索并添加相关材料。'
       });
       return current.trim() ? `${current.trim()}\n${prompt}` : prompt;
     });
@@ -1466,7 +1541,7 @@ export function AIAssistantPanel({
 
   const handleSend = useCallback(() => {
     const trimmedInput = input.trim();
-    if (attachments.some((attachment) => attachment.status !== "uploaded")) return;
+    if (attachments.some((attachment) => attachment.status !== 'uploaded')) return;
     const outgoing = buildOutgoingPrompt(trimmedInput, attachments);
     if (!outgoing.trim() || isUploadingAttachments) return;
     const displayContent = buildDisplayContent(trimmedInput, attachments, t);
@@ -1481,10 +1556,10 @@ export function AIAssistantPanel({
       providerConfigId: state.selectedProviderConfigId,
       reasoningEffort: state.reasoningEffort,
       approvalMode: state.approvalMode,
-      composerAttachments: attachments,
+      composerAttachments: attachments
     };
 
-    setInput("");
+    setInput('');
     setAttachments([]);
 
     if (isBusy) {
@@ -1498,7 +1573,7 @@ export function AIAssistantPanel({
       requestAttachments,
       providerConfigId: state.selectedProviderConfigId,
       reasoningEffort: state.reasoningEffort,
-      approvalMode: state.approvalMode,
+      approvalMode: state.approvalMode
     });
   }, [
     attachments,
@@ -1509,22 +1584,25 @@ export function AIAssistantPanel({
     state.reasoningEffort,
     state.approvalMode,
     state.selectedProviderConfigId,
-    t,
+    t
   ]);
 
-  const handleEditQueuedPrompt = useCallback((id: string) => {
-    setQueuedPrompts((current) => {
-      const queued = current.find((item) => item.id === id);
-      if (!queued) return current;
-      setInput(queued.prompt);
-      setAttachments(queued.composerAttachments);
-      requestAnimationFrame(() => {
-        resizeComposer();
-        inputRef.current?.focus();
+  const handleEditQueuedPrompt = useCallback(
+    (id: string) => {
+      setQueuedPrompts((current) => {
+        const queued = current.find((item) => item.id === id);
+        if (!queued) return current;
+        setInput(queued.prompt);
+        setAttachments(queued.composerAttachments);
+        requestAnimationFrame(() => {
+          resizeComposer();
+          inputRef.current?.focus();
+        });
+        return current.filter((item) => item.id !== id);
       });
-      return current.filter((item) => item.id !== id);
-    });
-  }, [resizeComposer]);
+    },
+    [resizeComposer]
+  );
 
   const handleCancelQueuedPrompt = useCallback((id: string) => {
     setQueuedPrompts((current) => current.filter((item) => item.id !== id));
@@ -1542,11 +1620,7 @@ export function AIAssistantPanel({
   }, []);
 
   useEffect(() => {
-    if (
-      queueDrainingRef.current ||
-      isAssistantBusy(state.status) ||
-      queuedPrompts.length === 0
-    )
+    if (queueDrainingRef.current || isAssistantBusy(state.status) || queuedPrompts.length === 0)
       return;
 
     const nextPrompt = queuedPrompts[0];
@@ -1558,7 +1632,7 @@ export function AIAssistantPanel({
       requestAttachments: nextPrompt.requestAttachments,
       providerConfigId: nextPrompt.providerConfigId,
       reasoningEffort: nextPrompt.reasoningEffort,
-      approvalMode: nextPrompt.approvalMode,
+      approvalMode: nextPrompt.approvalMode
     }).finally(() => {
       queueDrainingRef.current = false;
     });
@@ -1578,39 +1652,30 @@ export function AIAssistantPanel({
             providerConfigId: state.selectedProviderConfigId,
             reasoningEffort: state.reasoningEffort,
             approvalMode: state.approvalMode,
-            composerAttachments: [],
-          },
+            composerAttachments: []
+          }
         ]);
         return;
       }
       void sendMessage(text, {
         providerConfigId: state.selectedProviderConfigId,
         reasoningEffort: state.reasoningEffort,
-        approvalMode: state.approvalMode,
+        approvalMode: state.approvalMode
       });
     },
-    [
-      isBusy,
-      sendMessage,
-      state.approvalMode,
-      state.reasoningEffort,
-      state.selectedProviderConfigId,
-    ],
+    [isBusy, sendMessage, state.approvalMode, state.reasoningEffort, state.selectedProviderConfigId]
   );
 
-  const beginRenameConversation = useCallback(
-    (id: string, title: string | null) => {
-      setAttachmentMenuOpen(false);
-      setConfigMenuOpen(null);
-      setEditingConversationId(id);
-      setEditingTitle(title || "");
-    },
-    [],
-  );
+  const beginRenameConversation = useCallback((id: string, title: string | null) => {
+    setAttachmentMenuOpen(false);
+    setConfigMenuOpen(null);
+    setEditingConversationId(id);
+    setEditingTitle(title || '');
+  }, []);
 
   const cancelRenameConversation = useCallback(() => {
     setEditingConversationId(null);
-    setEditingTitle("");
+    setEditingTitle('');
   }, []);
 
   const commitRenameConversation = useCallback(async () => {
@@ -1626,7 +1691,7 @@ export function AIAssistantPanel({
       updateConversationTitle(editingConversationId, normalizedTitle);
       void refreshConversations();
     } catch (error) {
-      console.error("Failed to rename conversation:", error);
+      console.error('Failed to rename conversation:', error);
     } finally {
       setRenamingConversationId(null);
       cancelRenameConversation();
@@ -1636,7 +1701,7 @@ export function AIAssistantPanel({
     editingConversationId,
     editingTitle,
     refreshConversations,
-    updateConversationTitle,
+    updateConversationTitle
   ]);
 
   const startConversationOnSurface = useCallback(() => {
@@ -1649,7 +1714,7 @@ export function AIAssistantPanel({
       await loadConversation(conversationId);
       setHistoryOpen(false);
     },
-    [loadConversation],
+    [loadConversation]
   );
 
   const handleDeleteConversation = useCallback(
@@ -1661,17 +1726,13 @@ export function AIAssistantPanel({
         }
         await refreshConversations();
       } catch (error) {
-        console.error("Failed to delete conversation:", error);
+        console.error('Failed to delete conversation:', error);
       }
     },
-    [
-      refreshConversations,
-      startConversationOnSurface,
-      state.currentConversationId,
-    ],
+    [refreshConversations, startConversationOnSurface, state.currentConversationId]
   );
 
-  if (!isWorkspace && !isLinearAgent && (!state.isOpen || state.mode !== "panel")) return null;
+  if (!isWorkspace && !isLinearAgent && (!state.isOpen || state.mode !== 'panel')) return null;
 
   if (isLinearAgent) {
     const handleAttachmentMenuOpenChange = (open: boolean) => {
@@ -1684,24 +1745,24 @@ export function AIAssistantPanel({
     };
 
     return (
-      <div className="bp-linear-agent-composer" data-testid="linear-agent-composer">
+      <div className='bp-linear-agent-composer' data-testid='linear-agent-composer'>
         <input
           ref={fileInputRef}
-          type="file"
+          type='file'
           multiple
-          className="sr-only"
-          onChange={(event) => handleAttachmentInputChange(event, "file")}
+          className='sr-only'
+          onChange={(event) => handleAttachmentInputChange(event, 'file')}
         />
         <input
           ref={imageInputRef}
-          type="file"
+          type='file'
           multiple
-          accept="image/*"
-          className="sr-only"
-          onChange={(event) => handleAttachmentInputChange(event, "image")}
+          accept='image/*'
+          className='sr-only'
+          onChange={(event) => handleAttachmentInputChange(event, 'image')}
         />
         {attachments.length > 0 && (
-          <div className="bp-linear-agent-attachments" aria-label="Attachments">
+          <div className='bp-linear-agent-attachments' aria-label='Attachments'>
             {attachments.map((attachment) => (
               <AttachmentPreviewCard
                 key={attachment.id}
@@ -1718,7 +1779,7 @@ export function AIAssistantPanel({
           </div>
         )}
         {queuedPrompts.length > 0 && (
-          <section className="bp-linear-agent-queue" aria-label="待发送队列">
+          <section className='bp-linear-agent-queue' aria-label='待发送队列'>
             <header>
               <span>待发送</span>
               <small>{queuedPrompts.length}</small>
@@ -1726,27 +1787,50 @@ export function AIAssistantPanel({
             <ol>
               {queuedPrompts.map((queued, index) => (
                 <li key={queued.id}>
-                  <span className="bp-linear-agent-queue-order" aria-hidden="true">{index + 1}</span>
+                  <span className='bp-linear-agent-queue-order' aria-hidden='true'>
+                    {index + 1}
+                  </span>
                   <Button
-                    type="button"
-                    className="bp-linear-agent-queue-copy"
+                    type='button'
+                    className='bp-linear-agent-queue-copy'
                     onClick={() => handleEditQueuedPrompt(queued.id)}
-                    title="编辑待发送消息"
-                    size="sm"
-                    variant="ghost"
+                    title='编辑待发送消息'
+                    size='sm'
+                    variant='ghost'
                   >
                     {queued.displayContent}
                   </Button>
-                  <div className="bp-linear-agent-queue-actions">
+                  <div className='bp-linear-agent-queue-actions'>
                     {index > 0 && (
-                      <Button type="button" onClick={() => handlePrioritizeQueuedPrompt(queued.id)} title="移到队列最前" aria-label="移到队列最前" size="icon-xs" variant="ghost">
+                      <Button
+                        type='button'
+                        onClick={() => handlePrioritizeQueuedPrompt(queued.id)}
+                        title='移到队列最前'
+                        aria-label='移到队列最前'
+                        size='icon-xs'
+                        variant='ghost'
+                      >
                         <ArrowUpIcon size={14} />
                       </Button>
                     )}
-                    <Button type="button" onClick={() => handleEditQueuedPrompt(queued.id)} title="编辑待发送消息" aria-label="编辑待发送消息" size="icon-xs" variant="ghost">
+                    <Button
+                      type='button'
+                      onClick={() => handleEditQueuedPrompt(queued.id)}
+                      title='编辑待发送消息'
+                      aria-label='编辑待发送消息'
+                      size='icon-xs'
+                      variant='ghost'
+                    >
                       <PencilIcon size={13} />
                     </Button>
-                    <Button type="button" onClick={() => handleCancelQueuedPrompt(queued.id)} title="取消待发送消息" aria-label="取消待发送消息" size="icon-xs" variant="ghost">
+                    <Button
+                      type='button'
+                      onClick={() => handleCancelQueuedPrompt(queued.id)}
+                      title='取消待发送消息'
+                      aria-label='取消待发送消息'
+                      size='icon-xs'
+                      variant='ghost'
+                    >
                       <XIcon size={14} />
                     </Button>
                   </div>
@@ -1759,14 +1843,14 @@ export function AIAssistantPanel({
           ref={inputRef}
           value={input}
           rows={1}
-          aria-label={t("inputPlaceholder")}
-          placeholder={t("inputPlaceholder", { defaultValue: "Ask BidPilot..." })}
+          aria-label={t('inputPlaceholder')}
+          placeholder={t('inputPlaceholder', { defaultValue: 'Ask BidPilot...' })}
           onChange={(event) => {
             setInput(event.target.value);
             requestAnimationFrame(resizeComposer);
           }}
           onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.shiftKey) return;
+            if (event.key !== 'Enter' || event.shiftKey) return;
             event.preventDefault();
             if (isStreaming) {
               if (!isStopping) stopAssistantResponse();
@@ -1774,12 +1858,12 @@ export function AIAssistantPanel({
             }
             handleSend();
           }}
-          className="bp-linear-agent-textarea focus-visible:ring-0 focus-visible:ring-offset-0"
+          className='bp-linear-agent-textarea focus-visible:ring-0 focus-visible:ring-offset-0'
         />
-        <div className="bp-linear-agent-composer-footer">
-          <div className="bp-linear-agent-composer-left">
+        <div className='bp-linear-agent-composer-footer'>
+          <div className='bp-linear-agent-composer-left'>
             <AssistantComposerMenus
-              variant="linear"
+              variant='linear'
               showConfig={false}
               attachmentMenuOpen={attachmentMenuOpen}
               configMenuOpen={configMenuOpen}
@@ -1800,11 +1884,13 @@ export function AIAssistantPanel({
               onUploadImage={() => imageInputRef.current?.click()}
               onAddFromProject={handleAddFromProject}
             />
-            <span className="bp-linear-agent-keyhint"><CornerDownLeftIcon size={13} /> {isBusy ? "Enter to queue" : "Enter to send"}</span>
+            <span className='bp-linear-agent-keyhint'>
+              <CornerDownLeftIcon size={13} /> {isBusy ? 'Enter to queue' : 'Enter to send'}
+            </span>
           </div>
-          <div className="bp-linear-agent-composer-right">
+          <div className='bp-linear-agent-composer-right'>
             <AssistantComposerMenus
-              variant="linear"
+              variant='linear'
               showAttachment={false}
               attachmentMenuOpen={attachmentMenuOpen}
               configMenuOpen={configMenuOpen}
@@ -1826,15 +1912,29 @@ export function AIAssistantPanel({
               onAddFromProject={handleAddFromProject}
             />
             <Button
-              type="button"
-              className="bp-linear-agent-send"
+              type='button'
+              className='bp-linear-agent-send'
               onClick={isStopping ? undefined : isStreaming ? stopAssistantResponse : handleSend}
               disabled={isStopping || (!isStreaming && !canSend)}
-              aria-label={isStopping ? t("actions.stopRequested") : isStreaming ? t("actions.stopGenerating") : t("actions.send")}
-              size="icon-sm"
-              variant="ghost"
+              aria-label={
+                isStopping
+                  ? t('actions.stopRequested')
+                  : isStreaming
+                    ? t('actions.stopGenerating')
+                    : t('actions.send')
+              }
+              size='icon-sm'
+              variant='ghost'
             >
-              {isStopping ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : isStreaming ? <SquareIcon aria-hidden="true" fill="currentColor" /> : isUploadingAttachments ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : <SendIcon aria-hidden="true" />}
+              {isStopping ? (
+                <Loader2Icon aria-hidden='true' className='animate-spin' />
+              ) : isStreaming ? (
+                <SquareIcon aria-hidden='true' fill='currentColor' />
+              ) : isUploadingAttachments ? (
+                <Loader2Icon aria-hidden='true' className='animate-spin' />
+              ) : (
+                <SendIcon aria-hidden='true' />
+              )}
             </Button>
           </div>
         </div>
@@ -1845,116 +1945,112 @@ export function AIAssistantPanel({
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden",
+        'flex flex-col overflow-hidden',
         isWorkspace
-          ? "relative h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-background"
-          : "fixed inset-0 z-40 h-[100dvh] w-full animate-slide-in border-l bg-background sm:left-auto sm:w-[min(100vw,390px)] md:w-[500px] xl:w-[560px]",
+          ? 'relative h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-background'
+          : 'fixed inset-0 z-40 h-[100dvh] w-full animate-slide-in border-l bg-background sm:left-auto sm:w-[min(100vw,390px)] md:w-[500px] xl:w-[560px]'
       )}
       style={
         isWorkspace
           ? undefined
           : {
-              borderColor: "var(--border)",
-              boxShadow: "-20px 0 48px oklch(0 0 0 / 0.18)",
+              borderColor: 'var(--border)',
+              boxShadow: '-20px 0 48px oklch(0 0 0 / 0.18)'
             }
       }
     >
       {/* Compact chat header — no page marketing chrome */}
       <div
-        data-testid="assistant-panel-header"
+        data-testid='assistant-panel-header'
         className={cn(
-          "flex shrink-0 items-center justify-between gap-2 border-b px-3",
-          isWorkspace ? "h-12" : "min-h-14 px-3.5",
+          'flex shrink-0 items-center justify-between gap-2 border-b px-3',
+          isWorkspace ? 'h-12' : 'min-h-14 px-3.5'
         )}
         style={{
-          borderColor: "var(--border)",
-          background: "var(--background)",
+          borderColor: 'var(--border)',
+          background: 'var(--background)'
         }}
       >
-        <div className="flex min-w-0 items-center gap-2">
+        <div className='flex min-w-0 items-center gap-2'>
           <Button
-            data-testid="assistant-history-toggle"
-            variant="ghost"
-            size="icon-sm"
+            data-testid='assistant-history-toggle'
+            variant='ghost'
+            size='icon-sm'
             className={cn(
-              "text-muted-foreground",
-              historyOpen && "bg-muted text-foreground",
-              isWorkspace && "lg:hidden",
+              'text-muted-foreground',
+              historyOpen && 'bg-muted text-foreground',
+              isWorkspace && 'lg:hidden'
             )}
             onClick={() => {
               setAttachmentMenuOpen(false);
               setConfigMenuOpen(null);
               setHistoryOpen((v) => !v);
             }}
-            title={t("panel.history")}
+            title={t('panel.history')}
           >
-            <HistoryIcon className="size-4" />
+            <HistoryIcon className='size-4' />
           </Button>
-          <AgentMark
-            decorative
-            className={cn(isWorkspace ? "size-7" : "size-8")}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium text-foreground">
+          <AgentMark decorative className={cn(isWorkspace ? 'size-7' : 'size-8')} />
+          <div className='min-w-0 flex-1'>
+            <div className='truncate text-sm font-medium text-foreground'>
               {state.currentConversationId
                 ? (Array.isArray(state.conversations)
-                    ? state.conversations.find(
-                        (item) => item.id === state.currentConversationId,
-                      )?.title
-                    : null) || t("panel.untitledConversation")
-                : t("title")}
+                    ? state.conversations.find((item) => item.id === state.currentConversationId)
+                        ?.title
+                    : null) || t('panel.untitledConversation')
+                : t('title')}
             </div>
             {!isWorkspace && (
-              <div className="truncate text-[11px] text-muted-foreground">
-                {state.status === "idle"
-                  ? t("status.ready", { defaultValue: "Ready" })
+              <div className='truncate text-[11px] text-muted-foreground'>
+                {state.status === 'idle'
+                  ? t('status.ready', { defaultValue: 'Ready' })
                   : t(`status.${state.status}`, {
-                      defaultValue: t("thinking"),
+                      defaultValue: t('thinking')
                     })}
               </div>
             )}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className='flex shrink-0 items-center gap-0.5'>
           {isWorkspace ? (
             <Button
-              variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground lg:hidden"
+              variant='ghost'
+              size='icon-sm'
+              className='text-muted-foreground lg:hidden'
               onClick={startConversationOnSurface}
-              title={t("panel.newConversation")}
+              title={t('panel.newConversation')}
             >
-              <PlusIcon className="size-4" />
+              <PlusIcon className='size-4' />
             </Button>
           ) : (
             <Button
-              variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground"
+              variant='ghost'
+              size='icon-sm'
+              className='text-muted-foreground'
               onClick={startConversationOnSurface}
-              title={t("panel.newConversation")}
+              title={t('panel.newConversation')}
             >
-              <PlusIcon className="size-4" />
+              <PlusIcon className='size-4' />
             </Button>
           )}
           <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground"
-            onClick={() => toggle("command")}
-            title={t("panel.openCommand")}
+            variant='ghost'
+            size='icon-sm'
+            className='text-muted-foreground'
+            onClick={() => toggle('command')}
+            title={t('panel.openCommand')}
           >
-            <CommandIcon className="size-4" />
+            <CommandIcon className='size-4' />
           </Button>
           {!isWorkspace && (
             <Button
-              variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground"
+              variant='ghost'
+              size='icon-sm'
+              className='text-muted-foreground'
               onClick={close}
-              title={t("panel.close")}
+              title={t('panel.close')}
             >
-              <PanelRightCloseIcon className="size-4" />
+              <PanelRightCloseIcon className='size-4' />
             </Button>
           )}
         </div>
@@ -1962,17 +2058,15 @@ export function AIAssistantPanel({
 
       {/* The conversation pane owns both scrolling messages and the composer. */}
       <div
-        data-testid="assistant-panel-body"
+        data-testid='assistant-panel-body'
         className={cn(
-          "relative flex min-h-0 flex-1 overflow-hidden",
-          isWorkspace ? "flex-row" : "flex-col",
+          'relative flex min-h-0 flex-1 overflow-hidden',
+          isWorkspace ? 'flex-row' : 'flex-col'
         )}
       >
         {isWorkspace && (
           <HistorySidebar
-            conversations={
-              Array.isArray(state.conversations) ? state.conversations : []
-            }
+            conversations={Array.isArray(state.conversations) ? state.conversations : []}
             currentId={state.currentConversationId}
             searchQuery={historySearch}
             onSearchChange={setHistorySearch}
@@ -1997,23 +2091,21 @@ export function AIAssistantPanel({
         {historyOpen && (
           <>
             <button
-              aria-label={t("panel.closeHistory")}
+              aria-label={t('panel.closeHistory')}
               className={cn(
-                "absolute inset-0 z-10 bg-black/20 backdrop-blur-[1px]",
-                isWorkspace && "lg:hidden",
+                'absolute inset-0 z-10 bg-black/20 backdrop-blur-[1px]',
+                isWorkspace && 'lg:hidden'
               )}
               onClick={() => setHistoryOpen(false)}
             />
             <div
               className={cn(
-                "absolute inset-y-0 left-0 z-20 max-w-full",
-                isWorkspace && "lg:hidden",
+                'absolute inset-y-0 left-0 z-20 max-w-full',
+                isWorkspace && 'lg:hidden'
               )}
             >
               <HistorySidebar
-                conversations={
-                  Array.isArray(state.conversations) ? state.conversations : []
-                }
+                conversations={Array.isArray(state.conversations) ? state.conversations : []}
                 currentId={state.currentConversationId}
                 searchQuery={historySearch}
                 onSearchChange={setHistorySearch}
@@ -2037,87 +2129,71 @@ export function AIAssistantPanel({
         )}
 
         <div
-          data-testid="assistant-conversation-pane"
-          className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
+          data-testid='assistant-conversation-pane'
+          className='relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background'
         >
           <div
-            data-testid="assistant-message-pane"
-            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            data-testid='assistant-message-pane'
+            className='relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
           >
-            <ChatContainerRoot className="relative min-h-0 flex-1">
+            <ChatContainerRoot className='relative min-h-0 flex-1'>
               <ChatContainerContent
                 className={cn(
-                  "gap-3 px-3 py-3 sm:px-4 sm:py-4",
-                  isWorkspace && "mx-auto w-full max-w-4xl px-4 py-5 sm:px-6",
+                  'gap-3 px-3 py-3 sm:px-4 sm:py-4',
+                  isWorkspace && 'mx-auto w-full max-w-4xl px-4 py-5 sm:px-6'
                 )}
               >
                 {state.messages.length === 0 ? (
-                  <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                    <AgentMark
-                      decorative
-                      className="mx-auto mb-4 size-14 shadow-sm"
-                    />
-                    <h3 className="mb-1 text-base font-semibold text-foreground">
-                      {t("welcome.title")}
+                  <div className='flex flex-1 flex-col items-center justify-center py-10 text-center'>
+                    <AgentMark decorative className='mx-auto mb-4 size-14 shadow-sm' />
+                    <h3 className='mb-1 text-base font-semibold text-foreground'>
+                      {t('welcome.title')}
                     </h3>
-                    <p className="mb-6 max-w-[28ch] text-sm leading-6 text-muted-foreground">
-                      {t("welcome.description")}
+                    <p className='mb-6 max-w-[28ch] text-sm leading-6 text-muted-foreground'>
+                      {t('welcome.description')}
                     </p>
                     <QuickActions onSelect={handleQuickAction} />
                   </div>
                 ) : (
                   <>
                     {state.messages.map((msg) => {
-                      const turnItems =
-                        executionItemsByMessageId.get(msg.id) ?? [];
+                      const turnItems = executionItemsByMessageId.get(msg.id) ?? [];
                       const pendingConfirmation =
                         state.pendingConfirmation?.messageId === msg.id
                           ? state.pendingConfirmation
                           : null;
 
                       return (
-                        <div key={msg.id} className="flex flex-col gap-2">
-                          {msg.role === "assistant" && pendingConfirmation && (
+                        <div key={msg.id} className='flex flex-col gap-2'>
+                          {msg.role === 'assistant' && pendingConfirmation && (
                             <AssistantConfirmationCard
                               confirmation={pendingConfirmation}
                               onConfirm={(confirmationText) =>
-                                void confirmAssistantAction(
-                                  true,
-                                  confirmationText,
-                                )
+                                void confirmAssistantAction(true, confirmationText)
                               }
-                              onCancel={() =>
-                                void confirmAssistantAction(false)
-                              }
+                              onCancel={() => void confirmAssistantAction(false)}
                             />
                           )}
                           <MessageBubble
                             msg={msg}
-                            activityItems={
-                              msg.role === "assistant" ? turnItems : []
-                            }
-                            onCancelWorkflow={
-                              msg.role === "assistant"
-                                ? cancelWorkflow
-                                : undefined
-                            }
+                            activityItems={msg.role === 'assistant' ? turnItems : []}
+                            onCancelWorkflow={msg.role === 'assistant' ? cancelWorkflow : undefined}
                             onConfigureProvider={
-                              msg.role === "assistant"
-                                ? openProviderSettings
-                                : undefined
+                              msg.role === 'assistant' ? openProviderSettings : undefined
                             }
                             isStreaming={
-                              state.isStreaming &&
-                              state.activeAssistantMessageId === msg.id
+                              state.isStreaming && state.activeAssistantMessageId === msg.id
                             }
                             isThinking={
-                              state.isThinking &&
-                              state.activeAssistantMessageId === msg.id
+                              state.isThinking && state.activeAssistantMessageId === msg.id
                             }
                             sessionError={
-                              (state.sessionErrorRuntimeRunId
-                                ? state.sessionErrorRuntimeRunId === msg.runtimeRunId
-                                : (state.activeAssistantMessageId ?? latestAssistantMessageId) === msg.id)
+                              (
+                                state.sessionErrorRuntimeRunId
+                                  ? state.sessionErrorRuntimeRunId === msg.runtimeRunId
+                                  : (state.activeAssistantMessageId ?? latestAssistantMessageId) ===
+                                    msg.id
+                              )
                                 ? state.sessionError
                                 : null
                             }
@@ -2132,20 +2208,21 @@ export function AIAssistantPanel({
                         onConfigureProvider={openProviderSettings}
                       />
                     )}
-                    {state.pendingConfirmation &&
-                      !state.pendingConfirmation.messageId && (
-                        <AssistantConfirmationCard
-                          confirmation={state.pendingConfirmation}
-                          onConfirm={(confirmationText) =>
-                            void confirmAssistantAction(true, confirmationText)
-                          }
-                          onCancel={() => void confirmAssistantAction(false)}
-                        />
-                      )}
+                    {state.pendingConfirmation && !state.pendingConfirmation.messageId && (
+                      <AssistantConfirmationCard
+                        confirmation={state.pendingConfirmation}
+                        onConfirm={(confirmationText) =>
+                          void confirmAssistantAction(true, confirmationText)
+                        }
+                        onCancel={() => void confirmAssistantAction(false)}
+                      />
+                    )}
                     {state.pendingInput && (
                       <AssistantInputRequestForm
                         request={state.pendingInput}
-                        onSubmit={(content) => void sendMessage(content, { displayContent: content })}
+                        onSubmit={(content) =>
+                          void sendMessage(content, { displayContent: content })
+                        }
                       />
                     )}
                     <ChatContainerScrollAnchor />
@@ -2153,14 +2230,14 @@ export function AIAssistantPanel({
                 )}
               </ChatContainerContent>
               {!historyOpen && state.messages.length > 0 && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+                <div className='pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center'>
                   <ScrollButton
-                    aria-label={t("panel.scrollToBottom", {
-                      defaultValue: "Scroll to bottom",
+                    aria-label={t('panel.scrollToBottom', {
+                      defaultValue: 'Scroll to bottom'
                     })}
-                    className="pointer-events-auto size-9 border bg-background/95 text-muted-foreground shadow-sm backdrop-blur hover:text-foreground"
-                    size="icon"
-                    variant="outline"
+                    className='pointer-events-auto size-9 border bg-background/95 text-muted-foreground shadow-sm backdrop-blur hover:text-foreground'
+                    size='icon'
+                    variant='outline'
                   />
                 </div>
               )}
@@ -2169,33 +2246,31 @@ export function AIAssistantPanel({
 
           {/* ─── Input ─── */}
           <div
-            data-testid="assistant-composer"
+            data-testid='assistant-composer'
             className={cn(
-              "shrink-0 border-t bg-background px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3",
-              isWorkspace ? "px-4 sm:px-6" : "sm:px-3",
+              'shrink-0 border-t bg-background px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3',
+              isWorkspace ? 'px-4 sm:px-6' : 'sm:px-3'
             )}
           >
             <input
               ref={fileInputRef}
-              type="file"
+              type='file'
               multiple
-              className="hidden"
-              onChange={(event) => handleAttachmentInputChange(event, "file")}
+              className='hidden'
+              onChange={(event) => handleAttachmentInputChange(event, 'file')}
             />
             <input
               ref={imageInputRef}
-              type="file"
-              accept="image/*"
+              type='file'
+              accept='image/*'
               multiple
-              className="hidden"
-              onChange={(event) => handleAttachmentInputChange(event, "image")}
+              className='hidden'
+              onChange={(event) => handleAttachmentInputChange(event, 'image')}
             />
-            <ComposerFrame
-              className={cn("w-full", isWorkspace && "mx-auto max-w-4xl")}
-            >
-              <div className="rounded-xl border bg-card px-2 py-2 shadow-sm transition-colors focus-within:border-muted-foreground/35">
+            <ComposerFrame className={cn('w-full', isWorkspace && 'mx-auto max-w-4xl')}>
+              <div className='rounded-xl border bg-card px-2 py-2 shadow-sm transition-colors focus-within:border-muted-foreground/35'>
                 {(attachments.length > 0 || queuedPrompts.length > 0) && (
-                  <div className="mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pb-2 pt-1">
+                  <div className='mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pb-2 pt-1'>
                     {attachments.map((attachment) => (
                       <AttachmentPreviewCard
                         key={attachment.id}
@@ -2211,25 +2286,23 @@ export function AIAssistantPanel({
                     {queuedPrompts.map((queued) => (
                       <div
                         key={queued.id}
-                        className="flex h-16 w-[min(13.5rem,72vw)] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs"
+                        className='flex h-16 w-[min(13.5rem,72vw)] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs'
                         style={{
-                          background:
-                            "color-mix(in oklch, var(--background) 88%, transparent)",
-                          borderColor:
-                            "color-mix(in oklch, var(--border) 72%, transparent)",
-                          color: "var(--muted-foreground)",
+                          background: 'color-mix(in oklch, var(--background) 88%, transparent)',
+                          borderColor: 'color-mix(in oklch, var(--border) 72%, transparent)',
+                          color: 'var(--muted-foreground)'
                         }}
                       >
-                        <Loader2Icon className="h-4 w-4 shrink-0 animate-spin" />
-                        <span className="min-w-0 truncate">
-                          {t("panel.queuedPrompt", { defaultValue: "Queued" })}:{" "}
+                        <Loader2Icon className='h-4 w-4 shrink-0 animate-spin' />
+                        <span className='min-w-0 truncate'>
+                          {t('panel.queuedPrompt', { defaultValue: 'Queued' })}:{' '}
                           {queued.displayContent}
                         </span>
                       </div>
                     ))}
                   </div>
                 )}
-                <div className="flex min-h-10 items-center gap-1.5">
+                <div className='flex min-h-10 items-center gap-1.5'>
                   <DropdownMenu
                     open={attachmentMenuOpen}
                     onOpenChange={(open) => {
@@ -2238,16 +2311,37 @@ export function AIAssistantPanel({
                       setAttachmentMenuOpen(open);
                     }}
                   >
-                    <DropdownMenuTrigger render={<Button aria-label={t("attachments.add", { defaultValue: "Add attachment" })} className="flex size-8 items-center justify-center rounded-full text-muted-foreground" size="icon-sm" type="button" variant="ghost" />}>
-                      <PlusIcon aria-hidden="true" />
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          aria-label={t('attachments.add', { defaultValue: 'Add attachment' })}
+                          className='flex size-8 items-center justify-center rounded-full text-muted-foreground'
+                          size='icon-sm'
+                          type='button'
+                          variant='ghost'
+                        />
+                      }
+                    >
+                      <PlusIcon aria-hidden='true' />
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56" side="top" sideOffset={8}>
+                    <DropdownMenuContent align='start' className='w-56' side='top' sideOffset={8}>
                       <DropdownMenuGroup>
-                        <DropdownMenuLabel>{t("attachments.menuTitle", { defaultValue: "Add to this message" })}</DropdownMenuLabel>
+                        <DropdownMenuLabel>
+                          {t('attachments.menuTitle', { defaultValue: 'Add to this message' })}
+                        </DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => fileInputRef.current?.click()}><FileIcon aria-hidden="true" />{t("attachments.uploadFile", { defaultValue: "Upload file" })}</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => imageInputRef.current?.click()}><ImageIcon aria-hidden="true" />{t("attachments.uploadImage", { defaultValue: "Upload image" })}</DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleAddFromProject}><FolderOpenIcon aria-hidden="true" />{t("attachments.addFromProject", { defaultValue: "Add from project" })}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                          <FileIcon aria-hidden='true' />
+                          {t('attachments.uploadFile', { defaultValue: 'Upload file' })}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
+                          <ImageIcon aria-hidden='true' />
+                          {t('attachments.uploadImage', { defaultValue: 'Upload image' })}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleAddFromProject}>
+                          <FolderOpenIcon aria-hidden='true' />
+                          {t('attachments.addFromProject', { defaultValue: 'Add from project' })}
+                        </DropdownMenuItem>
                       </DropdownMenuGroup>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -2259,85 +2353,91 @@ export function AIAssistantPanel({
                     }}
                     onSubmit={handleSend}
                     isLoading={isBusy || isUploadingAttachments}
-                    className="min-w-0 flex-1 rounded-lg border-0 bg-transparent p-0 shadow-none"
+                    className='min-w-0 flex-1 rounded-lg border-0 bg-transparent p-0 shadow-none'
                   >
                     <PromptInputTextarea
-                      aria-label={t("inputPlaceholder")}
-                      placeholder={t("inputPlaceholder")}
-                      className="min-h-8 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-[14px]"
+                      aria-label={t('inputPlaceholder')}
+                      placeholder={t('inputPlaceholder')}
+                      className='min-h-8 max-h-28 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1.5 text-[16px] leading-6 text-foreground outline-none placeholder:text-muted-foreground sm:text-[14px]'
                     />
-                    <PromptInputActions className="shrink-0">
+                    <PromptInputActions className='shrink-0'>
                       <PromptInputAction
                         tooltip={
                           isStopping
-                            ? t("actions.stopRequested")
+                            ? t('actions.stopRequested')
                             : isStreaming
-                            ? t("actions.stopGenerating")
-                            : t("actions.send")
+                              ? t('actions.stopGenerating')
+                              : t('actions.send')
                         }
                       >
                         <Button
-                          type="button"
-                          onClick={isStopping ? undefined : isStreaming ? stopAssistantResponse : handleSend}
+                          type='button'
+                          onClick={
+                            isStopping
+                              ? undefined
+                              : isStreaming
+                                ? stopAssistantResponse
+                                : handleSend
+                          }
                           disabled={isStopping || (!isStreaming && !canSend)}
                           aria-label={
                             isStopping
-                              ? t("actions.stopRequested")
+                              ? t('actions.stopRequested')
                               : isStreaming
-                              ? t("actions.stopGenerating")
-                              : t("actions.send")
+                                ? t('actions.stopGenerating')
+                                : t('actions.send')
                           }
                           className={cn(
-                            "relative flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
+                            'relative flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35',
                             isStopping
-                              ? "bg-muted text-muted-foreground"
+                              ? 'bg-muted text-muted-foreground'
                               : isStreaming
-                              ? "bg-foreground text-background shadow-[0_8px_20px_oklch(0_0_0/0.2)] hover:scale-[1.03] active:scale-95"
-                              : canSend
-                              ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
-                              : "text-muted-foreground",
+                                ? 'bg-foreground text-background shadow-[0_8px_20px_oklch(0_0_0/0.2)] hover:scale-[1.03] active:scale-95'
+                                : canSend
+                                  ? 'bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95'
+                                  : 'text-muted-foreground'
                           )}
-                          size="icon"
-                          variant="ghost"
+                          size='icon'
+                          variant='ghost'
                         >
                           {isStopping ? (
-                            <Loader2Icon className="size-4 animate-spin" />
+                            <Loader2Icon className='size-4 animate-spin' />
                           ) : isStreaming ? (
                             <>
-                              <Loader2Icon className="absolute size-[1.15rem] animate-spin opacity-45" />
-                              <SquareIcon className="relative size-2.5 fill-current" />
+                              <Loader2Icon className='absolute size-[1.15rem] animate-spin opacity-45' />
+                              <SquareIcon className='relative size-2.5 fill-current' />
                             </>
                           ) : isUploadingAttachments ? (
-                            <Loader2Icon className="h-4 w-4 animate-spin" />
+                            <Loader2Icon className='h-4 w-4 animate-spin' />
                           ) : (
-                            <SendIcon className="w-4 h-4" />
+                            <SendIcon className='w-4 h-4' />
                           )}
                         </Button>
                       </PromptInputAction>
                     </PromptInputActions>
                   </PromptInput>
                 </div>
-                <div className="mt-1.5 flex min-h-5 items-center justify-between gap-2 px-1">
-                  <span className="hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex">
+                <div className='mt-1.5 flex min-h-5 items-center justify-between gap-2 px-1'>
+                  <span className='hidden items-center gap-1 text-[10px] text-muted-foreground min-[380px]:flex'>
                     {isStreaming ? (
                       <>
-                        <Loader2Icon className="size-3 animate-spin" />
-                        {isStopping ? t("actions.stopRequested") : t("panel.running")}
+                        <Loader2Icon className='size-3 animate-spin' />
+                        {isStopping ? t('actions.stopRequested') : t('panel.running')}
                       </>
                     ) : (
                       <>
-                        <CornerDownLeftIcon className="w-3 h-3" />{" "}
+                        <CornerDownLeftIcon className='w-3 h-3' />{' '}
                         {isBusy
-                      ? t("panel.enterToQueue", {
-                          defaultValue: "Enter queues",
-                        })
-                      : t("panel.enterToSend")}
+                          ? t('panel.enterToQueue', {
+                              defaultValue: 'Enter queues'
+                            })
+                          : t('panel.enterToSend')}
                       </>
                     )}
                   </span>
-                  <div className="relative ml-auto flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
+                  <div className='relative ml-auto flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground'>
                     <AssistantComposerMenus
-                      variant="panel"
+                      variant='panel'
                       showAttachment={false}
                       attachmentMenuOpen={attachmentMenuOpen}
                       configMenuOpen={configMenuOpen}

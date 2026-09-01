@@ -132,6 +132,9 @@ It is organized to support three goals:
 
 ### Implementation plans
 
+- `docs/superpowers/plans/2026-09-01-kiranism-next-bidpilot-migration.md`
+  - Kiranism Next frontend migration, FastAPI BFF boundary, and acceptance contract
+
 - `docs/superpowers/plans/2026-04-18-docpilot-phase-0-foundation.md`
   - repository bootstrap, environments, shared contracts, and local dev stack
 - `docs/superpowers/plans/2026-04-18-docpilot-phase-1-bidpilot-core.md`

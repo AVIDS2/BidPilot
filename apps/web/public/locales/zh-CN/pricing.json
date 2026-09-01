@@ -11,12 +11,7 @@
       "price": "免费",
       "period": "",
       "description": "体验单次招标响应。",
-      "features": [
-        "最多 3 个项目",
-        "1 个场景包（BidPilot）",
-        "社区支持",
-        "基础审计追踪"
-      ],
+      "features": ["最多 3 个项目", "1 个场景包（BidPilot）", "社区支持", "基础审计追踪"],
       "cta": "开始使用"
     },
     "professional": {

@@ -1,45 +1,71 @@
-import { useLocation, Link } from "react-router-dom"
+'use client';
+
+import { Icons } from '@/components/icons';
+
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem
+} from '@/components/ui/sidebar';
+import { Icon } from '@/components/icons';
 
 export function NavMain({
-  items,
+  items
 }: {
   items: {
-    title: string
-    url: string
-    icon: React.ReactNode
-    isActive?: boolean
-  }[]
+    title: string;
+    url: string;
+    icon?: Icon;
+    isActive?: boolean;
+    items?: {
+      title: string;
+      url: string;
+    }[];
+  }[];
 }) {
-  const location = useLocation()
-
   return (
-    <SidebarMenu>
-      {items.map((item) => {
-        const isActive = item.isActive ?? (location.pathname === item.url || location.pathname.startsWith(item.url + "/"))
-        return (
-          <SidebarMenuItem key={item.title}>
-            <SidebarMenuButton
-              isActive={isActive}
-              tooltip={item.title}
-              render={<Link to={item.url} />}
-              className="justify-start transition-all duration-200 group-data-[collapsible=icon]:justify-center"
-              style={{
-                color: isActive ? "var(--primary)" : "var(--muted-foreground)",
-                background: isActive ? "rgba(132, 204, 22, 0.08)" : "transparent",
-                boxShadow: "none",
-              }}
-            >
-              {item.icon}
-              <span className="text-sm">{item.title}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        )
-      })}
-    </SidebarMenu>
-  )
+    <SidebarGroup>
+      <SidebarGroupLabel>Platform</SidebarGroupLabel>
+      <SidebarGroupContent className='flex flex-col gap-2'>
+        <SidebarMenu>
+          {items.map((item) => (
+            <Collapsible key={item.title} defaultOpen={item.isActive} render={<SidebarMenuItem />}>
+              <CollapsibleTrigger
+                render={
+                  <SidebarMenuButton
+                    tooltip={item.title}
+                    className='group/collapsible bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground min-w-8 duration-200 ease-linear'
+                  />
+                }
+              >
+                {item.icon && <item.icon />}
+                <span>{item.title}</span>
+                <Icons.chevronRight className='ml-auto transition-transform duration-200 group-data-panel-open/collapsible:rotate-90' />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub>
+                  {item.items?.map((subItem) => (
+                    <SidebarMenuSubItem key={subItem.title}>
+                      <SidebarMenuSubButton
+                        render={<a href={subItem.url} aria-label={subItem.title} />}
+                      >
+                        <span>{subItem.title}</span>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ))}
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </Collapsible>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
 }

@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { getStoredValue } from "@/lib/browser-storage";
+import { useState, useEffect, useRef, useCallback } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE = '/api/bidpilot';
 
-export type AgentNodeStatus = "pending" | "running" | "completed" | "failed";
+export type AgentNodeStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface AgentNode {
   name: string;
@@ -41,7 +40,7 @@ function mergeNode(nodes: AgentNode[], update: Partial<AgentNode> & { name: stri
     return next;
   }
   const { name: _name, ...rest } = update;
-  return [...nodes, { name: _name, status: update.status ?? "pending", ...rest }];
+  return [...nodes, { name: _name, status: update.status ?? 'pending', ...rest }];
 }
 
 export function useAgentStream(runId: string | null): AgentStreamState {
@@ -54,7 +53,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
     isWaitingApproval: false,
     approvalMessage: null,
     isRunning: false,
-    error: null,
+    error: null
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -63,8 +62,8 @@ export function useAgentStream(runId: string | null): AgentStreamState {
 
   const recalcDerived = useCallback((nodes: AgentNode[]) => {
     return {
-      completedNodes: nodes.filter((n) => n.status === "completed"),
-      pendingNodes: nodes.filter((n) => n.status === "pending"),
+      completedNodes: nodes.filter((n) => n.status === 'completed'),
+      pendingNodes: nodes.filter((n) => n.status === 'pending')
     };
   }, []);
 
@@ -75,66 +74,74 @@ export function useAgentStream(runId: string | null): AgentStreamState {
         const parsed = data as Record<string, unknown>;
 
         switch (event) {
-          case "node_start":
-          case "node_started": {
+          case 'node_start':
+          case 'node_started': {
             const name = (parsed.node_name ?? parsed.node) as string;
             next.currentNode = name;
-            next.nodes = mergeNode(next.nodes, { name, status: "running", started_at: new Date().toISOString() });
+            next.nodes = mergeNode(next.nodes, {
+              name,
+              status: 'running',
+              started_at: new Date().toISOString()
+            });
             next.isRunning = true;
             break;
           }
-          case "node_complete":
-          case "node_completed": {
+          case 'node_complete':
+          case 'node_completed': {
             const name = (parsed.node_name ?? parsed.node) as string;
             next.nodes = mergeNode(next.nodes, {
               name,
-              status: "completed",
+              status: 'completed',
               completed_at: new Date().toISOString(),
-              summary: parsed.result_summary as string | undefined,
+              summary: parsed.result_summary as string | undefined
             });
             next.currentNode = null;
             break;
           }
-          case "node_error":
-          case "graph_error": {
-            const name = (parsed.node_name ?? parsed.node ?? next.currentNode ?? "workflow") as string;
+          case 'node_error':
+          case 'graph_error': {
+            const name = (parsed.node_name ??
+              parsed.node ??
+              next.currentNode ??
+              'workflow') as string;
             const errorMsg = (parsed.error_message ?? parsed.error) as string | undefined;
-            next.nodes = mergeNode(next.nodes, { name, status: "failed", error: errorMsg });
+            next.nodes = mergeNode(next.nodes, { name, status: 'failed', error: errorMsg });
             next.currentNode = null;
-            next.error = errorMsg ?? "Agent run failed";
+            next.error = errorMsg ?? 'Agent run failed';
             break;
           }
-          case "review_result": {
+          case 'review_result': {
             next.reviewResult = {
               score: parsed.score as number,
               feedback: parsed.feedback as string,
-              pass: parsed.pass as boolean,
+              pass: parsed.pass as boolean
             };
             break;
           }
-          case "approval_required":
-          case "human_approval_required": {
+          case 'approval_required':
+          case 'human_approval_required': {
             next.isWaitingApproval = true;
-            next.approvalMessage = ((parsed.message ?? parsed.draft_preview) as string | undefined) ?? null;
+            next.approvalMessage =
+              ((parsed.message ?? parsed.draft_preview) as string | undefined) ?? null;
             break;
           }
-          case "approval_granted": {
+          case 'approval_granted': {
             next.isWaitingApproval = false;
             next.approvalMessage = null;
             break;
           }
-          case "run_complete":
-          case "graph_completed": {
+          case 'run_complete':
+          case 'graph_completed': {
             next.isRunning = false;
             break;
           }
-          case "run_error": {
+          case 'run_error': {
             next.isRunning = false;
-            next.error = (parsed.error as string) ?? "Agent run failed";
+            next.error = (parsed.error as string) ?? 'Agent run failed';
             break;
           }
-          case "error": {
-            next.error = (parsed.message as string) ?? "Unknown error";
+          case 'error': {
+            next.error = (parsed.message as string) ?? 'Unknown error';
             break;
           }
           default:
@@ -145,7 +152,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
         return { ...next, ...derived };
       });
     },
-    [recalcDerived],
+    [recalcDerived]
   );
 
   useEffect(() => {
@@ -159,7 +166,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
         isWaitingApproval: false,
         approvalMessage: null,
         isRunning: false,
-        error: null,
+        error: null
       });
       return;
     }
@@ -175,15 +182,14 @@ export function useAgentStream(runId: string | null): AgentStreamState {
     async function connect() {
       if (cancelled) return;
 
-      const token = getStoredValue("token");
       const url = `${API_BASE}/drafting/runs/${runId}/stream`;
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
       try {
         const response = await fetch(url, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          signal: controller.signal,
+          credentials: 'include',
+          signal: controller.signal
         });
 
         if (!response.ok || !response.body) {
@@ -197,7 +203,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = "";
+        let buffer = '';
 
         while (!cancelled) {
           const { done, value } = await reader.read();
@@ -205,7 +211,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
 
           buffer += decoder.decode(value, { stream: true });
           const parts = buffer.split(/\r?\n\r?\n/);
-          buffer = parts.pop() ?? "";
+          buffer = parts.pop() ?? '';
 
           for (const part of parts) {
             const parsed = parseSsePart(part);
@@ -221,7 +227,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
         }
       } catch (error) {
         if (cancelled || controller.signal.aborted) return;
-        const message = error instanceof Error ? error.message : "Workflow stream disconnected";
+        const message = error instanceof Error ? error.message : 'Workflow stream disconnected';
         setState((prev) => ({ ...prev, error: message, isRunning: false }));
         scheduleReconnect();
       }
@@ -245,13 +251,13 @@ export function useAgentStream(runId: string | null): AgentStreamState {
 
 function parseSsePart(part: string): { eventType: string; data: Record<string, unknown> } | null {
   const lines = part.split(/\r?\n/);
-  let eventType = "";
+  let eventType = '';
   const dataLines: string[] = [];
 
   for (const line of lines) {
-    if (line.startsWith("event:")) {
+    if (line.startsWith('event:')) {
       eventType = line.slice(6).trim();
-    } else if (line.startsWith("data:")) {
+    } else if (line.startsWith('data:')) {
       dataLines.push(line.slice(5).trimStart());
     }
   }
@@ -259,7 +265,7 @@ function parseSsePart(part: string): { eventType: string; data: Record<string, u
   if (!eventType || dataLines.length === 0) return null;
 
   try {
-    return { eventType, data: JSON.parse(dataLines.join("\n")) as Record<string, unknown> };
+    return { eventType, data: JSON.parse(dataLines.join('\n')) as Record<string, unknown> };
   } catch {
     return null;
   }

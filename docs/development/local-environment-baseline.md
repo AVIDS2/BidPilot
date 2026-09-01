@@ -10,8 +10,12 @@ This document exists so implementation agents do not guess local runtime details
 
 - shell: `powershell`
 - Python environment: `conda activate llm`
-- PostgreSQL: use the project-local Docker service, not any host-installed PostgreSQL
-- if a required local service is missing, create it inside this repository's Docker setup rather than using unrelated local state
+- web and API: run as direct Node/Python processes
+- Docker is not used on the developer machine for this project. VPS production
+  retains the versioned Compose topology.
+- PostgreSQL, Redis and MinIO may only be used locally when already provisioned
+  as host services or through an approved isolated development environment; do
+  not start the repository Compose stack locally.
 
 ## Python environment
 
@@ -25,7 +29,10 @@ All API and worker Python commands should assume this environment unless the rep
 
 ## PostgreSQL baseline
 
-PostgreSQL is provided by Docker in this project.
+The historical local Docker baseline is retained below for reference only. It
+must not be started on the developer machine. Local API integration tests need
+an already provisioned isolated PostgreSQL instance whose database name ends in
+`_test`.
 
 Current compose file:
 
@@ -33,10 +40,10 @@ Current compose file:
 
 Current service:
 
-- container name: `docpilot-postgres`
+- production container name: `bidpilot-postgres`
 - image: `pgvector/pgvector:pg17`
 
-Connection baseline:
+Connection baseline when an isolated host/dev instance is available:
 
 - host: `localhost`
 - host port: `5433`
@@ -53,9 +60,9 @@ postgresql://docpilot:docpilot@localhost:5433/docpilot
 
 ## PostgreSQL rule
 
-- do not use a host-installed PostgreSQL instance for DocPilot
+- do not use a production database for local development or tests
 - do not create a second unrelated Postgres setup outside this project unless the docs are updated
-- if Postgres is needed and not running, start it from this repository's Docker setup
+- if an isolated local Postgres instance is not available, run UI-only checks and report the backend limitation
 
 ## Test database rule
 
@@ -91,7 +98,7 @@ tables, and removes only that scratch database when the check finishes. It
 refuses remote hosts and names outside its generated scratch namespace. Use
 `--keep-scratch` only when manually investigating a migration failure.
 
-Start command:
+Historical Compose start command (VPS only; do not run locally):
 
 ```powershell
 docker compose up -d postgres

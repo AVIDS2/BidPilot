@@ -1,119 +1,150 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { loginUser, registerUser, getCurrentUser, verifyEmail, type CurrentUser } from "@/lib/api";
-import { getStoredValue, removeStoredValue, setStoredValue } from "@/lib/browser-storage";
+'use client';
 
-interface AuthState {
-  user: CurrentUser | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  login: (email: string, password: string, turnstileToken?: string | null) => Promise<void>;
-  completeEmailVerification: (token: string) => Promise<void>;
-  register: (email: string, displayName: string, password: string, invitationToken?: string, orgName?: string, orgSlug?: string, turnstileToken?: string | null) => Promise<CurrentUser>;
-  logout: () => void;
-  setUser: (user: CurrentUser) => void;
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode
+} from 'react';
+import { usePathname } from 'next/navigation';
+
+export interface CurrentUser {
+  id: string;
+  email: string;
+  display_name: string;
+  role: string;
+  plan?: string;
+  disabled?: boolean;
+  email_verified?: boolean;
+  org_id?: string;
+  org_slug?: string;
+  verification_email_accepted?: boolean | null;
 }
 
-const AuthContext = createContext<AuthState | null>(null);
+export interface UserRegister {
+  email: string;
+  display_name: string;
+  password: string;
+  invitation_token?: string | null;
+  org_name?: string | null;
+  org_slug?: string | null;
+  turnstile_token?: string | null;
+}
+
+type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+
+interface AuthContextValue {
+  user: CurrentUser | null;
+  status: AuthStatus;
+  isAuthenticated: boolean;
+  refresh: () => Promise<CurrentUser | null>;
+  login: (email: string, password: string, turnstileToken?: string | null) => Promise<CurrentUser>;
+  register: (payload: UserRegister) => Promise<CurrentUser>;
+  logout: () => Promise<void>;
+  setUser: (user: CurrentUser | null) => void;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+async function readApiError(response: Response) {
+  try {
+    const body = (await response.json()) as { message?: unknown; detail?: unknown };
+    if (typeof body.message === 'string') return body.message;
+    if (typeof body.detail === 'string') return body.detail;
+  } catch {
+    // A non-JSON response is still represented by its HTTP status.
+  }
+  return `请求失败（${response.status}）`;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => getStoredValue("token"));
+  const pathname = usePathname();
+  const needsSession = pathname !== '/' && !pathname.startsWith('/auth');
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const [status, setStatus] = useState<AuthStatus>('loading');
 
-  // Fetch user info on mount when token exists
-  useEffect(() => {
-    if (token && !user) {
-      getCurrentUser(token).then(setUser).catch(() => {
-        // Token invalid, try refresh
-        const refreshToken = getStoredValue("refreshToken");
-        if (refreshToken) {
-          fetch(`${import.meta.env.VITE_API_URL || "http://localhost:8000"}/auth/refresh?refresh_token=${encodeURIComponent(refreshToken)}`, { method: "POST" })
-            .then(r => r.ok ? r.json() : Promise.reject())
-            .then((data: { access_token: string; refresh_token?: string }) => {
-              setStoredValue("token", data.access_token);
-              if (data.refresh_token) setStoredValue("refreshToken", data.refresh_token);
-              setToken(data.access_token);
-              return getCurrentUser(data.access_token);
-            })
-            .then(setUser)
-            .catch(() => {
-              removeStoredValue("token");
-              removeStoredValue("refreshToken");
-              setToken(null);
-            });
-        } else {
-          removeStoredValue("token");
-          setToken(null);
-        }
-      });
+  const refresh = useCallback(async () => {
+    let response = await fetch('/api/auth/me', { cache: 'no-store' });
+    if (response.status === 401) {
+      const renewed = await fetch('/api/auth/refresh', { method: 'POST' });
+      if (renewed.ok) response = await fetch('/api/auth/me', { cache: 'no-store' });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  const login = useCallback(async (email: string, password: string, turnstileToken?: string | null) => {
-    const res = await loginUser({ email, password, turnstile_token: turnstileToken || null });
-    setStoredValue("token", res.access_token);
-    if (res.refresh_token) setStoredValue("refreshToken", res.refresh_token);
-    setToken(res.access_token);
-    const u = await getCurrentUser(res.access_token);
-    setUser(u);
+    if (!response.ok) {
+      setUser(null);
+      setStatus('unauthenticated');
+      return null;
+    }
+    const nextUser = (await response.json()) as CurrentUser;
+    setUser(nextUser);
+    setStatus('authenticated');
+    return nextUser;
   }, []);
 
-  const completeEmailVerification = useCallback(async (verificationToken: string) => {
-    const res = await verifyEmail(verificationToken);
-    setStoredValue("token", res.access_token);
-    if (res.refresh_token) setStoredValue("refreshToken", res.refresh_token);
-    setToken(res.access_token);
-    setUser(await getCurrentUser(res.access_token));
-  }, []);
-
-  const register = useCallback(async (
-    email: string,
-    displayName: string,
-    password: string,
-    invitationToken?: string,
-    orgName?: string,
-    orgSlug?: string,
-    turnstileToken?: string | null,
-  ) => {
-    return registerUser({
-      email,
-      display_name: displayName,
-      password,
-      invitation_token: invitationToken || null,
-      org_name: orgName || null,
-      org_slug: orgSlug || null,
-      turnstile_token: turnstileToken || null,
+  useEffect(() => {
+    if (!needsSession) {
+      setUser(null);
+      setStatus('unauthenticated');
+      return;
+    }
+    void refresh().catch(() => {
+      setUser(null);
+      setStatus('unauthenticated');
     });
-    // Don't auto-login — user must verify email first.
-  }, []);
+  }, [needsSession, refresh]);
 
-  const logout = useCallback(() => {
-    removeStoredValue("token");
-    removeStoredValue("refreshToken");
-    setToken(null);
-    setUser(null);
-  }, []);
-
-  const value = useMemo<AuthState>(() => ({
-    user,
-    token,
-    isAuthenticated: !!token,
-    login,
-    completeEmailVerification,
-    register,
-    logout,
-    setUser,
-  }), [user, token, login, completeEmailVerification, register, logout]);
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
+  const login = useCallback(
+    async (email: string, password: string, turnstileToken?: string | null) => {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, turnstile_token: turnstileToken ?? null })
+      });
+      if (!response.ok) throw new Error(await readApiError(response));
+      const nextUser = await refresh();
+      if (!nextUser) throw new Error('登录成功，但无法读取当前账户。');
+      return nextUser;
+    },
+    [refresh]
   );
+
+  const register = useCallback(async (payload: UserRegister) => {
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error(await readApiError(response));
+    return (await response.json()) as CurrentUser;
+  }, []);
+
+  const logout = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+    setStatus('unauthenticated');
+  }, []);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      status,
+      isAuthenticated: status === 'authenticated',
+      refresh,
+      login,
+      register,
+      logout,
+      setUser
+    }),
+    [user, status, refresh, login, register, logout]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  return context;
 }

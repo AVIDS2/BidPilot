@@ -217,16 +217,17 @@ services:
     build:
       context: ./repo
       dockerfile: apps/web/Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL:-https://bidpilot-api.rglens.com}
-        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY}
     container_name: bidpilot-web
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DOCPILOT_API_URL: http://api:8000
+      NEXT_PUBLIC_APP_URL: ${DOCPILOT_APP_URL:-https://bidpilot.rglens.com}
     ports:
-      - "127.0.0.1:3100:80"
+      - "127.0.0.1:3100:3000"
 
 volumes:
   bidpilot-postgres-data:

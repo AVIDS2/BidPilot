@@ -6,15 +6,15 @@ Define a frontend architecture that supports long-lived product quality, not sho
 
 ## Frontend stack decision
 
-Recommended frontend stack remains:
+The frontend stack was updated on 2026-09-01 to:
 
 - `TypeScript`
 - `React 19`
-- `Vite`
+- `Next.js 16 App Router`
 - `Tailwind CSS v4`
 - `shadcn/ui`
 - `TanStack Query`
-- `TanStack Router`
+- Next.js routing and `nuqs` for URL state where useful
 - `TipTap`
 - `React Flow`
 - `Storybook`
@@ -26,9 +26,15 @@ Recommended frontend stack remains:
 
 React 19 is stable and adds better support for async actions, optimistic updates, and form flows, which fits execution-heavy product surfaces well.
 
-### Vite
+### Next.js App Router
 
-Vite remains the right choice for this repository because the backend is Python-first and the frontend benefits from a fast, lean development workflow without coupling the app to a full-stack Node framework.
+Next is used as the presentation and same-origin transport edge, not as the
+business backend. Its App Router provides route-level server rendering,
+metadata and Route Handlers that forward authenticated REST/SSE requests to
+the existing FastAPI control plane.
+
+The business core remains Python-first. Next does not own PostgreSQL state,
+provider keys, Pi sessions, tool authorization or workflow orchestration.
 
 ### Tailwind CSS v4
 
@@ -42,9 +48,11 @@ Tailwind v4 improves performance, simplifies setup, and moves toward CSS-first c
 
 Use TanStack Query for server-state, caching, invalidation, and async data orchestration. Do not replace it with ad hoc fetch state or a heavy global-state workaround.
 
-### TanStack Router
+### Next routing and `nuqs`
 
-Use TanStack Router for type-safe route structure, first-class URL state, and route-level organization for a complex workbench.
+Use the App Router for route structure and `nuqs` only for shareable filters,
+selected tabs and pane state. Do not create a second client router inside the
+Next app.
 
 ### Storybook
 
@@ -62,19 +70,21 @@ Preferred structure:
 - `apps/web/src/lib`
 - `apps/web/src/hooks`
 
-The current Vite application keeps the route composition in `src/app.tsx`
-until a route-file migration is justified. The active feature boundaries are:
+The active Next application uses file-system routes and keeps domain state in
+the existing API/Pi boundary. The active feature boundaries are:
 
 ```text
 apps/web/src/
-  app.tsx                         # providers and route composition
+  app/                            # App Router pages and Route Handlers
+    (app)/                        # authenticated product routes
+    api/                          # same-origin auth and FastAPI BFF
   features/
     agent/                        # Pi runtime projection and Agent workbench
       state/agent-store.tsx       # client state fed by API/SSE contracts
       runtime/                     # event projection and transcript mapping
       components/                  # Agent timeline, approvals, actions, panels
       legacy/                      # unused assistant-ui experiment only
-    workbench/                    # authenticated product shell and screens
+    bidpilot/                     # composed product primitives
   components/ui/                  # shadcn primitives
   components/                    # shell primitives shared by routes
   lib/                            # transport, auth, i18n, browser utilities
@@ -156,21 +166,19 @@ assistant-event mapping, transcript grouping, and Agent client state belong to
 sequence, parent/child run relation, status and redacted summary); it never
 infers execution from user message text or tool-name substrings.
 
-The former `components/assistant` assistant-ui experiment is quarantined under
-`features/agent/legacy`. It is not imported by the active routes, does not own
-the production runtime, and may only be revived for an explicit compatibility
-experiment. The production Agent surface is `features/agent` and the product
-shell is `features/workbench`.
+The former assistant-ui experiment remains quarantined under
+`features/agent/legacy` and is not part of the active Next route graph. The
+production Agent surface is `features/agent`; the authenticated product shell
+is `components/layout/app-shell.tsx` and uses Kiranism Sidebar/Sheet
+primitives.
 
 ### Navigation and server-state loading
 
-The active Vite route composition uses route-level lazy chunks, but the
-workbench shell owns the nested route boundary so the navigation and context
-bars remain mounted while a screen loads. `app-route-loaders.ts` shares the
-same dynamic import functions with `React.lazy` and warms a target chunk from
-navigation intent. The application query client uses a short default stale
-window, bounded retry behavior, and no focus-triggered refetch; feature queries
-can override those defaults for live execution surfaces.
+The active Next App Router keeps the authenticated shell mounted while route
+content changes. TanStack Query owns server state and uses a short default
+stale window; feature queries can override it for live execution surfaces. The
+Agent's only lazy import is its composer bundle, and it has one bounded stale
+chunk recovery path for browser sessions holding an obsolete HTML shell.
 
 Screens must treat `isLoading`/`isPending` as a first-class display state. A
 query-backed count is not `0` until its request has completed, and an empty
@@ -178,14 +186,11 @@ state is only rendered after the relevant dependent queries have settled.
 This is a presentation and caching concern, not a replacement for measuring
 slow API TTFB or reducing backend query fan-out.
 
-The authenticated Workbench keeps one navigation model across breakpoints. On
-desktop, the sidebar collapse control remains in the workspace header while
-the collapsed Logo is the single accessible affordance for restoring it. On
-mobile, the sidebar becomes a shadcn `Sheet` opened by a topbar control; the
-same navigation entries are reused, and selecting an entry closes the Sheet.
-The browser favicon is the same current BidPilot Logo asset as the workbench
-brand, with a versioned URL in `index.html` so a release cannot retain the
-previous tab icon indefinitely.
+The authenticated Next Workbench keeps one navigation model across breakpoints.
+On desktop, Kiranism's Sidebar collapse trigger remains in the header; the
+collapsed Logo is the accessible restore affordance. On mobile, the same
+Sidebar becomes a shadcn `Sheet` opened by that header trigger. The browser
+tab uses the current BidPilot Logo through Next's `app/icon.svg` convention.
 
 ## State strategy
 
@@ -200,7 +205,7 @@ Use `TanStack Query` for:
 
 ### URL state
 
-Use `TanStack Router` search params for:
+Use App Router search params or `nuqs` for:
 
 - selected project context
 - filters

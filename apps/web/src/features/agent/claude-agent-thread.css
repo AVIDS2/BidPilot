@@ -1,15 +1,15 @@
 @font-face {
-  font-family: "Anthropic Sans";
-  src: url("/claude-reference/fonts/anthropic-sans.woff2") format("woff2");
+  font-family: 'Anthropic Sans';
+  src: url('/claude-reference/fonts/anthropic-sans.woff2') format('woff2');
   font-weight: 300 800;
   font-style: normal;
   font-display: swap;
-  font-feature-settings: "dlig" 0;
+  font-feature-settings: 'dlig' 0;
 }
 
 @font-face {
-  font-family: "Anthropic Serif";
-  src: url("/claude-reference/fonts/anthropic-serif.woff2") format("woff2");
+  font-family: 'Anthropic Serif';
+  src: url('/claude-reference/fonts/anthropic-serif.woff2') format('woff2');
   font-weight: 300 800;
   font-style: normal;
   font-display: swap;
@@ -25,9 +25,9 @@
   --cr-line: rgba(11, 11, 11, 0.1);
   --cr-line-light: rgba(11, 11, 11, 0.06);
   --cr-active: #efefec;
-  --cr-font: "Anthropic Sans", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --cr-serif: "Anthropic Serif", Georgia, "Songti SC", SimSun, serif;
-  --cr-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --cr-font: 'Anthropic Sans', system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --cr-serif: 'Anthropic Serif', Georgia, 'Songti SC', SimSun, serif;
+  --cr-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   /* Claude's transcript is a light reading surface even when the app shell
      is dark. Keep Markdown controls and semantic utility classes in the same
      palette when this thread is embedded outside the full Agent workspace. */
@@ -49,10 +49,15 @@
 
 .bidpilot-claude-thread *,
 .bidpilot-claude-thread *::before,
-.bidpilot-claude-thread *::after { box-sizing: border-box; }
+.bidpilot-claude-thread *::after {
+  box-sizing: border-box;
+}
 
 .bidpilot-claude-thread button,
-.bidpilot-claude-thread input { font: inherit; -webkit-tap-highlight-color: transparent; }
+.bidpilot-claude-thread input {
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
 
 .bidpilot-claude-thread .cr-thread {
   position: relative;
@@ -78,7 +83,9 @@
   opacity: 0;
   pointer-events: none;
   transform: translateY(6px);
-  transition: opacity 140ms ease, transform 140ms ease;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
 }
 
 .bidpilot-claude-thread .cr-scroll-to-bottom.is-visible {
@@ -87,7 +94,9 @@
   transform: translateY(0);
 }
 
-.bidpilot-claude-thread .cr-user-message-wrap { display: flow-root; }
+.bidpilot-claude-thread .cr-user-message-wrap {
+  display: flow-root;
+}
 
 .bidpilot-claude-thread .cr-user-message {
   width: fit-content;
@@ -125,12 +134,44 @@
   cursor: pointer;
 }
 
-.bidpilot-claude-thread .cr-user-attachment svg { flex: 0 0 auto; color: #8a8882; }
-.bidpilot-claude-thread .cr-user-attachment span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bidpilot-claude-thread .cr-user-attachment img { width: 28px; height: 28px; border-radius: 4px; object-fit: cover; }
-.bidpilot-claude-thread .cr-user-attachment:hover { color: #34332f; }
-.bidpilot-claude-thread .cr-image-lightbox { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 5vh 5vw; background: rgba(16, 16, 14, 0.72); cursor: zoom-out; }
-.bidpilot-claude-thread .cr-image-lightbox img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3); }
+.bidpilot-claude-thread .cr-user-attachment svg {
+  flex: 0 0 auto;
+  color: #8a8882;
+}
+.bidpilot-claude-thread .cr-user-attachment span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bidpilot-claude-thread .cr-user-attachment img {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+.bidpilot-claude-thread .cr-user-attachment:hover {
+  color: #34332f;
+}
+.bidpilot-claude-thread .cr-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 5vh 5vw;
+  background: rgba(16, 16, 14, 0.72);
+  border: 0;
+  font: inherit;
+  appearance: none;
+  cursor: zoom-out;
+}
+.bidpilot-claude-thread .cr-image-lightbox img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+}
 
 .bidpilot-claude-thread .cr-user-message-actions {
   display: flex;
@@ -141,7 +182,9 @@
   color: #918f89;
   opacity: 0;
   transform: translateY(-2px);
-  transition: opacity 120ms ease-out, transform 120ms ease-out;
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms ease-out;
 }
 
 .bidpilot-claude-thread .cr-user-message-wrap:hover .cr-user-message-actions,
@@ -198,8 +241,12 @@
   color: #77756f;
 }
 
-.bidpilot-claude-thread .cr-agent-message { position: relative; }
-.bidpilot-claude-thread .cr-analysis-message { margin-bottom: 58px; }
+.bidpilot-claude-thread .cr-agent-message {
+  position: relative;
+}
+.bidpilot-claude-thread .cr-analysis-message {
+  margin-bottom: 58px;
+}
 
 .bidpilot-claude-thread .cr-analysis-answer,
 .bidpilot-claude-thread .cr-prose-answer {
@@ -244,7 +291,9 @@
   overflow-wrap: anywhere;
 }
 
-.bidpilot-claude-thread .cr-reasoning-heading:hover { color: #262521; }
+.bidpilot-claude-thread .cr-reasoning-heading:hover {
+  color: #262521;
+}
 
 .bidpilot-claude-thread .cr-reasoning-chevron {
   margin-left: auto;
@@ -306,19 +355,40 @@
   overflow-wrap: break-word;
 }
 
-.bidpilot-claude-thread .cr-prose-answer p { margin: 0 0 18px; }
-.bidpilot-claude-thread .cr-prose-answer p:last-child { margin-bottom: 0; }
-.bidpilot-claude-thread .cr-prose-answer strong { color: #25262b; font-family: inherit; font-weight: 650; }
-.bidpilot-claude-thread .cr-prose-answer ul { margin: 0 0 18px; padding-left: 22px; }
-.bidpilot-claude-thread .cr-prose-answer li { margin: 5px 0; }
+.bidpilot-claude-thread .cr-prose-answer p {
+  margin: 0 0 18px;
+}
+.bidpilot-claude-thread .cr-prose-answer p:last-child {
+  margin-bottom: 0;
+}
+.bidpilot-claude-thread .cr-prose-answer strong {
+  color: #25262b;
+  font-family: inherit;
+  font-weight: 650;
+}
+.bidpilot-claude-thread .cr-prose-answer ul {
+  margin: 0 0 18px;
+  padding-left: 22px;
+}
+.bidpilot-claude-thread .cr-prose-answer li {
+  margin: 5px 0;
+}
 
-.bidpilot-claude-thread .cr-prose-answer :where(input[type="checkbox"]) {
+.bidpilot-claude-thread .cr-prose-answer :where(input[type='checkbox']) {
   accent-color: #96948f;
   color-scheme: light;
   opacity: 1;
 }
-.bidpilot-claude-thread .cr-prose-answer :is(code, pre) { font-family: var(--cr-mono); }
-.bidpilot-claude-thread .cr-prose-answer pre { overflow-x: auto; border: 1px solid var(--cr-line); background: #f3f3f1; padding: 12px; font-size: 12px; }
+.bidpilot-claude-thread .cr-prose-answer :is(code, pre) {
+  font-family: var(--cr-mono);
+}
+.bidpilot-claude-thread .cr-prose-answer pre {
+  overflow-x: auto;
+  border: 1px solid var(--cr-line);
+  background: #f3f3f1;
+  padding: 12px;
+  font-size: 12px;
+}
 .bidpilot-claude-thread .cr-prose-answer table {
   border-collapse: collapse;
   margin: 14px 0;
@@ -365,37 +435,136 @@
   font-size: 13px;
 }
 
-.bidpilot-claude-thread .cr-message-actions { display: flex; min-height: 26px; align-items: center; gap: 3px; margin: 12px 0 0; color: #918f89; }
-.bidpilot-claude-thread .cr-message-actions button { display: grid; width: 26px; height: 26px; place-items: center; border: 0; border-radius: 4px; background: transparent; color: inherit; }
-.bidpilot-claude-thread .cr-message-actions button:hover { background: #efefec; color: #44423d; }
-.bidpilot-claude-thread .cr-message-actions span { color: #999791; font-size: 12px; }
+.bidpilot-claude-thread .cr-message-actions {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 3px;
+  margin: 12px 0 0;
+  color: #918f89;
+}
+.bidpilot-claude-thread .cr-message-actions button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+.bidpilot-claude-thread .cr-message-actions button:hover {
+  background: #efefec;
+  color: #44423d;
+}
+.bidpilot-claude-thread .cr-message-actions span {
+  color: #999791;
+  font-size: 12px;
+}
 
-.bidpilot-claude-thread .cr-approval { margin: -34px 0 42px 28px; border-left: 1px solid #dfded9; padding: 8px 0 8px 18px; }
-.bidpilot-claude-thread .cr-approval-copy > span { color: #4c4a45; font-size: 13px; font-weight: 600; }
-.bidpilot-claude-thread .cr-approval-copy p { margin: 5px 0 10px; color: #777570; font-size: 13px; line-height: 1.5; }
-.bidpilot-claude-thread .cr-approval-input { display: block; width: min(300px, 100%); border: 0; border-bottom: 1px solid #d4d2cc; border-radius: 0; outline: 0; background: transparent; padding: 5px 0; color: #34332f; font-size: 13px; }
-.bidpilot-claude-thread .cr-approval-input:focus { border-color: #777570; }
-.bidpilot-claude-thread .cr-approval-actions { display: flex; gap: 6px; margin-top: 10px; }
-.bidpilot-claude-thread .cr-approval-actions button { display: inline-flex; min-height: 26px; align-items: center; gap: 5px; border: 0; border-radius: 4px; background: transparent; padding: 3px 6px; color: #5f5d57; font-size: 12px; }
-.bidpilot-claude-thread .cr-approval-actions button:hover:not(:disabled) { background: #efefec; color: #262521; }
-.bidpilot-claude-thread .cr-approval-actions button:disabled { cursor: default; opacity: 0.4; }
+.bidpilot-claude-thread .cr-approval {
+  margin: -34px 0 42px 28px;
+  border-left: 1px solid #dfded9;
+  padding: 8px 0 8px 18px;
+}
+.bidpilot-claude-thread .cr-approval-copy > span {
+  color: #4c4a45;
+  font-size: 13px;
+  font-weight: 600;
+}
+.bidpilot-claude-thread .cr-approval-copy p {
+  margin: 5px 0 10px;
+  color: #777570;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.bidpilot-claude-thread .cr-approval-input {
+  display: block;
+  width: min(300px, 100%);
+  border: 0;
+  border-bottom: 1px solid #d4d2cc;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  padding: 5px 0;
+  color: #34332f;
+  font-size: 13px;
+}
+.bidpilot-claude-thread .cr-approval-input:focus {
+  border-color: #777570;
+}
+.bidpilot-claude-thread .cr-approval-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.bidpilot-claude-thread .cr-approval-actions button {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  padding: 3px 6px;
+  color: #5f5d57;
+  font-size: 12px;
+}
+.bidpilot-claude-thread .cr-approval-actions button:hover:not(:disabled) {
+  background: #efefec;
+  color: #262521;
+}
+.bidpilot-claude-thread .cr-approval-actions button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
 
-@keyframes bp-claude-reasoning-spin { to { transform: rotate(360deg); } }
+@keyframes bp-claude-reasoning-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 @keyframes bp-claude-thinking-shimmer {
-  0%, 100% { background-position: 100% 50%; }
-  50% { background-position: 0% 50%; }
+  0%,
+  100% {
+    background-position: 100% 50%;
+  }
+  50% {
+    background-position: 0% 50%;
+  }
 }
 
 @media (max-width: 720px) {
-  .bidpilot-claude-thread .cr-thread-inner { width: min(100% - 32px, 720px); padding-top: 22px; }
-  .bidpilot-claude-thread .cr-user-message { max-width: 88%; margin-right: 0; }
-  .bidpilot-claude-thread .cr-user-attachments { max-width: 88%; margin-right: 0; }
-  .bidpilot-claude-thread .cr-scroll-to-bottom { right: 16px; bottom: 14px; }
+  .bidpilot-claude-thread .cr-thread-inner {
+    width: min(100% - 32px, 720px);
+    padding-top: 22px;
+  }
+  .bidpilot-claude-thread .cr-user-message {
+    max-width: 88%;
+    margin-right: 0;
+  }
+  .bidpilot-claude-thread .cr-user-attachments {
+    max-width: 88%;
+    margin-right: 0;
+  }
+  .bidpilot-claude-thread .cr-scroll-to-bottom {
+    right: 16px;
+    bottom: 14px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bidpilot-claude-thread .cr-thread { scroll-behavior: auto; }
-  .bidpilot-claude-thread .cr-scroll-to-bottom { transition: none; }
-  .bidpilot-claude-thread .cr-reasoning-status i { animation: none; }
-  .bidpilot-claude-thread .cr-thinking-copy { animation: none; color: #777570; }
+  .bidpilot-claude-thread .cr-thread {
+    scroll-behavior: auto;
+  }
+  .bidpilot-claude-thread .cr-scroll-to-bottom {
+    transition: none;
+  }
+  .bidpilot-claude-thread .cr-reasoning-status i {
+    animation: none;
+  }
+  .bidpilot-claude-thread .cr-thinking-copy {
+    animation: none;
+    color: #777570;
+  }
 }

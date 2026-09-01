@@ -1,84 +1,91 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import "@testing-library/jest-dom/vitest";
-import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
-import type { AIAssistantState } from "@/features/agent/state/agent-store";
-import { ClaudeAgentThread } from "./claude-agent-thread";
+import { fireEvent, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import type { ReactNode } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import type { AIAssistantState } from '@/features/agent/state/agent-store';
+import { ClaudeAgentThread } from './claude-agent-thread';
 
-vi.mock("@/components/ui/message", () => ({
+vi.mock('@/components/ui/message', () => ({
   MessageContent: ({ children }: { children: ReactNode }) => (
-    <div data-testid="assistant-narrative">{children}</div>
-  ),
+    <div data-testid='assistant-narrative'>{children}</div>
+  )
 }));
 
-vi.mock("@/features/agent/components/claude-activity-timeline", () => ({
-  ClaudeActivityTimeline: ({ items, taskTitle }: { items: Array<{ toolName?: string }>; taskTitle?: string }) => (
-    <div data-testid="assistant-timeline">
-      {taskTitle ? `${taskTitle}: ` : ""}{items.map((item) => item.toolName).join(",")}
+vi.mock('@/features/agent/components/claude-activity-timeline', () => ({
+  ClaudeActivityTimeline: ({
+    items,
+    taskTitle
+  }: {
+    items: Array<{ toolName?: string }>;
+    taskTitle?: string;
+  }) => (
+    <div data-testid='assistant-timeline'>
+      {taskTitle ? `${taskTitle}: ` : ''}
+      {items.map((item) => item.toolName).join(',')}
     </div>
-  ),
+  )
 }));
 
 function createState(): AIAssistantState {
   return {
     isOpen: true,
-    mode: "panel",
-    currentConversationId: "conversation-1",
+    mode: 'panel',
+    currentConversationId: 'conversation-1',
     conversations: [],
     messages: [
       {
-        id: "user-1",
-        role: "user",
-        content: "帮我核对投标材料",
-        timestamp: 1,
+        id: 'user-1',
+        role: 'user',
+        content: '帮我核对投标材料',
+        timestamp: 1
       },
       {
-        id: "assistant-1",
-        role: "assistant",
+        id: 'assistant-1',
+        role: 'assistant',
         // The durable transcript is authoritative for interleaving. The final
         // assembled content must not be rendered again after its narrative parts.
-        content: "我已找到可引用的证据。",
+        content: '我已找到可引用的证据。',
         timestamp: 2,
         transcriptParts: [
-          { id: "narrative-1", kind: "narrative", text: "我先检索项目资料。", timestamp: 2 },
-          { id: "turn-1", kind: "turn", turnId: "turn-search", timestamp: 3 },
-          { id: "narrative-2", kind: "narrative", text: "我已找到可引用的证据。", timestamp: 4 },
-        ],
-      },
+          { id: 'narrative-1', kind: 'narrative', text: '我先检索项目资料。', timestamp: 2 },
+          { id: 'turn-1', kind: 'turn', turnId: 'turn-search', timestamp: 3 },
+          { id: 'narrative-2', kind: 'narrative', text: '我已找到可引用的证据。', timestamp: 4 }
+        ]
+      }
     ],
     activeAssistantMessageId: null,
     assistantContentBuffers: {},
     isStreaming: false,
     isThinking: false,
     cancellationRequested: false,
-    status: "completed",
+    status: 'completed',
     executionItems: [
       {
-        id: "execution-1",
-        messageId: "assistant-1",
-        turnId: "turn-search",
-        kind: "tool",
-        toolName: "search_projects",
-        status: "succeeded",
-        title: "搜索项目",
-        timestamp: 3,
-      },
+        id: 'execution-1',
+        messageId: 'assistant-1',
+        turnId: 'turn-search',
+        kind: 'tool',
+        toolName: 'search_projects',
+        status: 'succeeded',
+        title: '搜索项目',
+        timestamp: 3
+      }
     ],
     pendingConfirmation: null,
     pendingInput: null,
     sessionError: null,
     sessionErrorRuntimeRunId: null,
     selectedProviderConfigId: null,
-    reasoningEffort: "medium",
-    approvalMode: "full_access",
-    currentContext: { page: "agent" },
+    reasoningEffort: 'medium',
+    approvalMode: 'full_access',
+    currentContext: { page: 'agent' },
     suggestions: [],
-    commands: [],
+    commands: []
   };
 }
 
-describe("ClaudeAgentThread", () => {
-  it("renders the durable SSE transcript in narrative/tool/narrative order without a duplicate final answer", () => {
+describe('ClaudeAgentThread', () => {
+  it('renders the durable SSE transcript in narrative/tool/narrative order without a duplicate final answer', () => {
     const { container } = render(
       <ClaudeAgentThread
         state={createState()}
@@ -86,28 +93,26 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(screen.getByText("帮我核对投标材料")).toBeInTheDocument();
-    const orderedBlocks = Array.from(
-      container.querySelector(".cr-agent-message")?.children ?? [],
-    )
+    expect(screen.getByText('帮我核对投标材料')).toBeInTheDocument();
+    const orderedBlocks = Array.from(container.querySelector('.cr-agent-message')?.children ?? [])
       .map((node) => node.textContent)
       .filter((text): text is string => Boolean(text));
 
     expect(orderedBlocks).toEqual([
-      "我先检索项目资料。",
-      "search_projects",
-      "我已找到可引用的证据。",
+      '我先检索项目资料。',
+      'search_projects',
+      '我已找到可引用的证据。'
     ]);
-    expect(screen.getAllByText("我已找到可引用的证据。")).toHaveLength(1);
+    expect(screen.getAllByText('我已找到可引用的证据。')).toHaveLength(1);
   });
 
-  it("waits until the assistant stream ends before exposing the copy action", () => {
+  it('waits until the assistant stream ends before exposing the copy action', () => {
     const state = createState();
     state.isStreaming = true;
-    state.activeAssistantMessageId = "assistant-1";
+    state.activeAssistantMessageId = 'assistant-1';
     const { rerender } = render(
       <ClaudeAgentThread
         state={state}
@@ -115,10 +120,10 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(screen.queryByTitle("Copy")).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Copy')).not.toBeInTheDocument();
 
     rerender(
       <ClaudeAgentThread
@@ -127,17 +132,17 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(screen.getByTitle("Copy")).toBeInTheDocument();
+    expect(screen.getByTitle('Copy')).toBeInTheDocument();
   });
 
-  it("keeps a durable reply visible after history replay adds a trace", () => {
+  it('keeps a durable reply visible after history replay adds a trace', () => {
     const state = createState();
     state.messages[1] = {
       ...state.messages[1],
-      transcriptParts: [{ id: "turn-only", kind: "turn", turnId: "turn-search", timestamp: 3 }],
+      transcriptParts: [{ id: 'turn-only', kind: 'turn', turnId: 'turn-search', timestamp: 3 }]
     };
 
     render(
@@ -147,45 +152,45 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(screen.getByText("我已找到可引用的证据。")).toBeInTheDocument();
-    expect(screen.getByTestId("assistant-timeline")).toBeInTheDocument();
+    expect(screen.getByText('我已找到可引用的证据。')).toBeInTheDocument();
+    expect(screen.getByTestId('assistant-timeline')).toBeInTheDocument();
   });
 
-  it("attaches a replayed error to its failed run instead of the latest reply", () => {
+  it('attaches a replayed error to its failed run instead of the latest reply', () => {
     const state = createState();
     state.messages = [
       {
-        id: "user-failed",
-        role: "user",
-        content: "旧请求",
-        timestamp: 1,
+        id: 'user-failed',
+        role: 'user',
+        content: '旧请求',
+        timestamp: 1
       },
       {
-        id: "assistant-failed",
-        role: "assistant",
-        content: "旧请求未完成",
-        runtimeRunId: "run-failed",
-        timestamp: 2,
+        id: 'assistant-failed',
+        role: 'assistant',
+        content: '旧请求未完成',
+        runtimeRunId: 'run-failed',
+        timestamp: 2
       },
       {
-        id: "user-succeeded",
-        role: "user",
-        content: "新请求",
-        timestamp: 3,
+        id: 'user-succeeded',
+        role: 'user',
+        content: '新请求',
+        timestamp: 3
       },
       {
-        id: "assistant-succeeded",
-        role: "assistant",
-        content: "新的成功结果",
-        runtimeRunId: "run-succeeded",
-        timestamp: 4,
-      },
+        id: 'assistant-succeeded',
+        role: 'assistant',
+        content: '新的成功结果',
+        runtimeRunId: 'run-succeeded',
+        timestamp: 4
+      }
     ];
-    state.sessionError = "旧运行失败";
-    state.sessionErrorRuntimeRunId = "run-failed";
+    state.sessionError = '旧运行失败';
+    state.sessionErrorRuntimeRunId = 'run-failed';
     state.executionItems = [];
 
     render(
@@ -195,33 +200,33 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(screen.getByText("旧运行失败")).toBeInTheDocument();
-    expect(screen.getByText("新的成功结果").closest("article")).not.toContainElement(
-      screen.getByText("旧运行失败"),
+    expect(screen.getByText('旧运行失败')).toBeInTheDocument();
+    expect(screen.getByText('新的成功结果').closest('article')).not.toContainElement(
+      screen.getByText('旧运行失败')
     );
   });
 
-  it("uses a titled public narration once as its tool-turn title", () => {
+  it('uses a titled public narration once as its tool-turn title', () => {
     const state = createState();
     state.messages[1] = {
       ...state.messages[1],
-      content: "",
+      content: '',
       transcriptParts: [
         {
-          id: "reasoning-1",
-          kind: "reasoning",
-          text: "先确认项目范围，再读取大纲。",
-          title: "先确认项目范围，再读取大纲。",
-          source: "harness",
-          turnId: "turn-search",
+          id: 'reasoning-1',
+          kind: 'reasoning',
+          text: '先确认项目范围，再读取大纲。',
+          title: '先确认项目范围，再读取大纲。',
+          source: 'harness',
+          turnId: 'turn-search',
           completed: true,
-          timestamp: 2,
+          timestamp: 2
         },
-        { id: "turn-1", kind: "turn", turnId: "turn-search", timestamp: 3 },
-      ],
+        { id: 'turn-1', kind: 'turn', turnId: 'turn-search', timestamp: 3 }
+      ]
     };
 
     render(
@@ -231,36 +236,65 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
     expect(screen.getAllByText(/先确认项目范围，再读取大纲。/)).toHaveLength(1);
   });
 
-  it("renders report, execution group, report, execution group in event order", () => {
+  it('renders report, execution group, report, execution group in event order', () => {
     const state = createState();
     state.messages[1] = {
       ...state.messages[1],
-      content: "",
+      content: '',
       transcriptParts: [
         {
-          id: "task-title",
-          kind: "reasoning",
-          text: "招标机会调研",
-          title: "招标机会调研",
-          source: "harness",
-          turnId: "turn-search-1",
+          id: 'task-title',
+          kind: 'reasoning',
+          text: '招标机会调研',
+          title: '招标机会调研',
+          source: 'harness',
+          turnId: 'turn-search-1',
           completed: true,
-          timestamp: 2,
+          timestamp: 2
         },
-        { id: "group-1", kind: "turn", turnId: "turn-search", executionGroupId: "group-1", timestamp: 3 },
-        { id: "progress-report", kind: "narrative", text: "第一批来源已核对，继续检查公告。", timestamp: 4 },
-        { id: "group-2", kind: "turn", turnId: "turn-search", executionGroupId: "group-2", timestamp: 5 },
-      ],
+        {
+          id: 'group-1',
+          kind: 'turn',
+          turnId: 'turn-search',
+          executionGroupId: 'group-1',
+          timestamp: 3
+        },
+        {
+          id: 'progress-report',
+          kind: 'narrative',
+          text: '第一批来源已核对，继续检查公告。',
+          timestamp: 4
+        },
+        {
+          id: 'group-2',
+          kind: 'turn',
+          turnId: 'turn-search',
+          executionGroupId: 'group-2',
+          timestamp: 5
+        }
+      ]
     };
     state.executionItems = [
-      { ...state.executionItems[0], id: "search-1", turnId: "turn-search", executionGroupId: "group-1", toolName: "first_search" },
-      { ...state.executionItems[0], id: "search-2", turnId: "turn-search", executionGroupId: "group-2", toolName: "second_search" },
+      {
+        ...state.executionItems[0],
+        id: 'search-1',
+        turnId: 'turn-search',
+        executionGroupId: 'group-1',
+        toolName: 'first_search'
+      },
+      {
+        ...state.executionItems[0],
+        id: 'search-2',
+        turnId: 'turn-search',
+        executionGroupId: 'group-2',
+        toolName: 'second_search'
+      }
     ];
 
     render(
@@ -270,23 +304,27 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    const blocks = screen.getByLabelText("任务执行轨迹").children;
-    expect(screen.getAllByTestId("assistant-timeline")).toHaveLength(2);
-    expect(Array.from(blocks).map((node) => node.textContent).filter(Boolean)).toEqual([
-      "first_search,second_search",
-      "第一批来源已核对，继续检查公告。",
-      "first_search,second_search",
+    const blocks = screen.getByLabelText('任务执行轨迹').children;
+    expect(screen.getAllByTestId('assistant-timeline')).toHaveLength(2);
+    expect(
+      Array.from(blocks)
+        .map((node) => node.textContent)
+        .filter(Boolean)
+    ).toEqual([
+      'first_search,second_search',
+      '第一批来源已核对，继续检查公告。',
+      'first_search,second_search'
     ]);
   });
 
-  it("keeps a visible live indicator after narration while the next event is pending", () => {
+  it('keeps a visible live indicator after narration while the next event is pending', () => {
     const state = createState();
     state.isStreaming = true;
     state.isThinking = true;
-    state.activeAssistantMessageId = "assistant-1";
+    state.activeAssistantMessageId = 'assistant-1';
     state.executionItems = [];
 
     render(
@@ -296,17 +334,17 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(screen.getByTestId("assistant-thinking-indicator")).toBeInTheDocument();
+    expect(screen.getByTestId('assistant-thinking-indicator')).toBeInTheDocument();
   });
 
-  it("does not call an open stream thinking without a native thinking signal", () => {
+  it('does not call an open stream thinking without a native thinking signal', () => {
     const state = createState();
     state.isStreaming = true;
-    state.activeAssistantMessageId = "assistant-1";
-    state.messages[1] = { ...state.messages[1], content: "", transcriptParts: [] };
+    state.activeAssistantMessageId = 'assistant-1';
+    state.messages[1] = { ...state.messages[1], content: '', transcriptParts: [] };
     state.executionItems = [];
 
     render(
@@ -316,29 +354,29 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(screen.queryByTestId("assistant-thinking-indicator")).not.toBeInTheDocument();
-    expect(screen.getByTestId("assistant-waiting-indicator")).toBeInTheDocument();
+    expect(screen.queryByTestId('assistant-thinking-indicator')).not.toBeInTheDocument();
+    expect(screen.getByTestId('assistant-waiting-indicator')).toBeInTheDocument();
   });
 
-  it("renders stale reasoning as completed after the stream has ended", () => {
+  it('renders stale reasoning as completed after the stream has ended', () => {
     const state = createState();
     state.messages[1] = {
       ...state.messages[1],
-      content: "最终结果",
+      content: '最终结果',
       transcriptParts: [
         {
-          id: "stale-reasoning",
-          kind: "reasoning",
-          text: "上一次运行留下的状态",
-          source: "harness",
-          turnId: "turn-stale",
+          id: 'stale-reasoning',
+          kind: 'reasoning',
+          text: '上一次运行留下的状态',
+          source: 'harness',
+          turnId: 'turn-stale',
           completed: false,
-          timestamp: 3,
-        },
-      ],
+          timestamp: 3
+        }
+      ]
     };
 
     render(
@@ -348,27 +386,27 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(document.querySelector(".cr-reasoning.is-complete")).not.toBeNull();
+    expect(document.querySelector('.cr-reasoning.is-complete')).not.toBeNull();
   });
 
-  it("does not render provider reasoning parts from a legacy transcript", () => {
+  it('does not render provider reasoning parts from a legacy transcript', () => {
     const state = createState();
     state.messages[1] = {
       ...state.messages[1],
-      content: "公开回答",
+      content: '公开回答',
       transcriptParts: [
         {
-          id: "provider-reasoning",
-          kind: "reasoning",
-          text: "private provider thought",
-          source: "provider",
+          id: 'provider-reasoning',
+          kind: 'reasoning',
+          text: 'private provider thought',
+          source: 'provider',
           completed: true,
-          timestamp: 3,
-        },
-      ],
+          timestamp: 3
+        }
+      ]
     };
 
     render(
@@ -378,33 +416,33 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(screen.getByText("公开回答")).toBeInTheDocument();
-    expect(screen.queryByText("private provider thought")).not.toBeInTheDocument();
+    expect(screen.getByText('公开回答')).toBeInTheDocument();
+    expect(screen.queryByText('private provider thought')).not.toBeInTheDocument();
   });
 
-  it("keeps a prior run error attached to its own assistant response", () => {
+  it('keeps a prior run error attached to its own assistant response', () => {
     const state = createState();
     state.messages = [
       {
-        id: "assistant-failed",
-        role: "assistant",
-        content: "失败前的部分结果",
-        runtimeRunId: "run-failed",
-        timestamp: 2,
+        id: 'assistant-failed',
+        role: 'assistant',
+        content: '失败前的部分结果',
+        runtimeRunId: 'run-failed',
+        timestamp: 2
       },
       {
-        id: "assistant-succeeded",
-        role: "assistant",
-        content: "新的成功结果",
-        runtimeRunId: "run-succeeded",
-        timestamp: 3,
-      },
+        id: 'assistant-succeeded',
+        role: 'assistant',
+        content: '新的成功结果',
+        runtimeRunId: 'run-succeeded',
+        timestamp: 3
+      }
     ];
-    state.sessionError = "旧运行失败";
-    state.sessionErrorRuntimeRunId = "run-failed";
+    state.sessionError = '旧运行失败';
+    state.sessionErrorRuntimeRunId = 'run-failed';
 
     render(
       <ClaudeAgentThread
@@ -413,18 +451,20 @@ describe("ClaudeAgentThread", () => {
         onConfigureProvider={vi.fn()}
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
-      />,
+      />
     );
 
-    expect(screen.getByText("旧运行失败")).toBeInTheDocument();
-    expect(screen.getAllByText("新的成功结果")).toHaveLength(1);
-    expect(screen.getByText("新的成功结果").closest("article")).not.toContainElement(screen.getByText("旧运行失败"));
+    expect(screen.getByText('旧运行失败')).toBeInTheDocument();
+    expect(screen.getAllByText('新的成功结果')).toHaveLength(1);
+    expect(screen.getByText('新的成功结果').closest('article')).not.toContainElement(
+      screen.getByText('旧运行失败')
+    );
   });
 
-  it("sends user retry through the durable checkpoint action", () => {
+  it('sends user retry through the durable checkpoint action', () => {
     const onRetryFromCheckpoint = vi.fn();
     const state = createState();
-    state.messages[0] = { ...state.messages[0], durableId: "message-checkpoint" };
+    state.messages[0] = { ...state.messages[0], durableId: 'message-checkpoint' };
 
     render(
       <ClaudeAgentThread
@@ -434,10 +474,10 @@ describe("ClaudeAgentThread", () => {
         onConfirm={vi.fn()}
         onCancelConfirmation={vi.fn()}
         onRetryFromCheckpoint={onRetryFromCheckpoint}
-      />,
+      />
     );
 
-    fireEvent.click(screen.getByTitle("从此处重新执行"));
-    expect(onRetryFromCheckpoint).toHaveBeenCalledWith("message-checkpoint", "帮我核对投标材料");
+    fireEvent.click(screen.getByTitle('从此处重新执行'));
+    expect(onRetryFromCheckpoint).toHaveBeenCalledWith('message-checkpoint', '帮我核对投标材料');
   });
 });

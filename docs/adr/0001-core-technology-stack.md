@@ -1,6 +1,6 @@
 # ADR 0001: Core Technology Stack
 
-- Status: Accepted
+- Status: Accepted with frontend edge update (2026-09-01)
 - Date: 2026-04-18
 
 ## Context
@@ -20,15 +20,15 @@ The system is expected to evolve for at least two years, so stable foundations m
 
 DocPilot will use the following primary stack:
 
-- Frontend: `TypeScript + React + Vite`
+- Frontend: `TypeScript + React 19 + Next.js 16 App Router`
 - Backend API and worker runtime: `Python + FastAPI`
 - Data store: `PostgreSQL + pgvector`
 - Cache and queue broker: `Redis`
 - Object storage: `MinIO` or `S3`
 - Execution orchestration: `LangGraph` behind an internal engine interface
-- UI layer: `Tailwind CSS + shadcn/ui + TipTap + React Flow`
+- UI layer: `Tailwind CSS + Kiranism dashboard source + shadcn/Base UI + TipTap + React Flow`
 - Telemetry: `OpenTelemetry + Langfuse`
-- Local deployment: `Docker Compose`
+- VPS production deployment: `Docker Compose`; local app development uses direct Node/Python processes
 
 ## Why this decision
 
@@ -40,14 +40,16 @@ Vue remains strong for many domestic enterprise back-office systems, but React i
 - richer typed ecosystem alignment with modern AI SDKs
 - stronger overlap with current AI product tooling
 
-### Vite over Next.js as the default shell
+### Next.js as the presentation edge over FastAPI
 
-Next.js is powerful, but DocPilot already has a Python backend as the business core. Vite gives:
+The original Vite shell was replaced after the product UI review. Next owns the
+browser-facing App Router and a thin BFF, while FastAPI remains the business
+core. This gives:
 
-- lower framework churn risk
-- simpler frontend/backend separation
-- less coupling to Node server conventions
-- a stable path for a heavy workbench application
+- direct reuse of the reviewed Kiranism dashboard source
+- route-level server rendering and loading behavior
+- same-origin HttpOnly-cookie and SSE forwarding
+- no migration of business state or Pi orchestration into Node
 
 ### Python over Java as the primary backend
 
@@ -80,7 +82,10 @@ Rejected as the primary choice because the AI product ecosystem signal is weaker
 
 ### React + Next.js
 
-Rejected as the default shell because the product does not benefit enough from deeper framework coupling to justify the extra churn risk.
+Previously deferred because the first shell was a Python-backed Vite app. It is
+now accepted for the presentation edge because the user-facing SaaS shell,
+auth pages and responsive dashboard are the primary quality bottleneck. The
+decision does not change the FastAPI/Pi control-plane boundary.
 
 ### Java + Spring as the main backend
 

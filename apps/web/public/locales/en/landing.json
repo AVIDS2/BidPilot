@@ -9,7 +9,13 @@
   },
   "socialProof": {
     "label": "Trusted by procurement teams worldwide",
-    "logos": ["Contour Design", "Harbor Group", "Northway Systems", "Atria Capital", "Vantage Partners"],
+    "logos": [
+      "Contour Design",
+      "Harbor Group",
+      "Northway Systems",
+      "Atria Capital",
+      "Vantage Partners"
+    ],
     "stats": [
       { "value": "500+", "label": "Proposals generated" },
       { "value": "98%", "label": "Compliance rate" },
@@ -62,11 +68,7 @@
         "label": "Starter",
         "price": "Free",
         "sub": "For individual contributors evaluating BidPilot.",
-        "features": [
-          "3 proposals per month",
-          "Basic RFP parsing",
-          "Community support"
-        ],
+        "features": ["3 proposals per month", "Basic RFP parsing", "Community support"],
         "cta": "Get Started"
       },
       "team": {
