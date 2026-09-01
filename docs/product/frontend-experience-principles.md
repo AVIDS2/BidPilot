@@ -69,6 +69,14 @@ groups, `Field` for form rows, and `Avatar`, `Badge`, `Switch`, `Progress`,
 the shared `Button` and menu primitives for actions instead of bespoke control
 markup when the primitive already covers the interaction.
 
+Theme choice uses the upstream Kiranism `ThemeSelector` and its registered theme
+files. Do not invent a second palette picker or hard-code feature colors; the
+selected theme is persisted through the existing active-theme cookie and applies
+to the authenticated workbench and public marketing routes. The public
+navigation follows the same upstream composition: the mode toggle is available
+at every size, while the full theme selector follows the template's compact
+screen behavior.
+
 Every route, including the Agent transcript and public landing page, inherits
 the active Kiranism theme tokens for background, foreground, primary, muted,
 border, ring, and destructive states. Feature-specific styling may add layout

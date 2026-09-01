@@ -6,6 +6,8 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/ca
 import { BrandLogo } from '@/components/brand';
 import { CenteredMenu } from '@/components/marketing/saas-boilerplate/CenteredMenu';
 import { Section } from '@/components/marketing/saas-boilerplate/Section';
+import { ThemeModeToggle } from '@/components/themes/theme-mode-toggle';
+import { ThemeSelector } from '@/components/themes/theme-selector';
 
 export const metadata = {
   title: '产品说明',
@@ -47,6 +49,12 @@ export default function DocsPage() {
           logo={<BrandLogo />}
           rightMenu={
             <>
+              <li>
+                <ThemeModeToggle />
+              </li>
+              <li className='hidden sm:block'>
+                <ThemeSelector />
+              </li>
               <li>
                 <Link href='/auth/sign-in'>登录</Link>
               </li>

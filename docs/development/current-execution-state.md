@@ -38,6 +38,11 @@
   section composition but exposes only BidPilot product copy and uses the same
   active theme tokens as the app shell. Its mobile menu, FAQ and CTA links are
   browser-checked.
+- Kiranism's existing `ThemeSelector` is exposed in the authenticated Header
+  beside the light/dark mode toggle. It lists the upstream registered themes and
+  persists the selection through the active-theme cookie; the same official
+  controls are exposed in the public landing, docs and pricing navigation. No
+  custom color picker or duplicate palette exists.
 - Local direct-process startup profiles load the same local environment source
   and align `DOCPILOT_PI_INTERNAL_SECRET` between API and Pi before browser
   acceptance. A real local `你好` turn completed as `succeeded / pi` after this

@@ -20,6 +20,8 @@ import { BrandLogo } from '@/components/brand';
 import { Icons } from '@/components/icons';
 import { CenteredMenu } from '@/components/marketing/saas-boilerplate/CenteredMenu';
 import { Section } from '@/components/marketing/saas-boilerplate/Section';
+import { ThemeModeToggle } from '@/components/themes/theme-mode-toggle';
+import { ThemeSelector } from '@/components/themes/theme-selector';
 import { cn } from '@/lib/utils';
 
 const plans = [
@@ -54,6 +56,12 @@ export default function PricingPage() {
           logo={<BrandLogo />}
           rightMenu={
             <>
+              <li>
+                <ThemeModeToggle />
+              </li>
+              <li className='hidden sm:block'>
+                <ThemeSelector />
+              </li>
               <li>
                 <Link href='/auth/sign-in'>登录</Link>
               </li>

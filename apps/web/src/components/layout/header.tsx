@@ -4,6 +4,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { ThemeModeToggle } from '@/components/themes/theme-mode-toggle';
+import { ThemeSelector } from '@/components/themes/theme-selector';
 
 export default function Header() {
   return (
@@ -15,6 +16,9 @@ export default function Header() {
       </div>
       <div className='flex shrink-0 items-center gap-1 px-4'>
         <ThemeModeToggle />
+        <div className='hidden sm:block'>
+          <ThemeSelector />
+        </div>
       </div>
     </header>
   );

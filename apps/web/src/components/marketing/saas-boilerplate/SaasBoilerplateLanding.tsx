@@ -10,6 +10,8 @@ import { buttonVariants } from '@/components/ui/button';
 import { BrandLogo } from '@/components/brand';
 import { Icons } from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { ThemeModeToggle } from '@/components/themes/theme-mode-toggle';
+import { ThemeSelector } from '@/components/themes/theme-selector';
 import { CenteredHero } from './CenteredHero';
 import { CenteredMenu } from './CenteredMenu';
 import { CTABanner } from './CTABanner';
@@ -29,6 +31,12 @@ export function SaasBoilerplateLanding() {
           logo={<BrandLogo />}
           rightMenu={
             <>
+              <li>
+                <ThemeModeToggle />
+              </li>
+              <li className='hidden sm:block'>
+                <ThemeSelector />
+              </li>
               <li>
                 <Link href='/auth/sign-in'>登录</Link>
               </li>
