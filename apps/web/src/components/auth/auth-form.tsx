@@ -6,14 +6,7 @@ import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldSet
-} from '@/components/ui/field';
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { AuthSplitLayout } from './auth-split-layout';
@@ -142,7 +135,6 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
                 </Field>
               </>
             )}
-            {error && <FieldError>{error}</FieldError>}
           </FieldGroup>
         </FieldSet>
         <Button className='mt-6 w-full' size='lg' type='submit' disabled={isPending}>
