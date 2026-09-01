@@ -20,7 +20,14 @@ from app.assistant.audit import redact_arguments, redact_text
 from app.access.service import require_project_capability
 from app.audit.service import record_audit_event
 from app.auth.schemas import CurrentUser
-from app.models import ExecutionRun, Project, RuntimeAction, RuntimeApproval, RuntimeEvent, RuntimeRun
+from app.models import (
+    ExecutionRun,
+    Project,
+    RuntimeAction,
+    RuntimeApproval,
+    RuntimeEvent,
+    RuntimeRun,
+)
 from contracts.runtime import (
     RuntimeActionStatus,
     RuntimeApprovalDecisionType,
@@ -117,7 +124,9 @@ def get_previous_terminal_action_context(
         "capability_name": action.capability_name,
         "status": action.status,
         "error_code": action.error_code or "capability_execution_failed",
-        "message": action.error_message or action.public_summary or "上一项操作未能完成。",
+        "message": action.error_message
+        or action.public_summary
+        or "上一项操作未能完成。",
         "occurred_at": (action.completed_at or action.created_at).isoformat(),
     }
 
@@ -158,7 +167,9 @@ def list_runtime_runs_query(
     )
 
 
-def assistant_turn_idempotency_key(*, user_id: str, client_request_id: str | None) -> str | None:
+def assistant_turn_idempotency_key(
+    *, user_id: str, client_request_id: str | None
+) -> str | None:
     """Build an opaque, user-scoped key for one browser-originated assistant turn."""
     if not client_request_id:
         return None
@@ -424,7 +435,9 @@ def list_linked_workflow_runs(
             select(RuntimeRun)
             .where(
                 RuntimeRun.parent_run_id == parent.id,
-                RuntimeRun.kind.in_(("workflow_bridge", "deep_research", "remote_import")),
+                RuntimeRun.kind.in_(
+                    ("workflow_bridge", "deep_research", "remote_import")
+                ),
                 RuntimeRun.org_id == current_user.org_id,
                 RuntimeRun.user_id == current_user.id,
             )
@@ -568,7 +581,13 @@ def fail_runtime_run(
         terminal_status="failed",
         terminal_event=RuntimeEventType.RUN_FAILED,
         terminal_summary="任务未能完成。",
-        allowed_statuses={"queued", "running", "awaiting_approval", "awaiting_input", "cancel_requested"},
+        allowed_statuses={
+            "queued",
+            "running",
+            "awaiting_approval",
+            "awaiting_input",
+            "cancel_requested",
+        },
         result_json=result_json,
         error_code=error_code,
         parent_event_id=parent_event_id,
@@ -591,7 +610,13 @@ def cancel_runtime_run(
         terminal_status="cancelled",
         terminal_event=RuntimeEventType.RUN_CANCELLED,
         terminal_summary="任务已取消。",
-        allowed_statuses={"queued", "running", "awaiting_approval", "awaiting_input", "cancel_requested"},
+        allowed_statuses={
+            "queued",
+            "running",
+            "awaiting_approval",
+            "awaiting_input",
+            "cancel_requested",
+        },
         parent_event_id=parent_event_id,
     )
 
@@ -612,19 +637,32 @@ def request_runtime_cancellation(
     if visible_run.kind == "workflow_bridge":
         return request_workflow_cancellation(db, user, run_id=run_id)
     if visible_run.kind != "assistant_turn":
-        raise ValueError("Only assistant turns and linked workflow runs can be cancelled")
+        raise ValueError(
+            "Only assistant turns and linked workflow runs can be cancelled"
+        )
     if visible_run.user_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only the initiating user or an administrator can cancel this run")
+        raise HTTPException(
+            status_code=403,
+            detail="Only the initiating user or an administrator can cancel this run",
+        )
 
     run = get_runtime_run_for_update(db, visible_run.id)
     if run is None:
         raise ValueError("Runtime run not found")
-    if run.status in {"succeeded", "failed", "cancelled", "expired", "cancel_requested"}:
+    if run.status in {
+        "succeeded",
+        "failed",
+        "cancelled",
+        "expired",
+        "cancel_requested",
+    }:
         return run
     if run.status in {"awaiting_approval", "awaiting_input"}:
         return cancel_runtime_run(db, run.id, "已取消这次操作。")
     if run.status not in {"queued", "running"}:
-        raise ValueError(f"Cannot request cancellation for runtime run in status: {run.status}")
+        raise ValueError(
+            f"Cannot request cancellation for runtime run in status: {run.status}"
+        )
 
     run.status = "cancel_requested"
     append_events(
@@ -645,7 +683,10 @@ def request_runtime_cancellation(
 
 def runtime_cancellation_requested(db: Session, run_id: str) -> bool:
     """Read the durable cancellation flag without trusting an in-memory Run."""
-    return db.scalar(select(RuntimeRun.status).where(RuntimeRun.id == run_id)) == "cancel_requested"
+    return (
+        db.scalar(select(RuntimeRun.status).where(RuntimeRun.id == run_id))
+        == "cancel_requested"
+    )
 
 
 def finalize_requested_runtime_cancellation(
@@ -684,8 +725,10 @@ def request_workflow_cancellation(
     until the worker sees the durable request before its next graph node.
     """
     visible_run = get_visible_runtime_run(db, run_id, user)
-    if visible_run.kind != "workflow_bridge" or not visible_run.execution_run_id or not visible_run.project_id:
-        raise ValueError("Only linked workflow runs can be cancelled through this endpoint")
+    if visible_run.kind != "workflow_bridge" or not visible_run.project_id:
+        raise ValueError(
+            "Only linked workflow runs can be cancelled through this endpoint"
+        )
 
     require_project_capability(
         db,
@@ -702,11 +745,21 @@ def request_workflow_cancellation(
     if run.status == "cancel_requested":
         return run
 
+    # Historical rows can predate the execution bridge relation. There is no
+    # worker-side execution left to interrupt in that case, so closing the
+    # durable runtime row is the only truthful and reversible user action.
+    if not run.execution_run_id:
+        return cancel_runtime_run(db, run.id, "已取消工作流。")
+
     execution_run = db.get(ExecutionRun, run.execution_run_id)
     if execution_run is None:
         raise ValueError("Linked workflow execution run not found")
 
-    safe_to_cancel_now = execution_run.status in {"queued", "awaiting_human", "awaiting_approval"}
+    safe_to_cancel_now = execution_run.status in {
+        "queued",
+        "awaiting_human",
+        "awaiting_approval",
+    }
     if safe_to_cancel_now:
         execution_run.status = "cancelled"
         execution_run.finished_at = _now()
@@ -783,7 +836,9 @@ def _finish_runtime_run(
     if run.status not in allowed_statuses:
         raise ValueError(f"Cannot finish runtime run in status: {run.status}")
 
-    cancellation_events = _cancel_pending_approvals(db, run) if terminal_status == "cancelled" else []
+    cancellation_events = (
+        _cancel_pending_approvals(db, run) if terminal_status == "cancelled" else []
+    )
     persisted_result = dict(result_json or {})
     persisted_result["message"] = safe_message
     run.status = terminal_status
@@ -822,7 +877,11 @@ def _finish_runtime_run(
                     ),
                     "kind": run.kind,
                     "message_delta_emitted": message_delta_emitted,
-                    **({"message": safe_message} if terminal_event is RuntimeEventType.RUN_FAILED else {}),
+                    **(
+                        {"message": safe_message}
+                        if terminal_event is RuntimeEventType.RUN_FAILED
+                        else {}
+                    ),
                     **({"error_code": error_code} if error_code else {}),
                 },
             ),
@@ -873,7 +932,11 @@ def expire_runtime_approval_if_due(
     approval_id: str,
 ) -> RuntimeApproval | None:
     """Expire one pending approval and leave a terminal, replayable trace."""
-    approval = db.scalar(select(RuntimeApproval).where(RuntimeApproval.id == approval_id).with_for_update())
+    approval = db.scalar(
+        select(RuntimeApproval)
+        .where(RuntimeApproval.id == approval_id)
+        .with_for_update()
+    )
     if approval is None or approval.status != RuntimeApprovalStatus.PENDING.value:
         return approval
     if approval.expires_at > _now():
@@ -1020,8 +1083,13 @@ def prepare_capability_execution(
     definition = get_capability_definition(capability_name)
     missing_fields = missing_required_capability_arguments(definition.name, arguments)
     if missing_fields:
-        raise ValueError(f"{definition.label_zh}缺少必填信息：{'、'.join(missing_fields)}")
-    policy = evaluate_policy(definition, approval_mode=run.policy_snapshot_json.get("approval_mode", "risky_only"))
+        raise ValueError(
+            f"{definition.label_zh}缺少必填信息：{'、'.join(missing_fields)}"
+        )
+    policy = evaluate_policy(
+        definition,
+        approval_mode=run.policy_snapshot_json.get("approval_mode", "risky_only"),
+    )
 
     action = db.scalar(
         select(RuntimeAction)
@@ -1107,7 +1175,9 @@ def execute_prepared_capability(
     executor: CapabilityExecutor | None = None,
 ) -> RuntimeCapabilityExecution:
     """Execute a prepared action after its started event is observable."""
-    action = db.scalar(select(RuntimeAction).where(RuntimeAction.id == action_id).with_for_update())
+    action = db.scalar(
+        select(RuntimeAction).where(RuntimeAction.id == action_id).with_for_update()
+    )
     if action is None:
         raise ValueError("Runtime action not found")
     run = get_visible_runtime_run(db, action.run_id, user)
@@ -1125,8 +1195,16 @@ def resolve_approval(
     edited_arguments: dict[str, Any] | None = None,
     executor: CapabilityExecutor | None = None,
 ) -> RuntimeCapabilityExecution:
-    approval = db.scalar(select(RuntimeApproval).where(RuntimeApproval.id == approval_id).with_for_update())
-    if approval is None or approval.user_id != user.id or approval.org_id != user.org_id:
+    approval = db.scalar(
+        select(RuntimeApproval)
+        .where(RuntimeApproval.id == approval_id)
+        .with_for_update()
+    )
+    if (
+        approval is None
+        or approval.user_id != user.id
+        or approval.org_id != user.org_id
+    ):
         raise HTTPException(status_code=404, detail="Runtime approval not found")
 
     action = db.get(RuntimeAction, approval.action_id)
@@ -1167,7 +1245,10 @@ def resolve_approval(
         if edited_arguments is None:
             raise ValueError("Edited approval requires edited arguments")
         approval.status = RuntimeApprovalStatus.EDITED.value
-        approval.decision_json = {"decision": decision.value, "arguments": redact_arguments(edited_arguments)}
+        approval.decision_json = {
+            "decision": decision.value,
+            "arguments": redact_arguments(edited_arguments),
+        }
         action.arguments_json = redact_arguments(edited_arguments)
     else:
         approval.status = RuntimeApprovalStatus.APPROVED.value
@@ -1198,8 +1279,12 @@ def resolve_approval(
     )
 
 
-def _replay_existing_action(db: Session, action: RuntimeAction) -> RuntimeCapabilityExecution:
-    approval = db.scalar(select(RuntimeApproval).where(RuntimeApproval.action_id == action.id))
+def _replay_existing_action(
+    db: Session, action: RuntimeAction
+) -> RuntimeCapabilityExecution:
+    approval = db.scalar(
+        select(RuntimeApproval).where(RuntimeApproval.action_id == action.id)
+    )
     result = None
     if action.status == RuntimeActionStatus.SUCCEEDED.value:
         result = format_public_result(action.capability_name, action.result_json or {})
@@ -1216,7 +1301,9 @@ def _expected_confirmation_text(
     if capability_name != "delete_project":
         return None
     # Prefer an explicit name if the model already supplied one.
-    explicit = args.get("project_name") or args.get("name") or args.get("confirmation_text")
+    explicit = (
+        args.get("project_name") or args.get("name") or args.get("confirmation_text")
+    )
     if isinstance(explicit, str) and explicit.strip():
         return explicit.strip()
     project_id = args.get("project_id")
@@ -1429,7 +1516,9 @@ def _record_runtime_action_audit(
 
 
 def _legacy_executor(capability_name: str) -> CapabilityExecutor:
-    def execute(db: Session, user: CurrentUser, arguments: dict[str, Any]) -> dict[str, Any]:
+    def execute(
+        db: Session, user: CurrentUser, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
         from app.assistant.tools import execute_tool
 
         return execute_tool(db, user, capability_name, arguments).result

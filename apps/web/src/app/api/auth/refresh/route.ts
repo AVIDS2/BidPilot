@@ -1,4 +1,9 @@
-import { requestBackend, ACCESS_COOKIE, unavailableResponse } from '@/lib/backend';
+import {
+  forwardBackendResponse,
+  requestBackend,
+  ACCESS_COOKIE,
+  unavailableResponse
+} from '@/lib/backend';
 import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
@@ -18,10 +23,7 @@ export async function POST() {
       false
     );
     if (!upstream.ok) {
-      const response = new Response(upstream.body, {
-        status: upstream.status,
-        headers: upstream.headers
-      });
+      const response = forwardBackendResponse(upstream);
       const cookieStore = await cookies();
       cookieStore.delete(ACCESS_COOKIE);
       cookieStore.delete('bidpilot_refresh_token');

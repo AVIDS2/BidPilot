@@ -3,7 +3,6 @@
 // global-error replaces the root layout when it errors, so globals.css is not
 // loaded here — styles must be inline and self-contained.
 export default function GlobalError({
-  error,
   reset
 }: {
   error: Error & { digest?: string };
@@ -24,7 +23,7 @@ export default function GlobalError({
         <div style={{ textAlign: 'center', padding: '1rem' }}>
           <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>页面暂时无法打开</h1>
           <p style={{ color: '#6b7280', marginBottom: '1.25rem' }}>
-            {error.message || '发生了一个意外错误，请稍后再试。'}
+            页面暂时无法打开，请重新加载；如果问题持续存在，请联系管理员。
           </p>
           <button
             onClick={() => reset()}

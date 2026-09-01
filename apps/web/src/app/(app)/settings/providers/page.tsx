@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Cpu, Plus, Server, Trash2 } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -29,10 +30,15 @@ import {
 } from '@/lib/bidpilot-api';
 
 export default function ProviderSettingsPage() {
+  const { user } = useAuth();
   const client = useQueryClient();
   const configs = useQuery({ queryKey: ['provider-configs'], queryFn: listProviderConfigs });
   const catalog = useQuery({ queryKey: ['pi-model-catalog'], queryFn: getPiModelCatalog });
-  const runtime = useQuery({ queryKey: ['pi-runtime-contract'], queryFn: getPiRuntimeContract });
+  const runtime = useQuery({
+    queryKey: ['pi-runtime-contract'],
+    queryFn: getPiRuntimeContract,
+    enabled: user?.role === 'admin'
+  });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ProviderConfigCreate>({
     provider_type: 'openai',
@@ -57,9 +63,9 @@ export default function ProviderSettingsPage() {
   return (
     <>
       <PageHeader
-        eyebrow='管理'
-        title='模型与运行时'
-        description='配置 Agent 使用的模型供应商。密钥只提交给后端，不在页面中回显。'
+        eyebrow='工作区'
+        title='模型供应商'
+        description='配置你希望用于 Agent 任务的模型连接。密钥只提交给后端，不在页面中回显。'
         action={
           <Button onClick={() => setOpen(true)}>
             <Plus data-icon='inline-start' />
@@ -133,10 +139,8 @@ export default function ProviderSettingsPage() {
         <div className='grid content-start gap-6'>
           <Card>
             <CardHeader className='border-b'>
-              <h2 className='font-medium'>Pi 模型目录</h2>
-              <p className='text-muted-foreground mt-1 text-sm'>
-                来自后端 Pi runtime 的可用模型信息。
-              </p>
+              <h2 className='font-medium'>平台模型目录</h2>
+              <p className='text-muted-foreground mt-1 text-sm'>查看平台当前支持的模型和供应商。</p>
             </CardHeader>
             <CardContent className='p-5'>
               {catalog.isPending ? (
@@ -146,7 +150,7 @@ export default function ProviderSettingsPage() {
                   message={catalog.error instanceof Error ? catalog.error.message : undefined}
                 />
               ) : (
-                <div className='space-y-3'>
+                <div className='flex flex-col gap-3'>
                   <p className='text-sm'>
                     {catalog.data?.data.models.length ?? 0} 个模型 ·{' '}
                     {catalog.data?.data.providers.length ?? 0} 个供应商
@@ -159,37 +163,42 @@ export default function ProviderSettingsPage() {
               )}
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className='border-b'>
-              <h2 className='font-medium'>运行时连接</h2>
-            </CardHeader>
-            <CardContent className='p-5'>
-              {runtime.isPending ? (
-                <QuerySkeleton rows={2} />
-              ) : runtime.error ? (
-                <QueryError
-                  message={runtime.error instanceof Error ? runtime.error.message : undefined}
-                />
-              ) : runtime.data?.data ? (
-                <div className='space-y-3 text-sm'>
-                  <div className='flex justify-between gap-4'>
-                    <span className='text-muted-foreground'>运行时版本</span>
-                    <span>{runtime.data.data.version}</span>
+          {user?.role === 'admin' ? (
+            <Card>
+              <CardHeader className='border-b'>
+                <h2 className='font-medium'>Pi 运行时</h2>
+                <p className='text-muted-foreground mt-1 text-sm'>
+                  仅管理员可查看服务端运行时能力摘要。
+                </p>
+              </CardHeader>
+              <CardContent className='p-5'>
+                {runtime.isPending ? (
+                  <QuerySkeleton rows={2} />
+                ) : runtime.error ? (
+                  <QueryError
+                    message={runtime.error instanceof Error ? runtime.error.message : undefined}
+                  />
+                ) : runtime.data?.data ? (
+                  <div className='flex flex-col gap-3 text-sm'>
+                    <div className='flex justify-between gap-4'>
+                      <span className='text-muted-foreground'>运行时版本</span>
+                      <span>{runtime.data.data.version}</span>
+                    </div>
+                    <div className='flex justify-between gap-4'>
+                      <span className='text-muted-foreground'>扩展能力</span>
+                      <span>{runtime.data.data.extensions.length}</span>
+                    </div>
+                    <div className='flex justify-between gap-4'>
+                      <span className='text-muted-foreground'>技能</span>
+                      <span>{runtime.data.data.skills.length}</span>
+                    </div>
                   </div>
-                  <div className='flex justify-between gap-4'>
-                    <span className='text-muted-foreground'>扩展能力</span>
-                    <span>{runtime.data.data.extensions.length}</span>
-                  </div>
-                  <div className='flex justify-between gap-4'>
-                    <span className='text-muted-foreground'>技能</span>
-                    <span>{runtime.data.data.skills.length}</span>
-                  </div>
-                </div>
-              ) : (
-                <p className='text-muted-foreground text-sm'>暂无运行时信息。</p>
-              )}
-            </CardContent>
-          </Card>
+                ) : (
+                  <p className='text-muted-foreground text-sm'>暂无运行时信息。</p>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -222,7 +231,7 @@ export default function ProviderSettingsPage() {
                   onChange={(event) => setForm({ ...form, provider_id: event.target.value })}
                   placeholder='例如 xiaomi'
                 />
-                <FieldDescription>用于 Pi 模型目录中的 provider id。</FieldDescription>
+                <FieldDescription>用于平台模型目录中的供应商标识。</FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor='provider-url'>兼容 API 地址</FieldLabel>

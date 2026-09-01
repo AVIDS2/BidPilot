@@ -10,7 +10,9 @@ Use this before writing or deleting meaningful code in a fresh or partially init
 
 - do not delete files or infrastructure because the environment is not yet working
 - do not replace the documented stack with a new one because one dependency is missing
-- do not create a second local PostgreSQL outside the project Docker setup
+- do not start Docker or create a second unrelated local database for this
+  project; use the verified direct-process profile when host dependencies are
+  unavailable
 - do not switch away from `conda activate llm` unless the docs are updated first
 
 ## First-run sequence
@@ -21,42 +23,45 @@ Use this before writing or deleting meaningful code in a fresh or partially init
 conda activate llm
 ```
 
-### 2. Check Docker is available
+### 2. Check the direct-process profile
 
 ```powershell
-docker version
-docker compose version
+Test-NetConnection 127.0.0.1 -Port 8000
+Test-NetConnection 127.0.0.1 -Port 8787
 ```
 
-If Docker is unavailable, stop and report the blocker rather than inventing a non-Docker local stack.
+For UI/API work, the expected local API and Pi processes are direct Windows
+processes. Docker is not part of the developer workflow.
 
-### 3. Start the documented PostgreSQL service
+### 3. Prepare the local contract database
 
 ```powershell
-docker compose up -d postgres
+uv run --directory services/api python -c "from contracts.db import Base; import app.models; from app.db import engine; Base.metadata.create_all(engine)"
 ```
 
-### 4. Verify PostgreSQL container health
+Use the ignored local SQLite URL from the baseline when PostgreSQL is not
+available. Do not point the web app at the production API for convenience.
+
+### 4. Verify the local web/API boundary
 
 ```powershell
-docker ps --filter "name=docpilot-postgres"
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8787/health
 ```
 
 Expected:
 
-- container name `docpilot-postgres`
-- mapped port `5433`
-- healthy or running status
+- both loopback services return HTTP 200
 
 ### 5. Verify the documented connection target
 
 ```powershell
-Test-NetConnection localhost -Port 5433
+Test-NetConnection 127.0.0.1 -Port 3300
 ```
 
 Expected:
 
-- port `5433` reachable
+- the Next app is reachable on port `3300`
 
 ### 6. Confirm local provider baseline
 
@@ -83,10 +88,11 @@ Then continue with the active phase plan.
 
 ## If something is missing
 
-### If PostgreSQL is not running
+### If PostgreSQL, Redis or MinIO is not running
 
-- start it with `docker compose up -d postgres`
-- do not create a second database elsewhere
+- continue with the direct-process SQLite/API/Pi profile for UI and REST work
+- report asynchronous and object-storage flows as unavailable
+- do not start Docker or point local UI traffic at the public API
 
 ### If the app services do not exist yet
 

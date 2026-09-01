@@ -21,9 +21,9 @@ export default function MembersPage() {
   return (
     <>
       <PageHeader
-        eyebrow='管理'
+        eyebrow='工作区'
         title='团队成员'
-        description='管理当前工作区中的成员、角色和审核责任。'
+        description='查看当前工作区中的成员、角色和审核责任。'
       />
       <div className='flex flex-1 flex-col gap-5 px-5 py-6 lg:px-8'>
         {query.isPending ? (

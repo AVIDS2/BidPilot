@@ -11,13 +11,19 @@
   HttpOnly FastAPI access cookie
 - public landing, auth, dashboard, project, requirements, knowledge, run,
   deliverable, review, member, account, admin and provider routes are present
-- local verification: Next typecheck, format check, production build, dependency
-  audit, shadcn CLI info, 16-route authenticated browser matrix, desktop/mobile
-  navigation, Pi event projection, completed tool-detail pointer interaction,
-  and delayed native thinking shimmer all passed
-- remaining release gates: run a real authenticated account flow against a
-  dedicated local API test environment, then obtain explicit production
-  promotion approval
+- local direct-process verification: FastAPI on `127.0.0.1:8000`, Pi on
+  `127.0.0.1:8787`, Next on `127.0.0.1:3300`, isolated SQLite demo account and
+  workspace, 14 authenticated user routes plus public pricing/docs and admin
+  denial checks passed
+- local dependency boundary: PostgreSQL/Redis/MinIO/Worker are not running on
+  this machine; SQLite validation covers UI/API contracts only and does not
+  claim queue, indexing, object-storage or PostgreSQL/pgvector parity
+- local Agent transport: `DOCPILOT_LOCAL_DIRECT_ASSISTANT=true` invokes the
+  existing queued Pi executor in-process, registers the same cancellation
+  control and preserves the durable runtime event contract; it is not a second
+  model runtime or a keyword router
+- remaining release gates: run the dedicated PostgreSQL/Redis/MinIO Worker
+  acceptance environment, then obtain explicit production promotion approval
 
 ## Goal
 

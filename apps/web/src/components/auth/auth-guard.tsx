@@ -11,9 +11,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { status } = useAuth();
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    if (status !== 'unauthenticated') return;
+    // Let AuthProvider's current-path check settle before redirecting. During
+    // a client transition the provider can briefly expose the previous
+    // pathname's unauthenticated state even though the new cookie is valid.
+    const timer = window.setTimeout(() => {
       router.replace(`/auth/sign-in?next=${encodeURIComponent(pathname)}`);
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [pathname, router, status]);
 
   if (status === 'loading' || status === 'unauthenticated') {

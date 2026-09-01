@@ -1,4 +1,4 @@
-import { requestBackend, unavailableResponse } from '@/lib/backend';
+import { forwardBackendResponse, requestBackend, unavailableResponse } from '@/lib/backend';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,13 +19,7 @@ async function forward(request: Request, context: RouteContext) {
         ? undefined
         : await request.arrayBuffer();
     const upstream = await requestBackend(backendPath, { method: request.method, headers, body });
-    const responseHeaders = new Headers(upstream.headers);
-    responseHeaders.set('Cache-Control', 'no-store');
-    return new Response(upstream.body, {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      headers: responseHeaders
-    });
+    return forwardBackendResponse(upstream, { cacheControl: 'no-store' });
   } catch {
     return unavailableResponse();
   }

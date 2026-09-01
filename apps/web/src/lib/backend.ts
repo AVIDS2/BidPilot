@@ -22,6 +22,11 @@ const HOP_BY_HOP_HEADERS = new Set([
   'upgrade'
 ]);
 
+// Node fetch transparently decompresses upstream responses. Forwarding the
+// original compression metadata would make the browser try to decompress an
+// already-decoded body, especially on Cloudflare-proxied JSON and SSE routes.
+const RESPONSE_HEADERS_TO_STRIP = new Set([...HOP_BY_HOP_HEADERS, 'content-encoding']);
+
 export async function requestBackend(path: string, init: RequestInit = {}, includeAuth = true) {
   const headers = new Headers(init.headers);
   for (const name of HOP_BY_HOP_HEADERS) headers.delete(name);
@@ -35,6 +40,21 @@ export async function requestBackend(path: string, init: RequestInit = {}, inclu
     ...init,
     headers,
     cache: 'no-store'
+  });
+}
+
+export function forwardBackendResponse(
+  upstream: Response,
+  options: { cacheControl?: string } = {}
+) {
+  const headers = new Headers(upstream.headers);
+  for (const name of RESPONSE_HEADERS_TO_STRIP) headers.delete(name);
+  if (options.cacheControl) headers.set('Cache-Control', options.cacheControl);
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers
   });
 }
 

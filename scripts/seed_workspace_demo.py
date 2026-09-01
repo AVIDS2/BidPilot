@@ -23,6 +23,8 @@ from sqlalchemy.orm import Session
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "services" / "api"))
+# Imports intentionally follow the path bootstrap above for direct script use.
+# ruff: noqa: E402
 
 from app.auth.schemas import CurrentUser
 from app.auth.service import check_plan_limit
@@ -33,6 +35,7 @@ from app.models import (
     Deliverable,
     DeliverableSection,
     Evidence,
+    ExecutionRun,
     KnowledgeChunk,
     NoticeItem,
     NoticeMatch,
@@ -86,7 +89,9 @@ def current_user(user: User, org_id: str, org_slug: str) -> CurrentUser:
 
 
 def find_project(db: Session, *, org_id: str, name: str) -> Project | None:
-    return db.scalar(select(Project).where(Project.org_id == org_id, Project.name == name))
+    return db.scalar(
+        select(Project).where(Project.org_id == org_id, Project.name == name)
+    )
 
 
 def seed_project_fixture(
@@ -155,9 +160,14 @@ def seed_project_fixture(
             project_id=project.id,
             source_document_id=document.id,
             chunk_index=0,
-            chunk_key=hashlib.sha256(f"{document.id}:{content_hash}:0".encode("utf-8")).hexdigest(),
+            chunk_key=hashlib.sha256(
+                f"{document.id}:{content_hash}:0".encode("utf-8")
+            ).hexdigest(),
             content=content,
-            metadata_json={"source_kind": "workspace_demo", "document": document.original_filename},
+            metadata_json={
+                "source_kind": "workspace_demo",
+                "document": document.original_filename,
+            },
             retrieval_text=content,
             embedding_status="not_indexed",
         )
@@ -216,7 +226,9 @@ def seed_project_fixture(
                     requirement_id=requirement.id,
                     evidence_id=evidence.id,
                     relation_type="supports",
-                    verification_status="verified" if coverage == "covered" else "unverified",
+                    verification_status="verified"
+                    if coverage == "covered"
+                    else "unverified",
                     created_by_user_id=user.id,
                 )
             )
@@ -225,18 +237,33 @@ def seed_project_fixture(
     return project
 
 
-def seed_runtime_runs(db: Session, *, user: User, org_id: str, project: Project) -> None:
+def seed_runtime_runs(
+    db: Session, *, user: User, org_id: str, project: Project
+) -> None:
     approval_key = "workspace-demo-approval-v1"
     approval_run = db.scalar(
-        select(RuntimeRun).where(RuntimeRun.org_id == org_id, RuntimeRun.idempotency_key == approval_key)
+        select(RuntimeRun).where(
+            RuntimeRun.org_id == org_id, RuntimeRun.idempotency_key == approval_key
+        )
     )
     if approval_run is None:
+        approval_execution = ExecutionRun(
+            project_id=project.id,
+            requested_by_user_id=user.id,
+            run_type="workspace_demo_approval",
+            status="awaiting_approval",
+            input_json={"goal": "确认医疗数据治理服务的交付范围"},
+            started_at=utcnow() - timedelta(minutes=12),
+        )
+        db.add(approval_execution)
+        db.flush()
         approval_run = RuntimeRun(
             kind="workflow_bridge",
             status="awaiting_approval",
             org_id=org_id,
             user_id=user.id,
             project_id=project.id,
+            execution_run_id=approval_execution.id,
             engine="langgraph",
             trace_id="workspace-demo-approval-trace",
             idempotency_key=approval_key,
@@ -266,14 +293,39 @@ def seed_runtime_runs(db: Session, *, user: User, org_id: str, project: Project)
                 ),
             ]
         )
+    elif approval_run.execution_run_id is None and approval_run.project_id:
+        # Repair demo rows created before the bridge relation was seeded.
+        approval_execution = db.scalar(
+            select(ExecutionRun).where(
+                ExecutionRun.project_id == approval_run.project_id,
+                ExecutionRun.requested_by_user_id == approval_run.user_id,
+                ExecutionRun.run_type == "workspace_demo_approval",
+            )
+        )
+        if approval_execution is None:
+            approval_execution = ExecutionRun(
+                project_id=approval_run.project_id,
+                requested_by_user_id=approval_run.user_id,
+                run_type="workspace_demo_approval",
+                status=approval_run.status,
+                input_json={"goal": "确认医疗数据治理服务的交付范围"},
+                started_at=approval_run.started_at or utcnow(),
+            )
+            db.add(approval_execution)
+            db.flush()
+        approval_run.execution_run_id = approval_execution.id
+        db.flush()
 
     completed_key = "workspace-demo-completed-v1"
-    if db.scalar(
-        select(RuntimeRun).where(
-            RuntimeRun.org_id == org_id,
-            RuntimeRun.idempotency_key == completed_key,
+    if (
+        db.scalar(
+            select(RuntimeRun).where(
+                RuntimeRun.org_id == org_id,
+                RuntimeRun.idempotency_key == completed_key,
+            )
         )
-    ) is None:
+        is None
+    ):
         db.add(
             RuntimeRun(
                 kind="assistant_turn",
@@ -281,7 +333,9 @@ def seed_runtime_runs(db: Session, *, user: User, org_id: str, project: Project)
                 org_id=org_id,
                 user_id=user.id,
                 project_id=project.id,
-                engine="harness",
+                # Keep the demo transcript aligned with the production Pi
+                # runtime; the retired Harness is not a user-facing engine.
+                engine="pi",
                 trace_id="workspace-demo-completed-trace",
                 idempotency_key=completed_key,
                 model="demo-control-plane",
@@ -362,7 +416,15 @@ def seed_deliverable(db: Session, *, project: Project) -> Deliverable:
             version = SectionVersion(
                 deliverable_section_id=section.id,
                 version_number=1,
-                content_json={"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": content}]}]},
+                content_json={
+                    "type": "doc",
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [{"type": "text", "text": content}],
+                        }
+                    ],
+                },
                 content_markdown=content,
                 created_by_actor="ai",
                 generation_iteration=1,
@@ -377,7 +439,9 @@ def seed_deliverable(db: Session, *, project: Project) -> Deliverable:
 
 def seed_radar(db: Session, *, user: User, org_id: str) -> None:
     source = db.scalar(
-        select(NoticeSource).where(NoticeSource.org_id == org_id, NoticeSource.name == RADAR_SOURCE_NAME)
+        select(NoticeSource).where(
+            NoticeSource.org_id == org_id, NoticeSource.name == RADAR_SOURCE_NAME
+        )
     )
     if source is None:
         source = NoticeSource(
@@ -416,21 +480,103 @@ def seed_radar(db: Session, *, user: User, org_id: str) -> None:
         db.flush()
 
     notices = [
-        ("城市运行管理服务平台建设项目", "上海市城市运行管理中心", "上海", "数字政府", 12_800_000, "tender", "saved"),
-        ("区域医疗数据治理与互联互通服务", "江苏省卫生信息中心", "江苏", "医疗信息化", 8_600_000, "tender", "new"),
-        ("政务服务智能问答与知识运营采购", "杭州市政务服务管理办公室", "浙江", "人工智能", 4_200_000, "intent", "new"),
-        ("城市安全风险综合监测预警项目", "宁波市应急管理局", "浙江", "公共安全", 9_500_000, "tender", "saved"),
-        ("社区治理数据中台运维服务", "苏州市民政局", "江苏", "数据治理", 3_800_000, "tender", "new"),
-        ("营商环境智能分析应用建设", "上海市发展和改革委员会", "上海", "数据分析", 5_600_000, "rfi", "new"),
-        ("政务云资源运营支撑服务", "无锡市大数据管理局", "江苏", "云服务", 7_200_000, "tender", "new"),
-        ("基层治理 AI 助手试点采购", "嘉兴市社会治理综合指挥中心", "浙江", "人工智能", 2_600_000, "intent", "new"),
-        ("公共数据授权运营咨询服务", "上海市数据局", "上海", "数据治理", 1_900_000, "rfi", "new"),
+        (
+            "城市运行管理服务平台建设项目",
+            "上海市城市运行管理中心",
+            "上海",
+            "数字政府",
+            12_800_000,
+            "tender",
+            "saved",
+        ),
+        (
+            "区域医疗数据治理与互联互通服务",
+            "江苏省卫生信息中心",
+            "江苏",
+            "医疗信息化",
+            8_600_000,
+            "tender",
+            "new",
+        ),
+        (
+            "政务服务智能问答与知识运营采购",
+            "杭州市政务服务管理办公室",
+            "浙江",
+            "人工智能",
+            4_200_000,
+            "intent",
+            "new",
+        ),
+        (
+            "城市安全风险综合监测预警项目",
+            "宁波市应急管理局",
+            "浙江",
+            "公共安全",
+            9_500_000,
+            "tender",
+            "saved",
+        ),
+        (
+            "社区治理数据中台运维服务",
+            "苏州市民政局",
+            "江苏",
+            "数据治理",
+            3_800_000,
+            "tender",
+            "new",
+        ),
+        (
+            "营商环境智能分析应用建设",
+            "上海市发展和改革委员会",
+            "上海",
+            "数据分析",
+            5_600_000,
+            "rfi",
+            "new",
+        ),
+        (
+            "政务云资源运营支撑服务",
+            "无锡市大数据管理局",
+            "江苏",
+            "云服务",
+            7_200_000,
+            "tender",
+            "new",
+        ),
+        (
+            "基层治理 AI 助手试点采购",
+            "嘉兴市社会治理综合指挥中心",
+            "浙江",
+            "人工智能",
+            2_600_000,
+            "intent",
+            "new",
+        ),
+        (
+            "公共数据授权运营咨询服务",
+            "上海市数据局",
+            "上海",
+            "数据治理",
+            1_900_000,
+            "rfi",
+            "new",
+        ),
     ]
     now = utcnow()
-    for index, (title, buyer, region, category, budget, notice_type, status) in enumerate(notices):
+    for index, (
+        title,
+        buyer,
+        region,
+        category,
+        budget,
+        notice_type,
+        status,
+    ) in enumerate(notices):
         external_id = f"leho-workspace-demo-{index + 1}"
         notice = db.scalar(
-            select(NoticeItem).where(NoticeItem.source_id == source.id, NoticeItem.external_id == external_id)
+            select(NoticeItem).where(
+                NoticeItem.source_id == source.id, NoticeItem.external_id == external_id
+            )
         )
         if notice is None:
             notice = NoticeItem(
@@ -510,10 +656,34 @@ def seed(email: str) -> dict[str, object]:
             name=COMPLETED_PROJECT_NAME,
             status="completed",
             requirements=[
-                {"section": "technical", "text": "完成园区能耗数据接入与统一指标建模。", "coverage": "covered", "evidence_status": "sufficient", "weight": 10},
-                {"section": "delivery", "text": "按计划完成部署、联调、试运行和验收支持。", "coverage": "covered", "evidence_status": "sufficient", "weight": 8},
-                {"section": "security", "text": "提供账号权限、审计日志和数据访问控制。", "coverage": "covered", "evidence_status": "sufficient", "weight": 8},
-                {"section": "service", "text": "提供持续运维、巡检与问题响应机制。", "coverage": "covered", "evidence_status": "sufficient", "weight": 6},
+                {
+                    "section": "technical",
+                    "text": "完成园区能耗数据接入与统一指标建模。",
+                    "coverage": "covered",
+                    "evidence_status": "sufficient",
+                    "weight": 10,
+                },
+                {
+                    "section": "delivery",
+                    "text": "按计划完成部署、联调、试运行和验收支持。",
+                    "coverage": "covered",
+                    "evidence_status": "sufficient",
+                    "weight": 8,
+                },
+                {
+                    "section": "security",
+                    "text": "提供账号权限、审计日志和数据访问控制。",
+                    "coverage": "covered",
+                    "evidence_status": "sufficient",
+                    "weight": 8,
+                },
+                {
+                    "section": "service",
+                    "text": "提供持续运维、巡检与问题响应机制。",
+                    "coverage": "covered",
+                    "evidence_status": "sufficient",
+                    "weight": 6,
+                },
             ],
         )
         active_project = seed_project_fixture(
@@ -523,11 +693,43 @@ def seed(email: str) -> dict[str, object]:
             name=ACTIVE_PROJECT_NAME,
             status="active",
             requirements=[
-                {"section": "data", "text": "建立区域医疗数据目录、标准与质量治理机制。", "coverage": "covered", "evidence_status": "sufficient", "weight": 10},
-                {"section": "integration", "text": "完成医院系统、区域平台和监管接口的安全集成。", "coverage": "partial", "evidence_status": "weak", "weight": 9},
-                {"section": "security", "text": "落实数据分级分类、脱敏和访问审计要求。", "coverage": "partial", "evidence_status": "sufficient", "weight": 9},
-                {"section": "delivery", "text": "明确试点范围、里程碑和验收边界。", "coverage": "uncovered", "evidence_status": "missing", "weight": 8, "assigned": False},
-                {"section": "service", "text": "补齐上线后的运行监控与应急响应承诺。", "coverage": "uncovered", "evidence_status": "missing", "weight": 6, "assigned": False},
+                {
+                    "section": "data",
+                    "text": "建立区域医疗数据目录、标准与质量治理机制。",
+                    "coverage": "covered",
+                    "evidence_status": "sufficient",
+                    "weight": 10,
+                },
+                {
+                    "section": "integration",
+                    "text": "完成医院系统、区域平台和监管接口的安全集成。",
+                    "coverage": "partial",
+                    "evidence_status": "weak",
+                    "weight": 9,
+                },
+                {
+                    "section": "security",
+                    "text": "落实数据分级分类、脱敏和访问审计要求。",
+                    "coverage": "partial",
+                    "evidence_status": "sufficient",
+                    "weight": 9,
+                },
+                {
+                    "section": "delivery",
+                    "text": "明确试点范围、里程碑和验收边界。",
+                    "coverage": "uncovered",
+                    "evidence_status": "missing",
+                    "weight": 8,
+                    "assigned": False,
+                },
+                {
+                    "section": "service",
+                    "text": "补齐上线后的运行监控与应急响应承诺。",
+                    "coverage": "uncovered",
+                    "evidence_status": "missing",
+                    "weight": 6,
+                    "assigned": False,
+                },
             ],
         )
         seed_runtime_runs(db, user=user, org_id=workspace.id, project=active_project)
@@ -538,7 +740,11 @@ def seed(email: str) -> dict[str, object]:
         return {
             "workspace_id": workspace.id,
             "workspace_slug": workspace.slug,
-            "projects": [demo_project.name, completed_project.name, active_project.name],
+            "projects": [
+                demo_project.name,
+                completed_project.name,
+                active_project.name,
+            ],
             "radar_source": RADAR_SOURCE_NAME,
             "deliverable_id": deliverable.id,
             "plan": "enterprise",

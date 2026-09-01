@@ -1,4 +1,4 @@
-import { requestBackend, unavailableResponse } from '@/lib/backend';
+import { forwardBackendResponse, requestBackend, unavailableResponse } from '@/lib/backend';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       },
       false
     );
-    return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+    return forwardBackendResponse(upstream);
   } catch {
     return unavailableResponse();
   }

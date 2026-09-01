@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode
 } from 'react';
@@ -62,9 +63,16 @@ async function readApiError(response: Response) {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const needsSession = pathname !== '/' && !pathname.startsWith('/auth');
+  const needsSession =
+    pathname !== '/' &&
+    pathname !== '/pricing' &&
+    pathname !== '/docs' &&
+    !pathname.startsWith('/auth');
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>('loading');
+  const [checkedPathname, setCheckedPathname] = useState<string | null>(null);
+  const sessionCheckStarted = useRef(false);
+  const checkedPathnameRef = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     let response = await fetch('/api/auth/me', { cache: 'no-store' });
@@ -84,16 +92,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     if (!needsSession) {
-      setUser(null);
-      setStatus('unauthenticated');
+      if (pathname.startsWith('/auth')) {
+        setUser(null);
+        setStatus('unauthenticated');
+      }
+      checkedPathnameRef.current = pathname;
+      setCheckedPathname(pathname);
+      return () => {
+        cancelled = true;
+      };
+    }
+    // Reuse the current session across client route changes instead of
+    // re-fetching /me for every page, which made navigation feel like a reload.
+    if (checkedPathnameRef.current === pathname) return;
+    if (sessionCheckStarted.current) {
+      checkedPathnameRef.current = pathname;
+      setCheckedPathname(pathname);
       return;
     }
-    void refresh().catch(() => {
-      setUser(null);
-      setStatus('unauthenticated');
-    });
-  }, [needsSession, refresh]);
+    sessionCheckStarted.current = true;
+    checkedPathnameRef.current = pathname;
+    setCheckedPathname(pathname);
+    setStatus('loading');
+    void refresh()
+      .catch(() => {
+        if (!cancelled) {
+          setUser(null);
+          setStatus('unauthenticated');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          checkedPathnameRef.current = pathname;
+          setCheckedPathname(pathname);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsSession, pathname, refresh]);
+
+  const visibleStatus: AuthStatus =
+    needsSession && checkedPathname !== pathname ? 'loading' : status;
 
   const login = useCallback(
     async (email: string, password: string, turnstileToken?: string | null) => {
@@ -129,15 +171,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      status,
-      isAuthenticated: status === 'authenticated',
+      status: visibleStatus,
+      isAuthenticated: visibleStatus === 'authenticated',
       refresh,
       login,
       register,
       logout,
       setUser
     }),
-    [user, status, refresh, login, register, logout]
+    [user, visibleStatus, refresh, login, register, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

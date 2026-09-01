@@ -7,8 +7,10 @@ Python loop is not an automatic fallback for new requests.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator
 import logging
+import os
 from typing import Any
 from uuid import uuid4
 
@@ -58,6 +60,34 @@ from .service import (
 logger = logging.getLogger(__name__)
 
 _MAX_CONVERSATION_SOURCE_MESSAGES = 24
+
+
+def _local_direct_assistant_enabled() -> bool:
+    """Use the Pi sidecar directly only for the no-queue local profile."""
+
+    return os.getenv("DOCPILOT_LOCAL_DIRECT_ASSISTANT", "").strip().lower() == "true"
+
+
+async def _execute_local_pi_run(db: Session, run: RuntimeRun) -> str:
+    """Run the same queued Pi executor without requiring a local broker.
+
+    This is a development transport choice, not a second assistant runtime.
+    The executor still assembles the governed request and calls the Pi
+    sidecar's internal endpoint, so the user-visible events and terminal state
+    remain identical to the Worker path.
+    """
+
+    from .assistant_execution import execute_queued_assistant_run
+    from .pi_control import register_pi_execution, unregister_pi_execution
+
+    task = asyncio.current_task()
+    if task is not None:
+        register_pi_execution(run.id, task)
+    try:
+        return await execute_queued_assistant_run(db, run)
+    finally:
+        if task is not None:
+            unregister_pi_execution(run.id, task)
 
 
 async def stream_operator_assistant_response(
@@ -225,28 +255,52 @@ async def stream_operator_assistant_response(
     )
     run.input_json = {**(run.input_json or {}), "user_message_id": user_message.id}
     db.commit()
+    start = _sse(
+        "assistant.start",
+        {
+            "conversation_id": conversation_id,
+            "runtime_run_id": run.id,
+            "user_message_id": user_message.id,
+            "state": "queued",
+        },
+    )
+    yield start
+    yield _sse(
+        "assistant.runtime_state",
+        {
+            "runtime_run_id": run.id,
+            "phase": "queued",
+            "state": "queued",
+        },
+    )
+
+    if _local_direct_assistant_enabled():
+        await _execute_local_pi_run(db, run)
+        emitted_end = False
+        for event in _render_runtime_events(
+            db,
+            run.id,
+            after_sequence=0,
+            conversation_id=conversation_id,
+        ):
+            emitted_end = emitted_end or event.startswith("event: assistant.end")
+            yield event
+        if not emitted_end:
+            yield _sse(
+                "assistant.end",
+                {
+                    "conversation_id": conversation_id,
+                    "runtime_run_id": run.id,
+                    "state": "failed",
+                },
+            )
+        return
+
     # Subscribe before queue dispatch. The Worker owns execution, while Redis
     # carries the ephemeral Pi event stream directly to this browser request.
     # PostgreSQL replay remains the reconnect fallback, not the normal path.
     async with open_live_run(run.id) as live:
         enqueue_assistant_run(db, user, run)
-        yield _sse(
-            "assistant.start",
-            {
-                "conversation_id": conversation_id,
-                "runtime_run_id": run.id,
-                "user_message_id": user_message.id,
-                "state": "queued",
-            },
-        )
-        yield _sse(
-            "assistant.runtime_state",
-            {
-                "runtime_run_id": run.id,
-                "phase": "queued",
-                "state": "queued",
-            },
-        )
         if live is not None:
             async for frame in live.events():
                 yield frame

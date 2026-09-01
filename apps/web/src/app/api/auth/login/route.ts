@@ -1,4 +1,9 @@
-import { requestBackend, ACCESS_COOKIE, unavailableResponse } from '@/lib/backend';
+import {
+  forwardBackendResponse,
+  requestBackend,
+  ACCESS_COOKIE,
+  unavailableResponse
+} from '@/lib/backend';
 import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
@@ -14,8 +19,7 @@ export async function POST(request: Request) {
       },
       false
     );
-    if (!upstream.ok)
-      return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+    if (!upstream.ok) return forwardBackendResponse(upstream);
 
     const payload = (await upstream.json()) as {
       access_token?: string;

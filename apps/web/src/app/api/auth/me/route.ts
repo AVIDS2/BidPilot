@@ -1,4 +1,9 @@
-import { requestBackend, unavailableResponse, ACCESS_COOKIE } from '@/lib/backend';
+import {
+  forwardBackendResponse,
+  requestBackend,
+  unavailableResponse,
+  ACCESS_COOKIE
+} from '@/lib/backend';
 import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +17,7 @@ export async function GET() {
       );
     }
     const upstream = await requestBackend('/auth/me', { headers: { Accept: 'application/json' } });
-    return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+    return forwardBackendResponse(upstream);
   } catch {
     return unavailableResponse();
   }

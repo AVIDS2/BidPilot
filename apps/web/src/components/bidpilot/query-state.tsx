@@ -12,12 +12,24 @@ export function QuerySkeleton({ rows = 3 }: { rows?: number }) {
 }
 
 export function QueryError({ message = '数据暂时无法加载，请稍后重试。' }: { message?: string }) {
+  const safeMessage = getSafeQueryMessage(message);
   return (
     <Alert variant='destructive'>
       <AlertTitle>加载失败</AlertTitle>
-      <AlertDescription>{message}</AlertDescription>
+      <AlertDescription>{safeMessage}</AlertDescription>
     </Alert>
   );
+}
+
+function getSafeQueryMessage(message: string) {
+  const normalized = message.replace(/^API\s+\d{3}:\s*/i, '').trim();
+  if (/\b403\b|admin role|permission|forbidden|无权|权限/i.test(message)) {
+    return '当前账户没有访问这项工作区能力的权限。';
+  }
+  if (/\b5\d{2}\b|failed to fetch|network|backend unavailable|服务暂时不可用/i.test(message)) {
+    return '服务暂时无法读取，请稍后重试。';
+  }
+  return normalized || '数据暂时无法加载，请稍后重试。';
 }
 
 export function EmptyState({ title, description }: { title: string; description: string }) {

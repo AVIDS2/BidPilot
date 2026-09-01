@@ -7,6 +7,7 @@ import { useFilteredNavGroups } from '@/hooks/use-nav';
 import { Icons } from '@/components/icons';
 import { OrgSwitcher } from '@/components/org-switcher';
 import { UserNav } from './user-nav';
+import { useAuth } from '@/lib/auth';
 import {
   Sidebar,
   SidebarContent,
@@ -23,7 +24,8 @@ import {
 export default function AppSidebar() {
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
-  const groups = useFilteredNavGroups(navGroups);
+  const { user } = useAuth();
+  const groups = useFilteredNavGroups(navGroups, user?.role);
 
   return (
     <Sidebar collapsible='icon'>

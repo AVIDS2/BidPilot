@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useAIAssistant } from '@/features/agent/state/agent-store';
+import { useAuth } from '@/lib/auth';
 
 type CommandPaletteProps = {
   open: boolean;
@@ -37,6 +38,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const { t: tAI } = useTranslation('ai-assistant');
   const { theme, setTheme } = useTheme();
   const { open: openAssistant, sendMessage } = useAIAssistant();
+  const { user } = useAuth();
 
   const runAction = React.useCallback(
     (action: () => void) => {
@@ -119,11 +121,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 label={t('nav.settings')}
                 onSelect={() => runAction(() => navigate('/settings/providers'))}
               />
-              <CmdItem
-                icon={<UsersIcon />}
-                label={t('nav.users')}
-                onSelect={() => runAction(() => navigate('/admin/users'))}
-              />
+              {user?.role === 'admin' && (
+                <CmdItem
+                  icon={<UsersIcon />}
+                  label={t('nav.users')}
+                  onSelect={() => runAction(() => navigate('/admin/users'))}
+                />
+              )}
               <CmdItem
                 icon={<BookOpenIcon />}
                 label={t('nav.docs')}

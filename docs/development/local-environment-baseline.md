@@ -17,6 +17,27 @@ This document exists so implementation agents do not guess local runtime details
   as host services or through an approved isolated development environment; do
   not start the repository Compose stack locally.
 
+## Verified direct-process profile (2026-09-01)
+
+The current Windows development profile intentionally does not use Docker or a
+public API. It is the profile used for frontend and API contract acceptance in
+the `codex/kiranism-bidpilot` worktree:
+
+- Next web: `http://127.0.0.1:3300`
+- FastAPI: `http://127.0.0.1:8000`
+- Pi sidecar: `http://127.0.0.1:8787`
+- isolated SQLite file: `.tmp/bidpilot-local.sqlite3`
+- `DOCPILOT_LOCAL_DIRECT_ASSISTANT=true` (uses the same Pi executor without a
+  broker when Redis/Worker are unavailable)
+- Redis, MinIO and Celery Worker: not started in this profile
+
+The SQLite profile is suitable for local auth, project/workspace pages, radar,
+readiness presentation and REST contract checks. It is not a replacement for
+PostgreSQL/pgvector or a Worker integration environment; upload/indexing,
+queued workflow execution and object-storage flows must remain explicitly
+marked unavailable until approved local Redis/MinIO instances are provisioned.
+The browser must never use `https://bidpilot-api.rglens.com` during this profile.
+
 ## Python environment
 
 Before Python work:
@@ -108,9 +129,10 @@ docker compose up -d postgres
 
 These are the default local development ports to use unless the docs are updated:
 
-- web: `5173`
+- web: `3300` (the historical Vite port `5173` is retired for this Next app)
 - api: `8000`
-- postgres: `5433`
+- Pi sidecar: `8787`
+- postgres: `5433` when an approved host PostgreSQL instance exists
 - redis: `6379`
 - minio api: `9000`
 - minio console: `9001`
@@ -198,11 +220,13 @@ Use `DOCPILOT_LANGGRAPH_CHECKPOINTER=memory` only for local workflow smoke tests
 
 Before meaningful development:
 
-1. `conda activate llm`
-2. start Docker services required for the current task
-3. confirm Postgres is running on `localhost:5433`
-4. use the documented API base URL and models for provider setup
-5. only then start app services and run tests
+1. `conda activate llm` when Python work is required.
+2. For frontend/API contract work, initialize the ignored SQLite profile and
+   start FastAPI, Pi and Next directly on the loopback ports above.
+3. For PostgreSQL/queue/object-storage work, first confirm that approved host
+   services are running; never start the repository Compose stack locally.
+4. Use only the loopback `DOCPILOT_API_URL` for the local Next process.
+5. Run tests only against a dedicated local database ending in `_test`.
 
 ## Future rule
 

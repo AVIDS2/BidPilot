@@ -93,6 +93,8 @@ stores bearer tokens.
 - `DOCPILOT_LANGGRAPH_CHECKPOINTER`
 - `DOCPILOT_AGENT_CHECKPOINTER`
 - `DOCPILOT_ASSISTANT_ENGINE`
+- `DOCPILOT_LOCAL_DIRECT_ASSISTANT` (local-only direct Pi execution switch;
+  keep false/unset for production and for local environments with Worker)
 - `DOCPILOT_AGENT_MEMORY_EMBEDDING_TIMEOUT_SECONDS`
 - `DOCPILOT_MEM0_ENABLED`
 - `DOCPILOT_MEM0_API_KEY`
@@ -143,16 +145,20 @@ stores bearer tokens.
 - Test startup copies that value into `DOCPILOT_DATABASE_URL` before the API
   engine is imported. A normal development or production database is rejected
   before migrations or tests run.
-- On the documented local Docker baseline, create the isolated database with
-  `uv run --directory services/api python ../../scripts/prepare_local_test_database.py`,
-  then migrate it with Alembic before the first test run.
+- On a machine with an approved isolated PostgreSQL instance, create the test
+  database with `uv run --directory services/api python
+  ../../scripts/prepare_local_test_database.py`, then migrate it with Alembic
+  before the first test run. The current Windows UI profile does not start
+  Docker; use its SQLite contract profile for local page and auth checks.
 
 ## Current documented local baseline
 
 Use the project baseline unless later docs override it:
 
 - Python env: `conda activate llm`
-- PostgreSQL: Docker only, `postgresql://docpilot:docpilot@localhost:5433/docpilot`
+- PostgreSQL: approved host/isolated instance only; the current verified UI
+  profile uses ignored SQLite at `.tmp/bidpilot-local.sqlite3` because Docker is
+  prohibited on the developer machine
 - provider base URL: `https://dashscope.aliyuncs.com/compatible-mode/v1`
 - current local provider key: `<your-api-key>`
 - primary model: `qwen3.5-flash`

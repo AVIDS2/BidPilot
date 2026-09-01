@@ -20,22 +20,24 @@ Local assumptions are defined in:
 
 ## Expected local services
 
-- PostgreSQL
-- Redis
-- MinIO or S3-compatible local object storage
 - API service
-- worker service
+- Pi sidecar
 - web service
+- PostgreSQL, Redis, MinIO and Worker only when the task requires them and an
+  approved host/isolated instance is already available
 
 ## Default workflow
 
-1. `conda activate llm`
-2. start infrastructure stack from this repository
-3. apply database migrations
-4. start API service
-5. start worker service
-6. start web service
-7. run smoke checks
+1. `conda activate llm` when Python work is required.
+2. Start the direct-process local API with an ignored local environment file.
+3. Start the local Pi sidecar on `127.0.0.1:8787`.
+4. Start the Next web app on `127.0.0.1:3300` with
+   `DOCPILOT_API_URL=http://127.0.0.1:8000`.
+   Set `DOCPILOT_LOCAL_DIRECT_ASSISTANT=true` when Redis/Worker are not
+   available and a local Pi turn must be exercised.
+5. Start Worker/Redis/MinIO only for a task that needs asynchronous or
+   object-storage behavior and only after approved local dependencies exist.
+6. Run smoke checks against loopback services.
 
 ## Feature workflow
 

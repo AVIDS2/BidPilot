@@ -14,14 +14,18 @@
   link guidance (`buttonVariants` plus a semantic anchor/link).
 - Added valid `/admin` and `/settings` index routes so Kiranism breadcrumb
   prefetches no longer produce 404 console errors.
-- Compiled production browser acceptance passed for 16 authenticated routes,
-  desktop/mobile navigation, Agent event projection, tool detail interaction,
-  and delayed native thinking shimmer. `tsc`, format check, production build and
-  `pnpm audit --prod` passed; lint exits 0 with advisory upstream/source warnings.
-- Public readiness remained HTTP 200. Real local authenticated API/Pi testing
-  remains an explicit environment gate because no dedicated local test database
-  or local service processes are configured. Production promotion is still a
-  separate release decision.
+- Compiled production browser acceptance passed for the authenticated product
+  routes, desktop/mobile navigation, Agent event projection, tool detail
+  interaction, and delayed native thinking shimmer. `tsc`, format check,
+  production build and `pnpm audit --prod` passed; lint exits 0 with advisory
+  upstream/source warnings.
+- The direct local profile is now running and verified: Next `3300` -> FastAPI
+  `8000` -> Pi `8787`, with isolated SQLite demo data and no local Docker,
+  public API, Redis, MinIO or Worker. A real `你好` turn completed as Pi with
+  durable `run.started`/message/`run.completed` events. The local inbox stop
+  action also completed a previously unlinked workflow row with HTTP 200.
+- Full PostgreSQL/Redis/MinIO/Worker parity remains a separate environment gate;
+  production promotion is still a separate release decision.
 
 ## 2026-09-01 Kiranism Next frontend base
 

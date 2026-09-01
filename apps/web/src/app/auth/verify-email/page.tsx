@@ -1,14 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { buttonVariants } from '@/components/ui/button';
 import { BrandLogo } from '@/components/brand';
 
 export default function VerifyEmailPage() {
-  const router = useRouter();
   const params = useSearchParams();
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('正在验证邮箱…');
@@ -29,13 +28,13 @@ export default function VerifyEmailPage() {
         if (!response.ok) throw new Error(body.message || body.detail || '邮箱验证失败。');
         setState('success');
         setMessage(body.message || '邮箱验证成功。');
-        window.setTimeout(() => router.replace('/dashboard'), 1200);
+        window.setTimeout(() => window.location.assign('/dashboard'), 1200);
       })
       .catch((cause) => {
         setState('error');
         setMessage(cause instanceof Error ? cause.message : '邮箱验证失败。');
       });
-  }, [params, router]);
+  }, [params]);
 
   return (
     <main className='bg-muted/20 flex min-h-svh items-center justify-center px-5 py-10'>

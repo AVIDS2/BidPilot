@@ -24,8 +24,18 @@ const LABELS: Record<string, string> = {
   members: '团队成员',
   account: '账户',
   settings: '设置',
-  providers: '模型与运行时',
-  webhooks: 'Webhooks'
+  providers: '模型供应商',
+  webhooks: 'Webhook',
+  inbox: '收件箱',
+  'my-work': '我的工作',
+  radar: '招采雷达',
+  administration: '工作区管理',
+  admin: '管理员',
+  users: '用户管理',
+  teams: '团队管理',
+  invitations: '邀请管理',
+  pricing: '工作区权益',
+  docs: '产品说明'
 };
 
 export function Breadcrumbs() {

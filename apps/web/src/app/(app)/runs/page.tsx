@@ -37,8 +37,8 @@ export default function RunsPage() {
     <>
       <PageHeader
         eyebrow='投标工作流'
-        title='运行记录'
-        description='查看真实 Pi Agent 和工作流的执行状态、事件摘要与终态。'
+        title='任务记录'
+        description='查看你有权限访问的任务状态、公开进度和终态。内部运行时诊断仅供管理员使用。'
       />
       <div className='flex flex-1 flex-col gap-5 px-5 py-6 lg:px-8'>
         {runs.isPending ? (
@@ -77,10 +77,10 @@ export default function RunsPage() {
                             <RunIcon status={run.status} />
                             <span className='min-w-0'>
                               <span className='block max-w-[26rem] truncate text-sm font-medium'>
-                                {run.latest_event_summary || run.kind}
+                                {run.latest_event_summary || runKindLabel(run.kind)}
                               </span>
                               <span className='text-muted-foreground mt-1 block truncate text-xs'>
-                                {run.engine} · {formatDate(run.created_at)}
+                                {formatDate(run.created_at)}
                               </span>
                             </span>
                           </Link>
@@ -149,7 +149,7 @@ export default function RunsPage() {
                     {events.data.items.map((event) => (
                       <div className='px-5 py-4' key={event.event_id}>
                         <div className='flex items-center gap-2'>
-                          <Badge variant='outline'>{event.type}</Badge>
+                          <Badge variant='outline'>{eventLabel(event.type)}</Badge>
                           <span className='text-muted-foreground ml-auto text-xs'>
                             {formatDate(event.timestamp)}
                           </span>
@@ -192,10 +192,15 @@ function StatusBadge({ value }: { value: string }) {
           running: '运行中',
           queued: '排队中',
           pending: '等待中',
+          awaiting_approval: '等待审批',
+          awaiting_input: '需要补充信息',
+          cancel_requested: '停止中',
           completed: '已完成',
           succeeded: '已完成',
           failed: '失败',
-          cancelled: '已取消'
+          error: '失败',
+          cancelled: '已取消',
+          expired: '已过期'
         } as Record<string, string>
       )[value] || value}
     </Badge>
@@ -208,4 +213,33 @@ function formatDate(value: string) {
     hour: '2-digit',
     minute: '2-digit'
   }).format(new Date(value));
+}
+
+function eventLabel(value: string) {
+  return (
+    (
+      {
+        'assistant.start': '任务开始',
+        'assistant.message': '助手更新',
+        'assistant.tool_started': '开始处理',
+        'assistant.tool_succeeded': '处理完成',
+        'assistant.tool_failed': '处理失败',
+        'assistant.end': '任务结束'
+      } as Record<string, string>
+    )[value] || '任务更新'
+  );
+}
+
+function runKindLabel(value: string) {
+  return (
+    (
+      {
+        assistant_turn: 'Agent 任务',
+        workflow_bridge: '响应工作流',
+        subagent: '后台协作任务',
+        deep_research: '深度调研',
+        remote_import: '资料导入'
+      } as Record<string, string>
+    )[value] || '工作流任务'
+  );
 }
