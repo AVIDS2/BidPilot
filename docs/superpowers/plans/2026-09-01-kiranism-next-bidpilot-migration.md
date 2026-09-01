@@ -78,8 +78,10 @@ Browser
    statically loaded and the error action performs a full browser reload.
 9. Desktop sidebar uses Kiranism Sidebar primitives; mobile uses its Sheet and
    the header trigger remains reachable.
-10. `pnpm --filter @docpilot/web exec tsc --noEmit` and production build pass.
-11. shadcn CLI info and Playwright desktop/mobile checks pass without console
+10. Data pages show real freshness and retain prior data while refetching; the
+    radar poll and chart transition are driven by the server query state.
+11. `pnpm --filter @docpilot/web exec tsc --noEmit` and production build pass.
+12. shadcn CLI info and Playwright desktop/mobile checks pass without console
     errors other than expected API responses in an unauthenticated environment.
 
 ## Acceptance evidence

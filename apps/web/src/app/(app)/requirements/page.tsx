@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowUpRight, ListChecks, Search } from 'lucide-react';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { ProjectPicker } from '@/components/bidpilot/project-picker';
@@ -22,14 +23,21 @@ import {
 import { listProjects, listRequirements } from '@/lib/bidpilot-api';
 
 export default function RequirementsPage() {
-  const projects = useQuery({ queryKey: ['projects'], queryFn: listProjects });
+  const projects = useQuery({
+    queryKey: ['projects'],
+    queryFn: listProjects,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
+  });
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [search, setSearch] = useState('');
   const projectId = selectedProjectId || projects.data?.[0]?.id || '';
   const requirements = useQuery({
     queryKey: ['requirements', projectId],
     queryFn: () => listRequirements(projectId),
-    enabled: Boolean(projectId)
+    enabled: Boolean(projectId),
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true
   });
   const rows =
     requirements.data?.filter((item) =>
@@ -43,11 +51,20 @@ export default function RequirementsPage() {
         description='把招标要求作为可分配、可验证和可审计的工作项管理。'
         action={
           projects.data?.length ? (
-            <ProjectPicker
-              projects={projects.data}
-              value={projectId}
-              onChange={setSelectedProjectId}
-            />
+            <div className='flex flex-wrap items-center justify-end gap-2'>
+              <LiveSyncStatus
+                active={Boolean(requirements.data)}
+                dataUpdatedAt={Math.max(projects.dataUpdatedAt, requirements.dataUpdatedAt)}
+                intervalLabel='每 15 秒'
+                isFetching={projects.isFetching || requirements.isFetching}
+                onRefresh={() => void Promise.all([projects.refetch(), requirements.refetch()])}
+              />
+              <ProjectPicker
+                projects={projects.data}
+                value={projectId}
+                onChange={setSelectedProjectId}
+              />
+            </div>
           ) : undefined
         }
       />

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FolderKanban, Plus, Search } from 'lucide-react';
+import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +32,12 @@ import { createProject, listProjects, type ProjectRead } from '@/lib/bidpilot-ap
 
 export default function ProjectsPage() {
   const client = useQueryClient();
-  const query = useQuery({ queryKey: ['projects'], queryFn: listProjects });
+  const query = useQuery({
+    queryKey: ['projects'],
+    queryFn: listProjects,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
+  });
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
@@ -56,10 +62,19 @@ export default function ProjectsPage() {
         title='项目'
         description='每个项目拥有独立的资料包、需求、证据、运行记录和交付物。'
         action={
-          <Button onClick={() => setOpen(true)}>
-            <Plus data-icon='inline-start' />
-            新建项目
-          </Button>
+          <div className='flex flex-wrap items-center justify-end gap-2'>
+            <LiveSyncStatus
+              active={Boolean(query.data)}
+              dataUpdatedAt={query.dataUpdatedAt}
+              intervalLabel='每 30 秒'
+              isFetching={query.isFetching}
+              onRefresh={() => void query.refetch()}
+            />
+            <Button onClick={() => setOpen(true)}>
+              <Plus data-icon='inline-start' />
+              新建项目
+            </Button>
+          </div>
         }
       />
       <div className='flex flex-1 flex-col gap-5 px-5 py-6 lg:px-8'>

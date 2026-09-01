@@ -26,6 +26,10 @@
   stale route-manifest chunk taking down `/agent`; at `1024px` and below the
   environment panel is an on-demand shadcn Sheet, while the message thread and
   composer remain independently sized and scrollable
+- Product data motion: dashboard/workbench data pages use the shared
+  `LiveSyncStatus` with query freshness and manual refresh. Radar uses a real
+  30-second query poll and Recharts transition; no dynamic indicator is backed
+  by fabricated data or keyword inference.
 - remaining release gates: run the dedicated PostgreSQL/Redis/MinIO Worker
   acceptance environment, then obtain explicit production promotion approval
 

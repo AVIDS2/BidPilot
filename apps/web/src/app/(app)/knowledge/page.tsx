@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowUpRight, BookOpen, BrainCircuit } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { buttonVariants } from '@/components/ui/button';
@@ -12,7 +13,9 @@ import { listKnowledgePortfolio } from '@/lib/bidpilot-api';
 export default function KnowledgePage() {
   const query = useQuery({
     queryKey: ['knowledge-portfolio'],
-    queryFn: () => listKnowledgePortfolio(50)
+    queryFn: () => listKnowledgePortfolio(50),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
   });
   return (
     <>
@@ -21,9 +24,18 @@ export default function KnowledgePage() {
         title='知识库'
         description='查看项目共享记忆、编译状态和可追溯的知识来源。'
         action={
-          <Link className={buttonVariants({ variant: 'outline' })} href='/agent'>
-            让助手检索 <ArrowUpRight data-icon='inline-end' />
-          </Link>
+          <div className='flex flex-wrap items-center justify-end gap-2'>
+            <LiveSyncStatus
+              active={Boolean(query.data)}
+              dataUpdatedAt={query.dataUpdatedAt}
+              intervalLabel='每 30 秒'
+              isFetching={query.isFetching}
+              onRefresh={() => void query.refetch()}
+            />
+            <Link className={buttonVariants({ variant: 'outline' })} href='/agent'>
+              让助手检索 <ArrowUpRight data-icon='inline-end' />
+            </Link>
+          </div>
         }
       />
       <div className='flex flex-1 flex-col gap-5 px-5 py-6 lg:px-8'>

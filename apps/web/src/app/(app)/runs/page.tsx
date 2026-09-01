@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Clock3, Eye, Square } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +24,12 @@ export default function RunsPage() {
   const params = useSearchParams();
   const selectedRunId = params.get('run');
   const client = useQueryClient();
-  const runs = useQuery({ queryKey: ['runtime-runs', 'all'], queryFn: () => listRuntimeRuns(100) });
+  const runs = useQuery({
+    queryKey: ['runtime-runs', 'all'],
+    queryFn: () => listRuntimeRuns(100),
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true
+  });
   const events = useQuery({
     queryKey: ['runtime-events', selectedRunId],
     queryFn: () => listRuntimeEvents(selectedRunId || ''),
@@ -39,6 +45,15 @@ export default function RunsPage() {
         eyebrow='投标工作流'
         title='任务记录'
         description='查看你有权限访问的任务状态、公开进度和终态。内部运行时诊断仅供管理员使用。'
+        action={
+          <LiveSyncStatus
+            active={Boolean(runs.data)}
+            dataUpdatedAt={runs.dataUpdatedAt}
+            intervalLabel='每 15 秒'
+            isFetching={runs.isFetching}
+            onRefresh={() => void runs.refetch()}
+          />
+        }
       />
       <div className='flex flex-1 flex-col gap-5 px-5 py-6 lg:px-8'>
         {runs.isPending ? (

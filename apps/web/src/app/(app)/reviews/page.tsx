@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardCheck, MessageSquare, Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { ProjectPicker } from '@/components/bidpilot/project-picker';
@@ -11,13 +12,20 @@ import { Badge } from '@/components/ui/badge';
 import { listProjects, getCollaborationBoard } from '@/lib/bidpilot-api';
 
 export default function ReviewsPage() {
-  const projects = useQuery({ queryKey: ['projects'], queryFn: listProjects });
+  const projects = useQuery({
+    queryKey: ['projects'],
+    queryFn: listProjects,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
+  });
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const projectId = selectedProjectId || projects.data?.[0]?.id || '';
   const board = useQuery({
     queryKey: ['collaboration-board', projectId],
     queryFn: () => getCollaborationBoard(projectId),
-    enabled: Boolean(projectId)
+    enabled: Boolean(projectId),
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true
   });
   return (
     <>
@@ -27,11 +35,20 @@ export default function ReviewsPage() {
         description='从同一份项目看板跟踪审核、分配和待处理风险。'
         action={
           projects.data?.length ? (
-            <ProjectPicker
-              projects={projects.data}
-              value={projectId}
-              onChange={setSelectedProjectId}
-            />
+            <div className='flex flex-wrap items-center justify-end gap-2'>
+              <LiveSyncStatus
+                active={Boolean(board.data)}
+                dataUpdatedAt={Math.max(projects.dataUpdatedAt, board.dataUpdatedAt)}
+                intervalLabel='每 15 秒'
+                isFetching={projects.isFetching || board.isFetching}
+                onRefresh={() => void Promise.all([projects.refetch(), board.refetch()])}
+              />
+              <ProjectPicker
+                projects={projects.data}
+                value={projectId}
+                onChange={setSelectedProjectId}
+              />
+            </div>
           ) : undefined
         }
       />

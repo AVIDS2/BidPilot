@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth';
+import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { AdminGuard } from '@/components/auth/admin-guard';
@@ -366,20 +367,26 @@ export function MyWorkPage() {
     queryKey: ['projects'],
     queryFn: listProjects,
     staleTime: 30_000,
-    retry: false
+    retry: false,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
   });
   const runs = useQuery({
     queryKey: ['runtime-runs', 'my-work'],
     queryFn: () => listRuntimeRuns(50),
     staleTime: 10_000,
-    retry: false
+    retry: false,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true
   });
   const readinessQueries = useQueries({
     queries: (projects.data ?? []).map((project) => ({
       queryKey: ['readiness-summary', project.id],
       queryFn: () => getReadinessSummary(project.id),
       staleTime: 30_000,
-      retry: false
+      retry: false,
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: true
     }))
   });
   const workItems = useMemo(() => {
@@ -448,6 +455,20 @@ export function MyWorkPage() {
   const chartConfig = {
     readiness: { label: '就绪度', color: 'var(--primary)' }
   } satisfies ChartConfig;
+  const isRefreshing =
+    projects.isFetching || runs.isFetching || readinessQueries.some((query) => query.isFetching);
+  const dataUpdatedAt = Math.max(
+    projects.dataUpdatedAt,
+    runs.dataUpdatedAt,
+    ...readinessQueries.map((query) => query.dataUpdatedAt)
+  );
+  const refreshAll = () => {
+    void Promise.all([
+      projects.refetch(),
+      runs.refetch(),
+      ...readinessQueries.map((query) => query.refetch())
+    ]);
+  };
 
   return (
     <>
@@ -456,9 +477,18 @@ export function MyWorkPage() {
         title='我的工作'
         description='从项目事实和真实运行状态中汇总下一步需要你决定的事项。'
         action={
-          <Link className={buttonVariants({ variant: 'outline' })} href='/projects'>
-            查看项目 <ArrowUpRight data-icon='inline-end' />
-          </Link>
+          <div className='flex flex-wrap items-center justify-end gap-2'>
+            <LiveSyncStatus
+              active={Boolean(projects.data || runs.data)}
+              dataUpdatedAt={dataUpdatedAt}
+              intervalLabel='每 15 秒'
+              isFetching={isRefreshing}
+              onRefresh={refreshAll}
+            />
+            <Link className={buttonVariants({ variant: 'outline' })} href='/projects'>
+              查看项目 <ArrowUpRight data-icon='inline-end' />
+            </Link>
+          </div>
         }
       />
       <div className='flex flex-1 flex-col gap-6 px-5 py-6 lg:px-8'>
@@ -570,7 +600,14 @@ export function MyWorkPage() {
                             <ChartTooltipContent formatter={(value) => [`${value}%`, '就绪度']} />
                           }
                         />
-                        <Bar dataKey='readiness' fill='var(--color-readiness)' radius={4} />
+                        <Bar
+                          animationDuration={650}
+                          animationEasing='ease-out'
+                          dataKey='readiness'
+                          fill='var(--color-readiness)'
+                          isAnimationActive
+                          radius={4}
+                        />
                       </BarChart>
                     </ChartContainer>
                   ) : (
@@ -663,8 +700,12 @@ export function RadarPage() {
   const overviewQuery = useQuery({
     queryKey: ['radar-overview', view, queryText],
     queryFn: () => getRadarOverview({ view, query: queryText }),
+    placeholderData: (previousData) => previousData,
     staleTime: 15_000,
-    retry: false
+    retry: false,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true
   });
   const overview = overviewQuery.data;
   const invalidate = () => client.invalidateQueries({ queryKey: ['radar-overview'] });
@@ -730,7 +771,14 @@ export function RadarPage() {
         title='招采雷达'
         description='把公开来源、团队关注方向和机会研判放到同一条可追溯的工作路径上。'
         action={
-          <div className='flex flex-wrap gap-2'>
+          <div className='flex flex-wrap items-center justify-end gap-2'>
+            <LiveSyncStatus
+              active={Boolean(summary?.active_source_count)}
+              dataUpdatedAt={overviewQuery.dataUpdatedAt}
+              intervalLabel='每 30 秒'
+              isFetching={overviewQuery.isFetching}
+              onRefresh={() => void overviewQuery.refetch()}
+            />
             <Button onClick={() => setSubscriptionOpen(true)} size='sm'>
               <Plus data-icon='inline-start' />
               新建订阅
@@ -787,7 +835,7 @@ export function RadarPage() {
               <Card>
                 <CardHeader className='border-b'>
                   <CardTitle className='flex items-center gap-2'>
-                    <Radar />
+                    <Radar className={overviewQuery.isFetching ? 'motion-safe:animate-spin' : ''} />
                     来源信号
                   </CardTitle>
                   <CardDescription>只显示服务端已接入的公开来源。</CardDescription>
@@ -799,7 +847,7 @@ export function RadarPage() {
                         <span
                           className={
                             source.is_active
-                              ? 'bg-primary size-2 rounded-full'
+                              ? 'bg-primary motion-safe:animate-pulse size-2 rounded-full'
                               : 'bg-muted-foreground size-2 rounded-full'
                           }
                         />
@@ -807,6 +855,19 @@ export function RadarPage() {
                           <span className='block truncate text-sm font-medium'>{source.name}</span>
                           <span className='text-muted-foreground block truncate text-xs'>
                             {sourceKindLabel(source.kind)} · {source.notice_count} 条公告
+                          </span>
+                          <span className='text-muted-foreground/80 block truncate text-[11px]'>
+                            {source.last_success_at
+                              ? `最近成功 ${formatDate(source.last_success_at, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}`
+                              : source.last_polled_at
+                                ? '最近刷新未成功'
+                                : '尚未刷新'}
+                            {source.last_error_code ? ' · 需要处理' : ''}
                           </span>
                         </span>
                         {isAdmin && ['rss', 'json_feed'].includes(source.kind) && (
@@ -875,8 +936,11 @@ export function RadarPage() {
                         <YAxis allowDecimals={false} axisLine={false} tickLine={false} width={30} />
                         <ChartTooltip content={<ChartTooltipContent />} />
                         <Area
+                          animationDuration={700}
+                          animationEasing='ease-out'
                           dataKey='notice_count'
                           fill='url(#radar-notices-fill)'
+                          isAnimationActive
                           name='新增公告'
                           stroke='var(--color-notices)'
                           strokeWidth={2}
@@ -954,7 +1018,7 @@ export function RadarPage() {
                                     <div className='mt-2 flex flex-wrap gap-1'>
                                       {notice.matches.slice(0, 2).map((match) => (
                                         <Badge key={match.subscription_id} variant='secondary'>
-                                          {match.subscription_name} {Math.round(match.score * 100)}%
+                                          {match.subscription_name} {Math.round(match.score)}%
                                         </Badge>
                                       ))}
                                     </div>

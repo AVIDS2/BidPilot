@@ -4,11 +4,13 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, FileCheck2, Files, ListChecks, MessageSquare, PlayCircle } from 'lucide-react';
+import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { getProject, getReadinessSummary, listBundles, listDeliverables } from '@/lib/bidpilot-api';
 
@@ -18,22 +20,30 @@ export default function ProjectDetailPage() {
   const project = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
-    enabled: Boolean(projectId)
+    enabled: Boolean(projectId),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
   });
   const bundles = useQuery({
     queryKey: ['bundles', projectId],
     queryFn: () => listBundles(projectId),
-    enabled: Boolean(projectId)
+    enabled: Boolean(projectId),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
   });
   const deliverables = useQuery({
     queryKey: ['deliverables', projectId],
     queryFn: () => listDeliverables(projectId),
-    enabled: Boolean(projectId)
+    enabled: Boolean(projectId),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
   });
   const readiness = useQuery({
     queryKey: ['readiness', projectId],
     queryFn: () => getReadinessSummary(projectId),
-    enabled: Boolean(projectId)
+    enabled: Boolean(projectId),
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true
   });
 
   if (project.isPending)
@@ -57,14 +67,40 @@ export default function ProjectDetailPage() {
       </>
     );
   const item = project.data;
+  const isRefreshing =
+    project.isFetching || bundles.isFetching || deliverables.isFetching || readiness.isFetching;
+  const dataUpdatedAt = Math.max(
+    project.dataUpdatedAt,
+    bundles.dataUpdatedAt,
+    deliverables.dataUpdatedAt,
+    readiness.dataUpdatedAt
+  );
+  const refreshAll = () => {
+    void Promise.all([
+      project.refetch(),
+      bundles.refetch(),
+      deliverables.refetch(),
+      readiness.refetch()
+    ]);
+  };
+  const readinessScore = readiness.data
+    ? Math.min(100, Math.max(0, Math.round(readiness.data.readiness_score)))
+    : 0;
   return (
     <>
       <PageHeader
         eyebrow='项目工作区'
         title={item.name}
-        description={`${item.scenario_package} · ${item.slug}`}
+        description={`${scenarioLabel(item.scenario_package)} · ${item.slug}`}
         action={
-          <div className='flex flex-wrap gap-2'>
+          <div className='flex flex-wrap items-center justify-end gap-2'>
+            <LiveSyncStatus
+              active
+              dataUpdatedAt={dataUpdatedAt}
+              intervalLabel='每 15 秒'
+              isFetching={isRefreshing}
+              onRefresh={refreshAll}
+            />
             <Link
               className={buttonVariants({ variant: 'outline' })}
               href={`/agent?project_id=${item.id}`}
@@ -98,8 +134,37 @@ export default function ProjectDetailPage() {
             value={deliverables.data?.length}
             loading={deliverables.isPending}
           />
-          <SummaryCard icon={<PlayCircle />} title='项目状态' value={item.status} />
+          <SummaryCard
+            icon={<PlayCircle />}
+            title='项目状态'
+            value={projectStatusLabel(item.status)}
+          />
         </div>
+        {readiness.data ? (
+          <Card>
+            <CardHeader className='border-b'>
+              <div className='flex flex-wrap items-center justify-between gap-3'>
+                <div>
+                  <h2 className='font-medium'>响应准备度</h2>
+                  <p className='text-muted-foreground mt-1 text-sm'>
+                    由当前要求、证据和核验状态实时计算。
+                  </p>
+                </div>
+                <Badge variant='outline'>{readinessLabel(readiness.data.score_label)}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className='grid gap-5 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'>
+              <Progress value={readinessScore}>
+                <ProgressLabel>整体就绪度</ProgressLabel>
+                <ProgressValue />
+              </Progress>
+              <div className='grid grid-cols-2 gap-3 sm:min-w-56'>
+                <ReadinessMetric label='已覆盖要求' value={readiness.data.counts.covered} />
+                <ReadinessMetric label='待补证据' value={readiness.data.evidence_gaps.length} />
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
         <Tabs defaultValue='overview'>
           <TabsList>
             <TabsTrigger value='overview'>项目概览</TabsTrigger>
@@ -141,8 +206,8 @@ export default function ProjectDetailPage() {
                 <CardContent className='space-y-4 p-5 text-sm'>
                   <InfoRow label='项目 ID' value={item.id} />
                   <InfoRow label='工作区' value={item.org_slug || item.org_id || '当前账户'} />
-                  <InfoRow label='场景包' value={item.scenario_package} />
-                  <InfoRow label='状态' value={item.status} />
+                  <InfoRow label='场景包' value={scenarioLabel(item.scenario_package)} />
+                  <InfoRow label='状态' value={projectStatusLabel(item.status)} />
                 </CardContent>
               </Card>
             </div>
@@ -161,6 +226,35 @@ export default function ProjectDetailPage() {
       </div>
     </>
   );
+}
+
+function ReadinessMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className='bg-muted/40 rounded-lg p-3'>
+      <p className='text-muted-foreground text-xs'>{label}</p>
+      <p className='mt-1 text-lg font-semibold tabular-nums'>{value}</p>
+    </div>
+  );
+}
+
+function projectStatusLabel(value: string) {
+  return (
+    {
+      active: '进行中',
+      draft: '草稿',
+      completed: '已完成',
+      archived: '已归档',
+      failed: '需要处理'
+    }[value] || '进行中'
+  );
+}
+
+function scenarioLabel(value: string) {
+  return value === 'bidpilot' ? 'BidPilot 招标响应场景' : value;
+}
+
+function readinessLabel(value: string) {
+  return value === 'response_readiness' ? '响应准备度' : value || '响应准备度';
 }
 
 function SummaryCard({

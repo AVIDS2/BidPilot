@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowUpRight, FolderKanban, ListChecks, PlayCircle, TriangleAlert } from 'lucide-react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
+import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +30,12 @@ const runChartConfig = {
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const projects = useQuery({ queryKey: ['projects'], queryFn: listProjects });
+  const projects = useQuery({
+    queryKey: ['projects'],
+    queryFn: listProjects,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true
+  });
   const runtime = useQuery({
     queryKey: ['runtime-summary'],
     queryFn: getRuntimeSummary,
@@ -40,14 +46,18 @@ export default function DashboardPage() {
   const runs = useQuery({
     queryKey: ['runtime-runs', 'dashboard'],
     queryFn: () => listRuntimeRuns(8),
-    retry: false
+    retry: false,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true
   });
   const readinessQueries = useQueries({
     queries: (projects.data ?? []).map((project) => ({
       queryKey: ['readiness-summary', project.id],
       queryFn: () => getReadinessSummary(project.id),
       staleTime: 30_000,
-      retry: false
+      retry: false,
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: true
     }))
   });
   // Runtime summary is an administrator-only aggregate. It must not block the
@@ -88,6 +98,25 @@ export default function DashboardPage() {
       count: runs.data?.filter((run) => ['failed', 'error'].includes(run.status)).length ?? 0
     }
   ];
+  const isRefreshing =
+    projects.isFetching ||
+    runs.isFetching ||
+    runtime.isFetching ||
+    readinessQueries.some((query) => query.isFetching);
+  const dataUpdatedAt = Math.max(
+    projects.dataUpdatedAt,
+    runs.dataUpdatedAt,
+    runtime.dataUpdatedAt,
+    ...readinessQueries.map((query) => query.dataUpdatedAt)
+  );
+  const refreshAll = () => {
+    void Promise.all([
+      projects.refetch(),
+      runs.refetch(),
+      ...(user?.role === 'admin' ? [runtime.refetch()] : []),
+      ...readinessQueries.map((query) => query.refetch())
+    ]);
+  };
 
   return (
     <>
@@ -96,9 +125,18 @@ export default function DashboardPage() {
         title='总览'
         description='从这里查看项目进度、Agent 运行和响应准备度。'
         action={
-          <Link className={buttonVariants()} href='/projects'>
-            查看项目 <ArrowUpRight data-icon='inline-end' />
-          </Link>
+          <div className='flex flex-wrap items-center justify-end gap-2'>
+            <LiveSyncStatus
+              active={Boolean(projects.data || runs.data)}
+              dataUpdatedAt={dataUpdatedAt}
+              intervalLabel='每 15 秒'
+              isFetching={isRefreshing}
+              onRefresh={refreshAll}
+            />
+            <Link className={buttonVariants()} href='/projects'>
+              查看项目 <ArrowUpRight data-icon='inline-end' />
+            </Link>
+          </div>
         }
       />
       <div className='flex flex-1 flex-col gap-6 px-5 py-6 lg:px-8'>
@@ -169,7 +207,14 @@ export default function DashboardPage() {
                         <XAxis axisLine={false} dataKey='status' tickLine={false} />
                         <YAxis allowDecimals={false} axisLine={false} tickLine={false} width={28} />
                         <ChartTooltip content={<ChartTooltipContent />} />
-                        <Bar dataKey='count' fill='var(--color-count)' radius={4} />
+                        <Bar
+                          animationDuration={550}
+                          animationEasing='ease-out'
+                          dataKey='count'
+                          fill='var(--color-count)'
+                          isAnimationActive
+                          radius={4}
+                        />
                       </BarChart>
                     </ChartContainer>
                   ) : (
@@ -304,7 +349,14 @@ export default function DashboardPage() {
                             <ChartTooltipContent formatter={(value) => [`${value}%`, '就绪度']} />
                           }
                         />
-                        <Bar dataKey='readiness' fill='var(--color-readiness)' radius={4} />
+                        <Bar
+                          animationDuration={650}
+                          animationEasing='ease-out'
+                          dataKey='readiness'
+                          fill='var(--color-readiness)'
+                          isAnimationActive
+                          radius={4}
+                        />
                       </BarChart>
                     </ChartContainer>
                   ) : (

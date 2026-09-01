@@ -2,6 +2,17 @@
 
 ## 2026-09-01 Kiranism migration acceptance
 
+- Used the Kiranism dynamic primitives in user-facing product flows: shared
+  `LiveSyncStatus` now exposes real query freshness and manual refresh; project,
+  requirements, knowledge, delivery, review, run, dashboard and work views
+  retain prior data while polling their relevant API state. Radar polls every
+  30 seconds, shows source sync timestamps, pulses only for configured active
+  sources, and animates the real Recharts trend when data enters or changes.
+- Browser acceptance verified the radar timestamp changed across a real 30-second
+  poll interval, the manual refresh called the local API, and the UI showed
+  `95%` rather than the previous erroneous `9500%` match score. Project detail
+  now uses the official Progress primitive for live readiness.
+
 - Hardened the Agent page for real AppShell constraints: the composer is now a
   stable static import, so a stale manifest cannot fail the whole page through
   a missing assistant chunk; the error-boundary action performs a full browser
