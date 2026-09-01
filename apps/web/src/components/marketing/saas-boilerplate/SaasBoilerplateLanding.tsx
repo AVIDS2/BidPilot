@@ -66,7 +66,7 @@ export function SaasBoilerplateLanding() {
           title={
             <>
               把招标资料变成
-              <span className='bg-linear-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent'>
+              <span className='text-primary underline decoration-primary/25 underline-offset-8'>
                 有证据的响应方案
               </span>
             </>
@@ -105,7 +105,7 @@ export function SaasBoilerplateLanding() {
         <Section
           subtitle='从资料到交付'
           title='一个项目，贯穿完整响应链。'
-          description='保留 SaaS Boilerplate 的清晰 section 节奏，内容换成 BidPilot 真实业务对象。'
+          description='从资料收集、要求核验到章节起草、评审和交付，每一步都围绕同一个项目工作区推进。'
         >
           <div className='grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-6 md:gap-x-5'>
             {[
@@ -142,7 +142,7 @@ export function SaasBoilerplateLanding() {
               让每个章节拥有版本、证据和评审记录，交付前保持可核验。
             </FeatureCard>
             <FeatureCard icon={<Icons.sparkles />} title='Pi Agent 执行'>
-              由 Pi 负责模型和工具循环，界面只呈现真实事件，不用关键词强行触发动作。
+              由执行助手根据项目事实推进任务，界面只呈现真实进度、工具和结果。
             </FeatureCard>
             <FeatureCard icon={<Icons.teams />} title='团队工作区'>
               成员、角色、项目权限和审核决定由 FastAPI 控制面统一校验。
@@ -158,7 +158,7 @@ export function SaasBoilerplateLanding() {
         <Section
           subtitle='工作区权益'
           title='从一个项目开始，再按团队需要扩展。'
-          description='页面结构直接采用 SaaS Boilerplate 的 pricing section；金额以正式商业配置为准，不在营销页虚构价格。'
+          description='不同工作区提供不同的项目容量、协作和服务支持，具体权益以账户配置为准。'
         >
           <div className='grid grid-cols-1 gap-x-6 gap-y-8 @xl:grid-cols-3'>
             <PlanCard
@@ -185,7 +185,7 @@ export function SaasBoilerplateLanding() {
         <Section
           subtitle='常见问题'
           title='开始使用前，先把边界讲清楚。'
-          description='这些答案对应当前产品实现，而不是模板默认宣传文案。'
+          description='下面是使用 BidPilot 前最关键的产品边界。'
         >
           <Accordion multiple className='w-full'>
             <AccordionItem value='facts'>
@@ -198,8 +198,7 @@ export function SaasBoilerplateLanding() {
             <AccordionItem value='agent'>
               <AccordionTrigger>Agent 的“正在思考”是真实状态吗？</AccordionTrigger>
               <AccordionContent>
-                页面只在收到 Pi 的原生 thinking started
-                事件后显示，不通过用户文字关键词或固定计时器伪造。
+                只有执行助手真实开始思考后才会显示对应状态，不用固定文案冒充进度。
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value='approval'>
@@ -314,7 +313,7 @@ function PlanCard({
       )}
     >
       {featured && <Badge className='mb-3'>推荐团队起点</Badge>}
-      <div className='text-lg font-semibold'>{name}</div>
+      <h3 className='text-lg font-semibold'>{name}</h3>
       <div className='mt-4 text-3xl font-bold'>按工作区</div>
       <div className='text-muted-foreground mt-1 text-sm'>权益以当前账户配置为准</div>
       <div className='mt-2 mb-5 text-sm text-muted-foreground'>{description}</div>

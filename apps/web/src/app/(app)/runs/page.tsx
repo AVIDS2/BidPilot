@@ -44,7 +44,7 @@ export default function RunsPage() {
       <PageHeader
         eyebrow='投标工作流'
         title='任务记录'
-        description='查看你有权限访问的任务状态、公开进度和终态。内部运行时诊断仅供管理员使用。'
+        description='查看你有权限访问的任务状态、公开进度和完成结果。'
         action={
           <LiveSyncStatus
             active={Boolean(runs.data)}

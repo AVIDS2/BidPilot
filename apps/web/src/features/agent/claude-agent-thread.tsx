@@ -314,7 +314,7 @@ function ClaudeApproval({
           onChange={(event) => setTypedConfirmation(event.target.value)}
           placeholder={confirmation.expectedText ?? ''}
           aria-label='Confirmation text'
-          className='cr-approval-input h-auto border-0 border-b border-[#d4d2cc] rounded-none bg-transparent px-0 py-1 text-[13px] shadow-none focus-visible:border-[#777570] focus-visible:ring-0'
+          className='cr-approval-input h-auto rounded-none border-0 border-b border-border bg-transparent px-0 py-1 text-[13px] shadow-none focus-visible:border-ring focus-visible:ring-0'
         />
       )}
       <div className='cr-approval-actions'>

@@ -79,10 +79,16 @@ Browser
 9. Desktop sidebar uses Kiranism Sidebar primitives; mobile uses its Sheet and
    the header trigger remains reachable.
 10. Data pages show real freshness and retain prior data while refetching; the
-    radar poll and chart transition are driven by the server query state.
-11. `pnpm --filter @docpilot/web exec tsc --noEmit` and production build pass.
-12. shadcn CLI info and Playwright desktop/mobile checks pass without console
-    errors other than expected API responses in an unauthenticated environment.
+   radar poll and chart transition are driven by the server query state.
+11. Agent, chat transcript and public marketing surfaces inherit the active
+    Kiranism semantic theme in both light and dark modes; no legacy palette
+    overrides the app shell.
+12. The public landing page exposes product copy only, keeps its responsive
+    navigation/FAQ/CTA interactions, and has no source-template implementation
+    notes visible to users.
+13. `pnpm --filter @docpilot/web exec tsc --noEmit` and production build pass.
+14. shadcn CLI info and Playwright desktop/mobile checks pass without console
+   errors other than expected API responses in an unauthenticated environment.
 
 ## Acceptance evidence
 
@@ -122,6 +128,14 @@ Browser
   horizontal clipping in the project/radar/work pages. The compact breakpoint
   is `1024px`, where the environment surface opens through the installed
   shadcn Sheet.
+- Agent theme acceptance: browser screenshots and computed styles passed for
+  both Vercel light and dark modes; the Agent composer and transcript use the
+  active background/foreground/primary tokens, and 320px plus 1440px checks
+  showed no horizontal overflow.
+- Public landing acceptance: unauthenticated `localhost` browser checks showed
+  the SaaS Boilerplate-derived Hero, workflow, capabilities, plans, FAQ and
+  CTA; the FAQ expanded, the 390px menu opened/closed, and no implementation
+  notes or console errors were present.
 - Fixed legacy workflow rows without `execution_run_id`: user cancellation now
   closes the durable runtime row when there is no worker execution to interrupt;
   new demo rows seed the execution bridge and the service regression is covered

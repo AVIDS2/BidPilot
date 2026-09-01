@@ -9,9 +9,7 @@ export default function NotFound() {
 
   return (
     <div className='absolute top-1/2 left-1/2 mb-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center text-center'>
-      <span className='from-foreground bg-linear-to-b to-transparent bg-clip-text text-[10rem] leading-none font-extrabold text-transparent'>
-        404
-      </span>
+      <span className='text-foreground text-[10rem] leading-none font-extrabold'>404</span>
       <h2 className='font-heading my-2 text-2xl font-bold'>找不到这个页面</h2>
       <p>你访问的页面不存在，或已经移动到其他位置。</p>
       <div className='mt-8 flex justify-center gap-2'>

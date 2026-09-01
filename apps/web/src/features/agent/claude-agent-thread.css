@@ -16,34 +16,28 @@
 }
 
 .bidpilot-claude-thread {
-  --cr-bg: #f9f9f7;
-  --cr-paper: #fff;
-  --cr-text: #0b0b0b;
-  --cr-text-soft: #383835;
-  --cr-muted: #7b7974;
-  --cr-faint: #a6a49f;
-  --cr-line: rgba(11, 11, 11, 0.1);
-  --cr-line-light: rgba(11, 11, 11, 0.06);
-  --cr-active: #efefec;
-  --cr-font: 'Anthropic Sans', system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --cr-bg: var(--background);
+  --cr-paper: var(--card);
+  --cr-text: var(--foreground);
+  --cr-text-soft: var(--muted-foreground);
+  --cr-muted: var(--muted);
+  --cr-faint: color-mix(in oklch, var(--muted-foreground) 65%, transparent);
+  --cr-line: color-mix(in oklch, var(--border) 74%, transparent);
+  --cr-line-light: color-mix(in oklch, var(--border) 52%, transparent);
+  --cr-active: var(--accent);
+  --cr-font: var(
+    --font-sans,
+    'Anthropic Sans',
+    system-ui,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif
+  );
   --cr-serif: 'Anthropic Serif', Georgia, 'Songti SC', SimSun, serif;
   --cr-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  /* Claude's transcript is a light reading surface even when the app shell
-     is dark. Keep Markdown controls and semantic utility classes in the same
-     palette when this thread is embedded outside the full Agent workspace. */
-  --background: var(--cr-bg);
-  --foreground: var(--cr-text);
-  --card: var(--cr-paper);
-  --card-foreground: var(--cr-text);
-  --muted: #efefec;
-  --muted-foreground: var(--cr-muted);
-  --border: #dddcd7;
-  --input: #cbc9c2;
-  --primary: #5e6ad2;
-  --primary-foreground: #fff;
-  --destructive: #b5544b;
   color: var(--cr-text);
-  color-scheme: light;
   font-family: var(--cr-font);
 }
 
@@ -104,8 +98,8 @@
   margin: 0 16px 16px auto;
   padding: 10px 14px;
   border-radius: 13px;
-  background: #efefec;
-  color: #34332f;
+  background: var(--cr-active);
+  color: var(--cr-text);
   font-size: 15px;
   line-height: 1.35;
   white-space: pre-wrap;
@@ -125,7 +119,7 @@
   align-items: center;
   gap: 6px;
   overflow: hidden;
-  color: #64625d;
+  color: var(--cr-text-soft);
   font-size: 12px;
   border: 0;
   background: transparent;
@@ -136,7 +130,7 @@
 
 .bidpilot-claude-thread .cr-user-attachment svg {
   flex: 0 0 auto;
-  color: #8a8882;
+  color: var(--cr-text-soft);
 }
 .bidpilot-claude-thread .cr-user-attachment span {
   overflow: hidden;
@@ -150,7 +144,7 @@
   object-fit: cover;
 }
 .bidpilot-claude-thread .cr-user-attachment:hover {
-  color: #34332f;
+  color: var(--cr-text);
 }
 .bidpilot-claude-thread .cr-image-lightbox {
   position: fixed;
@@ -179,7 +173,7 @@
   justify-content: flex-end;
   gap: 2px;
   margin: -11px 16px 16px auto;
-  color: #918f89;
+  color: var(--cr-text-soft);
   opacity: 0;
   transform: translateY(-2px);
   transition:
@@ -207,15 +201,15 @@
 
 .bidpilot-claude-thread .cr-user-message-actions button:hover,
 .bidpilot-claude-thread .cr-user-message-editor-actions button:hover {
-  background: #efefec;
-  color: #44423d;
+  background: var(--cr-muted);
+  color: var(--cr-text);
 }
 
 .bidpilot-claude-thread .cr-user-message-editor {
   width: min(84%, 460px);
   margin: 0 16px 16px auto;
-  border-bottom: 1px solid #cbc9c2;
-  color: #34332f;
+  border-bottom: 1px solid var(--cr-line);
+  color: var(--cr-text);
 }
 
 .bidpilot-claude-thread .cr-user-message-editor textarea {
@@ -225,7 +219,7 @@
   resize: vertical;
   border: 0;
   outline: 0;
-  background: #efefec;
+  background: var(--cr-muted);
   padding: 10px 14px;
   color: inherit;
   font: inherit;
@@ -238,7 +232,7 @@
   justify-content: flex-end;
   gap: 2px;
   margin: 4px 0 0;
-  color: #77756f;
+  color: var(--cr-text-soft);
 }
 
 .bidpilot-claude-thread .cr-agent-message {
@@ -250,7 +244,7 @@
 
 .bidpilot-claude-thread .cr-analysis-answer,
 .bidpilot-claude-thread .cr-prose-answer {
-  color: #36373c;
+  color: var(--cr-text);
   font-family: var(--cr-font);
   font-size: 14px;
   line-height: 1.68;
@@ -258,9 +252,9 @@
 
 .bidpilot-claude-thread .cr-reasoning {
   margin: 0 0 18px 3px;
-  border-left: 1px solid #dddcd7;
+  border-left: 1px solid var(--cr-line);
   padding: 1px 0 1px 17px;
-  color: #6d6b66;
+  color: var(--cr-text-soft);
   font-family: var(--cr-font);
 }
 
@@ -278,7 +272,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: #686660;
+  color: var(--cr-text-soft);
   font-size: 12px;
   font-weight: 540;
   letter-spacing: 0.005em;
@@ -292,12 +286,12 @@
 }
 
 .bidpilot-claude-thread .cr-reasoning-heading:hover {
-  color: #262521;
+  color: var(--cr-text);
 }
 
 .bidpilot-claude-thread .cr-reasoning-chevron {
   margin-left: auto;
-  color: #a2a09b;
+  color: var(--cr-text-soft);
   transition: transform 0.2s ease;
 }
 
@@ -331,7 +325,7 @@
   display: block;
   width: 7px;
   height: 7px;
-  border: 1px solid #8d8a83;
+  border: 1px solid var(--cr-text-soft);
   border-radius: 50%;
   animation: bp-claude-reasoning-spin 1.05s linear infinite;
   border-right-color: transparent;
@@ -341,14 +335,14 @@
   width: 5px;
   height: 5px;
   border: 0;
-  background: #8d8a83;
+  background: var(--cr-text-soft);
   animation: none;
 }
 
 .bidpilot-claude-thread .cr-reasoning-text {
   max-width: 680px;
   margin-top: 4px;
-  color: #77756f;
+  color: var(--cr-text-soft);
   font-size: 13px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -362,7 +356,7 @@
   margin-bottom: 0;
 }
 .bidpilot-claude-thread .cr-prose-answer strong {
-  color: #25262b;
+  color: var(--cr-text);
   font-family: inherit;
   font-weight: 650;
 }
@@ -375,8 +369,8 @@
 }
 
 .bidpilot-claude-thread .cr-prose-answer :where(input[type='checkbox']) {
-  accent-color: #96948f;
-  color-scheme: light;
+  accent-color: var(--primary);
+  color-scheme: inherit;
   opacity: 1;
 }
 .bidpilot-claude-thread .cr-prose-answer :is(code, pre) {
@@ -385,7 +379,7 @@
 .bidpilot-claude-thread .cr-prose-answer pre {
   overflow-x: auto;
   border: 1px solid var(--cr-line);
-  background: #f3f3f1;
+  background: var(--cr-muted);
   padding: 12px;
   font-size: 12px;
 }
@@ -394,40 +388,46 @@
   margin: 14px 0;
   font-size: 13px;
   line-height: 1.5;
-  background: #fff;
+  background: var(--cr-paper);
 }
 .bidpilot-claude-thread .cr-prose-answer thead {
-  background: #efefec;
+  background: var(--cr-muted);
 }
 .bidpilot-claude-thread .cr-prose-answer th,
 .bidpilot-claude-thread .cr-prose-answer td {
-  border: 1px solid #dddcd7;
+  border: 1px solid var(--cr-line);
   padding: 7px 11px;
   text-align: left;
   vertical-align: top;
 }
 .bidpilot-claude-thread .cr-prose-answer th {
-  color: #181815;
+  color: var(--cr-text);
   font-family: var(--cr-font);
   font-size: 12px;
   font-weight: 650;
 }
 .bidpilot-claude-thread .cr-prose-answer td {
-  background: #fff;
-  color: #252521;
+  background: var(--cr-paper);
+  color: var(--cr-text);
 }
 /* Inline code inside table cells keeps the thread's light style; the global
    dark-mode muted background would otherwise render as black blocks. */
 .bidpilot-claude-thread .cr-prose-answer td code {
-  background: #efefec;
-  color: #181815;
+  background: var(--cr-muted);
+  color: var(--cr-text);
 }
 
 .bidpilot-claude-thread .cr-thinking-copy {
   display: inline-block;
   min-height: 24px;
   color: transparent;
-  background: linear-gradient(100deg, #777570 12%, #8ea34c 46%, #b08b5b 62%, #777570 88%);
+  background: linear-gradient(
+    100deg,
+    var(--cr-text-soft) 12%,
+    color-mix(in oklch, var(--primary) 62%, var(--cr-text-soft)) 46%,
+    var(--cr-text-soft) 62%,
+    var(--cr-text-soft) 88%
+  );
   background-size: 240% 100%;
   background-clip: text;
   -webkit-background-clip: text;
@@ -441,7 +441,7 @@
   align-items: center;
   gap: 3px;
   margin: 12px 0 0;
-  color: #918f89;
+  color: var(--cr-text-soft);
 }
 .bidpilot-claude-thread .cr-message-actions button {
   display: grid;
@@ -454,27 +454,27 @@
   color: inherit;
 }
 .bidpilot-claude-thread .cr-message-actions button:hover {
-  background: #efefec;
-  color: #44423d;
+  background: var(--cr-muted);
+  color: var(--cr-text);
 }
 .bidpilot-claude-thread .cr-message-actions span {
-  color: #999791;
+  color: var(--cr-text-soft);
   font-size: 12px;
 }
 
 .bidpilot-claude-thread .cr-approval {
   margin: -34px 0 42px 28px;
-  border-left: 1px solid #dfded9;
+  border-left: 1px solid var(--cr-line);
   padding: 8px 0 8px 18px;
 }
 .bidpilot-claude-thread .cr-approval-copy > span {
-  color: #4c4a45;
+  color: var(--cr-text);
   font-size: 13px;
   font-weight: 600;
 }
 .bidpilot-claude-thread .cr-approval-copy p {
   margin: 5px 0 10px;
-  color: #777570;
+  color: var(--cr-text-soft);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -482,16 +482,16 @@
   display: block;
   width: min(300px, 100%);
   border: 0;
-  border-bottom: 1px solid #d4d2cc;
+  border-bottom: 1px solid var(--cr-line);
   border-radius: 0;
   outline: 0;
   background: transparent;
   padding: 5px 0;
-  color: #34332f;
+  color: var(--cr-text);
   font-size: 13px;
 }
 .bidpilot-claude-thread .cr-approval-input:focus {
-  border-color: #777570;
+  border-color: var(--ring);
 }
 .bidpilot-claude-thread .cr-approval-actions {
   display: flex;
@@ -507,12 +507,12 @@
   border-radius: 4px;
   background: transparent;
   padding: 3px 6px;
-  color: #5f5d57;
+  color: var(--cr-text-soft);
   font-size: 12px;
 }
 .bidpilot-claude-thread .cr-approval-actions button:hover:not(:disabled) {
-  background: #efefec;
-  color: #262521;
+  background: var(--cr-muted);
+  color: var(--cr-text);
 }
 .bidpilot-claude-thread .cr-approval-actions button:disabled {
   cursor: default;
@@ -565,6 +565,6 @@
   }
   .bidpilot-claude-thread .cr-thinking-copy {
     animation: none;
-    color: #777570;
+    color: var(--cr-text-soft);
   }
 }

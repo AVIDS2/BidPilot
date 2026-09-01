@@ -30,6 +30,18 @@
   `LiveSyncStatus` with query freshness and manual refresh. Radar uses a real
   30-second query poll and Recharts transition; no dynamic indicator is backed
   by fabricated data or keyword inference.
+- Agent theme boundary: the legacy workspace and Pi transcript styles inherit
+  Kiranism semantic theme tokens for primary, background, card, muted, border,
+  ring and destructive states. They do not force a light palette or use the
+  old purple/Claude hardcoded UI colors.
+- Public marketing boundary: the landing page keeps the reused SaaS Boilerplate
+  section composition but exposes only BidPilot product copy and uses the same
+  active theme tokens as the app shell. Its mobile menu, FAQ and CTA links are
+  browser-checked.
+- Local direct-process startup profiles load the same local environment source
+  and align `DOCPILOT_PI_INTERNAL_SECRET` between API and Pi before browser
+  acceptance. A real local `你好` turn completed as `succeeded / pi` after this
+  correction.
 - remaining release gates: run the dedicated PostgreSQL/Redis/MinIO Worker
   acceptance environment, then obtain explicit production promotion approval
 

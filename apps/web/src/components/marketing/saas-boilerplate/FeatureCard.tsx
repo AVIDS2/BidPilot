@@ -4,20 +4,14 @@ export const FeatureCard = (props: {
   children: React.ReactNode;
 }) => (
   <div className='rounded-xl border border-border bg-background p-5'>
-    <div
-      className='
-      size-12 rounded-lg bg-linear-to-br from-indigo-400 via-purple-400
-      to-pink-400 p-2
-      [&_svg]:stroke-white [&_svg]:stroke-2
-    '
-    >
+    <div className='bg-primary text-primary-foreground flex size-12 items-center justify-center rounded-lg p-2'>
       {props.icon}
     </div>
 
-    <div className='mt-2 text-lg font-bold'>{props.title}</div>
+    <h3 className='mt-2 text-lg font-bold'>{props.title}</h3>
 
-    <div className='my-3 w-8 border-t border-purple-400' />
+    <div className='border-primary/30 my-3 w-8 border-t' />
 
-    <div className='mt-2 text-muted-foreground'>{props.children}</div>
+    <p className='text-muted-foreground mt-2'>{props.children}</p>
   </div>
 );

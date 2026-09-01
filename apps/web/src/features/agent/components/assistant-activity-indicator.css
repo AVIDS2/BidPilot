@@ -1,7 +1,13 @@
 .assistant-thinking-indicator__label {
   display: inline-block;
-  color: #777570;
-  background: linear-gradient(100deg, #777570 12%, #8ea34c 46%, #b08b5b 62%, #777570 88%);
+  color: var(--muted-foreground);
+  background: linear-gradient(
+    100deg,
+    var(--muted-foreground) 12%,
+    color-mix(in oklch, var(--primary) 62%, var(--muted-foreground)) 46%,
+    var(--muted-foreground) 62%,
+    var(--muted-foreground) 88%
+  );
   background-size: 240% 100%;
   background-clip: text;
   -webkit-background-clip: text;
@@ -22,6 +28,6 @@
 @media (prefers-reduced-motion: reduce) {
   .assistant-thinking-indicator__label {
     animation: none;
-    color: #777570;
+    color: var(--muted-foreground);
   }
 }

@@ -72,7 +72,7 @@ export default function DocsPage() {
       <Section
         subtitle='产品说明'
         title='从资料到可交付响应的一条工作路径。'
-        description='这份说明只描述当前 BidPilot 已实现的用户工作流，不把模板默认能力或开发者内部诊断包装成产品功能。'
+        description='了解 BidPilot 如何组织项目资料、要求、证据、Agent 任务和最终交付。'
       >
         <div className='grid gap-4 md:grid-cols-2'>
           {sections.map(({ icon: Icon, title, description }) => (

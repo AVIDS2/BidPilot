@@ -69,6 +69,12 @@ groups, `Field` for form rows, and `Avatar`, `Badge`, `Switch`, `Progress`,
 the shared `Button` and menu primitives for actions instead of bespoke control
 markup when the primitive already covers the interaction.
 
+Every route, including the Agent transcript and public landing page, inherits
+the active Kiranism theme tokens for background, foreground, primary, muted,
+border, ring, and destructive states. Feature-specific styling may add layout
+and domain status emphasis, but it must not replace the product palette with a
+second light/dark skin or expose template implementation details to users.
+
 ### 2. Dense, but navigable
 
 The product will carry a lot of information.
@@ -126,6 +132,10 @@ Use motion sparingly to clarify:
 - step progression
 
 Avoid decorative motion that adds delay or ambiguity.
+
+Live indicators must be driven by real query freshness, Pi events, or a domain
+state transition. A pulse, shimmer, spinner, or chart transition must never be
+used to imply work that the service has not actually started.
 
 ### 7. Accessibility is part of credibility
 

@@ -12,6 +12,19 @@
   poll interval, the manual refresh called the local API, and the UI showed
   `95%` rather than the previous erroneous `9500%` match score. Project detail
   now uses the official Progress primitive for live readiness.
+- Completed a user-side theme audit against the Kiranism Vercel/shadcn token
+  system. The legacy Agent workspace, Claude transcript, activity timeline and
+  native thinking indicator no longer reset the global palette or force light
+  mode; both light and dark screenshots now keep the composer, timeline,
+  history, preview and work overview on the active theme.
+- Reused the SaaS Boilerplate marketing composition for the public landing page
+  while removing source-template implementation copy and the old indigo/purple
+  gradients. Section titles now use semantic heading levels, CTA/cards use
+  theme tokens, and the public mobile menu and FAQ were browser-checked.
+- A real local `你好` turn initially exposed a local-only API/Pi bridge secret
+  mismatch (`401` from the Pi sidecar). The ignored local startup profiles now
+  load the same secret source for both processes; the follow-up turn completed
+  as `succeeded / pi` with durable message deltas and a terminal event.
 
 - Hardened the Agent page for real AppShell constraints: the composer is now a
   stable static import, so a stale manifest cannot fail the whole page through

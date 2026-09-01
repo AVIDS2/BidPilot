@@ -132,8 +132,7 @@ export default function PricingPage() {
           <AccordionItem value='upgrade'>
             <AccordionTrigger>后续如何升级工作区？</AccordionTrigger>
             <AccordionContent>
-              登录后从账户和管理员工作区查看当前计划、额度和计费入口；付款状态由服务端和支付 Webhook
-              更新。
+              登录后从账户和管理员工作区查看当前计划、额度和计费入口，支付状态会自动同步。
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value='data'>

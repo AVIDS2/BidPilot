@@ -7,53 +7,34 @@
 }
 
 .bidpilot-linear-agent {
-  --linear-font:
-    'Inter Variable', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --linear-page: lch(97.5 0.5 282);
-  --linear-surface: lch(98.94 0.5 282);
-  --linear-text: lch(9.894 0 282);
-  --linear-text-soft: lch(45 0 282);
-  --linear-line: lch(96.24 0 282);
-  --linear-line-strong: lch(86.5 0 282);
-  --linear-active: lch(92.4 0 282);
+  --linear-font: var(
+    --font-sans,
+    'Inter Variable',
+    'SF Pro Display',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif
+  );
+  --linear-page: var(--background);
+  --linear-surface: var(--background);
+  --linear-surface-raised: var(--card);
+  --linear-surface-muted: var(--muted);
+  --linear-surface-active: var(--accent);
+  --linear-text: var(--foreground);
+  --linear-text-soft: var(--muted-foreground);
+  --linear-line: var(--border);
+  --linear-line-strong: color-mix(in oklch, var(--border) 60%, var(--foreground));
+  --linear-active: var(--accent);
+  --linear-primary: var(--primary);
   --linear-radius: 12px;
   --linear-sidebar: 252px;
-  /* The agent surface intentionally stays light even when the surrounding
-     product is dark. Keep nested shadcn and Markdown controls on the same
-     token set so native controls never inherit the dark palette. */
-  --background: var(--linear-surface);
-  --foreground: var(--linear-text);
-  --card: #fff;
-  --card-foreground: var(--linear-text);
-  --popover: #fff;
-  --popover-foreground: var(--linear-text);
-  --primary: #5e6ad2;
-  --primary-foreground: #fff;
-  --secondary: lch(96.5 0 282);
-  --secondary-foreground: lch(25 0 282);
-  --muted: lch(95.8 0 282);
-  --muted-foreground: lch(51 0 282);
-  --accent: lch(95.8 0 282);
-  --accent-foreground: lch(22 0 282);
-  --destructive: #b35353;
-  --border: lch(88.5 0 282);
-  --input: lch(88.5 0 282);
-  --ring: #5e6ad2;
-  --sidebar: var(--linear-page);
-  --sidebar-foreground: var(--linear-text);
-  --sidebar-primary: #5e6ad2;
-  --sidebar-primary-foreground: #fff;
-  --sidebar-accent: lch(95.8 0 282);
-  --sidebar-accent-foreground: lch(22 0 282);
-  --sidebar-border: var(--linear-line);
-  --sidebar-ring: #5e6ad2;
   display: grid;
   min-height: 100dvh;
   grid-template-columns: var(--linear-sidebar) minmax(0, 1fr);
   overflow: hidden;
   background: var(--linear-page);
   color: var(--linear-text);
-  color-scheme: light;
   font-family: var(--linear-font);
   font-size: 13px;
   font-variation-settings: 'opsz' 14;
@@ -96,7 +77,7 @@
   cursor: pointer;
 }
 .bidpilot-linear-agent button:focus-visible {
-  outline: 2px solid rgba(88, 107, 255, 0.7);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 .bidpilot-linear-agent textarea:focus-visible {
@@ -107,8 +88,8 @@
    local accent they take the browser's dark-page appearance inside the light
    agent canvas. */
 .bidpilot-linear-agent .prose-bidpilot-assistant :where(input[type='checkbox']) {
-  accent-color: #96948f;
-  color-scheme: light;
+  accent-color: var(--primary);
+  color-scheme: inherit;
   opacity: 1;
 }
 
@@ -147,14 +128,14 @@
   gap: 7px;
   border-radius: 5px;
   padding: 5px 4px;
-  color: lch(27 0 282);
+  color: var(--linear-text);
   font-size: 13px;
   font-weight: 550;
   text-align: left;
   transition: background-color 120ms ease;
 }
 .bidpilot-linear-agent .workspace-button:hover {
-  background: rgba(0, 0, 0, 0.035);
+  background: color-mix(in oklch, var(--accent) 72%, transparent);
 }
 .bidpilot-linear-agent .workspace-avatar-mark {
   width: 20px;
@@ -162,7 +143,7 @@
   flex: none;
 }
 .bidpilot-linear-agent .workspace-chevron {
-  color: lch(55 0 282);
+  color: var(--linear-text-soft);
 }
 .bidpilot-linear-agent .workspace-actions {
   display: flex;
@@ -175,11 +156,11 @@
   height: 26px;
   place-items: center;
   border-radius: 5px;
-  color: lch(48 0 282);
+  color: var(--linear-text-soft);
   transition: background-color 120ms ease;
 }
 .bidpilot-linear-agent .workspace-actions button:hover {
-  background: rgba(0, 0, 0, 0.045);
+  background: color-mix(in oklch, var(--accent) 72%, transparent);
 }
 .bidpilot-linear-agent .side-group {
   display: grid;
@@ -196,7 +177,7 @@
   align-items: center;
   gap: 8px;
   border-radius: 6px;
-  color: lch(38 0 282);
+  color: var(--linear-text);
   padding: 4px 6px;
   font-size: 13px;
   font-weight: 500;
@@ -206,23 +187,23 @@
     color 120ms ease;
 }
 .bidpilot-linear-agent .side-row:hover {
-  background: rgba(0, 0, 0, 0.045);
+  background: color-mix(in oklch, var(--accent) 72%, transparent);
 }
 .bidpilot-linear-agent .side-row.is-active {
   background: var(--linear-active);
-  color: lch(18 0 282);
+  color: var(--linear-text);
   font-weight: 600;
 }
 .bidpilot-linear-agent .side-row .icon {
-  color: lch(48 0 282);
+  color: var(--linear-text-soft);
   stroke-width: 1.7;
 }
 .bidpilot-linear-agent .side-row.is-active .icon {
-  color: lch(31 0 282);
+  color: var(--linear-text);
 }
 .bidpilot-linear-agent .side-row small {
   margin-left: auto;
-  color: lch(54 0 282);
+  color: var(--linear-text-soft);
   font-size: 11px;
 }
 .bidpilot-linear-agent .group-heading {
@@ -232,7 +213,7 @@
   align-items: center;
   gap: 4px;
   border-radius: 4px;
-  color: lch(44 0 282);
+  color: var(--linear-text-soft);
   padding: 4px 3px;
   font-size: 12px;
   font-weight: 620;
@@ -246,7 +227,7 @@
   align-items: center;
   gap: 7px;
   border-radius: 5px;
-  color: lch(39 0 282);
+  color: var(--linear-text);
   padding: 3px 5px;
   font-size: 13px;
   font-weight: 550;
@@ -254,11 +235,11 @@
   transition: background-color 120ms ease;
 }
 .bidpilot-linear-agent .team-title:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: color-mix(in oklch, var(--accent) 72%, transparent);
 }
 .bidpilot-linear-agent .team-title > svg {
   margin-left: auto;
-  color: lch(55 0 282);
+  color: var(--linear-text-soft);
 }
 .bidpilot-linear-agent .team-mark {
   display: grid;
@@ -266,8 +247,8 @@
   height: 14px;
   place-items: center;
   border-radius: 3px;
-  background: #e6e2ff;
-  color: #6755d6;
+  background: color-mix(in oklch, var(--primary) 12%, var(--background));
+  color: var(--primary);
 }
 .bidpilot-linear-agent .team-mark svg {
   stroke-width: 1.7;
@@ -283,12 +264,12 @@
   gap: 7px;
   border-radius: 6px;
   padding: 4px;
-  color: lch(43 0 282);
+  color: var(--linear-text);
   text-align: left;
   transition: background-color 120ms ease;
 }
 .bidpilot-linear-agent .workspace-user:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: color-mix(in oklch, var(--accent) 72%, transparent);
 }
 .bidpilot-linear-agent .workspace-user > span {
   display: grid;
@@ -296,8 +277,8 @@
   height: 24px;
   place-items: center;
   border-radius: 50%;
-  background: #ebe7ff;
-  color: #5b49c5;
+  background: color-mix(in oklch, var(--primary) 12%, var(--background));
+  color: var(--primary);
   font-size: 10px;
   font-weight: 650;
 }
@@ -327,7 +308,7 @@
   bottom: 0;
   left: 3px;
   width: 1px;
-  background: #5e6ad2;
+  background: var(--primary);
   content: '';
   opacity: 0;
   transition: opacity 120ms ease-out;
@@ -379,7 +360,7 @@
   min-width: 0;
   height: calc(100dvh - 44px);
   border-color: var(--linear-line);
-  background: #fff;
+  background: var(--linear-surface-raised);
 }
 .bidpilot-linear-agent .agent-history-surface {
   position: relative;
@@ -406,7 +387,7 @@
   overflow: hidden;
   border: 1px solid transparent;
   border-radius: 5px;
-  color: lch(19.8 1.25 282);
+  color: var(--linear-text);
   margin-left: -3px;
   padding: 0 8px;
   font-size: 12px;
@@ -419,7 +400,7 @@
 }
 .bidpilot-linear-agent .chat-switch:hover {
   border-color: var(--linear-line);
-  background: #fff;
+  background: var(--linear-surface-raised);
 }
 .bidpilot-linear-agent .chat-switch > span {
   overflow: hidden;
@@ -432,17 +413,17 @@
   height: 26px;
   place-items: center;
   border-radius: 5px;
-  color: lch(49 0 282);
+  color: var(--linear-text-soft);
   transition:
     background-color 120ms ease,
     color 120ms ease;
 }
 .bidpilot-linear-agent .agent-header-icon:hover {
-  background: lch(96.5 0 282);
-  color: lch(25 0 282);
+  background: var(--linear-surface-muted);
+  color: var(--linear-text);
 }
 .bidpilot-linear-agent .agent-header-icon.is-active {
-  color: #e8ae19;
+  color: var(--linear-primary);
 }
 
 .bidpilot-linear-agent .bp-linear-history {
@@ -473,9 +454,9 @@
   max-height: min(60dvh, 520px);
   overflow-y: auto;
   overflow-x: hidden;
-  border: 1px solid lch(91 0 282);
+  border: 1px solid var(--linear-line);
   border-radius: 9px;
-  background: #fff;
+  background: var(--linear-surface-raised);
   box-shadow:
     0 13px 30px rgba(0, 0, 0, 0.08),
     0 2px 8px rgba(0, 0, 0, 0.05);
@@ -491,14 +472,14 @@
   border-radius: 5px;
   background: transparent;
   padding: 0 8px;
-  color: lch(22 0 282);
+  color: var(--linear-text);
   font-size: 13px;
   font-weight: 540;
   text-align: left;
   transition: background-color 120ms ease;
 }
 .bidpilot-linear-agent .bp-linear-history-new:hover {
-  background: lch(96.5 0 282);
+  background: var(--linear-surface-muted);
 }
 .bidpilot-linear-agent .bp-linear-history-new span {
   font-size: 18px;
@@ -511,7 +492,7 @@
 }
 .bidpilot-linear-agent .bp-linear-history-group > span {
   padding: 0 8px 3px;
-  color: lch(55 0 282);
+  color: var(--linear-text-soft);
   font-size: 11px;
   font-weight: 560;
 }
@@ -532,12 +513,12 @@
   border-radius: 5px;
   background: transparent;
   padding: 4px 4px;
-  color: lch(34 0 282);
+  color: var(--linear-text);
   text-align: left;
 }
 .bidpilot-linear-agent .bp-linear-history-project-main:not(:disabled):hover {
-  background: lch(96.5 0 282);
-  color: lch(18 0 282);
+  background: var(--linear-surface-muted);
+  color: var(--linear-text);
 }
 .bidpilot-linear-agent .bp-linear-history-project-main:disabled {
   cursor: default;
@@ -546,7 +527,7 @@
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
-  color: lch(48 0 282);
+  color: var(--linear-text-soft);
 }
 .bidpilot-linear-agent .bp-linear-history-project-main > span {
   display: grid;
@@ -562,14 +543,14 @@
 }
 .bidpilot-linear-agent .bp-linear-history-project-main small {
   overflow: hidden;
-  color: lch(58 0 282);
+  color: var(--linear-text-soft);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .bidpilot-linear-agent .bp-linear-history-project-count {
   min-width: 18px;
-  color: lch(58 0 282);
+  color: var(--linear-text-soft);
   font-size: 10px;
   text-align: right;
 }
@@ -579,12 +560,12 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   border-radius: 5px;
-  color: lch(31 0 282);
+  color: var(--linear-text);
   transition: background-color 120ms ease;
 }
 .bidpilot-linear-agent .bp-linear-history-row:hover,
 .bidpilot-linear-agent .bp-linear-history-row.is-current {
-  background: lch(96.3 0 282);
+  background: var(--linear-surface-active);
 }
 .bidpilot-linear-agent .bp-linear-history-row-main {
   display: grid;
@@ -607,18 +588,18 @@
   white-space: nowrap;
 }
 .bidpilot-linear-agent .bp-linear-history-row-main small {
-  color: lch(58 0 282);
+  color: var(--linear-text-soft);
   font-size: 11px;
 }
 .bidpilot-linear-agent .bp-linear-history-row input {
   min-width: 0;
   width: 100%;
-  border: 1px solid lch(82 0 282);
+  border: 1px solid var(--linear-line-strong);
   border-radius: 4px;
   outline: 0;
-  background: #fff;
+  background: var(--linear-surface-raised);
   padding: 4px 7px;
-  color: lch(20 0 282);
+  color: var(--linear-text);
   font-size: 12px;
 }
 .bidpilot-linear-agent .bp-linear-history-actions {
@@ -631,7 +612,7 @@
   border-radius: 5px;
   background: transparent;
   padding: 0;
-  color: lch(55 0 282);
+  color: var(--linear-text-soft);
   opacity: 0;
   transition:
     opacity 120ms ease,
@@ -646,21 +627,21 @@
 }
 .bidpilot-linear-agent .bp-linear-history-actions:hover,
 .bidpilot-linear-agent .bp-linear-history-actions[aria-expanded='true'] {
-  background: lch(91 0 282);
-  color: lch(22 0 282);
+  background: var(--linear-surface-muted);
+  color: var(--linear-text);
 }
 .bidpilot-linear-agent .bp-linear-history-empty {
   margin: 10px 8px 4px;
-  color: lch(55 0 282);
+  color: var(--linear-text-soft);
   font-size: 12px;
 }
 
 .bidpilot-linear-agent .bp-agent-session-error {
   flex: 0 0 auto;
-  border-bottom: 1px solid #ead2cc;
-  background: #fff8f6;
+  border-bottom: 1px solid color-mix(in oklch, var(--destructive) 35%, var(--border));
+  background: color-mix(in oklch, var(--destructive) 8%, var(--background));
   padding: 8px 14px;
-  color: #a84937;
+  color: var(--destructive);
   font-size: 12px;
 }
 .bidpilot-linear-agent .agent-content {
@@ -730,7 +711,7 @@
 .bidpilot-linear-agent .agent-watermark i {
   position: absolute;
   display: block;
-  background: lch(96.5 0 282);
+  background: var(--linear-surface-muted);
 }
 .bidpilot-linear-agent .watermark-disk {
   top: 7px;
@@ -769,7 +750,7 @@
   overflow: visible;
   border: 1px solid var(--linear-line);
   border-radius: 9px;
-  background: #fff;
+  background: var(--linear-surface-raised);
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.01);
 }
 .bidpilot-linear-agent .bp-linear-agent-composer:focus-within {
@@ -787,12 +768,12 @@
   outline: 0;
   background: transparent;
   padding: 12px 16px 7px;
-  color: lch(20 1 282);
+  color: var(--linear-text);
   font-size: 16px;
   line-height: 24px;
 }
 .bidpilot-linear-agent .bp-linear-agent-textarea::placeholder {
-  color: lch(68 0 282);
+  color: var(--linear-text-soft);
   opacity: 1;
 }
 .bidpilot-linear-agent .bp-linear-agent-composer-footer {
@@ -821,20 +802,20 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: lch(44 0 282);
+  color: var(--linear-text-soft);
   transition:
     background-color 120ms ease,
     color 120ms ease;
 }
 .bidpilot-linear-agent .bp-linear-agent-icon-button:hover {
-  background: lch(96.5 0 282);
-  color: lch(25 0 282);
+  background: var(--linear-surface-muted);
+  color: var(--linear-text);
 }
 .bidpilot-linear-agent .bp-linear-agent-keyhint {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: lch(55 0 282);
+  color: var(--linear-text-soft);
   font-size: 11px;
 }
 .bidpilot-linear-agent .bp-linear-agent-text-control {
@@ -848,7 +829,7 @@
   border-radius: 5px;
   background: transparent;
   padding: 4px 5px;
-  color: lch(43 0 282);
+  color: var(--linear-text);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -861,26 +842,26 @@
   text-overflow: ellipsis;
 }
 .bidpilot-linear-agent .bp-linear-agent-text-control:hover {
-  background: lch(96.5 0 282);
-  color: lch(22 0 282);
+  background: var(--linear-surface-muted);
+  color: var(--linear-text);
 }
 .bidpilot-linear-agent .bp-linear-agent-send {
   display: grid;
   width: 26px;
   height: 26px;
   place-items: center;
-  border: 1px solid lch(89 0 282);
+  border: 1px solid var(--linear-line);
   border-radius: 50%;
-  background: #fff;
-  color: lch(42 0 282);
+  background: var(--linear-surface-raised);
+  color: var(--linear-text);
   transition:
     border-color 120ms ease,
     background-color 120ms ease,
     color 120ms ease;
 }
 .bidpilot-linear-agent .bp-linear-agent-send:hover:not(:disabled) {
-  border-color: lch(65 0 282);
-  background: lch(97.5 0 282);
+  border-color: var(--linear-line-strong);
+  background: var(--linear-surface-muted);
 }
 .bidpilot-linear-agent .bp-linear-agent-send:disabled {
   cursor: default;
@@ -898,7 +879,7 @@
   overflow: hidden;
   border: 1px solid transparent;
   border-radius: 7px;
-  background: #fff;
+  background: var(--linear-surface-raised);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0);
   opacity: 0;
   pointer-events: none;
@@ -912,7 +893,7 @@
 }
 .bidpilot-linear-agent .bp-linear-agent-popover.is-open {
   grid-template-rows: 1fr;
-  border-color: lch(87 0 282);
+  border-color: var(--linear-line-strong);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.12);
   opacity: 1;
   pointer-events: auto;
@@ -944,7 +925,7 @@
   border-radius: 4px;
   background: transparent;
   padding: 6px 7px;
-  color: lch(29 0 282);
+  color: var(--linear-text);
   font-size: 12px;
   text-align: left;
   transition: background-color 120ms ease;
@@ -953,13 +934,13 @@
   justify-content: flex-start;
 }
 .bidpilot-linear-agent .bp-linear-agent-popover button:hover {
-  background: lch(96.5 0 282);
+  background: var(--linear-surface-muted);
 }
 .bidpilot-linear-agent .bp-linear-agent-menu-label,
 .bidpilot-linear-agent .bp-linear-agent-empty-menu {
   display: block;
   padding: 5px 7px 4px;
-  color: lch(55 0 282);
+  color: var(--linear-text-soft);
   font-size: 11px;
 }
 .bidpilot-linear-agent .bp-linear-agent-attachments {
@@ -983,7 +964,7 @@
   max-width: 250px;
   align-items: center;
   gap: 5px;
-  color: lch(48 0 282);
+  color: var(--linear-text-soft);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -992,7 +973,7 @@
   text-overflow: ellipsis;
 }
 .bidpilot-linear-agent .bp-linear-agent-attachment-meta {
-  color: lch(60 0 282);
+  color: var(--linear-text-soft);
 }
 .bidpilot-linear-agent .bp-linear-agent-attachment button {
   display: grid;
@@ -1002,10 +983,10 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: lch(54 0 282);
+  color: var(--linear-text-soft);
 }
 .bidpilot-linear-agent .bp-linear-agent-attachment button:hover {
-  background: lch(95.8 0 282);
+  background: var(--linear-surface-muted);
 }
 .bidpilot-linear-agent .bp-linear-agent-queue {
   display: grid;
@@ -1029,7 +1010,7 @@
   height: 16px;
   place-items: center;
   border-radius: 50%;
-  background: lch(96.5 0 282);
+  background: var(--linear-surface-muted);
   color: var(--linear-text-soft);
   font-size: 10px;
 }
@@ -1050,7 +1031,7 @@
   padding: 3px 4px;
 }
 .bidpilot-linear-agent .bp-linear-agent-queue li:hover {
-  background: lch(98.2 0 282);
+  background: var(--linear-surface-active);
 }
 .bidpilot-linear-agent .bp-linear-agent-queue-order {
   display: grid;
@@ -1097,7 +1078,7 @@
   color: var(--linear-text-soft);
 }
 .bidpilot-linear-agent .bp-linear-agent-queue-actions button:hover {
-  background: lch(94.8 0 282);
+  background: var(--linear-surface-muted);
   color: var(--linear-text);
 }
 .bidpilot-linear-agent .bp-linear-agent-composer:has(.bp-linear-agent-attachments) {
@@ -1121,7 +1102,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  color: lch(48 0 282);
+  color: var(--linear-text-soft);
   font-size: 12px;
   line-height: 24px;
 }
@@ -1133,13 +1114,13 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: lch(48 0 282);
+  color: var(--linear-text-soft);
   font-size: 16px;
   line-height: 1;
 }
 .bidpilot-linear-agent .examples-label button:hover {
-  background: lch(96.5 0 282);
-  color: lch(22 0 282);
+  background: var(--linear-surface-muted);
+  color: var(--linear-text);
 }
 .bidpilot-linear-agent .examples-grid {
   display: grid;
@@ -1169,7 +1150,7 @@
 }
 .bidpilot-linear-agent .example-card:hover,
 .bidpilot-linear-agent .example-card:focus-visible {
-  background: lch(98.5 0 282);
+  background: var(--linear-surface-active);
   outline: none;
 }
 .bidpilot-linear-agent .example-card:focus-visible {
@@ -1178,11 +1159,11 @@
 .bidpilot-linear-agent .example-card > svg {
   grid-row: 1 / span 2;
   margin-top: 2px;
-  color: lch(48 0 282);
+  color: var(--linear-text-soft);
 }
 .bidpilot-linear-agent .example-card strong {
   min-width: 0;
-  color: lch(13 0 282);
+  color: var(--linear-text);
   font-size: 13px;
   font-weight: 560;
   line-height: 19px;
@@ -1192,7 +1173,7 @@
 .bidpilot-linear-agent .example-card span {
   min-width: 0;
   margin-top: 2px;
-  color: lch(48 0 282);
+  color: var(--linear-text-soft);
   font-size: 13px;
   line-height: 18px;
   overflow-wrap: anywhere;
@@ -1207,7 +1188,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: lch(43 0 282);
+  color: var(--linear-text);
   font-size: 12px;
 }
 .bidpilot-linear-agent .agent-footer span {
@@ -1223,11 +1204,11 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: lch(43 0 282);
+  color: var(--linear-text);
   transition: background-color 120ms ease;
 }
 .bidpilot-linear-agent .agent-footer button:hover {
-  background: lch(95.8 0 282);
+  background: var(--linear-surface-muted);
 }
 
 .bidpilot-linear-agent .agent-preview-canvas {
@@ -1238,7 +1219,7 @@
   overflow: hidden;
   border: 1px solid var(--linear-line);
   border-radius: var(--linear-radius);
-  background: #fff;
+  background: var(--linear-surface-raised);
 }
 .bidpilot-linear-agent .agent-preview-header {
   display: flex;
@@ -1278,7 +1259,7 @@
   color: var(--linear-text-soft);
 }
 .bidpilot-linear-agent .agent-preview-close:hover {
-  background: lch(96.5 0 282);
+  background: var(--linear-surface-muted);
   color: var(--linear-text);
 }
 .bidpilot-linear-agent .agent-preview-body {
@@ -1299,7 +1280,7 @@
   width: 100%;
   height: calc(100dvh - 150px);
   border: 1px solid var(--linear-line);
-  background: #fff;
+  background: var(--linear-surface-raised);
 }
 .bidpilot-linear-agent .agent-preview-body pre {
   margin: 0;
@@ -1371,7 +1352,7 @@
   font-weight: 520;
 }
 .bidpilot-linear-agent .agent-workflow-footer button:hover {
-  background: lch(96.5 0 282);
+  background: var(--linear-surface-muted);
 }
 .bidpilot-linear-agent .agent-preview-resize-handle {
   position: relative;
@@ -1397,9 +1378,9 @@
   opacity: 1;
 }
 .agent-mobile-side-sheet {
-  --linear-line: #e6e5e1;
-  --linear-text: #292824;
-  --linear-text-soft: #76736d;
+  --linear-line: var(--border);
+  --linear-text: var(--foreground);
+  --linear-text-soft: var(--muted-foreground);
 }
 .agent-mobile-side-sheet-header {
   flex: 0 0 auto;
