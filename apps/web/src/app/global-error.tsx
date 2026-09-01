@@ -26,7 +26,10 @@ export default function GlobalError({
             页面暂时无法打开，请重新加载；如果问题持续存在，请联系管理员。
           </p>
           <button
-            onClick={() => reset()}
+            onClick={() => {
+              if (typeof window !== 'undefined') window.location.reload();
+              else reset();
+            }}
             style={{
               padding: '0.5rem 1.25rem',
               borderRadius: '0.5rem',

@@ -22,6 +22,10 @@
   existing queued Pi executor in-process, registers the same cancellation
   control and preserves the durable runtime event contract; it is not a second
   model runtime or a keyword router
+- Agent UI boundary: the full-page composer is statically imported to avoid a
+  stale route-manifest chunk taking down `/agent`; at `1024px` and below the
+  environment panel is an on-demand shadcn Sheet, while the message thread and
+  composer remain independently sized and scrollable
 - remaining release gates: run the dedicated PostgreSQL/Redis/MinIO Worker
   acceptance environment, then obtain explicit production promotion approval
 

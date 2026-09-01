@@ -2,6 +2,18 @@
 
 ## 2026-09-01 Kiranism migration acceptance
 
+- Hardened the Agent page for real AppShell constraints: the composer is now a
+  stable static import, so a stale manifest cannot fail the whole page through
+  a missing assistant chunk; the error-boundary action performs a full browser
+  reload for stale route assets.
+- Made the Agent surface responsive at the `1024px` compact boundary. The
+  environment panel moves to the installed shadcn Sheet, embedded height is
+  constrained to the space below the AppShell header, and example-card text
+  overrides the Button `nowrap` default so long Chinese copy wraps instead of
+  clipping.
+- Rebuilt and browser-checked the local production server after these changes:
+  the Agent composer and real Pi conversation rendered with zero console errors.
+
 - Finalized the isolated `codex/kiranism-bidpilot` worktree with the direct
   Kiranism Next/shadcn Base UI source and the existing FastAPI/Pi business
   boundary.

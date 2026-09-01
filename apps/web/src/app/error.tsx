@@ -16,7 +16,14 @@ export default function Error({
         <AlertDescription className='mt-1'>
           请重新加载当前页面。如果问题持续存在，请查看运行记录或联系管理员。
         </AlertDescription>
-        <Button className='mt-4' variant='outline' onClick={() => reset()}>
+        <Button
+          className='mt-4'
+          variant='outline'
+          onClick={() => {
+            if (typeof window !== 'undefined') window.location.reload();
+            else reset();
+          }}
+        >
           重新加载
         </Button>
       </Alert>

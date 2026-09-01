@@ -2,8 +2,6 @@
 import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
-  lazy,
-  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -28,7 +26,10 @@ import {
   XIcon
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import type { AttachmentPreviewSelection } from '@/features/agent/components/AIAssistantPanel';
+import {
+  AIAssistantPanel,
+  type AttachmentPreviewSelection
+} from '@/features/agent/components/AIAssistantPanel';
 import { WorkflowCanvas } from '@/components/workflow-canvas';
 import { Button } from '@/components/ui/button';
 import {
@@ -59,32 +60,9 @@ import {
   SheetTitle
 } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { loadWithChunkRecovery } from '@/app-route-loaders';
 import './linear-agent-workspace.css';
 
-const LazyAIAssistantPanel = lazy(() =>
-  loadWithChunkRecovery(
-    () => import('@/features/agent/components/AIAssistantPanel'),
-    'assistant-panel'
-  ).then(({ AIAssistantPanel }) => ({ default: AIAssistantPanel }))
-);
-
-function AgentComposerLoading() {
-  return (
-    <div
-      className='flex min-h-28 w-full flex-col gap-3 rounded-lg border bg-background p-3'
-      role='status'
-      aria-label='正在加载 Agent 输入框'
-    >
-      <Skeleton className='h-12 w-full' />
-      <div className='flex items-center justify-between gap-3'>
-        <Skeleton className='h-7 w-20' />
-        <Skeleton className='h-7 w-28' />
-      </div>
-    </div>
-  );
-}
+const AGENT_COMPACT_MEDIA_QUERY = '(max-width: 1024px)';
 
 function AgentPreviewCanvas({
   selection,
@@ -228,11 +206,11 @@ function AgentWorkflowCanvas({
 
 function useCompactViewport() {
   const [isCompact, setIsCompact] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(max-width: 820px)').matches : false
+    typeof window !== 'undefined' ? window.matchMedia(AGENT_COMPACT_MEDIA_QUERY).matches : false
   );
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 820px)');
+    const mediaQuery = window.matchMedia(AGENT_COMPACT_MEDIA_QUERY);
     const sync = () => setIsCompact(mediaQuery.matches);
     sync();
     mediaQuery.addEventListener('change', sync);
@@ -505,9 +483,7 @@ function AgentWelcome({
         <i className='watermark-slice slice-three' />
       </div>
       <h3>欢迎使用 BidPilot</h3>
-      <Suspense fallback={<AgentComposerLoading />}>
-        <LazyAIAssistantPanel variant='linear-agent' onPreviewAttachment={onPreviewAttachment} />
-      </Suspense>
+      <AIAssistantPanel variant='linear-agent' onPreviewAttachment={onPreviewAttachment} />
       {examplesVisible ? (
         <section className='agent-examples' aria-label='Agent examples'>
           <div className='examples-label'>
@@ -584,7 +560,7 @@ export function LinearAgentWorkspace() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectRead[]>([]);
   const [environmentPanelOpen, setEnvironmentPanelOpen] = useState(() =>
-    typeof window !== 'undefined' ? !window.matchMedia('(max-width: 820px)').matches : true
+    typeof window !== 'undefined' ? !window.matchMedia(AGENT_COMPACT_MEDIA_QUERY).matches : true
   );
   const [previewAttachment, setPreviewAttachment] = useState<AttachmentPreviewSelection | null>(
     null
@@ -812,15 +788,13 @@ export function LinearAgentWorkspace() {
                   onOpenWorkflowCanvas={openWorkflowCanvas}
                 />
                 <div className='bp-linear-agent-composer-slot' aria-label='Agent composer'>
-                  <Suspense fallback={<AgentComposerLoading />}>
-                    <LazyAIAssistantPanel
-                      variant='linear-agent'
-                      onPreviewAttachment={(selection) => {
-                        setWorkflowCanvasProjectId(null);
-                        setPreviewAttachment(selection);
-                      }}
-                    />
-                  </Suspense>
+                  <AIAssistantPanel
+                    variant='linear-agent'
+                    onPreviewAttachment={(selection) => {
+                      setWorkflowCanvasProjectId(null);
+                      setPreviewAttachment(selection);
+                    }}
+                  />
                 </div>
               </>
             ) : (

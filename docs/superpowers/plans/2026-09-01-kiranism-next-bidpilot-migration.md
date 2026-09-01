@@ -74,10 +74,12 @@ Browser
 5. Agent `thinking` is shown only after the real Pi `thinking.started` event.
 6. Tool cards remain in the transcript after success/failure and can be opened.
 7. Stop calls the durable runtime cancel endpoint and keeps the terminal event.
-8. Desktop sidebar uses Kiranism Sidebar primitives; mobile uses its Sheet and
+8. Agent input remains available after a stale route asset: the page composer is
+   statically loaded and the error action performs a full browser reload.
+9. Desktop sidebar uses Kiranism Sidebar primitives; mobile uses its Sheet and
    the header trigger remains reachable.
-9. `pnpm --filter @docpilot/web exec tsc --noEmit` and production build pass.
-10. shadcn CLI info and Playwright desktop/mobile checks pass without console
+10. `pnpm --filter @docpilot/web exec tsc --noEmit` and production build pass.
+11. shadcn CLI info and Playwright desktop/mobile checks pass without console
     errors other than expected API responses in an unauthenticated environment.
 
 ## Acceptance evidence
@@ -113,6 +115,11 @@ Browser
   `message.completed` and `run.completed`, with no keyword route or fabricated
   thinking state. The local inbox stop action returned HTTP 200 and changed the
   seeded approval run to `cancelled`/`已停止`.
+- Agent layout acceptance: standard desktop screenshot showed the message-state
+  composer fully inside the AppShell viewport; user route snapshots showed no
+  horizontal clipping in the project/radar/work pages. The compact breakpoint
+  is `1024px`, where the environment surface opens through the installed
+  shadcn Sheet.
 - Fixed legacy workflow rows without `execution_run_id`: user cancellation now
   closes the durable runtime row when there is no worker execution to interrupt;
   new demo rows seed the execution bridge and the service regression is covered
