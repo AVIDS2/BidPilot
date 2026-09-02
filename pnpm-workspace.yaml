@@ -20,6 +20,7 @@ overrides:
   "ip-address": 10.3.1
   "@hono/node-server": 1.19.15
   "body-parser": 2.3.0
+  "browserslist": 4.28.7
   "dompurify": 3.4.13
   "mermaid": 11.16.1
   "qs": 6.15.2

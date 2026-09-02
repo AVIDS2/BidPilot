@@ -1,5 +1,119 @@
 # Progress Log
 
+## 2026-09-02 product marketing copy pass
+
+- Reworked the visible landing copy for the actual B2B bid-response audience:
+  the Hero now leads with “让好机会，更快变成好方案”, uses a short outcome-led
+  supporting line and a single primary action, followed by product proof,
+  role-specific value and objection-oriented FAQ. Section copy now follows the
+  product promise “从机会到交付”, with short labels instead of feature
+  implementation explanations.
+- Removed template names, framework references, implementation explanations and
+  internal system language from user-visible content. The page speaks to a bid
+  owner, solution writer and reviewer as customers, not to a developer reading
+  the source.
+- Fixed the landing navigation contract while editing copy: Product,
+  workflow, team-fit and FAQ remain section links; pricing points to the real
+  `/pricing` route; product/role cards point to their actual workbench routes.
+
+## 2026-09-02 landing grid and showcase correction
+
+- Audited the visible layout against the official Open SaaS `FeaturesGrid`
+  source. The earlier sparse result was caused by supplying six items to a
+  nine-item small/medium/large bento contract, with a large item first. The
+  landing now supplies nine real BidPilot capabilities in the upstream size
+  sequence, so the six-column desktop grid fills three rows without a dangling
+  blank area.
+- Kept the upstream carousel card structure and in-view lifecycle, but changed
+  the user-visible behavior from timer-based snap-to-card scrolling to a
+  continuous duplicated-track marquee. It pauses on hover, is clipped inside
+  the content container, and honors reduced-motion preferences.
+- Browser regression caught and fixed a scrollbar-width overflow caused by the
+  upstream full-viewport positioning pattern. The marquee now stays inside the
+  page content container: desktop measured `1430/1430` and mobile `380/380` for
+  document client/scroll width.
+
+## 2026-09-02 landing motion and theme alignment
+
+- Rechecked the Open SaaS source against the official landing composition. The
+  product proof remains an application UI preview and the example carousel,
+  rather than a generated illustration or a developer-facing template banner.
+- Added restrained, state-led motion to the existing Tabler SVG icons and
+  product surfaces: live response status, document/review confirmation, and a
+  radar sweep. All marketing motion has a reduced-motion fallback.
+- Updated the installed Base UI Accordion composition to use a CSS Grid row
+  transition driven by Base UI's `data-open`, `data-starting-style` and
+  `data-ending-style` attributes, so FAQ expansion and collapse interpolate
+  instead of snapping. Removed the non-template full-width section rules and
+  kept the borders belonging to the upstream navigation, cards, FAQ items and
+  footer structure.
+- Selected the existing `supabase` theme as the default preset for BidPilot.
+  It provides the clearest brand-compatible green action color and avoids the
+  previous Vercel pure black-and-white first impression; no new color system
+  was introduced.
+- Browser evidence: the default theme resolves to `supabase`, the FAQ panel
+  reports `display: grid`, `transition: grid-template-rows`, and a `0fr` to
+  content-sized row transition; animated marketing nodes resolve to their
+  named keyframes, and the public page has no horizontal overflow at 1440px.
+
+
+## 2026-09-02 Open SaaS landing alignment
+
+- Compared the current Open SaaS `NavBar`/landing source through the official
+  repository and docs. The template is MIT and its landing page is a separate
+  set of React components; its Wasp router, auth and backend are not suitable
+  to import into the FastAPI/Pi product.
+- Adapted the upstream sticky navigation behavior to the current Kiranism Base
+  UI stack: the top bar becomes a rounded floating header after scroll, and the
+  mobile menu uses the installed shadcn/Base UI `Sheet` with an accessible
+  title, product links, auth links and theme selector.
+- Replaced landing-page Lucide/star-style decoration with the repository's
+  configured Tabler icon family and changed the page surfaces, borders, CTA,
+  canvas accent and preview to Kiranism semantic theme tokens. Browser checks
+  confirmed Vercel/Light Green and dark-mode changes are visible on the page.
+- Superseded by the direct Open SaaS landing port and grid/showcase correction
+  entries below: the historical ReactBits motion path is no longer active.
+  The current page uses the Open SaaS structure, the installed Kiranism
+  components and a live BidPilot product preview.
+
+## 2026-09-02 marketing and auth correction
+
+- The public landing page was compared against the historical `1577ebc`
+  implementation. The sparse SaaS composition was replaced by the actual
+  previously reviewed ReactBits components: `CinematicHero`, canvas
+  particles/grid, `BlurText`, `AnimatedContent`, `GlareHover`, `StarBorder`
+  and `CountUp`, adapted to the current Next/Kiranism routes.
+- The new page was cold-loaded through the real local `3300` server at desktop
+  and 390px mobile sizes. It rendered the product preview, workflow,
+  capability, plan, FAQ and CTA sections, with stable integer metrics and no
+  horizontal overflow.
+- Fixed the authentication race and local HTTP cookie mismatch. The login BFF
+  verifies the issued access token against `/auth/me` before returning success,
+  returns the verified user to the client, and derives `Secure` from the
+  request/forwarded protocol instead of `NODE_ENV` alone. A real local fixture
+  login reached `/dashboard` successfully.
+- Web verification: `114` tests passed, TypeScript passed, and Next production
+  build passed. The Docker-free local `/health/ready` probe remains outside the
+  full integration gate because Redis and MinIO are intentionally absent.
+- The production dependency audit initially exposed two `browserslist` high
+  advisories in the Next/Babel chain. The workspace override now pins the
+  patched `4.28.7` line; lockfile install and `pnpm audit --prod` are clean.
+
+## 2026-09-02 direct Open SaaS landing port
+
+- The prior custom `RichBidPilotLanding` was removed from the active route,
+  together with its ReactBits/GSAP-only components and dependency. The public
+  route now renders `open-saas/OpenSaasLanding.tsx`.
+- The active page follows the official Open SaaS landing component order and
+  source patterns: sticky `NavBar`, Hero, `ExamplesCarousel`, highlighted
+  feature, bento `FeaturesGrid`, role surfaces, FAQ and Footer. Only Wasp
+  router/auth/backend bindings were replaced with Next links, the existing
+  FastAPI BFF routes and the installed Kiranism shadcn/Base UI components.
+- Real Chromium checks passed for the desktop sticky/floating header, rotating
+  example cards, 390px mobile Sheet, theme selector and dark-mode surface
+  changes. The page has no horizontal overflow and no console errors in the
+  clean browser session.
+
 ## 2026-09-02 Pi stream latency correction
 
 - Root cause: the local direct-process facade discarded every event yielded by

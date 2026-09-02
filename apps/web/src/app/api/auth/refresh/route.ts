@@ -2,13 +2,14 @@ import {
   forwardBackendResponse,
   requestBackend,
   ACCESS_COOKIE,
+  shouldUseSecureCookies,
   unavailableResponse
 } from '@/lib/backend';
 import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const refreshToken = (await cookies()).get('bidpilot_refresh_token')?.value;
     if (!refreshToken) {
@@ -36,7 +37,7 @@ export async function POST() {
     if (!payload.access_token)
       return Response.json({ message: '刷新响应缺少访问令牌。' }, { status: 502 });
     const cookieStore = await cookies();
-    const secure = process.env.NODE_ENV === 'production';
+    const secure = shouldUseSecureCookies(request);
     cookieStore.set(ACCESS_COOKIE, payload.access_token, {
       httpOnly: true,
       sameSite: 'lax',

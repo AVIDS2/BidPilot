@@ -27,6 +27,28 @@ const HOP_BY_HOP_HEADERS = new Set([
 // already-decoded body, especially on Cloudflare-proxied JSON and SSE routes.
 const RESPONSE_HEADERS_TO_STRIP = new Set([...HOP_BY_HOP_HEADERS, 'content-encoding']);
 
+/**
+ * Local `next start` is also production mode, but it is normally served over
+ * plain HTTP. Base the cookie flag on the request/proxy protocol so local
+ * sessions work without weakening HTTPS deployments.
+ */
+export function shouldUseSecureCookies(request: Request) {
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  if (forwardedProto) return forwardedProto.toLowerCase() === 'https';
+
+  try {
+    if (new URL(request.url).protocol === 'https:') return true;
+  } catch {
+    // Fall through to the configured public origin.
+  }
+
+  try {
+    return new URL(process.env.NEXT_PUBLIC_APP_URL ?? '').protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export async function requestBackend(path: string, init: RequestInit = {}, includeAuth = true) {
   const headers = new Headers(init.headers);
   for (const name of HOP_BY_HOP_HEADERS) headers.delete(name);

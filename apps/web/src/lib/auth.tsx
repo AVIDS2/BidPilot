@@ -145,8 +145,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password, turnstile_token: turnstileToken ?? null })
       });
       if (!response.ok) throw new Error(await readApiError(response));
+      const payload = (await response.json()) as { user?: CurrentUser };
+      if (payload.user) {
+        setUser(payload.user);
+        setStatus('authenticated');
+        return payload.user;
+      }
+
+      // Keep compatibility with older web containers during a rolling update.
       const nextUser = await refresh();
-      if (!nextUser) throw new Error('登录成功，但无法读取当前账户。');
+      if (!nextUser) throw new Error('登录后无法验证当前账户，请重新登录。');
       return nextUser;
     },
     [refresh]

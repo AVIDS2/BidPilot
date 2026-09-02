@@ -238,6 +238,17 @@ Recommended characteristics:
 
 - strong typography hierarchy
 - restrained but distinctive accent usage
+
+The public marketing page is a separate campaign surface from the authenticated
+workbench. Its structure follows the MIT Open SaaS landing source: sticky
+navigation that compresses into a floating bar, a product Hero, example/product
+surfaces, capability sections, FAQ and Footer, with the mobile navigation in a
+Sheet. The Wasp-specific router, auth and backend are intentionally excluded;
+only the landing source structure is ported to Next and the current shadcn
+components. The Kiranism semantic theme remains the authority for the
+marketing page, authenticated shell, forms and workbench, so theme selection
+changes the surface and primary color without importing a fixed black/purple
+palette.
 - token-based spacing and color system
 - component states that clearly communicate draft, reviewed, approved, failed, and missing-evidence conditions
 

@@ -2,7 +2,10 @@
  * Default theme that loads when no user preference is set
  * Change this value to set a different default theme
  */
-export const DEFAULT_THEME = 'vercel';
+export const DEFAULT_THEME = 'supabase';
+export const THEME_COOKIE_NAME = 'active_theme';
+export const THEME_PREFERENCE_COOKIE = 'active_theme_preference';
+export const THEME_PREFERENCE_VERSION = '2';
 
 export const THEMES = [
   {

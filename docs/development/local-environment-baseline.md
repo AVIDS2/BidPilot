@@ -37,6 +37,9 @@ PostgreSQL/pgvector or a Worker integration environment; upload/indexing,
 queued workflow execution and object-storage flows must remain explicitly
 marked unavailable until approved local Redis/MinIO instances are provisioned.
 The browser must never use `https://bidpilot-api.rglens.com` during this profile.
+The Next BFF uses the loopback API and derives the cookie `Secure` flag from
+the actual request or forwarded protocol. This keeps `next start` over local
+HTTP usable while retaining secure cookies behind the HTTPS production proxy.
 
 ## Python environment
 
@@ -179,7 +182,7 @@ For local development, use these values:
 ```text
 DOCPILOT_ENV=local
 DOCPILOT_LOG_LEVEL=INFO
-DOCPILOT_APP_URL=http://localhost:5173
+DOCPILOT_APP_URL=http://127.0.0.1:3300
 
 DOCPILOT_DATABASE_URL=postgresql://docpilot:docpilot@localhost:5433/docpilot
 DOCPILOT_REDIS_URL=redis://localhost:6379/0
@@ -215,6 +218,13 @@ DOCPILOT_LANGGRAPH_CHECKPOINTER=postgres
 ```
 
 Use `DOCPILOT_LANGGRAPH_CHECKPOINTER=memory` only for local workflow smoke tests when isolating Postgres checkpoint behavior. Do not use memory checkpoints for staging or production.
+
+The direct-process profile intentionally has no Redis, MinIO or Celery Worker.
+Use `/health` for local API liveness and the Pi sidecar `/health` for the
+assistant process. `/health/ready` checks the complete dependency set and may
+return degraded or wait on unavailable optional services in this profile; a
+passing readiness result requires an approved PostgreSQL/Redis/MinIO/Worker
+environment and must not be inferred from the SQLite browser profile.
 
 ## Local startup order
 

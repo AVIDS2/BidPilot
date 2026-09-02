@@ -2,14 +2,19 @@
 
 import { ReactNode, createContext, useContext, useEffect, useState } from 'react';
 
-import { DEFAULT_THEME } from './theme.config';
-
-const COOKIE_NAME = 'active_theme';
+import {
+  DEFAULT_THEME,
+  THEME_COOKIE_NAME,
+  THEME_PREFERENCE_COOKIE,
+  THEME_PREFERENCE_VERSION
+} from './theme.config';
 
 function setThemeCookie(theme: string) {
   if (typeof window === 'undefined') return;
 
-  document.cookie = `${COOKIE_NAME}=${theme}; path=/; max-age=31536000; SameSite=Lax; ${window.location.protocol === 'https:' ? 'Secure;' : ''}`;
+  const cookieOptions = `path=/; max-age=31536000; SameSite=Lax; ${window.location.protocol === 'https:' ? 'Secure;' : ''}`;
+  document.cookie = `${THEME_COOKIE_NAME}=${theme}; ${cookieOptions}`;
+  document.cookie = `${THEME_PREFERENCE_COOKIE}=${THEME_PREFERENCE_VERSION}; ${cookieOptions}`;
 }
 
 type ThemeContextType = {

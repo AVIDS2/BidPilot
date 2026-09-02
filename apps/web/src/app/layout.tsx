@@ -1,7 +1,12 @@
 import Providers from '@/components/layout/providers';
 import { Toaster } from '@/components/ui/sonner';
 import { fontVariables } from '@/components/themes/font.config';
-import { DEFAULT_THEME, THEMES } from '@/components/themes/theme.config';
+import {
+  DEFAULT_THEME,
+  THEMES,
+  THEME_PREFERENCE_COOKIE,
+  THEME_PREFERENCE_VERSION
+} from '@/components/themes/theme.config';
 import ThemeProvider from '@/components/themes/theme-provider';
 import { cn } from '@/lib/utils';
 import type { Metadata, Viewport } from 'next';
@@ -49,8 +54,15 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const activeThemeValue = cookieStore.get('active_theme')?.value;
+  const hasVersionedThemePreference =
+    cookieStore.get(THEME_PREFERENCE_COOKIE)?.value === THEME_PREFERENCE_VERSION;
   const isValidTheme = THEMES.some((t) => t.value === activeThemeValue);
-  const themeToApply = isValidTheme ? activeThemeValue! : DEFAULT_THEME;
+  const isLegacyVercelDefault = activeThemeValue === 'vercel' && !hasVersionedThemePreference;
+  const themeToApply = isLegacyVercelDefault
+    ? DEFAULT_THEME
+    : isValidTheme
+      ? activeThemeValue!
+      : DEFAULT_THEME;
 
   return (
     <html lang='zh-CN' suppressHydrationWarning data-theme={themeToApply}>

@@ -2,6 +2,7 @@ import {
   forwardBackendResponse,
   requestBackend,
   ACCESS_COOKIE,
+  shouldUseSecureCookies,
   unavailableResponse
 } from '@/lib/backend';
 import { cookies } from 'next/headers';
@@ -28,8 +29,34 @@ export async function POST(request: Request) {
     if (!payload.access_token)
       return Response.json({ message: '登录响应缺少访问令牌。' }, { status: 502 });
 
+    // Verify the newly issued session before telling the browser that login
+    // completed. This prevents a successful token exchange followed by a
+    // misleading client-side "cannot read account" state.
+    const session = await requestBackend(
+      '/auth/me',
+      {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${payload.access_token}`
+        }
+      },
+      false
+    );
+    if (!session.ok) {
+      return Response.json(
+        {
+          code: 'session_verification_failed',
+          message: '登录凭据已签发，但账户信息校验失败，请重新登录。',
+          details: null,
+          request_id: session.headers.get('x-request-id')
+        },
+        { status: 502, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+    const user = await session.json();
+
     const cookieStore = await cookies();
-    const secure = process.env.NODE_ENV === 'production';
+    const secure = shouldUseSecureCookies(request);
     cookieStore.set(ACCESS_COOKIE, payload.access_token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -46,7 +73,7 @@ export async function POST(request: Request) {
         maxAge: 60 * 60 * 24 * 30
       });
     }
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, user }, { headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return unavailableResponse();
   }

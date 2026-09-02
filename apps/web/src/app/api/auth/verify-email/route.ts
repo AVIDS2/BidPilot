@@ -2,6 +2,7 @@ import {
   forwardBackendResponse,
   requestBackend,
   ACCESS_COOKIE,
+  shouldUseSecureCookies,
   unavailableResponse
 } from '@/lib/backend';
 import { cookies } from 'next/headers';
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     const cookieStore = await cookies();
-    const secure = process.env.NODE_ENV === 'production';
+    const secure = shouldUseSecureCookies(request);
     cookieStore.set(ACCESS_COOKIE, payload.access_token, {
       httpOnly: true,
       sameSite: 'lax',

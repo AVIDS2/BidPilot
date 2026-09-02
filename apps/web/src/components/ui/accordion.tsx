@@ -52,12 +52,12 @@ function AccordionContent({ className, children, ...props }: AccordionPrimitive.
   return (
     <AccordionPrimitive.Panel
       data-slot='accordion-content'
-      className='overflow-hidden text-sm data-open:animate-accordion-down data-closed:animate-accordion-up'
+      className='grid grid-rows-[0fr] overflow-hidden text-sm transition-[grid-template-rows] duration-300 ease-out data-open:grid-rows-[1fr] data-starting-style:grid-rows-[0fr] data-ending-style:grid-rows-[0fr] motion-reduce:transition-none'
       {...props}
     >
       <div
         className={cn(
-          'h-(--accordion-panel-height) pt-0 pb-2.5 data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4',
+          'min-h-0 overflow-hidden pt-0 pb-2.5 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4',
           className
         )}
       >

@@ -32,6 +32,8 @@ Browser
 | Kiranism dashboard starter | App Router, Base UI shadcn primitives, sidebar, forms, tables, themes, query setup | MIT; copied source remains in `apps/web` |
 | Existing BidPilot frontend at `fd2cc21` | API types/client and Pi Agent timeline/state projection | First-party project code; adapted to Next routing and BFF |
 | ixartz/SaaS-Boilerplate | Marketing section source (`CenteredMenu`, `CenteredHero`, `Section`, `FeatureCard`, `CTABanner`) adapted into the landing and pricing/docs routes | MIT; attribution retained in `apps/web/THIRD_PARTY_NOTICES.md`; no Clerk/Drizzle/next-intl runtime imported |
+| Wasp Open SaaS landing source | Sticky `NavBar` behavior, responsive Sheet menu, Hero/feature/FAQ/Footer section ordering and product-example presentation adapted to the BidPilot landing | MIT; Wasp router/auth/backend and unrelated example assets are not imported |
+| BidPilot historical ReactBits landing at `1577ebc` | Superseded historical attempt; removed from the active graph on 2026-09-02 after the landing was aligned directly to Open SaaS source structure | First-party historical code; the active page uses the Open SaaS structure and Kiranism components instead |
 | Open SaaS research | Architecture comparison only | MIT source researched; Wasp runtime is not mixed into the FastAPI/Pi product |
 | Supabase documentation | Future optional Auth/Storage adapter decision | No Supabase credentials or runtime dependency in this phase |
 
@@ -59,6 +61,18 @@ Browser
   projection, completed tool detail interaction and thinking shimmer.
 - [x] Run a real authenticated account flow with the direct local API and an
   isolated local SQLite workspace fixture.
+- [x] Review the historical rich BidPilot marketing composition, then replace
+  it in the active graph with the direct Open SaaS landing source structure.
+- [x] Fix local HTTP session cookies and make the Next login BFF verify the
+  issued token before returning success; verify a real local login reaches the
+  dashboard.
+- [x] Adapt Open SaaS's sticky landing navigation and mobile Sheet behavior,
+  and connect the public page to the Kiranism semantic theme selector and the
+  project's Tabler icon family.
+- [x] Align public landing motion with the installed Base UI/shadcn system:
+  state-led Tabler SVG motion, product-preview feedback, reduced-motion
+  fallback and CSS Grid FAQ expansion; use the existing Supabase preset as the
+  default theme.
 - [ ] Run the full PostgreSQL/Redis/MinIO/Worker integration flow in an approved
   local or staging environment.
 - [ ] Promote to VPS only after explicit release confirmation.
@@ -80,9 +94,9 @@ Browser
    the header trigger remains reachable.
 10. Data pages show real freshness and retain prior data while refetching; the
    radar poll and chart transition are driven by the server query state.
-11. Agent, chat transcript and public marketing surfaces inherit the active
-    Kiranism semantic theme in both light and dark modes; no legacy palette
-    overrides the app shell.
+11. Agent, chat and public marketing surfaces inherit the active Kiranism
+    semantic theme. Open SaaS layout behavior and BidPilot motion components
+    must not replace or leak a fixed palette into the authenticated app shell.
 12. The public landing page exposes product copy only, keeps its responsive
     navigation/FAQ/CTA interactions, and has no source-template implementation
     notes visible to users.
@@ -132,10 +146,33 @@ Browser
   both Vercel light and dark modes; the Agent composer and transcript use the
   active background/foreground/primary tokens, and 320px plus 1440px checks
   showed no horizontal overflow.
-- Public landing acceptance: unauthenticated `localhost` browser checks showed
-  the SaaS Boilerplate-derived Hero, workflow, capabilities, plans, FAQ and
-  CTA; the FAQ expanded, the 390px menu opened/closed, and no implementation
-  notes or console errors were present.
+- Public landing acceptance: a cold local Chromium load on `127.0.0.1:3300`
+  showed the directly ported Open SaaS landing component order: sticky
+  navigation, Hero, product/example carousel, highlighted feature, bento
+  features, role surfaces, FAQ and Footer. The page exposed a semantic `h1`,
+  stable product content, no horizontal overflow at 1440px or 390px, and the
+  shadcn FAQ and theme selector opened. Scrolling changed the header to its
+  rounded floating state; Light Green and dark mode changed the semantic page
+  background and primary color.
+- Public landing motion acceptance: the default theme is `supabase`; browser
+  computed styles confirmed the FAQ panel uses `display: grid` and a
+  `grid-template-rows` transition, and the radar, status and Tabler SVG nodes
+  resolve to their intended marketing keyframes. A 1440px full-page screenshot
+  showed the product preview, animated example surfaces and no full-width
+  section divider bands.
+- Public landing grid/showcase acceptance: the official Open SaaS bento data
+  contract is filled with nine real BidPilot capabilities; the desktop grid
+  measured three filled rows with no dangling blank area. The example track
+  moved continuously while in view, paused when hovered, and stayed clipped
+  inside its content container with no document overflow at 1440px or 390px.
+- Local auth acceptance: the existing `leho@bid.test` fixture logged in through
+  the Next BFF over plain HTTP and reached `/dashboard`; the dashboard loaded
+  the account, project count, task state and readiness chart. The previous
+  `登录成功，但无法读取当前账户` path was absent after the fix.
+- Local readiness limitation: `/health` and the Pi sidecar `/health` returned
+  200. `/health/ready` remains unavailable in the Docker-free profile because
+  Redis and MinIO are intentionally not running; it is not used as evidence of
+  a full local integration pass.
 - Fixed legacy workflow rows without `execution_run_id`: user cancellation now
   closes the durable runtime row when there is no worker execution to interrupt;
   new demo rows seed the execution bridge and the service regression is covered
