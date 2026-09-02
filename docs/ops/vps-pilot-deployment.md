@@ -93,6 +93,15 @@ docker compose exec api python scripts/bootstrap_admin.py --email pilot-admin@ex
 
 The reverse proxy should route public traffic to the web and API containers. Keep database, Redis, and MinIO internal.
 
+The public web host must send all paths, including `/api/*`, to the Next web
+container. Next owns the same-origin BFF routes that set HttpOnly session
+cookies and forward requests to FastAPI. Only `bidpilot-api.rglens.com` should
+proxy directly to the API container; routing the web host's `/api/*` directly to
+FastAPI returns raw token payloads and bypasses the BFF cookie boundary.
+
+The reviewed public web host configuration is versioned at
+`ops/openresty/bidpilot.rglens.com.conf`.
+
 ## Trusted proxy and public rate limits
 
 The API accepts `X-Forwarded-For` or `X-Real-IP` only when its immediate
