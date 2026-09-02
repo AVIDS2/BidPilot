@@ -1,5 +1,22 @@
 # Progress Log
 
+## 2026-09-02 production auth proxy correction
+
+- Real public browser acceptance reproduced the reported login failure: the
+  main host's `/api/*` OpenResty location rewrote requests directly to FastAPI,
+  so login returned raw access/refresh tokens while `/api/auth/me` had no
+  browser session and refresh received a missing query parameter.
+- Removed that bypass from the reviewed public web-host configuration. The main
+  host now sends `/api/*` to the Next BFF, while `bidpilot-api.rglens.com`
+  remains the direct FastAPI host. The old proxy file was backed up and the new
+  configuration passed OpenResty syntax validation inside the 1Panel container
+  before a hot reload.
+- Acceptance with the verified production account reached `/dashboard` and
+  rendered account/project data. The BFF response contained `ok/user` and set
+  both HttpOnly session cookies. A password-reset request with a non-existent
+  test email returned the normal anti-enumeration success state. No secret or
+  password was logged.
+
 ## 2026-09-02 product marketing copy pass
 
 - Reworked the visible landing copy for the actual B2B bid-response audience:
