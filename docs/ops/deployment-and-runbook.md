@@ -64,6 +64,12 @@ then atomically replaces the outer Compose file before rebuilding containers.
 This prevents application code and production topology from silently diverging;
 the outer `.env` is never copied, committed, or changed by the script.
 
+When deploying a reviewed local commit that is intentionally ahead of the
+GitHub `master` branch, transfer that exact commit to the VPS repository first
+and run the same script with `DOCPILOT_SKIP_PULL=1`. This keeps the production
+build on the reviewed local commit instead of pulling an older remote branch;
+the normal invocation still fast-forwards from `origin/master`.
+
 The production script builds application images sequentially because the pilot
 VPS has limited memory and no swap. It keeps PostgreSQL, Redis, and MinIO up,
 stops only the application containers while building, and restores them if a
