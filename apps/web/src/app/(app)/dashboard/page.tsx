@@ -25,7 +25,7 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 const runChartConfig = {
-  count: { label: '运行数', color: 'var(--primary)' }
+  count: { label: '任务数', color: 'var(--primary)' }
 } satisfies ChartConfig;
 
 export default function DashboardPage() {
@@ -45,7 +45,7 @@ export default function DashboardPage() {
   });
   const runs = useQuery({
     queryKey: ['runtime-runs', 'dashboard'],
-    queryFn: () => listRuntimeRuns(8),
+    queryFn: () => listRuntimeRuns(8, null, undefined, true),
     retry: false,
     refetchInterval: 15_000,
     refetchOnWindowFocus: true
@@ -80,7 +80,7 @@ export default function DashboardPage() {
   );
   const runChartData = [
     {
-      status: '运行中',
+      status: '处理中',
       count:
         runs.data?.filter((run) => ['running', 'queued', 'pending'].includes(run.status)).length ??
         0
@@ -123,7 +123,7 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow='BidPilot 工作台'
         title='总览'
-        description='从这里查看项目进度、Agent 运行和响应准备度。'
+        description='从这里查看项目进度、Agent 任务和响应准备度。'
         action={
           <div className='flex flex-wrap items-center justify-end gap-2'>
             <LiveSyncStatus
@@ -155,21 +155,21 @@ export default function DashboardPage() {
               />
               <MetricCard
                 icon={<PlayCircle />}
-                label='队列中的运行'
+                label='待处理任务'
                 value={
                   runtime.data?.queue_depth ??
                   runs.data?.filter((run) => run.status === 'queued').length
                 }
-                href='/runs'
+                href='/my-work'
               />
               <MetricCard
                 icon={<TriangleAlert />}
-                label='失败运行'
+                label='需要关注'
                 value={
                   runtime.data?.failed_runs ??
                   runs.data?.filter((run) => ['failed', 'error'].includes(run.status)).length
                 }
-                href='/runs'
+                href='/my-work'
                 tone={
                   (runtime.data?.failed_runs ??
                     runs.data?.filter((run) => ['failed', 'error'].includes(run.status)).length ??
@@ -194,9 +194,9 @@ export default function DashboardPage() {
             <div className='grid gap-6 xl:grid-cols-[0.8fr_1.2fr]'>
               <Card>
                 <CardHeader className='border-b'>
-                  <h2 className='font-medium'>运行状态分布</h2>
+                  <h2 className='font-medium'>任务状态分布</h2>
                   <p className='text-muted-foreground mt-1 text-sm'>
-                    当前账户可见运行的真实状态，不包含管理员全局统计。
+                    当前账户可见任务的真实状态，不包含管理员全局统计。
                   </p>
                 </CardHeader>
                 <CardContent className='p-5'>
@@ -270,13 +270,13 @@ export default function DashboardPage() {
                 <CardHeader className='border-b'>
                   <div className='flex items-center justify-between gap-3'>
                     <div>
-                      <h2 className='font-medium'>最近运行</h2>
+                      <h2 className='font-medium'>最近任务</h2>
                       <p className='text-muted-foreground mt-1 text-sm'>
                         真实 Pi/工作流运行的最新状态。
                       </p>
                     </div>
-                    <Link className={buttonVariants({ size: 'sm', variant: 'ghost' })} href='/runs'>
-                      全部运行 <ArrowUpRight data-icon='inline-end' />
+                    <Link className={buttonVariants({ size: 'sm', variant: 'ghost' })} href='/my-work'>
+                      查看我的工作 <ArrowUpRight data-icon='inline-end' />
                     </Link>
                   </div>
                 </CardHeader>
@@ -289,7 +289,9 @@ export default function DashboardPage() {
                           href={
                             run.project_id
                               ? `/projects/${run.project_id}?run=${run.id}`
-                              : `/runs?run=${run.id}`
+                              : run.conversation_id
+                                ? `/agent?conversation=${run.conversation_id}`
+                                : '/my-work'
                           }
                           key={run.id}
                         >
@@ -308,8 +310,8 @@ export default function DashboardPage() {
                   ) : (
                     <div className='p-5'>
                       <EmptyState
-                        title='还没有运行记录'
-                        description='当 Agent 开始处理项目任务后，运行状态会出现在这里。'
+                        title='还没有最近任务'
+                        description='当 Agent 开始处理项目任务后，进展会出现在这里。'
                       />
                     </div>
                   )}

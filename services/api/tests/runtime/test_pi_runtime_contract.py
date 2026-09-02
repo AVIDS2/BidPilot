@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
-from app.models import RuntimeRun
+from app.assistant.schemas import AssistantConfirmation
+from app.auth.schemas import CurrentUser
+from app.models import ChatConversation, ChatMessage, RuntimeRun
+from app.runtime import operator_adapter
+from app.runtime import assistant_execution
 from app.runtime.assistant_adapter import _render_runtime_event
+from app.runtime.prompt_assembly import compact_conversation_context
 from app.runtime.pi_adapter import _has_visible_text, _text_delta
-from app.runtime.service import await_runtime_input
+from app.runtime.service import await_runtime_input, execute_capability
+from app.usage.schemas import ProviderSource
 from contracts.pi_runtime import pi_model_provider
 
 
@@ -43,6 +50,184 @@ def test_runtime_run_waiting_for_input_is_not_marked_as_success(
 
     test_db.refresh(run)
     assert run.status == "awaiting_input"
+
+
+def test_queued_pi_executor_forwards_native_events_to_live_sink(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+    monkeypatch,
+) -> None:
+    conversation = ChatConversation(
+        id=str(uuid4()),
+        user_id=default_user_id,
+        title="live event forwarding",
+    )
+    run = RuntimeRun(
+        id=str(uuid4()),
+        kind="assistant_turn",
+        status="queued",
+        org_id=default_org_id,
+        user_id=default_user_id,
+        conversation_id=conversation.id,
+        engine="pi",
+        trace_id=f"trace-{uuid4().hex}",
+        input_json={"message": "你好"},
+    )
+    test_db.add_all([conversation, run])
+    test_db.commit()
+
+    monkeypatch.setattr(
+        assistant_execution,
+        "resolve_agent_model",
+        lambda: SimpleNamespace(
+            provider_type="openai",
+            provider_id="test-provider",
+            api_key="test-key",
+            base_url="https://models.example.test/v1",
+            model="test-model",
+        ),
+    )
+    monkeypatch.setattr(
+        assistant_execution,
+        "load_conversation_context",
+        lambda *_args, **_kwargs: compact_conversation_context([]),
+    )
+    monkeypatch.setattr(assistant_execution, "pending_input_context", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(assistant_execution, "load_authorized_memory", lambda *_args, **_kwargs: None)
+
+    async def no_profile_context(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(assistant_execution, "load_mem0_profile_context", no_profile_context)
+
+    async def fake_pi_stream(*_args, **_kwargs):
+        yield "event: assistant.message\ndata: {\"content\":\"第一段\"}\n\n"
+        yield "event: assistant.message\ndata: {\"content\":\"第二段\"}\n\n"
+        run.status = "succeeded"
+        test_db.commit()
+
+    monkeypatch.setattr(assistant_execution, "stream_pi_assistant_response", fake_pi_stream)
+
+    received: list[str] = []
+
+    async def collect() -> str:
+        async def sink(event: str) -> None:
+            received.append(event)
+
+        return await assistant_execution.execute_queued_assistant_run(
+            test_db,
+            run,
+            event_sink=sink,
+        )
+
+    result = asyncio.run(collect())
+
+    assert result == "succeeded"
+    assert received == [
+        "event: assistant.message\ndata: {\"content\":\"第一段\"}\n\n",
+        "event: assistant.message\ndata: {\"content\":\"第二段\"}\n\n",
+    ]
+
+
+def test_malformed_structured_confirmation_is_rejected_without_a_new_turn(client) -> None:
+    response = client.post(
+        "/assistant/stream",
+        json={
+            "message": "",
+            "confirmation": {
+                "approved": True,
+                "tool_name": "create_project",
+                "arguments": {},
+            },
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "结构化确认请求缺少 approval_id，未创建新的助手回合。"
+
+
+def test_pi_approval_continuation_does_not_append_a_fake_user_turn(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = CurrentUser(
+        id=default_user_id,
+        email="dev@docpilot.local",
+        display_name="Dev User",
+        role="admin",
+        org_id=default_org_id,
+    )
+    conversation = ChatConversation(
+        id=str(uuid4()),
+        user_id=default_user_id,
+        title="structured approval",
+    )
+    run = RuntimeRun(
+        id=str(uuid4()),
+        kind="assistant_turn",
+        status="running",
+        org_id=default_org_id,
+        user_id=default_user_id,
+        conversation_id=conversation.id,
+        engine="pi",
+        trace_id=f"trace-{uuid4().hex}",
+        policy_snapshot_json={"approval_mode": "risky_only"},
+    )
+    test_db.add_all((conversation, run))
+    test_db.commit()
+
+    project_name = f"Structured Approval {uuid4().hex[:8]}"
+    pending = execute_capability(
+        test_db,
+        user,
+        run_id=run.id,
+        capability_name="create_project",
+        arguments={"name": project_name, "scenario_package": "bidpilot"},
+        action_key="pi-structured-approval",
+    )
+    assert pending.approval is not None
+
+    async def collect_events() -> list[str]:
+        return [
+            event
+            async for event in operator_adapter._resume_operator_approval(
+                test_db,
+                user,
+                conversation.id,
+                AssistantConfirmation(
+                    approved=True,
+                    tool_name="create_project",
+                    # This mirrors an older client and proves the server does
+                    # not interpret copied action arguments as an edit.
+                    arguments={"name": project_name, "scenario_package": "bidpilot"},
+                    approval_id=pending.approval.id,
+                ),
+                provider_type="openai",
+                provider_id=None,
+                provider_source=ProviderSource.OFFICIAL,
+                api_key="test-key",
+                base_url="https://models.example.test/v1",
+                model="test-model",
+                reasoning_effort="medium",
+            )
+        ]
+
+    events = asyncio.run(collect_events())
+
+    user_messages = list(
+        test_db.query(ChatMessage)
+        .filter(ChatMessage.conversation_id == conversation.id, ChatMessage.role == "user")
+    )
+    assert user_messages == []
+    assert sum("assistant.tool_succeeded" in event for event in events) == 1
+    test_db.refresh(pending.approval)
+    test_db.refresh(pending.action)
+    test_db.refresh(run)
+    assert pending.approval.status == "approved"
+    assert pending.action.status == "succeeded"
+    assert run.status == "succeeded"
 
 
 class _FakePiResponse:

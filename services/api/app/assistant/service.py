@@ -58,7 +58,8 @@ async def stream_assistant_response(
     )
     payload = payload.model_copy(update={"project_id": project_id})
     conversation_id = _ensure_conversation(db, user, payload)
-    save_message(db, conversation_id, "user", payload.message, attachments=payload.attachments)
+    if payload.confirmation is None:
+        save_message(db, conversation_id, "user", payload.message, attachments=payload.attachments)
 
     yield _sse("assistant.start", {"conversation_id": conversation_id, "state": "thinking"})
 

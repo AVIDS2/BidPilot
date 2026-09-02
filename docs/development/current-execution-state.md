@@ -47,6 +47,18 @@
   and align `DOCPILOT_PI_INTERNAL_SECRET` between API and Pi before browser
   acceptance. A real local `你好` turn completed as `succeeded / pi` after this
   correction.
+- Local direct-process Agent streaming now forwards each native Pi SSE event
+  through an in-memory queue while the executor is running. It no longer waits
+  for the full Pi turn and then replays the completed timeline, which had made
+  the first visible text appear as one large burst. The stream still preserves
+  Pi's provider delta boundaries; it does not split text or infer intent from
+  keywords.
+- A 2026-09-02 local timing probe measured the corrected API path at about
+  `0.17s` to the first SSE frame and `2.20s` to the first visible assistant
+  delta, with the Next proxy retaining `text/event-stream` and chunked
+  delivery. The local environment is currently configured for DeepSeek, not
+  MiMo; MiMo latency is therefore not claimed until its server-side profile is
+  actually configured.
 - remaining release gates: run the dedicated PostgreSQL/Redis/MinIO Worker
   acceptance environment, then obtain explicit production promotion approval
 

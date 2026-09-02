@@ -669,12 +669,9 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
             )
             if key in result
         }
-        research_run_id = result.get("research_run_id") or result.get("runtime_run_id")
-        summary = (
-            f"深度调研已启动（运行 {str(research_run_id)[:8]}），会在后台完成计划、检索、核验和报告生成。"
-            if isinstance(research_run_id, str) and research_run_id
-            else "深度调研已启动，会在后台完成计划、检索、核验和报告生成。"
-        )
+        # Runtime identifiers stay in the durable payload for recovery and
+        # support, but are not useful in the user's conversation.
+        summary = "深度调研已启动，会在后台完成计划、检索、核验和报告生成。"
         return PublicCapabilityResult(summary, payload)
     if capability_name == "semantic_search":
         items = _public_items(

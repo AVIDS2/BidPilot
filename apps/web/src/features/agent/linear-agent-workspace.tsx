@@ -50,7 +50,8 @@ import {
   renameChatConversation,
   setChatConversationPinned,
   type ChatConversationRead,
-  type ProjectRead
+  type ProjectRead,
+  type RuntimeRunListItem
 } from '@/lib/api';
 import {
   Sheet,
@@ -59,6 +60,7 @@ import {
   SheetHeader,
   SheetTitle
 } from '@/components/ui/sheet';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import './linear-agent-workspace.css';
 
@@ -296,6 +298,9 @@ function AgentHistory({
       .sort((left, right) => {
         if (left.id === currentProjectId) return -1;
         if (right.id === currentProjectId) return 1;
+        const leftHasPinned = left.items.some((conversation) => conversation.is_pinned);
+        const rightHasPinned = right.items.some((conversation) => conversation.is_pinned);
+        if (leftHasPinned !== rightHasPinned) return leftHasPinned ? -1 : 1;
         if (left.id === 'personal') return 1;
         if (right.id === 'personal') return -1;
         return left.items[0]?.created_at && right.items[0]?.created_at
@@ -316,6 +321,9 @@ function AgentHistory({
         >
           <PlusIcon data-icon='inline-start' /> 新对话
         </Button>
+        {groups.some(({ id }) => id !== 'personal') ? (
+          <div className='bp-linear-history-section-label'>项目</div>
+        ) : null}
         {groups.map(({ id, items, project }) => {
           const label = project?.name ?? '个人会话';
           return (
@@ -401,7 +409,7 @@ function AgentHistory({
                             }
                           >
                             <PinIcon fill={conversation.is_pinned ? 'currentColor' : 'none'} />
-                            {conversation.is_pinned ? '取消置顶' : '置顶会话'}
+                            {conversation.is_pinned ? '取消收藏会话' : '收藏会话'}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => {
@@ -559,9 +567,7 @@ export function LinearAgentWorkspace() {
   } = useAIAssistant();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectRead[]>([]);
-  const [environmentPanelOpen, setEnvironmentPanelOpen] = useState(() =>
-    typeof window !== 'undefined' ? !window.matchMedia(AGENT_COMPACT_MEDIA_QUERY).matches : true
-  );
+  const [environmentPanelOpen, setEnvironmentPanelOpen] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<AttachmentPreviewSelection | null>(
     null
   );
@@ -646,7 +652,6 @@ export function LinearAgentWorkspace() {
   };
   const hasSideCanvas = Boolean(previewAttachment || workflowCanvasProjectId);
   const showDesktopCanvas = hasSideCanvas && !isCompactViewport;
-  const showDesktopEnvironment = environmentPanelOpen && !isCompactViewport;
   const closeSideSurface = () => {
     setPreviewAttachment(null);
     setWorkflowCanvasProjectId(null);
@@ -689,7 +694,7 @@ export function LinearAgentWorkspace() {
       ref={workspaceRef}
     >
       <div
-        className={`linear-main${showDesktopCanvas ? ' has-preview-canvas' : ''}${showDesktopEnvironment ? ' has-environment-panel' : ''}`}
+        className={`linear-main${showDesktopCanvas ? ' has-preview-canvas' : ''}`}
         style={{ '--preview-width': `${previewWidth}px` } as CSSProperties}
       >
         <section className='agent-canvas'>
@@ -709,7 +714,15 @@ export function LinearAgentWorkspace() {
               <Button
                 type='button'
                 className={`agent-header-icon${currentConversation?.is_pinned ? ' is-active' : ''}`}
-                aria-label={currentConversation?.is_pinned ? '取消置顶会话' : '置顶会话'}
+                aria-label={currentConversation?.is_pinned ? '取消收藏会话' : '收藏会话'}
+                disabled={!currentConversation}
+                title={
+                  currentConversation
+                    ? currentConversation.is_pinned
+                      ? '取消收藏会话'
+                      : '收藏会话'
+                    : '新对话暂无可收藏内容'
+                }
                 onClick={() => {
                   if (currentConversation) {
                     void togglePinnedConversation(
@@ -736,18 +749,50 @@ export function LinearAgentWorkspace() {
               >
                 <MoreHorizontalIcon aria-hidden='true' />
               </Button>
-              <Button
-                type='button'
-                className={`agent-header-icon${environmentPanelOpen ? ' is-active' : ''}`}
-                aria-expanded={environmentPanelOpen}
-                aria-label={environmentPanelOpen ? '收起工作概览' : '打开工作概览'}
-                title={environmentPanelOpen ? '收起工作概览' : '打开工作概览'}
-                onClick={() => setEnvironmentPanelOpen((value) => !value)}
-                size='icon-sm'
-                variant='ghost'
-              >
-                <PanelRightIcon aria-hidden='true' />
-              </Button>
+              <Popover open={environmentPanelOpen} onOpenChange={setEnvironmentPanelOpen}>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type='button'
+                      className={`agent-header-icon${environmentPanelOpen ? ' is-active' : ''}`}
+                      aria-label={environmentPanelOpen ? '收起工作概览' : '打开工作概览'}
+                      title={environmentPanelOpen ? '收起工作概览' : '打开工作概览'}
+                      size='icon-sm'
+                      variant='ghost'
+                    />
+                  }
+                >
+                  <PanelRightIcon aria-hidden='true' />
+                </PopoverTrigger>
+                <PopoverContent
+                  align='end'
+                  aria-label='工作概览'
+                  className='agent-environment-popover w-[min(22rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] p-0'
+                  side='bottom'
+                  sideOffset={8}
+                >
+                  <AgentEnvironmentPanel
+                    currentProjectId={state.currentContext.projectId ?? currentConversation?.project_id}
+                    onOpenProject={(projectId) => {
+                      setEnvironmentPanelOpen(false);
+                      navigate(`/projects/${projectId}`);
+                    }}
+                    onOpenRun={(run: RuntimeRunListItem) => {
+                      setEnvironmentPanelOpen(false);
+                      if (run.conversation_id) {
+                        navigate(
+                          agentWorkspacePath({
+                            conversationId: run.conversation_id,
+                            projectId: run.project_id ?? undefined
+                          })
+                        );
+                      } else if (run.project_id) {
+                        navigate(`/projects/${run.project_id}`);
+                      }
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
             </header>
             <AgentHistory
               open={historyOpen}
@@ -831,14 +876,6 @@ export function LinearAgentWorkspace() {
             onClose={() => setPreviewAttachment(null)}
           />
         ) : null}
-        {showDesktopEnvironment ? (
-          <AgentEnvironmentPanel
-            currentProjectId={state.currentContext.projectId ?? currentConversation?.project_id}
-            onClose={() => setEnvironmentPanelOpen(false)}
-            onOpenProject={(projectId) => navigate(`/projects/${projectId}`)}
-            onOpenRun={(runId) => navigate(`/runs?run=${runId}`)}
-          />
-        ) : null}
         <AgentFooter onHistory={() => setHistoryOpen((value) => !value)} />
       </div>
       <Sheet
@@ -872,32 +909,6 @@ export function LinearAgentWorkspace() {
               showHeader={false}
             />
           )}
-        </SheetContent>
-      </Sheet>
-      <Sheet
-        open={isCompactViewport && environmentPanelOpen}
-        onOpenChange={(open) => setEnvironmentPanelOpen(open)}
-      >
-        <SheetContent
-          side='right'
-          className='agent-mobile-environment-sheet w-[min(100vw,22rem)] max-w-none gap-0 p-0 sm:max-w-none'
-        >
-          <SheetHeader className='agent-mobile-side-sheet-header'>
-            <SheetTitle>工作概览</SheetTitle>
-            <SheetDescription>项目、资料和后台工作都在这里继续</SheetDescription>
-          </SheetHeader>
-          <AgentEnvironmentPanel
-            currentProjectId={state.currentContext.projectId ?? currentConversation?.project_id}
-            onClose={() => setEnvironmentPanelOpen(false)}
-            onOpenProject={(projectId) => {
-              setEnvironmentPanelOpen(false);
-              navigate(`/projects/${projectId}`);
-            }}
-            onOpenRun={(runId) => {
-              setEnvironmentPanelOpen(false);
-              navigate(`/runs?run=${runId}`);
-            }}
-          />
         </SheetContent>
       </Sheet>
     </div>

@@ -60,7 +60,7 @@ export default function ProjectsPage() {
       <PageHeader
         eyebrow='投标工作流'
         title='项目'
-        description='每个项目拥有独立的资料包、需求、证据、运行记录和交付物。'
+        description='每个项目拥有独立的资料包、需求、证据、任务进展和交付物。'
         action={
           <div className='flex flex-wrap items-center justify-end gap-2'>
             <LiveSyncStatus

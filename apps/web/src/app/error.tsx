@@ -14,7 +14,7 @@ export default function Error({
       <Alert className='max-w-md' variant='destructive'>
         <AlertTitle>页面暂时无法打开</AlertTitle>
         <AlertDescription className='mt-1'>
-          请重新加载当前页面。如果问题持续存在，请查看运行记录或联系管理员。
+          请重新加载当前页面。如果问题持续存在，请稍后再试或联系管理员。
         </AlertDescription>
         <Button
           className='mt-4'

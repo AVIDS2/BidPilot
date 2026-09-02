@@ -1197,14 +1197,20 @@ function HistorySidebar({
                                     </DropdownMenuLabel>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
-                                      onClick={() => onRename(conversation.id, conversation.title)}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        onRename(conversation.id, conversation.title);
+                                      }}
                                     >
                                       <PencilIcon />
                                       {t('panel.renameConversation')}
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
-                                      onClick={() => onDelete(conversation.id)}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        onDelete(conversation.id);
+                                      }}
                                       variant='destructive'
                                     >
                                       <Trash2Icon />

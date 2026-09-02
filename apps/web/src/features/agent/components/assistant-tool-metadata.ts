@@ -124,12 +124,12 @@ export function getAssistantToolLabel(toolName: string | undefined, t: Translate
 export function getAssistantActivityLabel(item: AssistantExecutionItem, t: Translate) {
   const base = getAssistantToolLabel(item.toolName ?? item.title, t);
   if (item.resourceKind === 'skill') {
-    return item.resourceName ? `使用「${item.resourceName}」技能` : '使用流程技能';
+    if (item.presentationKind === 'deep_research') return '准备深度调研';
+    return '准备工作步骤';
   }
   if (item.resourceKind === 'mcp') {
-    const provider = item.provider?.replace(/^mcp:/i, '').trim();
-    const mcpTool = base === '平台操作' ? item.resourceName || item.toolName || base : base;
-    return provider ? `通过 ${provider} · ${mcpTool}` : `调用外部工具 · ${mcpTool}`;
+    if (item.toolName === 'web_search') return '联网搜索';
+    return base === '平台操作' ? '查询外部资料' : base;
   }
   return base;
 }

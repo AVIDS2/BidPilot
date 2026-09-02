@@ -70,6 +70,17 @@ Focus:
 - P95 latency checks for liveness and schema endpoints
 - fast failure on non-2xx responses before release candidates
 
+## Current Commands
+
+- Web unit and component tests: `pnpm --dir apps/web test` (Vitest + jsdom)
+- Web typecheck/build: `pnpm --dir apps/web typecheck` and
+  `pnpm --dir apps/web build`
+- Pi sidecar contract tests: `pnpm --dir services/pi-agent test`
+- API and Worker tests require an isolated database whose name ends in
+  `_test`. The local direct-process profile does not start Docker, MinIO or a
+  broker; storage/queue integration belongs to the VPS or an approved
+  PostgreSQL/Redis/MinIO acceptance environment.
+
 ## Phase gate expectations
 
 ### Phase 0

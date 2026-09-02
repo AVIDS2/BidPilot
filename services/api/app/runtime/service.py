@@ -155,6 +155,7 @@ def list_runtime_runs_query(
     limit: int = 50,
     conversation_id: str | None = None,
     kinds: Sequence[str] | None = None,
+    live_only: bool = False,
 ) -> list[RuntimeRunListRow]:
     """Return a bounded, permission-scoped list for the Run Center / history restore."""
 
@@ -164,6 +165,7 @@ def list_runtime_runs_query(
         limit=max(1, min(limit, 100)),
         conversation_id=conversation_id,
         kinds=kinds,
+        live_only=live_only,
     )
 
 

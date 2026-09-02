@@ -43,6 +43,7 @@ def list_runtime_runs(
     limit: int = Query(default=50, ge=1, le=100),
     conversation_id: str | None = Query(default=None),
     kind: list[str] | None = Query(default=None),
+    live_only: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_auth),
 ) -> list[RuntimeRunListItem]:
@@ -52,6 +53,7 @@ def list_runtime_runs(
             kind=row.run.kind,
             status=row.run.status,
             project_id=row.run.project_id,
+            conversation_id=row.run.conversation_id,
             project_name=row.project_name,
             engine=row.run.engine,
             created_at=row.run.created_at,
@@ -65,6 +67,7 @@ def list_runtime_runs(
             limit=limit,
             conversation_id=conversation_id,
             kinds=kind,
+            live_only=live_only,
         )
     ]
 

@@ -6,6 +6,7 @@ import { Icons } from '@/components/icons';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -78,19 +79,23 @@ export function OrgSwitcher() {
             side={isMobile ? 'bottom' : 'right'}
             sideOffset={6}
           >
-            <DropdownMenuLabel className='text-muted-foreground text-xs'>
-              当前工作区
-            </DropdownMenuLabel>
-            <DropdownMenuItem className='gap-2' onClick={() => router.push('/projects')}>
-              <Icons.workspace className='size-4' />
-              <span className='truncate'>{workspaceName}</span>
-              <Icons.check className='text-primary ml-auto size-4' />
-            </DropdownMenuItem>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className='text-muted-foreground text-xs'>
+                当前工作区
+              </DropdownMenuLabel>
+              <DropdownMenuItem className='gap-2' onClick={() => router.push('/projects')}>
+                <Icons.workspace className='size-4' />
+                <span className='truncate'>{workspaceName}</span>
+                <Icons.check className='text-primary ml-auto size-4' />
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push('/account')}>
-              <Icons.settings className='size-4' />
-              工作区设置
-            </DropdownMenuItem>
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => router.push('/account')}>
+                <Icons.settings className='size-4' />
+                工作区设置
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

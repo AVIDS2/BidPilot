@@ -91,7 +91,7 @@ async def stream_runtime_assistant_response(
     conversation_id = _ensure_conversation(db, user, payload)
 
     if payload.confirmation is not None and payload.confirmation.approval_id:
-        save_message(db, conversation_id, "user", payload.message)
+        # Structured approval is a control-plane decision, not a new chat turn.
         async for event in _resume_approval(db, user, conversation_id, payload.confirmation):
             yield event
         return

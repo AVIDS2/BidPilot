@@ -6,20 +6,17 @@ import {
   BotIcon,
   ChevronRightIcon,
   CircleDotIcon,
-  ExternalLinkIcon,
   FileTextIcon,
   FolderKanbanIcon,
   Globe2Icon,
   Layers3Icon,
-  PanelRightCloseIcon,
   SparklesIcon,
   WorkflowIcon
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -62,9 +59,8 @@ const EMPTY_PROJECTS: ProjectRead[] = [];
 
 interface AgentEnvironmentPanelProps {
   currentProjectId?: string | null;
-  onClose?: () => void;
   onOpenProject?: (projectId: string) => void;
-  onOpenRun: (runId: string) => void;
+  onOpenRun: (run: RuntimeRunListItem) => void;
 }
 
 function runLabel(run: RuntimeRunListItem) {
@@ -72,8 +68,9 @@ function runLabel(run: RuntimeRunListItem) {
   if (run.kind === 'deep_research') return '深度调研';
   if (run.kind === 'workflow_bridge') return '响应工作流';
   if (run.kind === 'remote_import') return '资料导入';
+  if (run.kind === 'system_recovery') return '任务恢复';
   if (run.kind === 'assistant_turn') return '助手会话';
-  return run.kind.replace(/_/g, ' ');
+  return '后台任务';
 }
 
 function RunIcon({ kind }: { kind: string }) {
@@ -103,13 +100,19 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
   return 'outline';
 }
 
-function ActiveRunRow({ run, onOpen }: { run: RuntimeRunListItem; onOpen: () => void }) {
+function ActiveRunRow({
+  run,
+  onOpen
+}: {
+  run: RuntimeRunListItem;
+  onOpen: (run: RuntimeRunListItem) => void;
+}) {
   const isLive = ACTIVE_STATUSES.has(run.status);
   return (
     <Button
       aria-label={`${runLabel(run)}${run.latest_event_summary ? `：${run.latest_event_summary}` : ''}`}
       className='h-auto w-full justify-start gap-2.5 px-2.5 py-2 text-left'
-      onClick={onOpen}
+      onClick={() => onOpen(run)}
       size='sm'
       variant='ghost'
     >
@@ -169,13 +172,12 @@ function ProjectRow({
 
 export function AgentEnvironmentPanel({
   currentProjectId,
-  onClose,
   onOpenProject,
   onOpenRun
 }: AgentEnvironmentPanelProps) {
   const runsQuery = useQuery<RuntimeRunListItem[]>({
-    queryKey: ['agent-environment-runs'],
-    queryFn: () => listRuntimeRuns(30, null, BACKGROUND_RUN_KIND_LIST),
+    queryKey: ['agent-environment-runs', 'live'],
+    queryFn: () => listRuntimeRuns(30, null, BACKGROUND_RUN_KIND_LIST, true),
     refetchInterval: 4_000,
     staleTime: 2_000
   });
@@ -202,6 +204,12 @@ export function AgentEnvironmentPanel({
     [runs]
   );
   const currentProject = projects.find((project) => project.id === currentProjectId) ?? null;
+  const activeSubagentCount = activeRuns.filter((run) => run.kind === 'subagent').length;
+  const overviewSummary = activeSubagentCount
+    ? `${activeSubagentCount} 个子 Agent 正在工作`
+    : activeRuns.length
+      ? `${activeRuns.length} 项任务需要关注`
+      : '当前没有进行中的任务';
 
   return (
     <Card className='agent-environment-panel h-full min-h-0 rounded-xl' size='sm'>
@@ -210,20 +218,7 @@ export function AgentEnvironmentPanel({
           <CircleDotIcon className='size-3.5 text-primary' />
           工作概览
         </CardTitle>
-        <CardDescription className='text-[11px]'>项目、资料和后台工作都在这里继续</CardDescription>
-        {onClose ? (
-          <CardAction>
-            <Button
-              aria-label='收起工作概览'
-              onClick={onClose}
-              size='icon-sm'
-              title='收起工作概览'
-              variant='ghost'
-            >
-              <PanelRightCloseIcon />
-            </Button>
-          </CardAction>
-        ) : null}
+        <CardDescription className='text-[11px]'>{overviewSummary}</CardDescription>
       </CardHeader>
       <ScrollArea className='min-h-0 flex-1'>
         <CardContent className='flex flex-col gap-4 px-3.5 py-3.5'>
@@ -244,11 +239,11 @@ export function AgentEnvironmentPanel({
             </section>
           ) : null}
 
-          <section aria-label='正在处理' className='flex flex-col gap-2'>
+          <section aria-label='进行中的任务' className='flex flex-col gap-2'>
             <div className='flex items-center justify-between'>
               <div className='flex items-center gap-2 text-xs font-medium'>
                 <ActivityIcon className='size-3.5 text-muted-foreground' />
-                正在处理
+                进行中的任务
               </div>
               {activeRuns.length ? <Badge variant='default'>{activeRuns.length}</Badge> : null}
             </div>
@@ -272,7 +267,7 @@ export function AgentEnvironmentPanel({
             ) : activeRuns.length ? (
               <div className='flex flex-col gap-1'>
                 {activeRuns.slice(0, 8).map((run) => (
-                  <ActiveRunRow key={run.id} onOpen={() => onOpenRun(run.id)} run={run} />
+                  <ActiveRunRow key={run.id} onOpen={onOpenRun} run={run} />
                 ))}
               </div>
             ) : (
@@ -298,7 +293,7 @@ export function AgentEnvironmentPanel({
                 </div>
                 <div className='flex flex-col gap-1'>
                   {completedRuns.slice(0, 3).map((run) => (
-                    <ActiveRunRow key={run.id} onOpen={() => onOpenRun(run.id)} run={run} />
+                    <ActiveRunRow key={run.id} onOpen={onOpenRun} run={run} />
                   ))}
                 </div>
               </section>
@@ -359,15 +354,6 @@ export function AgentEnvironmentPanel({
           {loadError ? (
             <p className='text-[11px] text-destructive'>工作概览暂时无法刷新，正在保留上次状态。</p>
           ) : null}
-          <Link
-            className={cn(
-              buttonVariants({ size: 'sm', variant: 'outline' }),
-              'w-full justify-center'
-            )}
-            href='/runs'
-          >
-            查看全部后台工作 <ExternalLinkIcon data-icon='inline-end' />
-          </Link>
         </CardContent>
       </ScrollArea>
     </Card>

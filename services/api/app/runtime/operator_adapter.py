@@ -8,7 +8,7 @@ Python loop is not an automatic fallback for new requests.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 import logging
 import os
 from typing import Any
@@ -47,6 +47,7 @@ from .prompt_assembly import ConversationContextWindow, compact_conversation_con
 from .queue import enqueue_assistant_run
 from .service import (
     assistant_turn_idempotency_key,
+    cancel_runtime_run,
     complete_runtime_run,
     create_or_get_runtime_run,
     fail_runtime_run,
@@ -68,7 +69,12 @@ def _local_direct_assistant_enabled() -> bool:
     return os.getenv("DOCPILOT_LOCAL_DIRECT_ASSISTANT", "").strip().lower() == "true"
 
 
-async def _execute_local_pi_run(db: Session, run: RuntimeRun) -> str:
+async def _execute_local_pi_run(
+    db: Session,
+    run: RuntimeRun,
+    *,
+    event_sink: Callable[[str], Awaitable[None]] | None = None,
+) -> str:
     """Run the same queued Pi executor without requiring a local broker.
 
     This is a development transport choice, not a second assistant runtime.
@@ -84,7 +90,7 @@ async def _execute_local_pi_run(db: Session, run: RuntimeRun) -> str:
     if task is not None:
         register_pi_execution(run.id, task)
     try:
-        return await execute_queued_assistant_run(db, run)
+        return await execute_queued_assistant_run(db, run, event_sink=event_sink)
     finally:
         if task is not None:
             unregister_pi_execution(run.id, task)
@@ -136,7 +142,9 @@ async def stream_operator_assistant_response(
         active_project_id = _recover_conversation_project_context(db, user, conversation_id)
 
     if payload.confirmation is not None and payload.confirmation.approval_id:
-        save_message(db, conversation_id, "user", payload.message)
+        # A button approval is a control-plane decision, not a new user turn.
+        # Keep the original conversation transcript intact and resume the
+        # pending action through its structured approval record.
         async for event in _resume_operator_approval(
             db,
             user,
@@ -275,16 +283,63 @@ async def stream_operator_assistant_response(
     )
 
     if _local_direct_assistant_enabled():
-        await _execute_local_pi_run(db, run)
+        # Keep the local direct-process profile genuinely streaming. The same
+        # executor is used by the worker profile, but its events must travel
+        # through this request instead of being discarded and replayed only
+        # after the whole Pi turn finishes.
+        event_queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+        async def emit_local_event(event: str) -> None:
+            await event_queue.put(event)
+
+        async def run_local_executor() -> str:
+            try:
+                return await _execute_local_pi_run(
+                    db,
+                    run,
+                    event_sink=emit_local_event,
+                )
+            finally:
+                await event_queue.put(None)
+
+        executor_task = asyncio.create_task(run_local_executor(), name=f"pi-local:{run.id}")
         emitted_end = False
-        for event in _render_runtime_events(
-            db,
-            run.id,
-            after_sequence=0,
-            conversation_id=conversation_id,
-        ):
-            emitted_end = emitted_end or event.startswith("event: assistant.end")
-            yield event
+        try:
+            while True:
+                event = await event_queue.get()
+                if event is None:
+                    break
+                emitted_end = emitted_end or event.startswith("event: assistant.end")
+                yield event
+            await executor_task
+        except asyncio.CancelledError:
+            if not executor_task.done():
+                executor_task.cancel()
+            try:
+                await executor_task
+            except asyncio.CancelledError:
+                pass
+            raise
+        finally:
+            if not executor_task.done():
+                executor_task.cancel()
+                try:
+                    await executor_task
+                except asyncio.CancelledError:
+                    pass
+
+        # A defensive replay covers a terminal state written before the Pi
+        # stream could emit its final frame. Normal runs already emitted the
+        # authoritative events above, so this does not duplicate them.
+        if not emitted_end:
+            for event in _render_runtime_events(
+                db,
+                run.id,
+                after_sequence=0,
+                conversation_id=conversation_id,
+            ):
+                emitted_end = emitted_end or event.startswith("event: assistant.end")
+                yield event
         if not emitted_end:
             yield _sse(
                 "assistant.end",
@@ -428,26 +483,83 @@ async def _resume_operator_approval(
         yield _sse("assistant.end", {"conversation_id": conversation_id, "state": "failed"})
         return
 
+    if confirmation.tool_name and confirmation.tool_name != action.capability_name:
+        yield _sse(
+            "assistant.tool_failed",
+            {
+                "tool_name": action.capability_name,
+                "error_message": "当前确认与待处理操作不匹配，未执行任何操作。",
+                "error_code": "approval_tool_mismatch",
+                "state": "failed",
+            },
+        )
+        yield _sse(
+            "assistant.end",
+            {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "failed"},
+        )
+        return
+
     before_sequence = latest_event_sequence(db, run.id)
     yield _sse(
         "assistant.start",
         {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "thinking"},
     )
     if run.engine == "pi":
-        if confirmation.approved:
-            decision = (
-                RuntimeApprovalDecisionType.EDIT
-                if confirmation.arguments
-                else RuntimeApprovalDecisionType.APPROVE
-            )
+        approval_payload = approval.payload_json if isinstance(approval.payload_json, dict) else {}
+        requires_typed_confirmation = bool(approval_payload.get("requires_typed_confirmation"))
+        stored_arguments = approval_payload.get("arguments")
+        original_arguments = dict(stored_arguments) if isinstance(stored_arguments, dict) else {}
+
+        if confirmation.approved and requires_typed_confirmation:
+            expected_text = approval_payload.get("expected_text")
+            provided_text = confirmation.arguments.get("confirmation_text")
+            if (
+                not isinstance(expected_text, str)
+                or not isinstance(provided_text, str)
+                or provided_text.strip() != expected_text.strip()
+            ):
+                # Keep the durable approval pending and re-render the same
+                # control. A malformed client payload must not approve a
+                # destructive action or create a chat message.
+                confirmation_payload = {
+                    "approval_id": approval.id,
+                    "tool_name": action.capability_name,
+                    "arguments": {},
+                    "message": approval_payload.get("message") or "该操作需要你的确认。",
+                    "requires_typed_confirmation": True,
+                    "expected_text": expected_text,
+                    "state": "needs_confirmation",
+                }
+                yield _sse("assistant.confirmation_requested", confirmation_payload)
+                yield _sse(
+                    "assistant.end",
+                    {
+                        "conversation_id": conversation_id,
+                        "runtime_run_id": run.id,
+                        "state": "needs_confirmation",
+                    },
+                )
+                return
+            decision = RuntimeApprovalDecisionType.EDIT
+            edited_arguments = {
+                **original_arguments,
+                "confirmation_text": provided_text.strip(),
+            }
+        elif confirmation.approved:
+            # A normal approval never edits the model-authored action. Older
+            # clients may still send a copy of the arguments, but that copy is
+            # deliberately ignored at this control-plane boundary.
+            decision = RuntimeApprovalDecisionType.APPROVE
+            edited_arguments = None
         else:
             decision = RuntimeApprovalDecisionType.REJECT
+            edited_arguments = None
         execution = resolve_approval(
             db,
             user,
             approval_id=approval.id,
             decision=decision,
-            edited_arguments=(dict(confirmation.arguments) if confirmation.arguments else None),
+            edited_arguments=edited_arguments,
         )
         if confirmation.approved and execution.result is not None:
             reply = execution.result.summary
@@ -455,10 +567,10 @@ async def _resume_operator_approval(
             reply = "已执行确认的操作。"
         else:
             reply = "已取消该操作。"
-            run.status = "running"
-            db.commit()
+            cancel_runtime_run(db, run.id, reply)
         save_message(db, conversation_id, "assistant", reply)
-        complete_runtime_run(db, run.id, reply)
+        if confirmation.approved:
+            complete_runtime_run(db, run.id, reply)
         for event in _render_runtime_events(
             db,
             run.id,

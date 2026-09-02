@@ -36,6 +36,13 @@ def cancel_active_pi_execution(run_id: str) -> bool:
     return True
 
 
+def is_pi_execution_active(run_id: str) -> bool:
+    """Return whether this API process still owns a live Pi execution task."""
+
+    task = _active_pi_executions.get(run_id)
+    return task is not None and not task.done()
+
+
 async def request_pi_abort(run_id: str) -> bool:
     """Ask the active Pi AgentSession to abort through its official API."""
 
@@ -72,6 +79,7 @@ async def request_pi_abort(run_id: str) -> bool:
 
 __all__ = [
     "cancel_active_pi_execution",
+    "is_pi_execution_active",
     "register_pi_execution",
     "request_pi_abort",
     "unregister_pi_execution",

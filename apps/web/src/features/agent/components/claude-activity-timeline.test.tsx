@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
 import type { AssistantExecutionItem } from '@/features/agent/state/agent-store';
 import { ClaudeActivityTimeline } from './claude-activity-timeline';
 
@@ -24,9 +23,7 @@ function renderTimeline(
   onOpenWorkflowCanvas?: (projectId: string) => void
 ) {
   return render(
-    <MemoryRouter>
-      <ClaudeActivityTimeline items={items} onOpenWorkflowCanvas={onOpenWorkflowCanvas} />
-    </MemoryRouter>
+    <ClaudeActivityTimeline items={items} onOpenWorkflowCanvas={onOpenWorkflowCanvas} />
   );
 }
 
@@ -56,11 +53,7 @@ describe('ClaudeActivityTimeline', () => {
     expect(container.querySelector('.cr-task-turn-summary .cr-live-label')).toBeInTheDocument();
     expect(screen.queryByTestId('assistant-runtime-workflow-running')).not.toBeInTheDocument();
 
-    rerender(
-      <MemoryRouter>
-        <ClaudeActivityTimeline items={[{ ...runningWorkflow, status: 'failed' }]} />
-      </MemoryRouter>
-    );
+    rerender(<ClaudeActivityTimeline items={[{ ...runningWorkflow, status: 'failed' }]} />);
     const failedTaskSummary = container.querySelector('.cr-task-turn-summary')!;
     expect(failedTaskSummary).toHaveAttribute('aria-expanded', 'false');
 
@@ -121,11 +114,9 @@ describe('ClaudeActivityTimeline', () => {
     expect(container.querySelector('.cr-public-summary')).not.toBeInTheDocument();
 
     rerender(
-      <MemoryRouter>
-        <ClaudeActivityTimeline
-          items={[{ ...runningTool, status: 'succeeded', summary: 'Found 3 projects.' }]}
-        />
-      </MemoryRouter>
+      <ClaudeActivityTimeline
+        items={[{ ...runningTool, status: 'succeeded', summary: 'Found 3 projects.' }]}
+      />
     );
 
     expect(screen.getByRole('button', { name: 'Hide Search projects details' })).toHaveAttribute(

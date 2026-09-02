@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -29,26 +30,32 @@ export function UserNav() {
         <UserAvatarProfile user={user} />
       </DropdownMenuTrigger>
       <DropdownMenuContent className='w-56' align='end' sideOffset={8}>
-        <DropdownMenuLabel className='font-normal'>
-          <div className='flex min-w-0 flex-col gap-1'>
-            <span className='truncate font-medium'>{user.display_name}</span>
-            <span className='text-muted-foreground truncate text-xs'>{user.email}</span>
-          </div>
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className='font-normal'>
+            <div className='flex min-w-0 flex-col gap-1'>
+              <span className='truncate font-medium'>{user.display_name}</span>
+              <span className='text-muted-foreground truncate text-xs'>{user.email}</span>
+            </div>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => router.push('/account')}>
-          <Icons.account className='size-4' />
-          账户
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => router.push('/settings/providers')}>
-          <Icons.settings className='size-4' />
-          设置
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => router.push('/account')}>
+            <Icons.account className='size-4' />
+            账户
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push('/settings/providers')}>
+            <Icons.settings className='size-4' />
+            设置
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => void logout().then(() => router.replace('/auth/sign-in'))}>
-          <Icons.logout className='size-4' />
-          退出登录
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => void logout().then(() => router.replace('/auth/sign-in'))}>
+            <Icons.logout className='size-4' />
+            退出登录
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -150,6 +150,11 @@ async def assistant_stream(
     - ``assistant.confirmation_requested``: a governed action needs approval
     - ``assistant.end``: agent finished
     """
+    if payload.confirmation is not None and not payload.confirmation.approval_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="结构化确认请求缺少 approval_id，未创建新的助手回合。",
+        )
     # A transport retry must replay before any mutable preflight work:
     # attachment hydration, provider lookup, quota accounting, or conversation
     # allocation. The same client request ID therefore has exactly one cost.

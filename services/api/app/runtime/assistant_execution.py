@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
@@ -70,7 +71,12 @@ def _request_from_run(run: RuntimeRun) -> AssistantRequest:
     )
 
 
-async def execute_queued_assistant_run(db: Session, run: RuntimeRun) -> str:
+async def execute_queued_assistant_run(
+    db: Session,
+    run: RuntimeRun,
+    *,
+    event_sink: Callable[[str], Awaitable[None]] | None = None,
+) -> str:
     """Run Pi to a durable terminal state; no browser or SSE is required."""
 
     if run.status in {"succeeded", "failed", "cancelled", "expired", "awaiting_approval", "awaiting_input"}:
@@ -167,7 +173,8 @@ async def execute_queued_assistant_run(db: Session, run: RuntimeRun) -> str:
     ):
         # RuntimeEvent/chat persistence and the Redis live projection all happen
         # inside the Pi adapter. The worker does not own the browser socket.
-        continue
+        if event_sink is not None:
+            await event_sink(_event)
     db.refresh(run)
     return run.status
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -9,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.auth.schemas import CurrentUser
 from app.db import Base
-from app.models import Organization, Project, ProjectMember, RuntimeEvent, RuntimeRun, User
+from app.models import Organization, Project, ProjectMember, RuntimeEvent, RuntimeRun, TaskOutboxEvent, User
 from app.runtime.service import create_runtime_run, list_runtime_runs_query
 
 
@@ -209,6 +211,7 @@ def test_runtime_run_list_endpoint_exposes_only_public_fields(
     assert response.status_code == 200
     item = next(candidate for candidate in response.json() if candidate["id"] == run.id)
     assert item["kind"] == "assistant_turn"
+    assert item["conversation_id"] is None
     assert item["latest_event_summary"] == "任务已开始。"
     assert "trace_id" not in item
     assert "input_json" not in item
@@ -239,6 +242,134 @@ def test_runtime_run_list_can_filter_background_kinds(
     assert background.id in {item["id"] for item in items}
     assert {item["kind"] for item in items} == {"subagent"}
     assert assistant.id not in response.text
+
+
+def test_live_runtime_list_hides_stale_open_work_without_execution_evidence(
+    client,
+    test_db: Session,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = CurrentUser(
+        id=default_user_id,
+        email="dev@docpilot.local",
+        display_name="Dev User",
+        role="admin",
+        org_id=default_org_id,
+    )
+    stale = create_runtime_run(
+        test_db,
+        user,
+        kind="workflow_bridge",
+        engine="langgraph_workflow",
+    )
+    stale.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
+    live = create_runtime_run(
+        test_db,
+        user,
+        kind="subagent",
+        engine="pi_subagent_worker",
+    )
+    test_db.add(
+        TaskOutboxEvent(
+            org_id=default_org_id,
+            runtime_run_id=live.id,
+            task_name="worker.run_subagent",
+            args_json=[live.id],
+            kwargs_json={},
+            deduplication_key=f"live-list:{live.id}",
+            status="pending",
+        )
+    )
+    test_db.commit()
+
+    response = client.get("/runtime/runs?limit=100&live_only=true")
+
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()}
+    assert live.id in ids
+    assert stale.id not in ids
+
+
+def test_live_runtime_list_hides_old_pending_outbox_without_a_worker_lease(
+    client,
+    test_db: Session,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = CurrentUser(
+        id=default_user_id,
+        email="dev@docpilot.local",
+        display_name="Dev User",
+        role="admin",
+        org_id=default_org_id,
+    )
+    stale = create_runtime_run(
+        test_db,
+        user,
+        kind="deep_research",
+        engine="deep_research_worker",
+    )
+    stale.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
+    test_db.add(
+        TaskOutboxEvent(
+            org_id=default_org_id,
+            runtime_run_id=stale.id,
+            task_name="worker.run_deep_research",
+            args_json=[stale.id],
+            kwargs_json={},
+            deduplication_key=f"stale-pending:{stale.id}",
+            status="pending",
+            created_at=stale.created_at,
+        )
+    )
+    test_db.commit()
+
+    response = client.get("/runtime/runs?limit=10&live_only=true")
+
+    assert response.status_code == 200
+    assert stale.id not in {item["id"] for item in response.json()}
+
+
+def test_live_runtime_list_limits_completed_work_to_recent_items(
+    client,
+    test_db: Session,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    user = CurrentUser(
+        id=default_user_id,
+        email="dev@docpilot.local",
+        display_name="Dev User",
+        role="admin",
+        org_id=default_org_id,
+    )
+    old = create_runtime_run(
+        test_db,
+        user,
+        kind="deep_research",
+        engine="deep_research_worker",
+    )
+    old.status = "succeeded"
+    old.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
+    old.finished_at = old.created_at
+    recent = create_runtime_run(
+        test_db,
+        user,
+        kind="deep_research",
+        engine="deep_research_worker",
+    )
+    recent.status = "succeeded"
+    recent.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=2)
+    recent.finished_at = recent.created_at
+    test_db.commit()
+
+    response = client.get("/runtime/runs?limit=100&live_only=true")
+
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()}
+    assert recent.id in ids
+    assert old.id not in ids
 
 
 def test_runtime_child_runs_endpoint_exposes_safe_timeline_projection(

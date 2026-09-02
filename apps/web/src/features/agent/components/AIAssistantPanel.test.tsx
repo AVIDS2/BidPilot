@@ -112,9 +112,9 @@ describe('AIAssistantPanel', () => {
         body: streamFrom(
           [
             'event: assistant.start\ndata: {"conversation_id":"c1","state":"thinking"}',
-            'event: assistant.confirmation_requested\ndata: {"tool_name":"create_project","arguments":{"name":"Acme Bid","scenario_package":"bidpilot"},"message":"需要你确认：我将创建项目「Acme Bid」。"}',
-            'event: assistant.message\ndata: {"content":"需要你确认：我将创建项目「Acme Bid」。","state":"completed"}',
-            'event: assistant.end\ndata: {"conversation_id":"c1","full_response":"需要你确认：我将创建项目「Acme Bid」。"}'
+            'event: assistant.confirmation_requested\ndata: {"approval_id":"approval-1","tool_name":"create_project","arguments":{"name":"Acme Bid","scenario_package":"bidpilot"},"message":"需要你确认：我将创建项目「Acme Bid」。","state":"needs_confirmation"}',
+            'event: assistant.message\ndata: {"content":"需要你确认：我将创建项目「Acme Bid」。","state":"needs_confirmation"}',
+            'event: assistant.end\ndata: {"conversation_id":"c1","full_response":"需要你确认：我将创建项目「Acme Bid」。","state":"needs_confirmation"}'
           ].join('\n\n') + '\n\n'
         )
       })
@@ -185,7 +185,7 @@ describe('AIAssistantPanel', () => {
           [
             'event: assistant.start\ndata: {"conversation_id":"c-input","runtime_run_id":"run-input","state":"thinking"}',
             'event: assistant.missing_input\ndata: {"runtime_run_id":"run-input","tool_name":"create_project","missing_fields":["name"],"message":"请提供项目名称。","state":"needs_input"}',
-            'event: assistant.end\ndata: {"conversation_id":"c-input","full_response":"请提供项目名称。","state":"completed"}'
+            'event: assistant.end\ndata: {"conversation_id":"c-input","full_response":"请提供项目名称。","state":"needs_input"}'
           ].join('\n\n') + '\n\n'
         )
       })

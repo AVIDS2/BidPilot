@@ -41,7 +41,10 @@ The Agent workspace uses two user-facing context surfaces:
 - **Project workspaces** group related conversations under the project they work on;
   unscoped conversations remain under `个人会话`.
 - **Work overview** shows the current project, active background work, recent
-  work, and links back to project or run details. It is not a developer console.
+  work, and links back to the project or the related Agent conversation. It opens from the Agent
+  top-right control as a compact shadcn `Popover` status card rather than a
+  permanent pane. It is not a developer console: only actionable project and
+  user-owned task status belongs here.
 - Conversation actions use a single shadcn `DropdownMenu` per row rather than
   several always-visible icon buttons. The menu keeps pin, rename, and delete
   discoverable without competing with the conversation title.
@@ -55,6 +58,10 @@ registration, sandbox/network profiles, raw event payloads, and internal engine
 names stay out of the user surface. They belong in the operations and
 observability views. The overview must still be backed by live project/run APIs,
 not demo counters or replay-only UI state.
+
+The detailed runtime event view at `/runs` is an administrator-only diagnostic
+surface. Ordinary users follow a task from the Agent conversation, project
+workspace, or `我的工作` page and should never be sent to the raw event view.
 
 The authenticated workbench uses one consistent navigation model: a desktop
 sidebar can be collapsed with its existing control and restored by clicking the

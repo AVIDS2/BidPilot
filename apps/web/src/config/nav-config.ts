@@ -14,7 +14,6 @@ export const navGroups: NavGroup[] = [
     items: [
       { title: '知识库', url: '/knowledge', icon: 'post', items: [] },
       { title: '需求清单', url: '/requirements', icon: 'forms', items: [] },
-      { title: '运行记录', url: '/runs', icon: 'clock', items: [] },
       { title: '交付物', url: '/deliverables', icon: 'page', items: [] },
       { title: '评审', url: '/reviews', icon: 'badgeCheck', items: [] }
     ]

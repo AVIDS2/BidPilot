@@ -42,6 +42,7 @@ class RuntimeRunListItem(BaseModel):
     kind: str
     status: str
     project_id: str | None = None
+    conversation_id: str | None = None
     project_name: str | None = None
     engine: str
     created_at: datetime

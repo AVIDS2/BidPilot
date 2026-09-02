@@ -41,12 +41,12 @@ describe('assistant tool metadata', () => {
         { ...base, resourceKind: 'skill', resourceName: 'opportunity-deep-research' },
         translate
       )
-    ).toBe('使用「opportunity-deep-research」技能');
+    ).toBe('准备工作步骤');
     expect(
       getAssistantActivityLabel(
         { ...base, resourceKind: 'mcp', provider: 'mcp:tavily', toolName: 'mcp_tavily_search' },
         translate
       )
-    ).toBe('通过 tavily · mcp_tavily_search');
+    ).toBe('查询外部资料');
   });
 });

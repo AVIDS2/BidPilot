@@ -362,6 +362,20 @@
   border-color: var(--linear-line);
   background: var(--linear-surface-raised);
 }
+
+/* The overview is rendered in the shadcn Popover portal, so these selectors
+   intentionally stay outside the Agent surface scope. */
+.agent-environment-popover {
+  max-height: calc(100dvh - 5rem);
+  overflow: hidden;
+}
+.agent-environment-popover > .agent-environment-panel {
+  height: min(70dvh, 560px);
+  max-height: calc(100dvh - 5rem);
+  border: 0;
+  border-radius: 0.75rem;
+  box-shadow: none;
+}
 .bidpilot-linear-agent .agent-history-surface {
   position: relative;
   z-index: 4;
@@ -426,6 +440,13 @@
   color: var(--linear-primary);
 }
 
+/* Keep the user-facing work overview attached to the top-right edge of the
+   agent surface, like a compact status popover rather than another toolbar
+   control beside the conversation title. */
+.bidpilot-linear-agent .agent-topbar > [data-slot='popover-trigger'] {
+  margin-left: auto;
+}
+
 .bidpilot-linear-agent .bp-linear-history {
   position: absolute;
   z-index: 8;
@@ -467,6 +488,7 @@
   width: 100%;
   min-height: 30px;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   border: 0;
   border-radius: 5px;
@@ -490,6 +512,14 @@
   gap: 2px;
   margin-top: 9px;
 }
+.bidpilot-linear-agent .bp-linear-history-section-label {
+  margin: 14px 8px 3px;
+  color: var(--linear-text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: left;
+}
 .bidpilot-linear-agent .bp-linear-history-group > span {
   padding: 0 8px 3px;
   color: var(--linear-text-soft);
@@ -508,6 +538,7 @@
   min-width: 0;
   flex: 1;
   align-items: center;
+  justify-content: flex-start;
   gap: 7px;
   border: 0;
   border-radius: 5px;
@@ -573,6 +604,7 @@
   min-height: 31px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   border: 0;
   background: transparent;
@@ -1405,13 +1437,6 @@
 .agent-mobile-side-sheet .agent-workflow-footer {
   flex: 0 0 auto;
 }
-.agent-mobile-environment-sheet .agent-environment-panel {
-  min-height: 0;
-  flex: 1;
-  border: 0;
-  border-radius: 0;
-}
-
 @media (max-width: 1024px) {
   .bidpilot-linear-agent {
     display: block;

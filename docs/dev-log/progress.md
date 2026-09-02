@@ -1,5 +1,41 @@
 # Progress Log
 
+## 2026-09-02 Pi stream latency correction
+
+- Root cause: the local direct-process facade discarded every event yielded by
+  the queued Pi executor and replayed the durable timeline only after the
+  executor finished. This produced a long blank interval followed by a burst
+  of small deltas; it was an API transport bug, not a Pi chunk-size setting.
+- Fixed the local facade with an in-memory event queue and an explicit event
+  sink on `execute_queued_assistant_run`. The worker and local profiles still
+  use the same Pi executor and native Pi event stream.
+- Local probes after the fix: first SSE frame around `0.17s`, first visible
+  assistant delta around `2.20s` through Next -> FastAPI, and native delta
+  sizes remained small. No character splitting or keyword intent routing was
+  added.
+- The active local provider profile remains DeepSeek in the ignored source
+  environment. MiMo-specific latency is intentionally unverified until the
+  MiMo server-side key/profile is configured.
+- Focused API runtime contract: `11 passed`; Ruff and Python compilation pass.
+
+## 2026-09-02 release-candidate verification
+
+- Restored the existing Web test suite after the Next migration had removed
+  its Vitest dependencies and setup. The current Next App Router tests no
+  longer depend on the old `react-router-dom` harness.
+- Fixed history-menu event bubbling so Rename/Delete actions do not select and
+  close the conversation row underneath them.
+- Verification: Web `114 passed`, Worker `203 passed`, Pi `18 passed`, API
+  static checks, Web typecheck and Next production build passed. API full
+  local tests reached `841 passed / 62 skipped`; 11 storage/queue integration
+  cases remain unavailable on the Docker-free machine because MinIO is not
+  running. Production VPS readiness and public Web/API health both passed.
+- The production server profile is already MiMo with the unchanged OpenRouter
+  embedding model. Local startup now prefers MiMo when a server-only
+  `MIMO_API_KEY` or `XIAOMI_API_KEY` alias exists; the current local source
+  environment still has only the legacy DeepSeek profile, so no provider key
+  was copied or repurposed.
+
 ## 2026-09-01 Kiranism migration acceptance
 
 - Used the Kiranism dynamic primitives in user-facing product flows: shared

@@ -227,7 +227,7 @@ export function InboxPage() {
   const [filter, setFilter] = useState<RunFilter>('all');
   const runs = useQuery({
     queryKey: ['runtime-runs', 'inbox'],
-    queryFn: () => listRuntimeRuns(50),
+    queryFn: () => listRuntimeRuns(50, null, undefined, true),
     staleTime: 10_000,
     retry: false
   });
@@ -237,7 +237,7 @@ export function InboxPage() {
       await client.invalidateQueries({ queryKey: ['runtime-runs'] });
       toast.success('已请求停止运行，终态会由服务端事件确认。');
     },
-    onError: () => toast.error('当前运行无法停止，请打开运行记录查看服务端状态。')
+    onError: () => toast.error('当前任务无法停止，请稍后重试。')
   });
   const visibleRuns = useMemo(() => {
     const all = runs.data ?? [];
@@ -255,8 +255,8 @@ export function InboxPage() {
         title='收件箱'
         description='把需要你处理的 Agent 运行、审批和失败事项集中在一处。'
         action={
-          <Link className={buttonVariants({ variant: 'outline' })} href='/runs'>
-            完整运行记录 <ArrowUpRight data-icon='inline-end' />
+          <Link className={buttonVariants({ variant: 'outline' })} href='/my-work'>
+            查看我的工作 <ArrowUpRight data-icon='inline-end' />
           </Link>
         }
       />
@@ -306,12 +306,14 @@ export function InboxPage() {
                         className='min-w-0 flex-1'
                         href={
                           run.project_id
-                            ? `/projects/${run.project_id}?run=${run.id}`
-                            : `/runs?run=${run.id}`
+                            ? `/projects/${run.project_id}`
+                            : run.conversation_id
+                              ? `/agent?conversation=${run.conversation_id}`
+                              : '/my-work'
                         }
                       >
-                        <p className='truncate text-sm font-medium'>
-                          {run.latest_event_summary || 'Agent 运行'}
+                          <p className='truncate text-sm font-medium'>
+                            {run.latest_event_summary || 'Agent 任务'}
                         </p>
                         <p className='text-muted-foreground mt-1 truncate text-xs'>
                           {run.project_name || '未关联项目'} · {formatDate(run.created_at)}
@@ -332,16 +334,18 @@ export function InboxPage() {
                         </Button>
                       ) : (
                         <Button
-                          aria-label='查看运行'
+                          aria-label='查看任务'
                           onClick={() =>
                             router.push(
                               run.project_id
-                                ? `/projects/${run.project_id}?run=${run.id}`
-                                : `/runs?run=${run.id}`
+                                ? `/projects/${run.project_id}`
+                                : run.conversation_id
+                                  ? `/agent?conversation=${run.conversation_id}`
+                                  : '/my-work'
                             )
                           }
                           size='icon-sm'
-                          title='查看运行'
+                          title='查看任务'
                           type='button'
                           variant='ghost'
                         >
@@ -373,7 +377,7 @@ export function MyWorkPage() {
   });
   const runs = useQuery({
     queryKey: ['runtime-runs', 'my-work'],
-    queryFn: () => listRuntimeRuns(50),
+    queryFn: () => listRuntimeRuns(50, null, undefined, true),
     staleTime: 10_000,
     retry: false,
     refetchInterval: 15_000,
@@ -545,7 +549,7 @@ export function MyWorkPage() {
                       {visibleItems.slice(0, 30).map((item) => (
                         <Link
                           className='hover:bg-muted/40 flex items-center gap-3 px-5 py-4 transition-colors'
-                          href={item.projectId ? `/projects/${item.projectId}` : '/runs'}
+                          href={item.projectId ? `/projects/${item.projectId}` : '/my-work'}
                           key={item.id}
                         >
                           <span className='bg-muted flex size-8 shrink-0 items-center justify-center rounded-lg'>
@@ -558,7 +562,7 @@ export function MyWorkPage() {
                             </span>
                           </span>
                           <Badge variant={item.tone}>
-                            {item.kind === 'approval' ? '查看运行' : '处理缺口'}
+                            {item.kind === 'approval' ? '查看任务' : '处理缺口'}
                           </Badge>
                         </Link>
                       ))}

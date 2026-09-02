@@ -1,5 +1,4 @@
 import { render, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 const dispatch = vi.fn();
@@ -22,16 +21,16 @@ vi.mock('./linear-agent-workspace', () => ({
   LinearAgentWorkspace: () => <div data-testid='agent-workspace' />
 }));
 
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams('project_id=project-123')
+}));
+
 import { AgentWorkspacePage } from './agent-workspace-page';
 
 describe('AgentWorkspacePage', () => {
   it('keeps the source project context when opened from a project workspace', async () => {
     dispatch.mockClear();
-    render(
-      <MemoryRouter initialEntries={['/agent?project_id=project-123']}>
-        <AgentWorkspacePage />
-      </MemoryRouter>
-    );
+    render(<AgentWorkspacePage />);
 
     await waitFor(() => {
       expect(dispatch).toHaveBeenCalledWith({

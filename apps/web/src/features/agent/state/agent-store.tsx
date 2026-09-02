@@ -1225,8 +1225,19 @@ function handleAssistantSseEvent(
 
   if (eventType === 'assistant.task_started') {
     dispatch({ type: 'SET_THINKING', thinking: false });
-    const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
-    const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : title;
+    const presentationKind =
+      typeof parsed.presentation_kind === 'string' ? parsed.presentation_kind : '';
+    const resourceKind = typeof parsed.resource_kind === 'string' ? parsed.resource_kind : '';
+    const skillName = typeof parsed.skill_name === 'string' ? parsed.skill_name.trim() : '';
+    const rawTitle = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+    const title =
+      resourceKind === 'skill' || skillName
+        ? presentationKind === 'deep_research'
+          ? '准备深度调研'
+          : '准备工作步骤'
+        : rawTitle;
+    const rawSummary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
+    const summary = resourceKind === 'skill' || skillName ? title : rawSummary || title;
     if (title || summary) {
       dispatch({
         type: 'APPEND_VISIBLE_REASONING',
@@ -1638,6 +1649,8 @@ function handleAssistantSseEvent(
   }
 
   if (eventType === 'assistant.session_error') {
+    dispatch({ type: 'SET_PENDING_CONFIRMATION', confirmation: null });
+    dispatch({ type: 'SET_PENDING_INPUT', request: null });
     dispatch({
       type: 'SET_SESSION_ERROR',
       message:
@@ -1659,6 +1672,13 @@ function handleAssistantSseEvent(
   if (eventType === 'assistant.end') {
     dispatch({ type: 'SET_THINKING', thinking: false });
     dispatch({ type: 'SET_CANCELLATION_REQUESTED', requested: false });
+    const terminalState = state ?? (typeof parsed.state === 'string' ? parsed.state : undefined);
+    if (terminalState !== 'needs_confirmation') {
+      dispatch({ type: 'SET_PENDING_CONFIRMATION', confirmation: null });
+    }
+    if (terminalState !== 'needs_input') {
+      dispatch({ type: 'SET_PENDING_INPUT', request: null });
+    }
     const conversationId = parsed.conversation_id;
     if (typeof conversationId === 'string') {
       const accepted = options?.onConversation?.(conversationId);
@@ -2707,17 +2727,16 @@ export function AIAssistantProvider({
         approval_id?: string;
       }
     ) => {
-      const displayContent = confirmation
-        ? confirmation.approved
-          ? '确认执行'
-          : '取消操作'
+      const isConfirmationRequest = Boolean(confirmation);
+      const displayContent = isConfirmationRequest
+        ? ''
         : (options?.displayContent ?? content).trim();
       const targetConversationId = options?.conversationId ?? state.currentConversationId;
       const targetHasKnownRun = Boolean(
         targetConversationId && runtimeRunByConversationRef.current[targetConversationId]
       );
       if (
-        !displayContent ||
+        (!displayContent && !isConfirmationRequest) ||
         assistantRequestInFlightRef.current ||
         (targetConversationId === state.currentConversationId && isAssistantBusy(state.status)) ||
         targetHasKnownRun
@@ -2731,25 +2750,40 @@ export function AIAssistantProvider({
         dispatch({ type: 'SET_CURRENT_CONVERSATION', conversationId: targetConversationId });
       }
 
-      const userMsg: ChatMessage = {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: displayContent,
-        timestamp: Date.now(),
-        attachments: options?.attachments
-      };
       dispatch({ type: 'CLEAR_TRANSIENT_STATE' });
-      dispatch({ type: 'ADD_MESSAGE', message: userMsg });
       dispatch({ type: 'SET_STATUS', status: 'thinking' });
 
-      const aiMsg: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        role: 'assistant',
-        content: '',
-        timestamp: Date.now()
-      };
-      dispatch({ type: 'ADD_MESSAGE', message: aiMsg });
-      dispatch({ type: 'SET_ACTIVE_ASSISTANT_MESSAGE', messageId: aiMsg.id });
+      if (!isConfirmationRequest) {
+        const userMsg: ChatMessage = {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          content: displayContent,
+          timestamp: Date.now(),
+          attachments: options?.attachments
+        };
+        dispatch({ type: 'ADD_MESSAGE', message: userMsg });
+
+        const aiMsg: ChatMessage = {
+          id: `ai-${Date.now()}`,
+          role: 'assistant',
+          content: '',
+          timestamp: Date.now()
+        };
+        dispatch({ type: 'ADD_MESSAGE', message: aiMsg });
+        dispatch({ type: 'SET_ACTIVE_ASSISTANT_MESSAGE', messageId: aiMsg.id });
+      } else if (!state.activeAssistantMessageId) {
+        // A restored approval can arrive without the transient placeholder.
+        // Keep the approval result attached to the assistant turn instead of
+        // manufacturing a user message for the button click.
+        const aiMsg: ChatMessage = {
+          id: `ai-${Date.now()}`,
+          role: 'assistant',
+          content: '',
+          timestamp: Date.now()
+        };
+        dispatch({ type: 'ADD_MESSAGE', message: aiMsg });
+        dispatch({ type: 'SET_ACTIVE_ASSISTANT_MESSAGE', messageId: aiMsg.id });
+      }
 
       let activeRuntimeRunId: string | null = null;
       activeAssistantRuntimeRunRef.current = null;
@@ -2908,7 +2942,7 @@ export function AIAssistantProvider({
           } else {
             dispatch({
               type: 'SET_SESSION_ERROR',
-              message: '助手连接已结束，暂时没有拿到可恢复的运行记录。请稍后重试。',
+              message: '助手连接中断，但当前任务仍保存在会话中。请稍后重试。',
               errorCode: 'assistant_stream_incomplete',
               runtimeRunId: activeRuntimeRunId ?? undefined
             });
@@ -3001,6 +3035,7 @@ export function AIAssistantProvider({
       refreshConversations,
       state.currentContext.projectId,
       state.currentConversationId,
+      state.activeAssistantMessageId,
       state.reasoningEffort,
       state.approvalMode,
       state.selectedProviderConfigId,
@@ -3060,12 +3095,22 @@ export function AIAssistantProvider({
     async (approved: boolean, confirmationText?: string) => {
       const pending = state.pendingConfirmation;
       if (!pending) return;
+      if (!pending.approvalId) {
+        dispatch({
+          type: 'SET_SESSION_ERROR',
+          message: '这项确认已经失效，请重新发起任务。'
+        });
+        return;
+      }
       dispatch({ type: 'SET_PENDING_CONFIRMATION', confirmation: null });
+      // Approval controls are a structured continuation, not a chat turn.
+      // Send only the extra typed value; the server keeps the original,
+      // authorized action arguments and ignores browser copies of them.
       const confirmationArguments =
         approved && pending.requiresTypedConfirmation
-          ? { ...pending.arguments, confirmation_text: confirmationText ?? '' }
-          : pending.arguments;
-      await sendAssistantRequest(approved ? '确认执行' : '取消操作', undefined, {
+          ? { confirmation_text: confirmationText ?? '' }
+          : {};
+      await sendAssistantRequest('', undefined, {
         approved,
         tool_name: pending.toolName,
         arguments: confirmationArguments,

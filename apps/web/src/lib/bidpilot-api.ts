@@ -826,6 +826,7 @@ export interface RuntimeRunListItem {
   kind: string;
   status: string;
   project_id: string | null;
+  conversation_id: string | null;
   project_name: string | null;
   engine: string;
   created_at: string;
@@ -850,7 +851,8 @@ export interface RuntimeChildRunRead {
 export function listRuntimeRuns(
   limit = 50,
   conversationId?: string | null,
-  kinds?: readonly string[]
+  kinds?: readonly string[],
+  liveOnly = false
 ) {
   const params = new URLSearchParams({
     limit: String(Math.min(Math.max(limit, 1), 100))
@@ -859,6 +861,7 @@ export function listRuntimeRuns(
   for (const kind of kinds ?? []) {
     if (kind) params.append('kind', kind);
   }
+  if (liveOnly) params.set('live_only', 'true');
   return request<RuntimeRunListItem[]>(`/runtime/runs?${params.toString()}`);
 }
 

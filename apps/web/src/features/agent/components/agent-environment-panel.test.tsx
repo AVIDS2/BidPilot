@@ -21,6 +21,7 @@ vi.mock('@/lib/api', () => ({
       kind: 'subagent',
       status: 'running',
       project_id: 'p1',
+      conversation_id: 'conversation-1',
       project_name: '常州项目',
       engine: 'pi_subagent_worker',
       created_at: '2026-08-25T12:00:00Z',
@@ -33,6 +34,7 @@ vi.mock('@/lib/api', () => ({
       kind: 'deep_research',
       status: 'awaiting_approval',
       project_id: 'p1',
+      conversation_id: 'conversation-1',
       project_name: '常州项目',
       engine: 'deep_research_worker',
       created_at: '2026-08-25T12:01:00Z',
@@ -54,13 +56,14 @@ describe('AgentEnvironmentPanel', () => {
     );
 
     expect(await screen.findByText('工作概览')).toBeInTheDocument();
-    expect(screen.getByText('正在处理')).toBeInTheDocument();
+    expect(screen.getByText('进行中的任务')).toBeInTheDocument();
+    expect(await screen.findByText('1 个子 Agent 正在工作')).toBeInTheDocument();
     expect(await screen.findByText('子 Agent')).toBeInTheDocument();
     expect(await screen.findByText('深度调研')).toBeInTheDocument();
     expect(screen.getByText('项目工作区')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /子 Agent/ }));
-    expect(onOpenRun).toHaveBeenCalledWith('run-1');
+    expect(onOpenRun).toHaveBeenCalledWith(expect.objectContaining({ id: 'run-1' }));
   });
 
   it('keeps assistant turns out of the background-work overview', async () => {

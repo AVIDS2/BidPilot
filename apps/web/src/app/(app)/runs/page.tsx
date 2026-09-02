@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
+import { AdminGuard } from '@/components/auth/admin-guard';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants, Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -21,6 +22,14 @@ import {
 import { cancelRuntimeWorkflow, listRuntimeEvents, listRuntimeRuns } from '@/lib/bidpilot-api';
 
 export default function RunsPage() {
+  return (
+    <AdminGuard>
+      <RunsContent />
+    </AdminGuard>
+  );
+}
+
+function RunsContent() {
   const params = useSearchParams();
   const selectedRunId = params.get('run');
   const client = useQueryClient();

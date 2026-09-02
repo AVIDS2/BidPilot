@@ -66,7 +66,7 @@ export function AuthSplitLayout({
             </h2>
             <p className='text-muted-foreground mt-2 text-sm leading-6'>
               {isSignIn
-                ? '使用邮箱进入你的项目、知识库和 Agent 运行记录。'
+                ? '使用邮箱进入你的项目、知识库和 Agent 工作进展。'
                 : '用一个真实工作区开始管理招标资料和响应任务。'}
             </p>
           </div>
