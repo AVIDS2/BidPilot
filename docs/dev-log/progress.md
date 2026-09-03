@@ -1,5 +1,27 @@
 # Progress Log
 
+## 2026-09-03 production delivery
+
+- Promoted release commit `751c329495ef2e6300a1ffe225621b7f878eca3e` to the
+  VPS at `/app/bidpilot/repo`. The production environment is now `pi` with
+  the MiMo provider and `mimo-v2.5-pro`; the embedding provider remains
+  OpenRouter.
+- The release gate completed successfully: production Compose config,
+  readiness, Alembic migration, LangGraph checkpoints, Pi sidecar health,
+  API health, Worker, Worker Beat, and Web startup all passed.
+- Created and verified the public test account through registration, email
+  verification, and login. Public dashboard and Agent routes loaded with
+  authenticated API calls returning 200.
+- Public Agent acceptance passed with a real MiMo response, a native Pi
+  read-only project tool call, and an immediate-stop run that ended as
+  `cancelled` without leaving a running production run. The browser route
+  smoke covered 18 user, admin, workflow, settings, and Agent routes; no
+  page-level error or browser console error was observed.
+- VPS Docker Build Cache was pruned from 11.54 GB to 0 B. Images, running
+  containers, PostgreSQL, Redis, MinIO, and their volumes were preserved.
+- Rollback material is retained in the timestamped production `.env` backup;
+  the temporary release bundle was removed after the remote checkout.
+
 ## 2026-09-03 MiMo local provider acceptance
 
 - Switched the local Pi Assistant profile to the Xiaomi MiMo OpenAI-compatible
