@@ -12,7 +12,7 @@ from typing import Any
 import uuid
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -838,16 +838,49 @@ def _finish_runtime_run(
     if run.status not in allowed_statuses:
         raise ValueError(f"Cannot finish runtime run in status: {run.status}")
 
-    cancellation_events = (
-        _cancel_pending_approvals(db, run) if terminal_status == "cancelled" else []
-    )
     persisted_result = dict(result_json or {})
     persisted_result["message"] = safe_message
+    finished_at = _now()
+
+    # ``SELECT ... FOR UPDATE`` is sufficient on PostgreSQL, but SQLite does
+    # not implement row locks. A cancellation can therefore be observed by
+    # the API request and the interrupted local executor at the same time.
+    # Claim the allowed -> terminal transition atomically so only one caller
+    # can append terminal events and the user-facing completion message.
+    claimed = db.execute(
+        update(RuntimeRun)
+        .where(
+            RuntimeRun.id == run_id,
+            RuntimeRun.status.in_(allowed_statuses),
+        )
+        .values(
+            status=terminal_status,
+            result_json=redact_arguments(persisted_result),
+            error_code=error_code,
+            error_message=safe_message if error_code else None,
+            finished_at=finished_at,
+        )
+    )
+    if claimed.rowcount != 1:
+        # Another request won the terminal transition. Refresh the identity
+        # map before deciding whether this is an idempotent duplicate or a
+        # genuinely invalid state transition.
+        db.expire(run)
+        db.refresh(run)
+        if run.status == terminal_status:
+            return run
+        raise ValueError(f"Cannot finish runtime run in status: {run.status}")
+
+    # Keep the already-loaded ORM object coherent for callers that inspect it
+    # before the transaction commits.
     run.status = terminal_status
     run.result_json = redact_arguments(persisted_result)
     run.error_code = error_code
     run.error_message = safe_message if error_code else None
-    run.finished_at = _now()
+    run.finished_at = finished_at
+    cancellation_events = (
+        _cancel_pending_approvals(db, run) if terminal_status == "cancelled" else []
+    )
     append_events(
         db,
         run.id,

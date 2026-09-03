@@ -146,8 +146,31 @@ def resolve_agent_model(
     env = environment if environment is not None else os.environ
 
     assistant_key = _env_value(env, "DOCPILOT_ASSISTANT_API_KEY")
+    assistant_provider_id = _env_value(env, "DOCPILOT_ASSISTANT_PROVIDER_ID")
+    mimo_key = _env_value(env, "MIMO_API_KEY") or _env_value(env, "XIAOMI_API_KEY")
+    uses_mimo_profile = (assistant_provider_id or "").casefold() in {
+        "mimo",
+        "xiaomi",
+        "xiaomi-token-plan-cn",
+        "xiaomi-token-plan-ams",
+        "xiaomi-token-plan-sgp",
+    }
+
+    # A dedicated MiMo credential wins over a stale generic assistant key when
+    # the configured profile is MiMo. This keeps provider, endpoint and model
+    # from silently drifting apart during local or production restarts.
+    if mimo_key and (not assistant_key or uses_mimo_profile):
+        return _platform_model(
+            api_key=mimo_key,
+            provider_type="openai",
+            provider_id="mimo",
+            base_url=_env_value(env, "MIMO_BASE_URL") or MIMO_CHAT_COMPLETIONS_BASE_URL,
+            model=_env_value(env, "MIMO_MODEL") or MIMO_V2_5_PRO_MODEL,
+            source_name="MIMO_API_KEY",
+        )
+
     if assistant_key:
-        assistant_provider_id = _env_value(env, "DOCPILOT_ASSISTANT_PROVIDER_ID") or "deepseek"
+        assistant_provider_id = assistant_provider_id or "deepseek"
         uses_opencode_go = assistant_provider_id.casefold() == "opencode-go"
         uses_mimo = assistant_provider_id.casefold() in {
             "mimo",
@@ -182,17 +205,6 @@ def resolve_agent_model(
                 )
             ),
             source_name="DOCPILOT_ASSISTANT_*",
-        )
-
-    mimo_key = _env_value(env, "MIMO_API_KEY") or _env_value(env, "XIAOMI_API_KEY")
-    if mimo_key:
-        return _platform_model(
-            api_key=mimo_key,
-            provider_type="openai",
-            provider_id="mimo",
-            base_url=_env_value(env, "MIMO_BASE_URL") or MIMO_CHAT_COMPLETIONS_BASE_URL,
-            model=_env_value(env, "MIMO_MODEL") or MIMO_V2_5_PRO_MODEL,
-            source_name="MIMO_API_KEY",
         )
 
     opencode_key = _env_value(env, "OPENCODE_API_KEY")

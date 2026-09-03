@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import ExecutionRun, RuntimeEvent, RuntimeRun
 from app.runtime.events import list_events_after
@@ -30,44 +30,53 @@ def _sse_event(event: str, data: dict[str, Any]) -> dict[str, str]:
 
 async def stream_graph_events(run_id: str, db: Session):
     """Yield compatible drafting SSE events from the durable runtime timeline."""
-    execution_run = db.get(ExecutionRun, run_id)
-    if execution_run is None:
+    session_factory = sessionmaker(bind=db.get_bind(), expire_on_commit=False)
+    with session_factory() as read_db:
+        execution_run = read_db.get(ExecutionRun, run_id)
+        runtime_run = _find_workflow_runtime_run(read_db, run_id)
+        execution_missing = execution_run is None
+        runtime_run_id = runtime_run.id if runtime_run is not None else None
+        execution_status = execution_run.status if execution_run is not None else None
+
+    if execution_missing:
         yield _sse_event("graph_error", {"error_message": "运行记录不存在。"})
         return
 
-    runtime_run = _find_workflow_runtime_run(db, run_id)
     yield _sse_event(
         "connected",
         {
             "run_id": run_id,
-            "runtime_run_id": runtime_run.id if runtime_run is not None else None,
-            "status": execution_run.status,
+            "runtime_run_id": runtime_run_id,
+            "status": execution_status,
             "timestamp": datetime.now(UTC).isoformat(),
         },
     )
 
-    if runtime_run is None:
-        async for event in _stream_legacy_status(run_id, db):
+    if runtime_run_id is None:
+        async for event in _stream_legacy_status(run_id, session_factory):
             yield event
         return
 
     after_sequence = 0
     elapsed = 0.0
     while elapsed < _MAX_STREAM_SECONDS:
-        db.expire_all()
-        runtime_run = db.get(RuntimeRun, runtime_run.id)
-        execution_run = db.get(ExecutionRun, run_id)
-        if runtime_run is None or execution_run is None:
-            yield _sse_event("graph_error", {"error_message": "运行记录不可用。"})
-            return
+        with session_factory() as read_db:
+            runtime_run = read_db.get(RuntimeRun, runtime_run_id)
+            execution_run = read_db.get(ExecutionRun, run_id)
+            if runtime_run is None or execution_run is None:
+                mapped_events = [_sse_event("graph_error", {"error_message": "运行记录不可用。"})]
+                terminal = True
+            else:
+                events = list_events_after(read_db, runtime_run.id, after_sequence=after_sequence)
+                mapped_events = []
+                for event in events:
+                    after_sequence = event.sequence
+                    mapped_events.extend(_map_runtime_event(event, runtime_run))
+                terminal = runtime_run.status in _TERMINAL_STATUSES
 
-        events = list_events_after(db, runtime_run.id, after_sequence=after_sequence)
-        for event in events:
-            after_sequence = event.sequence
-            for mapped in _map_runtime_event(event, runtime_run):
-                yield mapped
-
-        if runtime_run.status in _TERMINAL_STATUSES:
+        for mapped in mapped_events:
+            yield mapped
+        if terminal:
             return
 
         await asyncio.sleep(_POLL_INTERVAL)
@@ -186,24 +195,25 @@ def _map_runtime_event(event: RuntimeEvent, runtime_run: RuntimeRun) -> list[dic
     return []
 
 
-async def _stream_legacy_status(run_id: str, db: Session):
+async def _stream_legacy_status(run_id: str, session_factory):
     """Compatibility status-only fallback for runs created before bridge rollout."""
     elapsed = 0.0
     while elapsed < _MAX_STREAM_SECONDS:
-        db.expire_all()
-        run = db.get(ExecutionRun, run_id)
+        with session_factory() as read_db:
+            run = read_db.get(ExecutionRun, run_id)
+            run_status = run.status if run is not None else None
+            output = (run.output_json or {}) if run is not None else {}
         if run is None:
             yield _sse_event("graph_error", {"error_message": "运行记录不可用。"})
             return
-        if run.status in _TERMINAL_STATUSES:
-            output = run.output_json or {}
-            if run.status == "succeeded":
+        if run_status in _TERMINAL_STATUSES:
+            if run_status == "succeeded":
                 yield _sse_event(
                     "graph_completed",
                     {
                         "persisted": True,
                         "section_version_id": output.get("section_version_id"),
-                        "status": run.status,
+                        "status": run_status,
                         "timestamp": datetime.now(UTC).isoformat(),
                     },
                 )
@@ -217,7 +227,7 @@ async def _stream_legacy_status(run_id: str, db: Session):
             "heartbeat",
             {
                 "run_id": run_id,
-                "status": run.status,
+                "status": run_status,
                 "elapsed_seconds": round(elapsed, 1),
                 "timestamp": datetime.now(UTC).isoformat(),
             },

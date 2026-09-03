@@ -110,6 +110,7 @@ class GlobalApiRateLimitMiddleware(BaseHTTPMiddleware):
                     "message": "Too many requests. Please try again later.",
                     "details": None,
                 },
+                headers={"Retry-After": "1"},
             )
         except RateLimiterUnavailable:
             return JSONResponse(

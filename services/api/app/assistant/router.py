@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
-from app.auth.service import require_auth
+from app.auth.service import require_auth, require_stream_auth
 from app.chat.service import resolve_conversation_project_context
 from app.db import get_db
 from app.providers.service import get_provider_config
@@ -131,7 +131,7 @@ async def upload_assistant_attachment(
 @router.post("/stream")
 async def assistant_stream(
     payload: AssistantRequest,
-    user: CurrentUser = Depends(require_auth),
+    user: CurrentUser = Depends(require_stream_auth),
     db: Session = Depends(get_db),
 ):
     """Queue one governed Pi turn and project its durable events over SSE.

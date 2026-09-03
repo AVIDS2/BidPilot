@@ -728,6 +728,40 @@ describe('AIAssistantPanel', () => {
     expect(screen.queryByText('Intent detected')).not.toBeInTheDocument();
   });
 
+  it('keeps skill bootstrap events out of the user-facing activity timeline', async () => {
+    const { listRuntimeEvents, listRuntimeRuns } = await import('@/lib/api');
+    vi.mocked(listRuntimeRuns).mockResolvedValue({ items: [], next_cursor: null });
+    vi.mocked(listRuntimeEvents).mockResolvedValue({ items: [] });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: streamFrom(
+          [
+            'event: assistant.start\ndata: {"conversation_id":"c-skill","runtime_run_id":"r-skill","state":"thinking"}',
+            'event: assistant.task_started\ndata: {"runtime_run_id":"r-skill","skill_name":"deep-research","title":"深度调研","turn_id":"turn-1","state":"thinking"}',
+            'event: assistant.tool_started\ndata: {"runtime_run_id":"r-skill","tool_name":"read_skill","resource_kind":"skill","resource_name":"deep-research","state":"executing_tool"}',
+            'event: assistant.tool_succeeded\ndata: {"runtime_run_id":"r-skill","tool_name":"read_skill","resource_kind":"skill","resource_name":"deep-research","summary":"已载入流程技能。","state":"completed"}',
+            'event: assistant.message\ndata: {"runtime_run_id":"r-skill","content":"实际业务结果已准备好。","state":"completed"}',
+            'event: assistant.end\ndata: {"conversation_id":"c-skill","runtime_run_id":"r-skill","state":"completed"}'
+          ].join('\n\n') + '\n\n'
+        )
+      })
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText('Open assistant'));
+    fireEvent.change(screen.getByPlaceholderText('Ask me anything...'), {
+      target: { value: 'Check the project' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('实际业务结果已准备好。')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('assistant-activity-timeline')).not.toBeInTheDocument();
+  });
+
   it('replays durable runtime events after an assistant stream is interrupted', async () => {
     const { listRuntimeEvents } = await import('@/lib/api');
     vi.mocked(listRuntimeEvents).mockResolvedValue({

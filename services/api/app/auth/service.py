@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.db import SessionLocal
 from app.entitlements.constants import (
     PLAN_PROJECT_LIMITS,
     VALID_PLANS,
@@ -679,7 +679,6 @@ def revoke_refresh_token(db: Session, refresh_token: str) -> None:
 
 async def require_auth(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-    db: Session = Depends(get_db),
     access_token: str | None = Query(default=None),
 ) -> CurrentUser:
     """Dependency that enforces auth when DOCPILOT_AUTH_REQUIRED=true.
@@ -699,10 +698,21 @@ async def require_auth(
             raise HTTPException(status_code=401, detail="Authentication required")
         return get_dev_user()
 
-    user = get_current_user_from_token(db, raw_token)
+    # Resolve the identity in a short-lived session. A yield dependency stays
+    # alive until a StreamingResponse closes, so keeping ``db`` here would
+    # reserve one PostgreSQL connection for every open browser SSE tab.
+    with SessionLocal() as db:
+        user = get_current_user_from_token(db, raw_token)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
     return user
+
+
+async def require_stream_auth(
+    current_user: CurrentUser = Depends(require_auth),
+) -> CurrentUser:
+    """Document the short-session authentication contract for long-lived SSE."""
+    return current_user
 
 
 async def get_current_user(current_user: CurrentUser = Depends(require_auth)) -> CurrentUser:

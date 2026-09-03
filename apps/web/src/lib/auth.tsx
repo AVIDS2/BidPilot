@@ -61,6 +61,10 @@ async function readApiError(response: Response) {
   return `请求失败（${response.status}）`;
 }
 
+function authRequestError(status: number, message: string) {
+  return Object.assign(new Error(message), { status });
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const needsSession =
@@ -78,12 +82,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let response = await fetch('/api/auth/me', { cache: 'no-store' });
     if (response.status === 401) {
       const renewed = await fetch('/api/auth/refresh', { method: 'POST' });
+      if (!renewed.ok && renewed.status !== 401 && renewed.status !== 403) {
+        throw authRequestError(renewed.status, await readApiError(renewed));
+      }
       if (renewed.ok) response = await fetch('/api/auth/me', { cache: 'no-store' });
     }
     if (!response.ok) {
-      setUser(null);
-      setStatus('unauthenticated');
-      return null;
+      const message = await readApiError(response);
+      if (response.status === 401 || response.status === 403) {
+        setUser(null);
+        setStatus('unauthenticated');
+        return null;
+      }
+      // A temporary API limit or outage is not proof that the browser session
+      // expired. Preserve the current identity and let the caller retry.
+      throw authRequestError(response.status, message);
     }
     const nextUser = (await response.json()) as CurrentUser;
     setUser(nextUser);
@@ -93,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: number | null = null;
     if (!needsSession) {
       if (pathname.startsWith('/auth')) {
         setUser(null);
@@ -119,8 +133,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh()
       .catch(() => {
         if (!cancelled) {
-          setUser(null);
-          setStatus('unauthenticated');
+          // Do not redirect on a temporary 429/5xx. The old implementation
+          // treated every failed /me request as logout, which made a browser
+          // refresh look like a session reset.
+          setStatus(user ? 'authenticated' : 'loading');
+          retryTimer = window.setTimeout(() => {
+            if (cancelled) return;
+            void refresh().catch(() => undefined);
+          }, 1500);
         }
       })
       .finally(() => {
@@ -131,8 +151,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     return () => {
       cancelled = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
     };
-  }, [needsSession, pathname, refresh]);
+  }, [needsSession, pathname, refresh, user]);
 
   const visibleStatus: AuthStatus =
     needsSession && checkedPathname !== pathname ? 'loading' : status;

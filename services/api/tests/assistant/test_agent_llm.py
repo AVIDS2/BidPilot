@@ -128,6 +128,20 @@ def test_resolve_agent_model_uses_mimo_direct_balance_defaults_for_explicit_assi
     assert resolved.model == "mimo-v2.5-pro"
 
 
+def test_resolve_agent_model_prefers_mimo_alias_over_stale_generic_profile_key() -> None:
+    resolved = resolve_agent_model(
+        environment={
+            "DOCPILOT_ASSISTANT_API_KEY": "stale-provider-key",
+            "DOCPILOT_ASSISTANT_PROVIDER_ID": "mimo",
+            "MIMO_API_KEY": "mimo-direct-key",
+        }
+    )
+
+    assert resolved.api_key == "mimo-direct-key"
+    assert resolved.provider_id == "mimo"
+    assert resolved.model == "mimo-v2.5-pro"
+
+
 def test_deepseek_client_preserves_visible_reasoning_content() -> None:
     from langchain_core.messages import AIMessageChunk
 

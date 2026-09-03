@@ -10,7 +10,6 @@ import {
 import {
   BotIcon,
   ChevronDownIcon,
-  Clock3Icon,
   FileSearchIcon,
   FileTextIcon,
   FolderKanbanIcon,
@@ -531,25 +530,6 @@ function AgentWelcome({
   );
 }
 
-function AgentFooter({ onHistory }: { onHistory: () => void }) {
-  return (
-    <div className='agent-footer'>
-      <span>
-        <PanelTopIcon size={14} /> Agent
-      </span>
-      <Button
-        aria-label='Chat history'
-        onClick={onHistory}
-        size='icon-xs'
-        type='button'
-        variant='ghost'
-      >
-        <Clock3Icon aria-hidden='true' />
-      </Button>
-    </div>
-  );
-}
-
 export function LinearAgentWorkspace() {
   const router = useRouter();
   const navigate = (href: string, options?: { replace?: boolean }) => {
@@ -876,7 +856,6 @@ export function LinearAgentWorkspace() {
             onClose={() => setPreviewAttachment(null)}
           />
         ) : null}
-        <AgentFooter onHistory={() => setHistoryOpen((value) => !value)} />
       </div>
       <Sheet
         open={isCompactViewport && hasSideCanvas}

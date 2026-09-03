@@ -27,6 +27,7 @@ import type {
   ChatMessage
 } from '@/features/agent/state/agent-store';
 import {
+  projectExecutionItemsOntoTranscript,
   publicTranscriptParts,
   type AssistantTranscriptPart
 } from '@/features/agent/runtime/assistant-transcript';
@@ -363,23 +364,9 @@ function ClaudeAssistantMessage({
   const hasNarrativePart = parts.some((part) => part.kind === 'narrative' && part.text);
   const isTimelineTitle = (part: Extract<AssistantTranscriptPart, { kind: 'reasoning' }>) =>
     Boolean(part.title && part.title.trim() === part.text.trim());
-  const turnIds = useMemo(
-    () => new Set(parts.flatMap((part) => (part.kind === 'turn' ? [part.turnId] : []))),
-    [parts]
-  );
-  const toolsByTurn = useMemo(() => {
-    const groups = new Map<string, AssistantExecutionItem[]>();
-    for (const item of activityItems) {
-      if (!item.turnId) continue;
-      const items = groups.get(item.turnId) ?? [];
-      items.push(item);
-      groups.set(item.turnId, items);
-    }
-    return groups;
-  }, [activityItems]);
-  const orphanTools = useMemo(
-    () => activityItems.filter((item) => !item.turnId || !turnIds.has(item.turnId)),
-    [activityItems, turnIds]
+  const executionProjection = useMemo(
+    () => projectExecutionItemsOntoTranscript(parts, activityItems),
+    [activityItems, parts]
   );
   const titlesByTurn = useMemo(() => {
     const titles = new Map<string, string>();
@@ -467,7 +454,7 @@ function ClaudeAssistantMessage({
                 />
               );
             }
-            const items = toolsByTurn.get(part.turnId) ?? [];
+            const items = executionProjection.itemsByPartId.get(part.id) ?? [];
             return items.length ? (
               <ClaudeActivityTimeline
                 key={part.id}
@@ -480,9 +467,9 @@ function ClaudeAssistantMessage({
               />
             ) : null;
           })}
-          {orphanTools.length > 0 && (
+          {executionProjection.orphanItems.length > 0 && (
             <ClaudeActivityTimeline
-              items={orphanTools}
+              items={executionProjection.orphanItems}
               taskTitle={orphanTaskTitle}
               nested
               onCancelWorkflow={onCancelWorkflow}

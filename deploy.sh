@@ -67,7 +67,7 @@ soft_defaults = {
     "DOCPILOT_AGENT_CHECKPOINTER": vals.get("DOCPILOT_LANGGRAPH_CHECKPOINTER") or "postgres",
     "DOCPILOT_ASSISTANT_ENGINE": "pi",
     "USE_LANGGRAPH": "true",
-    "DOCPILOT_RATE_LIMIT": "120/minute",
+    "DOCPILOT_RATE_LIMIT": "1000/minute",
     "DOCPILOT_AUTH_REQUIRED": "true",
 }
 for key, value in soft_defaults.items():

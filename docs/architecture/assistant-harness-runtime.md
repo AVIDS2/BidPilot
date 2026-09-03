@@ -113,6 +113,27 @@ run ID for the currently selected conversation, so two open conversations (or
 two tabs) cannot share one stop target. Late replay events from an old
 conversation are ignored by the visible projection.
 
+### Long-lived transport resource handling
+
+Authentication for SSE endpoints uses the same `require_auth` contract as
+ordinary APIs, but validates the bearer token in a short-lived SQLAlchemy
+session. FastAPI yield dependencies otherwise live until an infinite stream
+closes and can leave PostgreSQL sessions idle in transaction for every browser
+tab. Notification and workflow streams open short read sessions per poll; the
+queued assistant stream releases its preflight session before waiting on the
+Redis live channel.
+
+The web client treats a `429` as an admission result and surfaces it without
+exponential replays. Runtime recovery uses the server's `live_only` evidence
+filter, so an old queued row without a live outbox lease or active Pi session
+cannot start a browser polling loop. Explicit URL restores are owned by the
+route and are deduplicated while the same conversation load is in flight.
+
+Runtime terminal transitions are claimed with a conditional database update.
+This keeps cancellation idempotent in the local SQLite profile, where
+`FOR UPDATE` is not enforced and an API cancellation can race the interrupted
+local executor.
+
 ### Cancellation and release recovery
 
 Assistant cancellation is a durable control-plane operation. The API first
@@ -157,6 +178,31 @@ terminal signal. `agent_end` is only the end of one low-level attempt and may be
 followed by retry, compaction or queued continuation. The API must not treat a
 closed transport as a successful Pi turn or invent a second terminal boundary
 around the session.
+
+### Pi Web source audit (2026-09-03)
+
+The official `earendil-works/pi` repository does not contain a `pi-web` product
+package. It exposes the reusable `AgentSession` SDK and the documented
+`--mode rpc` JSONL protocol for custom browser clients. The public `agegr/pi-web`
+and `jmfederico/pi-web` repositories are independent MIT-licensed wrappers,
+not official Pi modules. Their useful implementation patterns are consistent:
+the server keeps the Pi process/session alive, the browser subscribes to an
+ordered event stream, a ready snapshot is published before buffered events,
+and `abort`/session commands are control messages rather than synthetic chat
+turns.
+
+BidPilot keeps its multi-tenant control plane instead of importing those
+projects wholesale. Pi Web's local filesystem, project/worktree trust,
+provider credential store and session-file authority assume a trusted
+single-user workspace; they cannot replace PostgreSQL authorization, approvals,
+tenant isolation or the signed business-tool bridge. BidPilot therefore uses
+the official SDK boundary in `services/pi-agent`, persists business truth in
+`RuntimeRun`/`RuntimeEvent`, and adopts Pi Web's snapshot-before-replay and
+session-command semantics in the BFF/UI projection. Historical replay never
+re-executes `open_page`, skill bootstrap rows remain hidden from users, and
+the stop control calls the durable cancellation endpoint plus Pi's native
+`AgentSession.abort()` path.
+
 New turns do not call the retired Python ReAct loop or a locally reimplemented
 model loop. The Pi session receives only server-defined BidPilot tools;
 built-in host `bash`, `read`, `write`, `edit`, `grep`, `find`, and `ls` tools are

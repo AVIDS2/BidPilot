@@ -881,7 +881,12 @@ function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
         });
     };
     refresh();
-    const timer = window.setInterval(refresh, 1_200);
+    if (['succeeded', 'failed', 'cancelled', 'expired'].includes(item.status)) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    const timer = window.setInterval(refresh, 2_500);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -916,7 +921,7 @@ function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
         cancelled = true;
       };
     }
-    const timer = window.setInterval(refresh, 1_200);
+    const timer = window.setInterval(refresh, 2_500);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -984,7 +989,12 @@ function DeepResearchRuntime({ items }: { items: AssistantExecutionItem[] }) {
   );
   const result: Record<string, unknown> =
     research?.result && typeof research.result === 'object' ? research.result : {};
-  const phase = typeof result.phase === 'string' ? result.phase : 'scope';
+  const phase =
+    research?.status === 'failed'
+      ? 'failed'
+      : typeof result.phase === 'string'
+        ? result.phase
+        : 'scope';
   const active = research ? statusIsActive(research.status) : false;
   const phaseLabels: Record<string, string> = {
     scope: '确定范围',

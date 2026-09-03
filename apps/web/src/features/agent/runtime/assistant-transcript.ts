@@ -189,7 +189,7 @@ export function appendReasoningPart(
   return next;
 }
 
-function normalizeTranscriptText(text: string): string {
+export function normalizeTranscriptText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
@@ -295,6 +295,16 @@ export function projectExecutionItemsOntoTranscript(
       if (grouped.length > 0) {
         itemsByPartId.set(part.id, grouped);
         consumedGroups.add(part.executionGroupId);
+      } else if (!consumedLegacyTurns.has(part.turnId)) {
+        // Older runtime rows do not have an executionGroupId. When their
+        // transcript has already been upgraded to explicit turn parts, attach
+        // those legacy items to the first matching position instead of
+        // rendering a second orphan timeline at the end of the message.
+        const legacy = legacyItemsByTurn.get(part.turnId) ?? [];
+        if (legacy.length > 0) {
+          itemsByPartId.set(part.id, legacy);
+          consumedLegacyTurns.add(part.turnId);
+        }
       }
       continue;
     }

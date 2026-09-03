@@ -135,6 +135,35 @@ describe('interleaved transcript parts', () => {
     expect(projection.orphanItems.map((entry) => entry.id)).toEqual(['orphan']);
   });
 
+  it('places legacy ungrouped tools at the first matching explicit turn position', () => {
+    const parts = [
+      {
+        id: 'group-1',
+        kind: 'turn' as const,
+        turnId: 'legacy-turn',
+        executionGroupId: 'group-1',
+        timestamp: 1
+      },
+      { id: 'narrative', kind: 'narrative' as const, text: '继续。', timestamp: 2 },
+      {
+        id: 'group-2',
+        kind: 'turn' as const,
+        turnId: 'legacy-turn',
+        executionGroupId: 'group-2',
+        timestamp: 3
+      }
+    ];
+    const projection = projectExecutionItemsOntoTranscript(parts, [
+      item({ id: 'legacy-tool', title: '旧版工具', turnId: 'legacy-turn' })
+    ]);
+
+    expect(projection.itemsByPartId.get('group-1')?.map((entry) => entry.id)).toEqual([
+      'legacy-tool'
+    ]);
+    expect(projection.itemsByPartId.get('group-2')).toBeUndefined();
+    expect(projection.orphanItems).toHaveLength(0);
+  });
+
   it('keeps one structured research runtime across public progress narration', () => {
     const parts = [
       {

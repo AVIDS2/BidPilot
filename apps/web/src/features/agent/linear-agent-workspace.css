@@ -1212,37 +1212,6 @@
   white-space: normal;
 }
 
-.bidpilot-linear-agent .agent-footer {
-  position: absolute;
-  right: 10px;
-  bottom: 11px;
-  left: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--linear-text);
-  font-size: 12px;
-}
-.bidpilot-linear-agent .agent-footer span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.bidpilot-linear-agent .agent-footer button {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--linear-text);
-  transition: background-color 120ms ease;
-}
-.bidpilot-linear-agent .agent-footer button:hover {
-  background: var(--linear-surface-muted);
-}
-
 .bidpilot-linear-agent .agent-preview-canvas {
   display: flex;
   min-width: 0;
@@ -1454,9 +1423,6 @@
     height: 100dvh;
     border: 0;
     border-radius: 0;
-  }
-  .bidpilot-linear-agent .agent-footer {
-    display: none;
   }
   .bidpilot-linear-agent .linear-main.has-preview-canvas {
     grid-template-columns: minmax(0, 1fr);

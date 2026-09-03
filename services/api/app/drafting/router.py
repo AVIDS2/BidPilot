@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
 from app.access.service import require_execution_run_capability
-from app.auth.service import require_auth
+from app.auth.service import require_auth, require_stream_auth
 from app.db import get_db
 from app.usage.service import UsageLimitExceeded
 
@@ -72,7 +72,7 @@ def resume_run(
 async def stream_run_events(
     run_id: str,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(require_auth),
+    current_user: CurrentUser = Depends(require_stream_auth),
 ):
     """SSE endpoint for real-time graph execution progress.
 
@@ -100,4 +100,7 @@ async def stream_run_events(
         run_id=run_id,
         capability="project.read",
     )
+    # The stream generator opens short read sessions per poll. Release the
+    # request dependency's transaction before returning the long-lived SSE.
+    db.rollback()
     return EventSourceResponse(stream_graph_events(run_id, db))

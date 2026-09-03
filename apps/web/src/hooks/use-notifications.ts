@@ -103,6 +103,7 @@ export function useNotifications(options?: {
   const [transport, setTransport] = useState<'sse' | 'poll'>('poll');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
+  const loadInFlightRef = useRef<Promise<void> | null>(null);
   const pollIntervalMs = options?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const enabled = options?.enabled ?? true;
   const preferSse = options?.preferSse ?? true;
@@ -114,14 +115,20 @@ export function useNotifications(options?: {
       setLoading(false);
       return;
     }
-    try {
-      const data = await fetchNotifications();
-      setNotifications(data);
-    } catch {
-      // Silently fail — the user may not have auth or the endpoint may not exist yet.
-    } finally {
-      setLoading(false);
-    }
+    if (loadInFlightRef.current) return loadInFlightRef.current;
+    const request = (async () => {
+      try {
+        const data = await fetchNotifications();
+        setNotifications(data);
+      } catch {
+        // Silently fail — the user may not have auth or the endpoint may not exist yet.
+      } finally {
+        setLoading(false);
+        loadInFlightRef.current = null;
+      }
+    })();
+    loadInFlightRef.current = request;
+    return request;
   }, [enabled]);
 
   const markAsRead = useCallback(
@@ -156,8 +163,9 @@ export function useNotifications(options?: {
       setTransport('poll');
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(() => {
+        if (document.visibilityState === 'hidden') return;
         void load();
-      }, pollIntervalMs);
+      }, Math.max(pollIntervalMs, 30_000));
     };
 
     const stopPolling = () => {
@@ -181,6 +189,7 @@ export function useNotifications(options?: {
         stopPolling();
         intervalRef.current = setInterval(
           () => {
+            if (document.visibilityState === 'hidden') return;
             void load();
           },
           Math.max(pollIntervalMs, 60_000)
@@ -211,8 +220,14 @@ export function useNotifications(options?: {
 
     startSse();
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       stopPolling();
       if (sourceRef.current) {
         sourceRef.current.close();

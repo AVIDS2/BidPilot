@@ -356,6 +356,9 @@ async def stream_operator_assistant_response(
     # PostgreSQL replay remains the reconnect fallback, not the normal path.
     async with open_live_run(run.id) as live:
         enqueue_assistant_run(db, user, run)
+        # The queued worker owns the rest of this long-lived stream. Release
+        # the request's SQLAlchemy connection before waiting on Redis events.
+        db.rollback()
         if live is not None:
             async for frame in live.events():
                 yield frame

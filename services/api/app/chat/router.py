@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
-from app.auth.service import require_auth
+from app.auth.service import require_auth, require_stream_auth
 from app.db import get_db
 from app.models import ChatMessage as ChatMessageModel
 
@@ -55,7 +55,7 @@ def _conversation_title(db: Session, conversation_id: str, stored_title: str | N
 @router.post("/stream")
 async def chat_stream(
     payload: ChatRequest,
-    user: CurrentUser = Depends(require_auth),
+    user: CurrentUser = Depends(require_stream_auth),
     db: Session = Depends(get_db),
 ):
     """Stream an AI chat response via Server-Sent Events.

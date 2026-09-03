@@ -3,6 +3,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 
 const ACCESS_COOKIE = 'bidpilot_access_token';
+const REFRESH_COOKIE = 'bidpilot_refresh_token';
 const BACKEND_URL = (
   process.env.DOCPILOT_API_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
@@ -65,6 +66,127 @@ export async function requestBackend(path: string, init: RequestInit = {}, inclu
   });
 }
 
+type SessionRenewal =
+  | { accessToken: string }
+  | { response: Response }
+  | null;
+
+type RefreshResult =
+  | { ok: true; accessToken: string; refreshToken?: string | null }
+  | { ok: false; status: number; body: string };
+
+const REFRESH_RESULT_GRACE_MS = 5_000;
+let refreshInFlight: { token: string; promise: Promise<RefreshResult> } | null = null;
+let lastRefreshResult: {
+  token: string;
+  result: Extract<RefreshResult, { ok: true }>;
+  expiresAt: number;
+} | null = null;
+
+async function refreshFromBackend(refreshToken: string): Promise<RefreshResult> {
+  const upstream = await requestBackend(
+    '/auth/refresh',
+    {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    },
+    false
+  );
+  const body = await upstream.text().catch(() => '');
+  if (!upstream.ok) return { ok: false, status: upstream.status, body };
+
+  let payload: { access_token?: string; refresh_token?: string | null };
+  try {
+    payload = JSON.parse(body) as { access_token?: string; refresh_token?: string | null };
+  } catch {
+    return { ok: false, status: 502, body: JSON.stringify({ message: '刷新响应不是有效 JSON。' }) };
+  }
+  if (!payload.access_token) {
+    return { ok: false, status: 502, body: JSON.stringify({ message: '刷新响应缺少访问令牌。' }) };
+  }
+  return { ok: true, accessToken: payload.access_token, refreshToken: payload.refresh_token };
+}
+
+/** Renew a browser session without exposing tokens to the client bundle. */
+export async function renewSession(request: Request): Promise<SessionRenewal> {
+  const cookieStore = await cookies();
+  const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;
+  if (!refreshToken) return null;
+
+  const existing = refreshInFlight;
+  const cached =
+    lastRefreshResult?.token === refreshToken && lastRefreshResult.expiresAt > Date.now()
+      ? lastRefreshResult.result
+      : null;
+  const promise = existing?.token === refreshToken
+    ? existing.promise
+    : cached
+      ? Promise.resolve(cached)
+      : refreshFromBackend(refreshToken);
+  if (!existing || existing.token !== refreshToken) {
+    if (!cached) {
+      refreshInFlight = { token: refreshToken, promise };
+      void promise
+        .then((result) => {
+          if (result.ok) {
+            lastRefreshResult = {
+              token: refreshToken,
+              result,
+              expiresAt: Date.now() + REFRESH_RESULT_GRACE_MS
+            };
+          }
+        })
+        .finally(() => {
+          if (refreshInFlight?.promise === promise) refreshInFlight = null;
+        })
+        .catch(() => undefined);
+    }
+  }
+  const result = await promise;
+  if (!result.ok) {
+    // A rejected refresh is terminal. Temporary upstream errors must preserve
+    // the cookies so a later request can retry instead of logging the user out.
+    if (result.status === 401 || result.status === 403) {
+      cookieStore.delete(ACCESS_COOKIE);
+      cookieStore.delete(REFRESH_COOKIE);
+    }
+    let failureBody: unknown = { message: '刷新失败。' };
+    if (result.body) {
+      try {
+        failureBody = JSON.parse(result.body) as unknown;
+      } catch {
+        failureBody = { message: result.body };
+      }
+    }
+    return {
+      response: Response.json(failureBody, {
+        status: result.status,
+        headers: { 'Cache-Control': 'no-store' }
+      })
+    };
+  }
+
+  const secure = shouldUseSecureCookies(request);
+  cookieStore.set(ACCESS_COOKIE, result.accessToken, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure,
+    path: '/',
+    maxAge: 60 * 60
+  });
+  if (result.refreshToken) {
+    cookieStore.set(REFRESH_COOKIE, result.refreshToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure,
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30
+    });
+  }
+  return { accessToken: result.accessToken };
+}
+
 export function forwardBackendResponse(
   upstream: Response,
   options: { cacheControl?: string } = {}
@@ -94,4 +216,4 @@ export async function unavailableResponse() {
   );
 }
 
-export { ACCESS_COOKIE };
+export { ACCESS_COOKIE, REFRESH_COOKIE };

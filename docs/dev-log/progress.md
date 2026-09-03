@@ -1,5 +1,77 @@
 # Progress Log
 
+## 2026-09-03 MiMo local provider acceptance
+
+- Switched the local Pi Assistant profile to the Xiaomi MiMo OpenAI-compatible
+  endpoint with model `mimo-v2.5-pro`; the embedding profile remains the
+  existing OpenRouter model.
+- Stored the MiMo credential in the Windows current-user environment as
+  `MIMO_API_KEY`. The local API launcher reads it in memory and fails closed
+  when it is absent; it never falls back to the old provider credential.
+- The model resolver now gives the dedicated MiMo alias priority whenever the
+  configured assistant profile is MiMo, so an old generic assistant variable
+  cannot silently select a different provider.
+- Sent a real browser prompt through the local BFF/SSE path. The response
+  identified `MiMo-v2.5-pro`, and the persisted runtime row completed with
+  `engine=pi` and `model=mimo-v2.5-pro`.
+- No prompt, handler, keyword routing, or business-tool behavior was changed
+  by this provider switch. Production configuration remains unchanged.
+
+## 2026-09-02 assistant refresh, stream and replay convergence
+
+- Reproduced the reported public failure against the running system. The VPS
+  API had 15 PostgreSQL connections in `idle in transaction`, exhausting its
+  default `5 + 10` QueuePool; long-lived SSE authentication dependencies were
+  holding database sessions open. The code now authenticates streams through a
+  short-lived session, and workflow polling also opens a short read session per
+  interval.
+- Browser session renewal now works when only the HttpOnly refresh cookie
+  remains. Temporary API `429/5xx` responses no longer clear the authenticated
+  identity, and the client no longer retries a `429` with a 1/2/4-second burst.
+  Refresh tokens are sent to the backend in a JSON body on the new BFF path;
+  the legacy query parameter remains accepted for compatibility.
+- Runtime recovery now uses `live_only` for active monitoring and does not
+  start a poller for stale queued workflow children. The explicit agent URL
+  restore is guarded against the React state-change re-entry that previously
+  requested the same chat history twice. The unused footer history control,
+  which was covered by the composer, was removed; the top conversation menu is
+  the single history entry point.
+- Pi durable `message.delta/message.completed` events are replayed into the
+  ordered public transcript without duplicating stored final text. Execution
+  items receive their frontend execution group, and the legacy projection
+  attaches ungrouped items at the first matching turn position. No prompt,
+  Pi handler, tool schema, or keyword intent routing was changed.
+- Local evidence: Next production build, TypeScript, Python compileall and
+  Ruff pass; Agent/web targeted tests pass (`71 tests`). The Python integration
+  suite still requires a configured dedicated `_test` database. Changes are
+  local only; the unhealthy VPS has not been restarted or redeployed in this
+  task.
+
+## 2026-09-03 Pi Web parity and cancellation/replay closeout
+
+- Checked the current official Pi repository and its RPC/SDK documentation,
+  plus the MIT `agegr/pi-web` and `jmfederico/pi-web` source implementations.
+  There is no official `pi-web` package inside Pi; those projects are browser
+  wrappers around a persistent Pi session. BidPilot keeps the official
+  `createAgentSession` sidecar and PostgreSQL control plane because Pi Web's
+  trusted local-filesystem model is not a multi-tenant business backend.
+- Found and fixed two remaining user-visible replay defects: historical
+  `open_page` events no longer navigate the current browser, and successful
+  skill bootstrap events are omitted from the product timeline so multiple
+  Skills do not become duplicate preparation cards.
+- Found a local cancellation race where the API and interrupted direct executor
+  could both finalize the same run under SQLite. Runtime terminal transitions
+  now use a conditional update, leaving exactly one message/terminal event pair;
+  the new regression test and a real browser cancellation both pass.
+- Real local evidence: stop control became clickable in 83 ms, cancellation
+  returned 200, the UI showed one cancellation result and returned to Send;
+  restoring the historical conversation stayed on `/agent`, made one live-only
+  runtime snapshot request, and did not poll the stale child run.
+- Verification: web 11 files/116 tests passed, Pi 18 tests passed, backend
+  targeted runtime/auth/rate-limit/heartbeat suite 46 passed, build and
+  compileall passed. Production remains unchanged because the VPS API was
+  previously unhealthy and a release/restart requires explicit confirmation.
+
 ## 2026-09-02 production auth proxy correction
 
 - Real public browser acceptance reproduced the reported login failure: the

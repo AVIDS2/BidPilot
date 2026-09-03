@@ -5,28 +5,6 @@ function getAuthHeaders(): Record<string, string> {
   return {};
 }
 
-// Rate limit retry configuration
-const RETRY_CONFIG = {
-  maxRetries: 3,
-  baseDelay: 1000,
-  maxDelay: 10000
-};
-
-// Delay utility with exponential backoff
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Check if error is rate limit (429)
-function isRateLimitError(error: unknown): error is { status: number } {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'status' in error &&
-    (error as { status: number }).status === 429
-  );
-}
-
 export interface ApiRequestError extends Error {
   status: number;
   body?: unknown;
@@ -53,107 +31,48 @@ export function getApiErrorDetail(error: unknown): unknown {
 }
 
 async function request<T>(path: string, options?: RequestInit, base = API_BASE): Promise<T> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
-    try {
-      const res = await fetch(`${base}${path}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-          ...options?.headers
-        },
-        credentials: 'include',
-        ...options
-      });
-
-      if (res.status === 429) {
-        // Rate limit exceeded - extract retry-after or use exponential backoff
-        const retryAfter = res.headers.get('Retry-After');
-        const retryMs = retryAfter
-          ? parseInt(retryAfter, 10) * 1000
-          : Math.min(RETRY_CONFIG.baseDelay * Math.pow(2, attempt), RETRY_CONFIG.maxDelay);
-
-        if (attempt < RETRY_CONFIG.maxRetries) {
-          await delay(retryMs);
-          continue; // Retry
-        }
-      }
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw createApiError(res.status, body);
-      }
-
-      if (res.status === 204) {
-        return undefined as T;
-      }
-
-      const text = await res.text();
-      if (!text) {
-        return undefined as T;
-      }
-
-      return JSON.parse(text) as T;
-    } catch (error) {
-      lastError = error;
-
-      // If it's a rate limit error and we haven't exhausted retries, wait and retry
-      if (isRateLimitError(error) && attempt < RETRY_CONFIG.maxRetries) {
-        const retryMs = Math.min(
-          RETRY_CONFIG.baseDelay * Math.pow(2, attempt),
-          RETRY_CONFIG.maxDelay
-        );
-        await delay(retryMs);
-        continue;
-      }
-
-      // For non-rate-limit errors or exhausted retries, throw immediately
-      throw error;
-    }
+  const res = await fetchWithSessionRefresh(`${base}${path}`, options);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw createApiError(res.status, body);
   }
-
-  throw lastError;
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 async function requestBlob(path: string, options?: RequestInit, base = API_BASE): Promise<Blob> {
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
-    try {
-      const res = await fetch(`${base}${path}`, {
-        headers: { ...getAuthHeaders(), ...options?.headers },
-        credentials: 'include',
-        ...options
-      });
-      if (res.status === 429 && attempt < RETRY_CONFIG.maxRetries) {
-        const retryAfter = res.headers.get('Retry-After');
-        const retryMs = retryAfter
-          ? parseInt(retryAfter, 10) * 1000
-          : Math.min(RETRY_CONFIG.baseDelay * Math.pow(2, attempt), RETRY_CONFIG.maxDelay);
-        await delay(retryMs);
-        continue;
-      }
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw createApiError(res.status, body);
-      }
-      return res.blob();
-    } catch (error) {
-      lastError = error;
-      if (isRateLimitError(error) && attempt < RETRY_CONFIG.maxRetries) {
-        const retryMs = Math.min(
-          RETRY_CONFIG.baseDelay * Math.pow(2, attempt),
-          RETRY_CONFIG.maxDelay
-        );
-        await delay(retryMs);
-        continue;
-      }
-      throw error;
-    }
+  const res = await fetchWithSessionRefresh(`${base}${path}`, options);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw createApiError(res.status, body);
   }
+  return res.blob();
+}
 
-  throw lastError;
+async function fetchWithSessionRefresh(url: string, options?: RequestInit): Promise<Response> {
+  const init: RequestInit = {
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+      ...options?.headers
+    },
+    credentials: 'include',
+    ...options
+  };
+  let response = await fetch(url, init);
+  if (response.status !== 401 || url.startsWith('/api/auth/')) return response;
+
+  // Access cookies expire independently from the refresh cookie. Renew once
+  // on the same-origin BFF, then replay the original request exactly once.
+  const renewed = await fetch('/api/auth/refresh', {
+    method: 'POST',
+    credentials: 'include',
+    cache: 'no-store'
+  });
+  if (renewed.ok) response = await fetch(url, init);
+  return response;
 }
 
 async function requestBlobWithTimeout(path: string, timeoutMs: number): Promise<Blob> {

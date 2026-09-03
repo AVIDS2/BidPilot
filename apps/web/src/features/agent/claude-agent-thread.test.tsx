@@ -314,9 +314,9 @@ describe('ClaudeAgentThread', () => {
         .map((node) => node.textContent)
         .filter(Boolean)
     ).toEqual([
-      'first_search,second_search',
+      'first_search',
       '第一批来源已核对，继续检查公告。',
-      'first_search,second_search'
+      'second_search'
     ]);
   });
 

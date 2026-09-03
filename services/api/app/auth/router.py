@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,7 @@ from app.security.redis_rate_limiter import RateLimitExceeded, RateLimiterUnavai
 from app.security.turnstile import verify_turnstile_or_raise
 
 import math
-from .schemas import CurrentUser, TokenResponse, VerifyEmailResponse, UserLogin, UserRegister, UserUpdate, SubscriptionRead, SubscriptionUpdate, PasswordResetRequest, PasswordResetConfirm, UsersPaginatedResponse
+from .schemas import CurrentUser, RefreshTokenRequest, TokenResponse, VerifyEmailResponse, UserLogin, UserRegister, UserUpdate, SubscriptionRead, SubscriptionUpdate, PasswordResetRequest, PasswordResetConfirm, UsersPaginatedResponse
 from .service import AUTH_REQUIRED, get_current_user_from_token, get_dev_user, login_command, register_user_command, update_user_command, update_subscription_command, _user_to_current, require_admin, create_password_reset_token, confirm_password_reset, create_email_verification_token, verify_email_and_create_session_command, refresh_token_command, login_rate_limiter, resend_rate_limiter, registration_rate_limiter, password_reset_rate_limiter, admin_verify_user_command, delete_user_account_command
 from app.billing.service import get_billing_summary
 
@@ -77,9 +77,16 @@ def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)) -
 
 
 @router.post("/refresh", response_model=TokenResponse)
-def refresh_token(refresh_token: str, db: Session = Depends(get_db)) -> TokenResponse:
+def refresh_token(
+    payload: RefreshTokenRequest | None = Body(default=None),
+    legacy_refresh_token: str | None = Query(default=None, alias="refresh_token"),
+    db: Session = Depends(get_db),
+) -> TokenResponse:
     try:
-        return refresh_token_command(db, refresh_token)
+        refresh_token_value = payload.refresh_token if payload is not None else legacy_refresh_token
+        if not refresh_token_value:
+            raise ValueError("Refresh token is required")
+        return refresh_token_command(db, refresh_token_value)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
 

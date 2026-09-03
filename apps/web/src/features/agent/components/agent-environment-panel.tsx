@@ -178,8 +178,9 @@ export function AgentEnvironmentPanel({
   const runsQuery = useQuery<RuntimeRunListItem[]>({
     queryKey: ['agent-environment-runs', 'live'],
     queryFn: () => listRuntimeRuns(30, null, BACKGROUND_RUN_KIND_LIST, true),
-    refetchInterval: 4_000,
-    staleTime: 2_000
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+    staleTime: 5_000
   });
   const projectsQuery = useQuery<ProjectRead[]>({
     queryKey: ['projects'],

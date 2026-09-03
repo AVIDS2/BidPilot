@@ -531,6 +531,31 @@ def test_failed_and_cancelled_runtime_runs_preserve_distinct_terminal_evidence(
     ]
 
 
+def test_duplicate_terminal_cancellation_is_idempotent(
+    test_db,
+    default_org_id: str,
+    default_user_id: str,
+) -> None:
+    run = create_runtime_run(
+        test_db,
+        _user(default_org_id, default_user_id),
+        kind="assistant_turn",
+        engine="pi",
+    )
+    run.status = "cancel_requested"
+    test_db.commit()
+
+    first = cancel_runtime_run(test_db, run.id, "已取消这次操作。")
+    second = cancel_runtime_run(test_db, run.id, "已取消这次操作。")
+
+    assert first.status == second.status == "cancelled"
+    assert [event.event_type for event in list_events_after(test_db, run.id)] == [
+        "run.started",
+        "message.completed",
+        "run.cancelled",
+    ]
+
+
 def test_cancelling_waiting_approval_closes_the_action_before_it_can_execute(
     test_db,
     default_org_id: str,
@@ -930,16 +955,14 @@ def test_unlinked_workflow_cancellation_closes_legacy_runtime_row(
     )
     test_db.add(project)
     test_db.flush()
-    bridge = RuntimeRun(
+    bridge = create_runtime_run(
+        test_db,
+        user,
         kind="workflow_bridge",
-        status="awaiting_approval",
-        org_id=default_org_id,
-        user_id=default_user_id,
-        project_id=project.id,
         engine="langgraph",
-        trace_id=f"legacy-{suffix}",
+        project_id=project.id,
     )
-    test_db.add(bridge)
+    bridge.status = "awaiting_approval"
     test_db.commit()
 
     cancelled = request_workflow_cancellation(test_db, user, run_id=bridge.id)

@@ -38,6 +38,7 @@ export function AgentWorkspacePage() {
   const params = useSearchParams();
   const { dispatch, loadConversation, state } = useAIAssistant();
   const handledWakeRef = useRef<string | null>(null);
+  const loadingConversationRef = useRef<string | null>(null);
   const projectId = params.get('project_id') || undefined;
   const conversationId = params.get('conversation');
   const wake = params.get('wake');
@@ -68,9 +69,21 @@ export function AgentWorkspacePage() {
       return;
     }
 
-    void loadConversation(conversationId).then(() => {
-      rememberWake();
-    });
+    // loadConversation updates the selected id before its async history read
+    // completes. That state change reruns this effect; share the in-flight
+    // restore instead of issuing the same messages request twice.
+    if (loadingConversationRef.current === conversationId) return;
+    loadingConversationRef.current = conversationId;
+
+    void loadConversation(conversationId)
+      .then(() => {
+        rememberWake();
+      })
+      .finally(() => {
+        if (loadingConversationRef.current === conversationId) {
+          loadingConversationRef.current = null;
+        }
+      });
   }, [loadConversation, conversationId, state.currentConversationId, state.messages.length, wake]);
 
   return <LinearAgentWorkspace />;

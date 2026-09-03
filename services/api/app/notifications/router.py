@@ -13,7 +13,7 @@ from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
-from app.auth.service import require_auth
+from app.auth.service import require_auth, require_stream_auth
 from app.db import SessionLocal, get_db
 from app.models import Notification, NotificationPreference
 
@@ -135,7 +135,7 @@ def mark_all_notifications_read(
 
 @router.get("/stream")
 async def stream_notifications(
-    user: CurrentUser = Depends(require_auth),
+    user: CurrentUser = Depends(require_stream_auth),
     after_created_at: str | None = Query(default=None),
     after_id: str | None = Query(default=None),
 ) -> StreamingResponse:

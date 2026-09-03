@@ -23,6 +23,10 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
 class VerifyEmailResponse(TokenResponse):
     """Session tokens returned after a verification link is redeemed."""
 
