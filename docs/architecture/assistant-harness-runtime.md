@@ -150,10 +150,14 @@ with success. If cancellation arrives before the Worker starts Pi, the Worker
 closes the run without creating a model session.
 
 The web stop control therefore has three explicit states: normal generation,
-stop requested, and terminal. A click before the first run ID is received is
-held briefly for that ID, with a bounded transport fallback only when the
-server never exposes one. Reloading a conversation derives the same state from
-`RuntimeRun.status`, so a refresh cannot make a cancelled run look active.
+stop requested, and terminal. A click before the first run ID is received stays
+in the stop-requested state and keeps the stream open until the server exposes
+that durable ID; it then calls the same cancellation endpoint and Pi abort
+path. The client never aborts on an arbitrary timer, because doing so can leave
+the Worker running without a cancellation target. If transport delivery fails,
+conversation-scoped durable recovery remains responsible for discovering the
+run and reconciling its terminal state. Reloading a conversation derives the
+same state from `RuntimeRun.status`, so a refresh cannot make a cancelled run look active.
 
 The web release serves `index.html` without a cache lifetime while hashed JS/CSS
 assets remain immutable. This prevents a browser from pairing a new HTML shell

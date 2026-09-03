@@ -317,7 +317,19 @@ describe('AIAssistantPanel', () => {
     });
   });
 
-  it('turns send into a stop control and aborts the active response stream', async () => {
+  it('waits for a delayed runtime id before aborting the active response stream', async () => {
+    const { cancelRuntimeWorkflow } = await import('@/lib/api');
+    vi.mocked(cancelRuntimeWorkflow).mockResolvedValue({
+      id: 'delayed-runtime-stop',
+      kind: 'assistant_turn',
+      status: 'cancelled',
+      project_id: null,
+      conversation_id: 'c-stop',
+      execution_run_id: null,
+      engine: 'pi',
+      trace_id: 'trace-delayed-stop',
+      parent_run_id: null
+    });
     let requestSignal: AbortSignal | undefined;
     const encoder = new TextEncoder();
     const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
@@ -332,6 +344,13 @@ describe('AIAssistantPanel', () => {
           requestSignal?.addEventListener('abort', () => {
             controller.error(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
           });
+          window.setTimeout(() => {
+            controller.enqueue(
+              encoder.encode(
+                'event: assistant.start\ndata: {"conversation_id":"c-stop","runtime_run_id":"delayed-runtime-stop","state":"thinking"}\n\n'
+              )
+            );
+          }, 75);
         }
       });
       return Promise.resolve({ ok: true, body });
@@ -353,6 +372,7 @@ describe('AIAssistantPanel', () => {
     await waitFor(() => {
       expect(requestSignal?.aborted).toBe(true);
     });
+    expect(cancelRuntimeWorkflow).toHaveBeenCalledWith('delayed-runtime-stop');
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
     });
@@ -416,6 +436,18 @@ describe('AIAssistantPanel', () => {
   });
 
   it('keeps a live tool run collapsed until the reader opens it', async () => {
+    const { cancelRuntimeWorkflow } = await import('@/lib/api');
+    vi.mocked(cancelRuntimeWorkflow).mockResolvedValue({
+      id: 'run-live',
+      kind: 'assistant_turn',
+      status: 'cancelled',
+      project_id: null,
+      conversation_id: 'c-live',
+      execution_run_id: null,
+      engine: 'pi',
+      trace_id: 'trace-live-stop',
+      parent_run_id: null
+    });
     let requestSignal: AbortSignal | undefined;
     const encoder = new TextEncoder();
     vi.stubGlobal(
@@ -427,7 +459,7 @@ describe('AIAssistantPanel', () => {
             controller.enqueue(
               encoder.encode(
                 [
-                  'event: assistant.start\ndata: {"conversation_id":"c-live","state":"thinking"}',
+                  'event: assistant.start\ndata: {"conversation_id":"c-live","runtime_run_id":"run-live","state":"thinking"}',
                   'event: assistant.tool_started\ndata: {"tool_name":"search_projects","tool_call_id":"call-live","arguments":{"query":"active"},"state":"executing_tool"}'
                 ].join('\n\n') + '\n\n'
               )

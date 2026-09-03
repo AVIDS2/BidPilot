@@ -2297,7 +2297,6 @@ export function AIAssistantProvider({
   const activeAssistantRuntimeRunRef = useRef<string | null>(null);
   const watchedRuntimeRunRef = useRef<string | null>(null);
   const pendingAssistantCancellationRef = useRef(false);
-  const pendingAssistantCancellationTimerRef = useRef<number | null>(null);
   // A conversation owns its run and its cancel affordance. The provider is
   // shared by the shell, so a single global run id would make switching
   // conversations cancel whichever task happened to start last.
@@ -2493,10 +2492,6 @@ export function AIAssistantProvider({
       runtimeEventCursorsRef.current = {};
       runtimeProjectionKeysRef.current = new Set();
       pendingAssistantCancellationRef.current = false;
-      if (pendingAssistantCancellationTimerRef.current !== null) {
-        window.clearTimeout(pendingAssistantCancellationTimerRef.current);
-        pendingAssistantCancellationTimerRef.current = null;
-      }
       currentConversationIdRef.current = conversationId;
       dispatch({ type: 'SET_CURRENT_CONVERSATION', conversationId });
       dispatch({ type: 'CLEAR_MESSAGES' });
@@ -2800,23 +2795,10 @@ export function AIAssistantProvider({
       : (activeAssistantRuntimeRunRef.current ?? watchedRuntimeRunRef.current);
     dispatch({ type: 'SET_CANCELLATION_REQUESTED', requested: true });
     if (!runtimeRunId) {
-      // The initial SSE frame normally carries the durable id immediately.
-      // Keep consuming until it arrives so a fast click cannot detach the
-      // browser before the server-side run can be cancelled.
+      // Keep the stream open until the server publishes its durable id. An
+      // early browser abort can otherwise leave the Worker running without a
+      // cancellation target.
       pendingAssistantCancellationRef.current = true;
-      if (pendingAssistantCancellationTimerRef.current === null) {
-        pendingAssistantCancellationTimerRef.current = window.setTimeout(() => {
-          pendingAssistantCancellationTimerRef.current = null;
-          if (!pendingAssistantCancellationRef.current) return;
-          pendingAssistantCancellationRef.current = false;
-          const activeController = currentConversationIdRef.current
-            ? (streamAbortByConversationRef.current[currentConversationIdRef.current] ??
-              activeStreamAbortRef.current)
-            : activeStreamAbortRef.current;
-          if (activeController && !activeController.signal.aborted) activeController.abort();
-          dispatch({ type: 'STOP_ACTIVE_RESPONSE' });
-        }, 500);
-      }
       return;
     }
     requestAssistantCancellation(runtimeRunId, conversationId, streamController);
@@ -2841,10 +2823,6 @@ export function AIAssistantProvider({
     activeAssistantRuntimeRunRef.current = null;
     watchedRuntimeRunRef.current = null;
     pendingAssistantCancellationRef.current = false;
-    if (pendingAssistantCancellationTimerRef.current !== null) {
-      window.clearTimeout(pendingAssistantCancellationTimerRef.current);
-      pendingAssistantCancellationTimerRef.current = null;
-    }
     didAutoRestoreRef.current = true;
     removeSessionStoredValue('lastAssistantConversationId');
     dispatch({ type: 'SET_CURRENT_CONVERSATION', conversationId: null });
@@ -2976,10 +2954,6 @@ export function AIAssistantProvider({
           }
           if (pendingAssistantCancellationRef.current && activeConversationId) {
             pendingAssistantCancellationRef.current = false;
-            if (pendingAssistantCancellationTimerRef.current !== null) {
-              window.clearTimeout(pendingAssistantCancellationTimerRef.current);
-              pendingAssistantCancellationTimerRef.current = null;
-            }
             requestAssistantCancellation(runId, activeConversationId, abortController);
           }
         },
@@ -2998,10 +2972,6 @@ export function AIAssistantProvider({
           setSessionStoredValue('lastAssistantConversationId', conversationId);
           if (pendingAssistantCancellationRef.current && activeRuntimeRunId) {
             pendingAssistantCancellationRef.current = false;
-            if (pendingAssistantCancellationTimerRef.current !== null) {
-              window.clearTimeout(pendingAssistantCancellationTimerRef.current);
-              pendingAssistantCancellationTimerRef.current = null;
-            }
             requestAssistantCancellation(activeRuntimeRunId, conversationId, abortController);
           }
           return true;
@@ -3200,10 +3170,6 @@ export function AIAssistantProvider({
           runtimeWatchAbortRef.current?.abort();
         }
         pendingAssistantCancellationRef.current = false;
-        if (pendingAssistantCancellationTimerRef.current !== null) {
-          window.clearTimeout(pendingAssistantCancellationTimerRef.current);
-          pendingAssistantCancellationTimerRef.current = null;
-        }
         void refreshConversations();
       }
     },

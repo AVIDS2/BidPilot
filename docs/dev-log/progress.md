@@ -67,6 +67,10 @@
   returned 200, the UI showed one cancellation result and returned to Send;
   restoring the historical conversation stayed on `/agent`, made one live-only
   runtime snapshot request, and did not poll the stale child run.
+- The first public immediate-stop probe exposed a race in the previous 500 ms
+  browser fallback: it could abort before the durable run ID arrived and leave
+  the Worker running. The fallback was removed; the UI now waits for the real
+  run ID and the delayed-ID regression test passes.
 - Verification: web 11 files/116 tests passed, Pi 18 tests passed, backend
   targeted runtime/auth/rate-limit/heartbeat suite 46 passed, build and
   compileall passed. Production remains unchanged because the VPS API was
