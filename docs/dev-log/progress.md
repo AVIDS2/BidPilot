@@ -2,10 +2,13 @@
 
 ## 2026-09-03 production delivery
 
-- Promoted release commit `751c329495ef2e6300a1ffe225621b7f878eca3e` to the
-  VPS at `/app/bidpilot/repo`. The production environment is now `pi` with
-  the MiMo provider and `mimo-v2.5-pro`; the embedding provider remains
+- Promoted the final release commit `7843f42132cb179df18642351f47b25945408643`
+  to the VPS at `/app/bidpilot/repo`. The production environment is now `pi`
+  with the MiMo provider and `mimo-v2.5-pro`; the embedding provider remains
   OpenRouter.
+- Updated the Pi dependency tree with fixed `fast-uri` and `qs` overrides;
+  `pnpm audit --prod` reports no known vulnerabilities, and the final Pi/Web
+  images were rebuilt from the updated lockfile.
 - The release gate completed successfully: production Compose config,
   readiness, Alembic migration, LangGraph checkpoints, Pi sidecar health,
   API health, Worker, Worker Beat, and Web startup all passed.
