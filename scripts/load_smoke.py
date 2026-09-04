@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import argparse
 from datetime import UTC, datetime
+import http.client
 import json
 import math
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import NamedTuple
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
 
 
 SMOKE_USER_AGENT = "BidPilot-ReleaseSmoke/1.0"
+_connection_local = threading.local()
 
 
 class Sample(NamedTuple):
@@ -31,28 +32,62 @@ class LoadSummary(NamedTuple):
     p95_ms: float
 
 
+def _connection_for(parsed_url, timeout: float) -> http.client.HTTPConnection:
+    """Reuse one HTTP/1.1 connection per worker instead of timing every TLS handshake."""
+    key = (parsed_url.scheme, parsed_url.hostname, parsed_url.port)
+    connections = getattr(_connection_local, "connections", None)
+    if connections is None:
+        connections = {}
+        _connection_local.connections = connections
+    connection = connections.get(key)
+    if connection is not None:
+        return connection
+
+    connection_type = http.client.HTTPSConnection if parsed_url.scheme == "https" else http.client.HTTPConnection
+    connection = connection_type(parsed_url.hostname, parsed_url.port, timeout=timeout)
+    connections[key] = connection
+    return connection
+
+
+def _close_connection(parsed_url) -> None:
+    connections = getattr(_connection_local, "connections", None)
+    if not connections:
+        return
+    key = (parsed_url.scheme, parsed_url.hostname, parsed_url.port)
+    connection = connections.pop(key, None)
+    if connection is not None:
+        connection.close()
+
+
 def request_once(base_url: str, endpoint: str, timeout: float) -> Sample:
     url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
     started_at = time.perf_counter()
+    parsed_url = urlsplit(url)
+    request_target = parsed_url.path or "/"
+    if parsed_url.query:
+        request_target = f"{request_target}?{parsed_url.query}"
     try:
-        request = Request(
-            url,
-            headers={"User-Agent": SMOKE_USER_AGENT},
-            method="GET",
-        )
-        with urlopen(request, timeout=timeout) as response:
-            response.read()
-            status_code = response.status
-            error = None
-    except HTTPError as exc:
-        status_code = exc.code
-        error = None
-    except URLError:
+        for attempt in range(2):
+            try:
+                connection = _connection_for(parsed_url, timeout)
+                connection.request(
+                    "GET",
+                    request_target,
+                    headers={"Connection": "keep-alive", "User-Agent": SMOKE_USER_AGENT},
+                )
+                response = connection.getresponse()
+                response.read()
+                status_code = response.status
+                error = None
+                break
+            except (http.client.HTTPException, OSError, TimeoutError):
+                _close_connection(parsed_url)
+                if attempt == 1:
+                    status_code = None
+                    error = "network_error"
+    except (ValueError, TypeError):
         status_code = None
         error = "network_error"
-    except TimeoutError:
-        status_code = None
-        error = "timeout"
     elapsed_ms = (time.perf_counter() - started_at) * 1000
     return Sample(endpoint=endpoint, status_code=status_code, elapsed_ms=elapsed_ms, error=error)
 

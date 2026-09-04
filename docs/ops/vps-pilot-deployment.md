@@ -101,6 +101,15 @@ FastAPI returns raw token payloads and bypasses the BFF cookie boundary.
 
 The reviewed public web host configuration is versioned at
 `ops/openresty/bidpilot.rglens.com.conf`.
+The direct API host configuration is versioned at
+`ops/openresty/bidpilot-api.rglens.com.conf`. Both configurations use an
+upstream keep-alive pool; the Web `/api/*` BFF path and the API host disable
+proxy buffering and caching so Assistant SSE frames are forwarded promptly.
+When Cloudflare proxying is enabled, verify that the matching Configuration
+Rule uses `response_body_buffering: none` for the Assistant paths. Cloudflare
+does not forward the `X-Accel-Buffering` response header, so the origin must
+also preserve `Content-Type: text/event-stream` and an explicit no-transform
+cache policy.
 
 ## Trusted proxy and public rate limits
 

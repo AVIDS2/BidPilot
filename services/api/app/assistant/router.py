@@ -105,7 +105,7 @@ def _assistant_sse_response(stream: AsyncIterator[str]) -> StreamingResponse:
         _with_sse_heartbeats(stream),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
