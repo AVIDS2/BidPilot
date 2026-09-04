@@ -56,6 +56,13 @@
   are still required. The verified public release therefore remains on the
   VPS PostgreSQL/Redis/MinIO profile, with this migration boundary recorded in
   `docs/development/configuration-and-secrets.md`.
+- Final post-release browser regression kept the authenticated session after a
+  hard refresh and reopened the project response page. The public deliverables
+  page showed `approved / exported` with DOCX/PDF actions, and the response
+  page showed the approved section count and download actions. After that
+  check, the VPS reported Docker BuildKit cache `0B`, reclaimable images `0B`,
+  all 11 data volumes retained, and root disk usage at `53%`; stopped one-shot
+  migration containers were retained as release evidence.
 
 ## 2026-09-04 streaming path optimization and re-release
 
