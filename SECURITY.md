@@ -43,16 +43,19 @@ through a private channel before publishing technical details.
 - Use the example environment files only as templates. Production readiness
   rejects development defaults, localhost endpoints and placeholder secrets.
 
-## Pre-publication audit status
+## Public release audit status
 
-The 2026-09-04 repository audit found no current-environment credential match in
-the working tree or Git history. It did find one old provider-key-shaped value
-in development documentation in commit `bcd2fb3c`, repeated five times. The
-value is absent from the current tree and does not match the currently
-configured MiMo, OpenRouter or Supabase credentials, but it remains a history
-exposure until the provider credential is revoked/rotated and the public refs
-are rewritten and rescanned. Do not make the repository public before that
-remediation is complete.
+The 2026-09-04 release audit found no current-environment credential match in
+the working tree or in the history selected for publication. An old
+provider-key-shaped value existed in early development documentation and was
+removed from the public refs during the release history rewrite. The value did
+not match the currently configured MiMo, OpenRouter or Supabase credentials.
+Provider-console revocation/rotation is outside this repository's permissions;
+the credential owner must still confirm that the old value is revoked.
+
+The published `master` must be rescanned after every history rewrite, branch
+change or repository visibility change. A clean scan is evidence about the
+scanned refs at that point in time, not a permanent guarantee.
 
 ## Disclosure
 

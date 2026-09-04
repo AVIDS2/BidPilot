@@ -23,7 +23,7 @@
   <img src="https://img.shields.io/badge/Pi-native%20agent-111827.svg" alt="Pi native agent" />
 </p>
 
-> **当前状态**：BidPilot 的个人面试展示版已经部署到公网，支持真实登录、项目创建、资料上传、解析索引、证据检索、MiMo 起草、人工审核和 DOCX/PDF 导出。本仓库是一个可运行的 controlled pilot / interview-grade reference implementation，不把演示版包装成已经完成企业商业 GA 的 SaaS。公开 GitHub 前还必须完成下方列出的历史凭据清理。
+> **当前状态**：BidPilot 的个人面试展示版已经部署到公网，支持真实登录、项目创建、资料上传、解析索引、证据检索、MiMo 起草、人工审核和 DOCX/PDF 导出。本仓库是一个可运行的 controlled pilot / interview-grade reference implementation，不把演示版包装成已经完成企业商业 GA 的 SaaS。本次公开发布会先清理 Git 历史中的旧凭据形状值，再发布经过复扫的 `master`。
 
 ## 为什么是 BidPilot
 
@@ -278,7 +278,7 @@ python scripts/production_readiness.py --target production
 - 跟踪的 secret-shaped 文件只有 `.env.production.example` 和 `services/api/.env.example`，它们使用示例/占位值；真实 `.env`、备份、数据库 dump、bundle 和临时文件均不在 Git 跟踪范围；
 - 用户提供过的 provider key、Supabase Management PAT 和生产 `.env` 没有写入本 README，也没有写入代码或文档。
 
-**公开阻塞项**：在把仓库设为公开前，必须先在对应 provider 控制台撤销/轮换这条历史旧凭据，再用经过确认的历史清理方案移除 `bcd2fb3c` 及后续历史中的敏感值，并对所有将公开的 refs 重新扫描。只删除当前文件或新增 `.gitignore` 不会清理 Git 历史。
+**本次发布处理**：公开 refs 会移除早期开发文档中的旧 provider key 形状值，并在 force-push 前重新扫描当前树和完整公开历史。provider 控制台的撤销/轮换状态无法通过本仓库权限验证；拥有该 provider 账户的人仍必须确保历史值已撤销。只删除当前文件或新增 `.gitignore` 不会清理 Git 历史。
 
 “没有进入当前工作树”不等于“没有暴露”。任何曾经出现在聊天、截图、终端、CI 日志、浏览器录屏或共享机器上的凭据，在把仓库设为公开前都应撤销并重新生成。
 
@@ -291,7 +291,7 @@ python scripts/production_readiness.py --target production
 - 项目访问、审核、导出和配额由 FastAPI/Worker 服务端裁决；
 - 日志和用户界面只展示稳定的公开错误类别，不回显原始 provider payload、密钥、数据库 DSN 或内部工具参数。
 
-这是一次性发布前审计，不替代你在开源前后的持续 secret scanning。历史清理完成前，不应把仓库标记为“安全可公开”。发现安全问题请不要开公开 Issue，按照 [`SECURITY.md`](SECURITY.md) 的私下报告流程提交。
+这是一次性发布前审计，不替代开源后的持续 secret scanning。历史清理完成并通过复扫后，公开 `master` 才是本次发布的安全门槛。发现安全问题请不要开公开 Issue，按照 [`SECURITY.md`](SECURITY.md) 的私下报告流程提交。
 
 ## 当前边界，诚实地说
 
