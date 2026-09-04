@@ -8,13 +8,21 @@ from app.models import (
     Bundle,
     ExecutionRun,
     KnowledgeChunk,
+    Notification,
     Organization,
     Project,
     RuntimeEvent,
     RuntimeRun,
     SourceDocument,
 )
-from app.tasks import cleanup_assistant_attachments, draft_section, ingest_bundle, ping, reindex_bundle
+from app.tasks import (
+    _mark_wake_notifications_read,
+    cleanup_assistant_attachments,
+    draft_section,
+    ingest_bundle,
+    ping,
+    reindex_bundle,
+)
 from contracts.models import User
 
 
@@ -37,6 +45,44 @@ def _ensure_test_org(db) -> str:
 
 def test_ping_task() -> None:
     assert ping() == "pong"
+
+
+def test_consumed_agent_wake_notification_is_closed() -> None:
+    db = SessionLocal()
+    try:
+        suffix = _unique_suffix()
+        user = User(
+            org_id=_ensure_test_org(db),
+            email=f"wake-cleanup-{suffix}@example.test",
+            display_name="Wake Cleanup",
+            role="admin",
+            password_hash="test-only",
+        )
+        db.add(user)
+        db.flush()
+        wake_id = f"wake-{suffix}"
+        db.add(
+            Notification(
+                user_id=user.id,
+                type="agent_task",
+                title="后台任务已完成",
+                body="测试 wake",
+                link=f"/agent?conversation=conversation-{suffix}&wake={wake_id}",
+                read=False,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    _mark_wake_notifications_read(wake_id)
+
+    db = SessionLocal()
+    try:
+        notification = db.query(Notification).filter(Notification.user_id == user.id).one()
+        assert notification.read is True
+    finally:
+        db.close()
 
 
 def test_remote_import_task_persists_result_and_runtime_timeline(monkeypatch) -> None:

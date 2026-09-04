@@ -111,6 +111,30 @@ def _wake_run_id(link: str | None) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _mark_wake_notifications_read(wake_run_id: str) -> None:
+    """Close durable wake notices once the API has consumed or rejected them."""
+    db = SessionLocal()
+    try:
+        notifications = list(
+            db.scalars(
+                select(Notification).where(
+                    Notification.type == "agent_task",
+                    Notification.read.is_(False),
+                    Notification.link.contains(f"wake={wake_run_id}"),
+                )
+            )
+        )
+        for notification in notifications:
+            notification.read = True
+        if notifications:
+            db.commit()
+    except Exception:  # noqa: BLE001 - wake cleanup must not hide delivery results
+        db.rollback()
+        logger.exception("Failed to close consumed agent wake notification", extra={"wake_run_id": wake_run_id})
+    finally:
+        db.close()
+
+
 @celery_app.task(name="worker.resume_agent_wake", bind=True, max_retries=5)
 def resume_agent_wake(self, wake_run_id: str) -> dict[str, object]:
     """Deliver one durable completion observation to the parent Pi session."""
@@ -128,10 +152,13 @@ def resume_agent_wake(self, wake_run_id: str) -> dict[str, object]:
         )
         response.raise_for_status()
         payload = response.json()
+        _mark_wake_notifications_read(wake_run_id)
         return payload if isinstance(payload, dict) else {"status": "completed"}
     except (httpx.TimeoutException, httpx.RequestError, httpx.HTTPStatusError) as exc:
         status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
         if status is not None and status < 500:
+            if status in {400, 403, 404}:
+                _mark_wake_notifications_read(wake_run_id)
             return {"status": "rejected", "wake_run_id": wake_run_id, "http_status": status}
         raise self.retry(exc=exc, countdown=min(60, 2 ** int(self.request.retries)))
 
