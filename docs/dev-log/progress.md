@@ -21,12 +21,14 @@
   and `X-Accel-Buffering: no`. Cloudflare Rulesets were inspected read-only;
   the available credential returned `403` for that endpoint, so no unknown
   Cloudflare rule was changed.
-- Reworked `scripts/load_smoke.py` to reuse one HTTP/1.1 connection per worker
-  and retry a stale keep-alive once. The re-release commit is
-  `2cebebf22e225bae3557ef30edb88eda7260a5ed`; its final public smoke passed
-  40/40 requests with zero failures and p95 `532.68ms` (health `532.68ms`,
-  readiness `524.50ms`). Web root, sign-in, API liveness, API readiness, and
-  OpenResty syntax checks all returned success after the reload and rebuild.
+- Reworked `scripts/load_smoke.py` to reuse one HTTP/1.1 connection per worker,
+  retry a stale keep-alive once, and expose an explicit `--warmup` mode. The
+  re-release commit is `2cebebf22e225bae3557ef30edb88eda7260a5ed`; a cold
+  four-worker smoke had zero failures but p95 `1.94s`, while the warmed
+  four-worker smoke passed 40/40 requests with p95 `458.98ms` (health
+  `491.24ms`, readiness `450.06ms`). The three script regression tests pass.
+  Web root, sign-in, API liveness, API readiness, and OpenResty syntax checks
+  all returned success after the reload and rebuild.
 - Rebuilt the full Pi-enabled production Compose stack and passed readiness,
   migration, checkpoint initialization, API/Pi health, Worker, Worker Beat,
   and Web startup. MiMo remains the workflow provider and OpenRouter remains

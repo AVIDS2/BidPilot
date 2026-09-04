@@ -70,18 +70,23 @@ def test_load_smoke_identifies_itself_without_credentials(monkeypatch: pytest.Mo
         def read(self) -> bytes:
             return b"ok"
 
-        def __enter__(self) -> "Response":
-            return self
+    class Connection:
+        def __init__(self, timeout: float) -> None:
+            observed["timeout"] = str(timeout)
 
-        def __exit__(self, *_args: object) -> None:
+        def request(self, _method: str, _target: str, *, headers: dict[str, str]) -> None:
+            observed["user_agent"] = headers["User-Agent"]
+
+        def getresponse(self) -> Response:
+            return Response()
+
+        def close(self) -> None:
             return None
 
-    def fake_urlopen(request: object, timeout: float) -> Response:
-        observed["user_agent"] = request.get_header("User-agent")  # type: ignore[union-attr]
-        observed["timeout"] = str(timeout)
-        return Response()
+    def fake_connection(_parsed_url: object, timeout: float) -> Connection:
+        return Connection(timeout)
 
-    monkeypatch.setattr(load_smoke, "urlopen", fake_urlopen)
+    monkeypatch.setattr(load_smoke, "_connection_for", fake_connection)
 
     sample = load_smoke.request_once("https://api.example.com", "/health", 3.0)
 

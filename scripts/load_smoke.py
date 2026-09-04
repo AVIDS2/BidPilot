@@ -10,7 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import NamedTuple
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 
 SMOKE_USER_AGENT = "BidPilot-ReleaseSmoke/1.0"
@@ -32,7 +32,7 @@ class LoadSummary(NamedTuple):
     p95_ms: float
 
 
-def _connection_for(parsed_url, timeout: float) -> http.client.HTTPConnection:
+def _connection_for(parsed_url: SplitResult, timeout: float) -> http.client.HTTPConnection:
     """Reuse one HTTP/1.1 connection per worker instead of timing every TLS handshake."""
     key = (parsed_url.scheme, parsed_url.hostname, parsed_url.port)
     connections = getattr(_connection_local, "connections", None)
@@ -49,7 +49,7 @@ def _connection_for(parsed_url, timeout: float) -> http.client.HTTPConnection:
     return connection
 
 
-def _close_connection(parsed_url) -> None:
+def _close_connection(parsed_url: SplitResult) -> None:
     connections = getattr(_connection_local, "connections", None)
     if not connections:
         return
@@ -146,10 +146,33 @@ def normalize_endpoint(endpoint: str) -> str:
     return parsed.path
 
 
-def run_load_smoke(base_url: str, endpoints: list[str], requests_per_endpoint: int, concurrency: int, timeout: float) -> tuple[list[Sample], LoadSummary]:
+def _warmup_worker(base_url: str, endpoints: list[str], timeout: float, barrier: threading.Barrier) -> None:
+    """Establish one connection per worker before measuring steady-state latency."""
+    barrier.wait()
+    for endpoint in endpoints:
+        request_once(base_url, endpoint, timeout)
+
+
+def run_load_smoke(
+    base_url: str,
+    endpoints: list[str],
+    requests_per_endpoint: int,
+    concurrency: int,
+    timeout: float,
+    *,
+    warmup_per_worker: bool = False,
+) -> tuple[list[Sample], LoadSummary]:
     work = [(base_url, endpoint, timeout) for endpoint in endpoints for _ in range(requests_per_endpoint)]
     samples = []
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        if warmup_per_worker:
+            barrier = threading.Barrier(concurrency)
+            warmups = [
+                executor.submit(_warmup_worker, base_url, endpoints, timeout, barrier)
+                for _ in range(concurrency)
+            ]
+            for warmup in warmups:
+                warmup.result()
         futures = [executor.submit(request_once, *item) for item in work]
         for future in as_completed(futures):
             samples.append(future.result())
@@ -168,6 +191,7 @@ def build_evidence_artifact(
     samples: list[Sample],
     summary: LoadSummary,
     failures: list[str],
+    warmup_per_worker: bool = False,
 ) -> dict[str, object]:
     """Return a redacted, portable record suitable for a release attachment."""
     return {
@@ -177,6 +201,7 @@ def build_evidence_artifact(
         "endpoints": endpoints,
         "requests_per_endpoint": requests_per_endpoint,
         "concurrency": concurrency,
+        "warmup_per_worker": warmup_per_worker,
         "timeout_seconds": timeout,
         "thresholds": {
             "max_error_rate": max_error_rate,
@@ -207,6 +232,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=5.0)
     parser.add_argument("--max-error-rate", type=float, default=0.0)
     parser.add_argument("--max-p95-ms", type=float, default=1000.0)
+    parser.add_argument(
+        "--warmup",
+        action="store_true",
+        help="establish one keep-alive connection per worker before measuring",
+    )
     parser.add_argument("--require-https", action="store_true", help="reject a non-HTTPS smoke target")
     parser.add_argument("--output-file", type=Path, help="write a redacted JSON release-evidence artifact")
     return parser.parse_args()
@@ -226,8 +256,10 @@ def main() -> int:
         requests_per_endpoint=args.requests,
         concurrency=args.concurrency,
         timeout=args.timeout,
+        warmup_per_worker=args.warmup,
     )
 
+    print(f"warmup_per_worker={args.warmup}")
     print(f"total={summary.total} failures={summary.failures} error_rate={summary.error_rate:.2%} avg_ms={summary.avg_ms:.2f} p95_ms={summary.p95_ms:.2f}")
     for endpoint in endpoints:
         endpoint_samples = [sample for sample in samples if sample.endpoint == endpoint]
@@ -250,6 +282,7 @@ def main() -> int:
                 samples=samples,
                 summary=summary,
                 failures=failures,
+                warmup_per_worker=args.warmup,
             ),
             args.output_file,
         )
