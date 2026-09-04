@@ -25,7 +25,9 @@ def test_deepseek_v4_draft_disables_thinking(monkeypatch):
     captured: dict = {}
 
     monkeypatch.setattr(llm_module, "_api_key", lambda: "test-key")
-    monkeypatch.setattr(llm_module, "_api_url", lambda: "https://api.deepseek.com/v1/chat/completions")
+    monkeypatch.setattr(
+        llm_module, "_api_url", lambda: "https://api.deepseek.com/v1/chat/completions"
+    )
     monkeypatch.setattr(llm_module, "_api_model", lambda: "deepseek-v4-flash")
     monkeypatch.setattr(
         llm_module.httpx,
@@ -45,9 +47,42 @@ def test_deepseek_v4_draft_disables_thinking(monkeypatch):
     assert "reasoning_effort" not in captured
 
 
+def test_mimo_draft_disables_thinking_and_uses_completion_budget(monkeypatch):
+    captured: dict = {}
+
+    monkeypatch.setattr(llm_module, "_api_key", lambda: "test-key")
+    monkeypatch.setattr(
+        llm_module, "_api_url", lambda: "https://api.xiaomimimo.com/v1/chat/completions"
+    )
+    monkeypatch.setattr(llm_module, "_api_model", lambda: "mimo-v2.5-pro")
+    monkeypatch.setattr(
+        llm_module.httpx,
+        "post",
+        lambda _url, **kwargs: (
+            captured.update(kwargs["json"])
+            or SimpleNamespace(
+                status_code=200,
+                json=lambda: {"choices": [{"message": {"content": "## Draft"}}]},
+            )
+        ),
+    )
+
+    llm_module.draft_section("summary", [], "project-1")
+
+    assert captured["thinking"] == {"type": "disabled"}
+    assert captured["max_completion_tokens"] == llm_module._MAX_DRAFT_OUTPUT_TOKENS
+    assert "max_tokens" not in captured
+
+
 def test_section_drafter_increments_draft_iteration(monkeypatch):
-    monkeypatch.setattr(section_drafter_module, "_resolve_provider", lambda _provider_config_id: (None, "openai"))
-    monkeypatch.setattr(section_drafter_module, "_load_system_prompt", lambda _project_id: None)
+    monkeypatch.setattr(
+        section_drafter_module,
+        "_resolve_provider",
+        lambda _provider_config_id: (None, "openai"),
+    )
+    monkeypatch.setattr(
+        section_drafter_module, "_load_system_prompt", lambda _project_id: None
+    )
     monkeypatch.setattr(
         section_drafter_module,
         "draft_section_openai",
@@ -74,7 +109,9 @@ def test_section_drafter_increments_draft_iteration(monkeypatch):
     assert result["iteration"] == 2
 
 
-def test_section_drafter_reloads_authorized_evidence_instead_of_state_payload(monkeypatch):
+def test_section_drafter_reloads_authorized_evidence_instead_of_state_payload(
+    monkeypatch,
+):
     session = MagicMock()
     snapshot = EvidenceSetSnapshot(
         id="evidence-set-1",
@@ -106,12 +143,20 @@ def test_section_drafter_reloads_authorized_evidence_instead_of_state_payload(mo
         "load_authorized_evidence_set",
         lambda *_args, **_kwargs: snapshot,
     )
-    monkeypatch.setattr(section_drafter_module, "_resolve_provider", lambda _provider_config_id: (None, "openai"))
-    monkeypatch.setattr(section_drafter_module, "_load_system_prompt", lambda _project_id: None)
+    monkeypatch.setattr(
+        section_drafter_module,
+        "_resolve_provider",
+        lambda _provider_config_id: (None, "openai"),
+    )
+    monkeypatch.setattr(
+        section_drafter_module, "_load_system_prompt", lambda _project_id: None
+    )
 
     def draft_stub(_section_key, evidence_texts, *_args, **_kwargs):
         seen_evidence.extend(evidence_texts)
-        return DraftResult(content_markdown="## Draft", evidence_ids=[], model_used="stub")
+        return DraftResult(
+            content_markdown="## Draft", evidence_ids=[], model_used="stub"
+        )
 
     monkeypatch.setattr(section_drafter_module, "draft_section_openai", draft_stub)
 
@@ -187,9 +232,17 @@ def test_section_drafter_retries_only_typed_transient_provider_failures(monkeypa
     uncertain_reservations: list[dict] = []
     usage_records: list[dict] = []
 
-    monkeypatch.setattr(section_drafter_module, "_resolve_provider", lambda _provider_config_id: (None, "openai"))
-    monkeypatch.setattr(section_drafter_module, "_load_system_prompt", lambda _project_id: None)
-    monkeypatch.setattr(section_drafter_module._draft_with_retry.retry, "wait", wait_none())
+    monkeypatch.setattr(
+        section_drafter_module,
+        "_resolve_provider",
+        lambda _provider_config_id: (None, "openai"),
+    )
+    monkeypatch.setattr(
+        section_drafter_module, "_load_system_prompt", lambda _project_id: None
+    )
+    monkeypatch.setattr(
+        section_drafter_module._draft_with_retry.retry, "wait", wait_none()
+    )
     monkeypatch.setattr(
         section_drafter_module,
         "publish_provider_retry",
@@ -198,8 +251,10 @@ def test_section_drafter_retries_only_typed_transient_provider_failures(monkeypa
     monkeypatch.setattr(
         section_drafter_module,
         "begin_workflow_model_call",
-        lambda **kwargs: model_calls.append(kwargs)
-        or SimpleNamespace(reservation_key=f"reservation-{len(model_calls)}"),
+        lambda **kwargs: (
+            model_calls.append(kwargs)
+            or SimpleNamespace(reservation_key=f"reservation-{len(model_calls)}")
+        ),
     )
     monkeypatch.setattr(
         section_drafter_module,
@@ -220,7 +275,9 @@ def test_section_drafter_retries_only_typed_transient_provider_failures(monkeypa
                 "模型服务请求超时，正在按策略重试。",
                 retryable=True,
             )
-        return DraftResult(content_markdown="## Draft", evidence_ids=[], model_used="test-model")
+        return DraftResult(
+            content_markdown="## Draft", evidence_ids=[], model_used="test-model"
+        )
 
     monkeypatch.setattr(section_drafter_module, "draft_section_openai", flaky_draft)
 
@@ -261,8 +318,10 @@ def test_section_drafter_reserves_first_attempt_of_later_graph_iteration(monkeyp
     monkeypatch.setattr(
         section_drafter_module,
         "begin_workflow_model_call",
-        lambda **kwargs: model_calls.append(kwargs)
-        or SimpleNamespace(reservation_key="later-iteration"),
+        lambda **kwargs: (
+            model_calls.append(kwargs)
+            or SimpleNamespace(reservation_key="later-iteration")
+        ),
     )
 
     class RetryState:
@@ -288,8 +347,14 @@ def test_section_drafter_reserves_first_attempt_of_later_graph_iteration(monkeyp
 def test_section_drafter_does_not_retry_provider_auth_failure(monkeypatch):
     attempts: list[int] = []
 
-    monkeypatch.setattr(section_drafter_module, "_resolve_provider", lambda _provider_config_id: (None, "openai"))
-    monkeypatch.setattr(section_drafter_module, "_load_system_prompt", lambda _project_id: None)
+    monkeypatch.setattr(
+        section_drafter_module,
+        "_resolve_provider",
+        lambda _provider_config_id: (None, "openai"),
+    )
+    monkeypatch.setattr(
+        section_drafter_module, "_load_system_prompt", lambda _project_id: None
+    )
 
     def auth_failure(*_args, **_kwargs):
         attempts.append(1)
@@ -320,13 +385,17 @@ def test_section_drafter_does_not_retry_provider_auth_failure(monkeypatch):
 
 
 def test_missing_byok_provider_config_is_a_terminal_error(monkeypatch):
-    monkeypatch.setattr(section_drafter_module, "resolve_structured_provider", lambda _config_id: (_ for _ in ()).throw(
-        ProviderInvocationError(
-            "provider_config_missing",
-            "所选模型提供商配置已不可用，请重新选择后再试。",
-            retryable=False,
-        )
-    ))
+    monkeypatch.setattr(
+        section_drafter_module,
+        "resolve_structured_provider",
+        lambda _config_id: (_ for _ in ()).throw(
+            ProviderInvocationError(
+                "provider_config_missing",
+                "所选模型提供商配置已不可用，请重新选择后再试。",
+                retryable=False,
+            )
+        ),
+    )
 
     with pytest.raises(ProviderInvocationError) as error:
         section_drafter_module._resolve_provider("deleted-config")
@@ -338,13 +407,17 @@ def test_missing_byok_provider_config_is_a_terminal_error(monkeypatch):
 def test_section_drafter_returns_safe_failure_for_deleted_byok_config(monkeypatch):
     attempts: list[bool] = []
 
-    monkeypatch.setattr(section_drafter_module, "resolve_structured_provider", lambda _config_id: (_ for _ in ()).throw(
-        ProviderInvocationError(
-            "provider_config_missing",
-            "所选模型提供商配置已不可用，请重新选择后再试。",
-            retryable=False,
-        )
-    ))
+    monkeypatch.setattr(
+        section_drafter_module,
+        "resolve_structured_provider",
+        lambda _config_id: (_ for _ in ()).throw(
+            ProviderInvocationError(
+                "provider_config_missing",
+                "所选模型提供商配置已不可用，请重新选择后再试。",
+                retryable=False,
+            )
+        ),
+    )
     monkeypatch.setattr(
         section_drafter_module,
         "draft_section_openai",

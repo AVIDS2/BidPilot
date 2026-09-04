@@ -20,8 +20,14 @@ def test_openai_compatible_structured_call_normalizes_usage(monkeypatch):
         captured.update(kwargs)
         return _Response(
             {
-                "choices": [{"message": {"content": '[{"requirement_text": "Must comply"}]'}}],
-                "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+                "choices": [
+                    {"message": {"content": '[{"requirement_text": "Must comply"}]'}}
+                ],
+                "usage": {
+                    "prompt_tokens": 11,
+                    "completion_tokens": 7,
+                    "total_tokens": 18,
+                },
             }
         )
 
@@ -73,10 +79,18 @@ def test_structured_call_resolves_base_url_and_profile_headers(monkeypatch):
     )
 
     assert captured["url"] == "https://mimo.example.test/v1/chat/completions"
-    assert captured["headers"] == {"api-key": "test-key", "content-type": "application/json"}
+    assert captured["headers"] == {
+        "api-key": "test-key",
+        "content-type": "application/json",
+    }
+    assert captured["json"]["max_completion_tokens"] == 100
+    assert "max_tokens" not in captured["json"]
+    assert captured["json"]["thinking"] == {"type": "disabled"}
 
 
-def test_deepseek_v4_structured_call_enables_thinking_only_for_reasoning_nodes(monkeypatch):
+def test_deepseek_v4_structured_call_enables_thinking_only_for_reasoning_nodes(
+    monkeypatch,
+):
     captured: dict = {}
 
     def fake_post(_url, **kwargs):
@@ -131,7 +145,9 @@ def test_opencode_go_structured_call_uses_pi_compatible_thinking_payload(monkeyp
     assert "reasoning_effort" not in captured["json"]
 
 
-def test_anthropic_structured_call_uses_messages_protocol_and_normalizes_usage(monkeypatch):
+def test_anthropic_structured_call_uses_messages_protocol_and_normalizes_usage(
+    monkeypatch,
+):
     captured: dict = {}
 
     def fake_post(_url, **kwargs):

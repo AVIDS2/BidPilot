@@ -24,14 +24,20 @@ from app.adapters.llm import (
     _supports_deepseek_thinking,
     _supports_reasoning_effort,
 )
-from app.adapters.provider_errors import ProviderInvocationError, provider_error_for_status
+from app.adapters.provider_errors import (
+    ProviderInvocationError,
+    provider_error_for_status,
+)
 from app.provider_registry import get_provider_by_id
 from contracts.model_usage import (
     ProviderUsageMeasurement,
     normalize_anthropic_usage,
     normalize_openai_usage,
 )
-from contracts.provider_profiles import ProviderProfileError, resolve_provider_chat_request
+from contracts.provider_profiles import (
+    ProviderProfileError,
+    resolve_provider_chat_request,
+)
 from contracts.untrusted_context import with_untrusted_context_guard
 
 
@@ -52,6 +58,14 @@ class StructuredModelResult:
 
 def _is_opencode_go_gateway(url: str) -> bool:
     return "opencode.ai/zen/go" in url.lower()
+
+
+def _is_mimo_provider(url: str, provider_id: str, model: str) -> bool:
+    normalized = f"{url} {provider_id} {model}".lower()
+    return "xiaomimimo.com" in normalized or provider_id.casefold() in {
+        "mimo",
+        "xiaomi",
+    }
 
 
 def resolve_structured_provider(
@@ -99,7 +113,12 @@ def _anthropic_connection(
     provider_config: dict[str, str | None] | None,
 ) -> tuple[str | None, str, str, str]:
     if provider_config is None:
-        return anthropic_api_key(), anthropic_api_url(), anthropic_api_model(), "custom-anthropic"
+        return (
+            anthropic_api_key(),
+            anthropic_api_url(),
+            anthropic_api_model(),
+            "custom-anthropic",
+        )
     return (
         provider_config.get("api_key") or anthropic_api_key(),
         provider_config.get("api_url") or anthropic_api_url(),
@@ -144,18 +163,28 @@ def _invoke_openai_compatible(
         ],
         "max_tokens": max_output_tokens,
     }
-    if _supports_deepseek_thinking(request.url, model):
+    if _is_mimo_provider(request.url, provider_id, model):
+        # MiMo-V2.5 enables thinking by default. Structured extraction and
+        # review must return their JSON payload directly; leaving thinking on
+        # can spend the whole bounded completion budget on reasoning_content.
+        payload["max_completion_tokens"] = payload.pop("max_tokens")
+        payload["thinking"] = {"type": "disabled"}
+    elif _supports_deepseek_thinking(request.url, model):
         # DeepSeek V4 has thinking on by default. Structured workflow nodes
         # activate it only when their caller explicitly requested reasoning.
         payload["thinking"] = {"type": "enabled" if reasoning_effort else "disabled"}
         # Pi sends OpenCode Go's DeepSeek models `thinking` only. The
         # gateway is OpenAI-compatible but does not need the DeepSeek
         # official-endpoint compatibility alias for reasoning effort.
-        if reasoning_effort in _OPENAI_REASONING_EFFORT and not _is_opencode_go_gateway(request.url):
+        if reasoning_effort in _OPENAI_REASONING_EFFORT and not _is_opencode_go_gateway(
+            request.url
+        ):
             payload["reasoning_effort"] = _deepseek_reasoning_effort(reasoning_effort)
     else:
         payload["temperature"] = temperature
-        if reasoning_effort in _OPENAI_REASONING_EFFORT and _supports_reasoning_effort(request.url, model):
+        if reasoning_effort in _OPENAI_REASONING_EFFORT and _supports_reasoning_effort(
+            request.url, model
+        ):
             payload["reasoning_effort"] = _OPENAI_REASONING_EFFORT[reasoning_effort]
     try:
         response = httpx.post(
@@ -214,7 +243,9 @@ def _invoke_anthropic(
     if not api_key:
         _raise_missing_provider()
     try:
-        request = resolve_provider_chat_request("anthropic", provider_id, raw_url, api_key)
+        request = resolve_provider_chat_request(
+            "anthropic", provider_id, raw_url, api_key
+        )
     except ProviderProfileError as exc:
         raise ProviderInvocationError(
             "provider_request_invalid",
@@ -227,9 +258,13 @@ def _invoke_anthropic(
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_prompt}],
     }
-    if reasoning_effort in _ADAPTIVE_THINKING_EFFORT and _supports_adaptive_thinking(request.url, model):
+    if reasoning_effort in _ADAPTIVE_THINKING_EFFORT and _supports_adaptive_thinking(
+        request.url, model
+    ):
         payload["thinking"] = {"type": "adaptive"}
-        payload["output_config"] = {"effort": _ADAPTIVE_THINKING_EFFORT[reasoning_effort]}
+        payload["output_config"] = {
+            "effort": _ADAPTIVE_THINKING_EFFORT[reasoning_effort]
+        }
     else:
         payload["temperature"] = temperature
     if (

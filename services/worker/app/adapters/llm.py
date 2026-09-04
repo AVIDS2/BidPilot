@@ -10,15 +10,26 @@ from typing import Literal
 
 import httpx
 
-from app.adapters.provider_env import chat_api_key, chat_api_url, chat_model, chat_provider_id
+from app.adapters.provider_env import (
+    chat_api_key,
+    chat_api_url,
+    chat_model,
+    chat_provider_id,
+)
 from app.adapters.provider_errors import (
     ProviderInvocationError,
     allow_stub_llm,
     provider_error_for_status,
 )
 from contracts.model_usage import ProviderUsageMeasurement, normalize_openai_usage
-from contracts.provider_profiles import ProviderProfileError, resolve_provider_chat_request
-from contracts.untrusted_context import build_untrusted_context_packet, with_untrusted_context_guard
+from contracts.provider_profiles import (
+    ProviderProfileError,
+    resolve_provider_chat_request,
+)
+from contracts.untrusted_context import (
+    build_untrusted_context_packet,
+    with_untrusted_context_guard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +94,16 @@ def _api_model() -> str:
     return chat_model(_DEFAULT_MODEL)
 
 
-def _build_prompt(section_key: str, evidence_texts: list[str], review_feedback: str | None = None) -> str:
+def _build_prompt(
+    section_key: str, evidence_texts: list[str], review_feedback: str | None = None
+) -> str:
     records: list[dict[str, object]] = [
         {
             "kind": "draft_task",
             "section_key": section_key[:120],
-            "review_feedback": (review_feedback or "")[:_MAX_REVIEW_FEEDBACK_CHARACTERS],
+            "review_feedback": (review_feedback or "")[
+                :_MAX_REVIEW_FEEDBACK_CHARACTERS
+            ],
         }
     ]
     records.extend(
@@ -121,11 +136,21 @@ def _supports_deepseek_thinking(url: str, model: str) -> bool:
     return "api.deepseek.com" in normalized or "deepseek-v4" in model.lower()
 
 
+def _is_mimo_provider(url: str, provider_id: str, model: str) -> bool:
+    normalized = f"{url} {provider_id} {model}".lower()
+    return "xiaomimimo.com" in normalized or provider_id.casefold() in {
+        "mimo",
+        "xiaomi",
+    }
+
+
 def _deepseek_reasoning_effort(reasoning_effort: str) -> str:
     return _DEEPSEEK_REASONING_EFFORT[reasoning_effort]
 
 
-def _system_prompt_with_reasoning(system_prompt: str, reasoning_effort: str | None) -> str:
+def _system_prompt_with_reasoning(
+    system_prompt: str, reasoning_effort: str | None
+) -> str:
     trusted_instructions = system_prompt
     if reasoning_effort not in _REASONING_INSTRUCTIONS:
         return with_untrusted_context_guard(
@@ -143,9 +168,15 @@ def _stub_draft(
     evidence_texts: list[str],
     review_feedback: str | None,
 ) -> DraftResult:
-    evidence_block = "\n".join(f"- {text[:100]}" for text in evidence_texts[:5]) if evidence_texts else "- No evidence available"
-    feedback_note = f"\n\n*Revision addressing: {review_feedback}*" if review_feedback else ""
-    markdown = f"""## {section_key.replace('-', ' ').title()}
+    evidence_block = (
+        "\n".join(f"- {text[:100]}" for text in evidence_texts[:5])
+        if evidence_texts
+        else "- No evidence available"
+    )
+    feedback_note = (
+        f"\n\n*Revision addressing: {review_feedback}*" if review_feedback else ""
+    )
+    markdown = f"""## {section_key.replace("-", " ").title()}
 
 This is a draft section for **{section_key}**.
 
@@ -211,7 +242,8 @@ def draft_section(
 
     prompt = _build_prompt(section_key, evidence_texts, review_feedback)
     effective_system_prompt = _system_prompt_with_reasoning(
-        system_prompt or "You are a professional document writer. Write clear, evidence-backed sections in markdown.",
+        system_prompt
+        or "You are a professional document writer. Write clear, evidence-backed sections in markdown.",
         reasoning_effort,
     )
     payload = {
@@ -226,7 +258,14 @@ def draft_section(
         # user-visible draft at all, so reserve enough budget for both.
         "max_tokens": _MAX_DRAFT_OUTPUT_TOKENS,
     }
-    if _supports_deepseek_thinking(request.url, model):
+    if _is_mimo_provider(request.url, provider_id, model):
+        # MiMo-V2.5 defaults to thinking mode. A section draft already has a
+        # deterministic evidence/plan/review path around it, so keep the model
+        # focused on the visible section and avoid spending the full budget on
+        # hidden reasoning before any markdown is returned.
+        payload["max_completion_tokens"] = payload.pop("max_tokens")
+        payload["thinking"] = {"type": "disabled"}
+    elif _supports_deepseek_thinking(request.url, model):
         # DeepSeek V4 defaults to thinking mode. Drafting is a bounded writing
         # task, so disable it explicitly and reserve reasoning for the parser,
         # planner, and reviewer structured-task calls.
@@ -269,8 +308,12 @@ def draft_section(
             retryable=True,
         ) from exc
     if not isinstance(content, str) or not content.strip():
-        finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
-        reasoning_content = message.get("reasoning_content") if isinstance(message, dict) else None
+        finish_reason = (
+            choice.get("finish_reason") if isinstance(choice, dict) else None
+        )
+        reasoning_content = (
+            message.get("reasoning_content") if isinstance(message, dict) else None
+        )
         logger.warning(
             "LLM completed without draft content (finish_reason=%s, content_type=%s, reasoning_chars=%d)",
             finish_reason,
