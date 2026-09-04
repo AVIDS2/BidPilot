@@ -11,7 +11,8 @@ from dataclasses import dataclass
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, aliased
 
 from app.access.service import require_project_capability
 from app.auth.schemas import CurrentUser
@@ -43,7 +44,8 @@ _LLM_TIMEOUT = 120.0
 
 # Default system prompt
 _SYSTEM_PROMPT = (
-    "你是DocPilot AI助手，帮助用户管理和创建投标文档。"
+    "你是 BidPilot Copilot，帮助用户管理投标项目、资料、证据和响应交付。"
+    "不要把底层模型或模型供应商当作自己的身份；只有用户明确询问运行配置时才说明。"
     "请用中文回答，简洁明了。"
 )
 
@@ -481,6 +483,7 @@ def resolve_conversation_project_context(
 ) -> str | None:
     """Resolve a conversation's immutable project context after access checks."""
     effective_project_id = requested_project_id
+    conversation: ChatConversation | None = None
     if conversation_id:
         conversation = get_conversation(db, conversation_id, user.id)
         if conversation is None:
@@ -496,6 +499,14 @@ def resolve_conversation_project_context(
         effective_project_id = conversation.project_id
 
     if effective_project_id:
+        project = db.get(Project, effective_project_id)
+        if conversation is not None and (project is None or project.status == "deleted"):
+            # Projects are soft-deleted. Historical conversations remain useful
+            # even after their workspace is gone, but must become unbound before
+            # the next turn so no missing project context reaches the tools.
+            conversation.project_id = None
+            db.commit()
+            return None
         require_project_capability(
             db,
             current_user=user,
@@ -548,6 +559,26 @@ def list_conversations(
     history does not appear to vanish after the user navigates into a project.
     """
     query = db.query(ChatConversation).filter(ChatConversation.user_id == user_id)
+    # Older releases created one ChatConversation per child agent. Keep those
+    # rows recoverable for operators, but remove them from the user history:
+    # a child runtime is part of its parent Copilot turn, not a second chat.
+    child_run = aliased(RuntimeRun)
+    parent_run = aliased(RuntimeRun)
+    legacy_child_conversation = aliased(ChatConversation)
+    legacy_child_conversations = (
+        select(child_run.conversation_id)
+        .join(parent_run, parent_run.id == child_run.parent_run_id)
+        .join(legacy_child_conversation, legacy_child_conversation.id == child_run.conversation_id)
+        .where(
+            child_run.kind == "subagent",
+            child_run.conversation_id.is_not(None),
+            child_run.user_id == user_id,
+            legacy_child_conversation.user_id == user_id,
+            legacy_child_conversation.id != parent_run.conversation_id,
+            legacy_child_conversation.source_conversation_id == parent_run.conversation_id,
+        )
+    )
+    query = query.filter(~ChatConversation.id.in_(legacy_child_conversations))
     if project_id:
         query = query.filter(
             (ChatConversation.project_id == project_id)

@@ -60,6 +60,7 @@ def list_runtime_runs(
             started_at=row.run.started_at,
             finished_at=row.run.finished_at,
             latest_event_summary=row.latest_event_summary,
+            parent_run_id=row.run.parent_run_id,
         )
         for row in list_runtime_runs_query(
             db,

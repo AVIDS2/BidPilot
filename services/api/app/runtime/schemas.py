@@ -49,6 +49,7 @@ class RuntimeRunListItem(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     latest_event_summary: str | None = None
+    parent_run_id: str | None = None
 
 
 class RuntimeChildRunRead(BaseModel):

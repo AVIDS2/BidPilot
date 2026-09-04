@@ -11,6 +11,34 @@ research surface, while PostgreSQL event replay is used only for reconnect or
 recovery. A tender-specific Skill may constrain scope and output, but it does
 not reimplement the research loop or issue an unbounded search sequence.
 
+## User-facing conversation and child-run boundary
+
+One user conversation is the durable presentation boundary for one Copilot
+turn. A Pi `spawn_subagents` call may create several `RuntimeRun(kind=subagent)`
+rows with `parent_run_id` pointing at the parent assistant run, but it must not
+create a `ChatConversation` or a second assistant message. Child progress and
+verified summaries are read from the parent runtime tree and shown in the
+Agent side surface. This keeps parallel work visible without turning internal
+execution branches into a history full of `researcher:` sessions.
+
+The browser restores only root assistant runs for the conversation transcript.
+Child runs are queried through the parent-child endpoint and remain available
+to the current turn's collaboration panel. Terminal child rows are not live
+conversation state and are not used to keep the parent composer busy. Historical
+child conversations created by older releases remain stored for recovery, but
+the user history query excludes rows that are provably linked to a child run;
+this is a compatibility filter, not destructive cleanup.
+
+The Agent side surface is one contextual panel with template `Tabs` for
+collaboration tasks, response workflow, and attachment preview. Desktop uses
+the installed `ResizablePanelGroup`; mobile uses the installed `Sheet`. A side
+surface can be closed without navigating away from the conversation.
+
+Queue entries are local pending user messages, not runtime runs. The composer
+queues only while the response is genuinely active or paused for confirmation /
+input, keeps an entry when a request boundary rejects it because of a race, and
+offers an explicit next-message action when the conversation is settled.
+
 ## Purpose
 
 BidPilot has two different AI execution modes. They solve different problems

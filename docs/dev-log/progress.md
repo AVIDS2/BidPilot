@@ -1,5 +1,40 @@
 # Progress Log
 
+## 2026-09-04 Agent workspace and template interaction pass
+
+- Rechecked the Kiranism upstream theme and Base UI contracts. The public
+  landing FAQ uses the existing template Accordion motion without wrapping
+  each item in an extra card border. Duplicated desktop/mobile theme selector
+  IDs were removed with per-instance IDs; Supabase remains the configured
+  default for users without a saved theme preference.
+- Rebuilt Agent history around real project workspaces: project records and
+  conversation rows use the installed `Accordion`, `Item`, `Empty`, `Dialog`,
+  `Field`, `Input`, `Badge`, `Button`, and `DropdownMenu` components. Users can
+  create a project workspace from the history surface; stale project IDs no
+  longer navigate to a broken project page, and deleted-project conversations
+  are recovered as unbound history without weakening project access checks.
+- Removed the legacy child-agent conversation/message path. New Pi child runs
+  share the parent conversation and remain runtime branches; the user-facing
+  history contains only the parent conversation. Legacy child session rows are
+  filtered from the user list but retained for operator recovery.
+- Added a Kiranism `ResizablePanelGroup` side surface with template `Tabs` for
+  collaboration tasks, response workflow canvas, and attachment preview. The
+  same tabs are used inside the mobile `Sheet`; child agents are displayed as
+  current-process collaboration progress, not independent chats.
+- Queue sending now uses actual response state, preserves messages rejected by
+  a request race, and exposes a `发送下一条` action in both linear and floating
+  composers. Copilot identity is explicit in the Pi and legacy chat prompt;
+  MiMo remains a runtime provider detail only when the user asks for it.
+- Verification: Web TypeScript check, production build, formatting, full Web
+  tests (`116 passed`), Pi sidecar tests (`18 passed`), API chat/access/
+  subagent tests (`43 passed`), API runtime listing tests (`7 passed`), Worker
+  subagent/runtime tests (`8 passed`), Python compileall, and local
+  production-browser landing acceptance for Supabase theme selection, FAQ
+  expansion, mobile navigation, and mobile viewport reflow. The API focused
+  runs use dedicated SQLite databases ending in `_test`; SQLAlchemy reports the
+  repository's existing foreign-key-cycle warning while dropping those test
+  tables. No production deployment was performed in this interaction yet.
+
 ## 2026-09-03 production delivery
 
 - Promoted the final release commit `7843f42132cb179df18642351f47b25945408643`

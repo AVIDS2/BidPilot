@@ -625,6 +625,55 @@ class TestChatService:
         assert any(c.project_id is None for c in convs)
         assert all(c.project_id != project_two.id for c in convs)
 
+    def test_list_conversations_hides_legacy_child_agent_sessions(
+        self,
+        test_db,
+        chat_test_user_id,
+        default_org_id: str,
+    ):
+        """Child runtime work is part of the parent turn, not user history."""
+        from app.chat.service import create_conversation, list_conversations
+        from app.models import ChatConversation, RuntimeRun
+
+        parent_conversation = create_conversation(test_db, chat_test_user_id, None)
+        child_conversation = ChatConversation(
+            user_id=chat_test_user_id,
+            source_conversation_id=parent_conversation.id,
+            title="researcher: legacy task",
+        )
+        test_db.add(child_conversation)
+        test_db.flush()
+        parent_run = RuntimeRun(
+            kind="assistant_turn",
+            status="succeeded",
+            org_id=default_org_id,
+            user_id=chat_test_user_id,
+            conversation_id=parent_conversation.id,
+            engine="pi",
+            trace_id=f"parent-{_unique_id()}",
+            policy_snapshot_json={},
+        )
+        test_db.add(parent_run)
+        test_db.flush()
+        child_run = RuntimeRun(
+            kind="subagent",
+            status="succeeded",
+            org_id=default_org_id,
+            user_id=chat_test_user_id,
+            conversation_id=child_conversation.id,
+            parent_run_id=parent_run.id,
+            engine="pi_subagent_worker",
+            trace_id=f"child-{_unique_id()}",
+            policy_snapshot_json={},
+        )
+        test_db.add(child_run)
+        test_db.commit()
+
+        conversations = list_conversations(test_db, chat_test_user_id)
+
+        assert parent_conversation.id in {conversation.id for conversation in conversations}
+        assert child_conversation.id not in {conversation.id for conversation in conversations}
+
     def test_build_messages(self):
         """Builds the messages array correctly."""
         from app.chat.service import _build_messages

@@ -1,13 +1,7 @@
 /* oxlint-disable nextjs/no-img-element -- previews use local blob URLs. */
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
-import {
+  ArrowUpRightIcon,
   BotIcon,
   ChevronDownIcon,
   FileSearchIcon,
@@ -31,6 +25,21 @@ import {
 } from '@/features/agent/components/AIAssistantPanel';
 import { WorkflowCanvas } from '@/components/workflow-canvas';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger
+} from '@/components/ui/accordion';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,11 +49,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle
+} from '@/components/ui/item';
+import { Input } from '@/components/ui/input';
+import { Spinner } from '@/components/ui/spinner';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ClaudeAgentThread } from './claude-agent-thread';
 import { AgentEnvironmentPanel } from './components/agent-environment-panel';
+import { AgentSubagentsPanel } from './components/agent-subagents-panel';
 import { useAIAssistant, type AIAssistantState } from '@/features/agent/state/agent-store';
 import {
   deleteChatConversation,
+  createProject,
   listProjects,
   renameChatConversation,
   setChatConversationPinned,
@@ -60,7 +85,7 @@ import {
   SheetTitle
 } from '@/components/ui/sheet';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Input } from '@/components/ui/input';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import './linear-agent-workspace.css';
 
 const AGENT_COMPACT_MEDIA_QUERY = '(max-width: 1024px)';
@@ -205,6 +230,96 @@ function AgentWorkflowCanvas({
   );
 }
 
+type AgentSideTab =
+  | { type: 'workflow'; projectId: string }
+  | { type: 'subagents'; parentRunId: string }
+  | { type: 'attachment'; selection: AttachmentPreviewSelection };
+
+type AgentSideTabType = AgentSideTab['type'];
+
+function sideTabLabel(tab: AgentSideTab) {
+  if (tab.type === 'workflow') return '响应工作流';
+  if (tab.type === 'subagents') return '协作任务';
+  return tab.selection.name || '附件预览';
+}
+
+function AgentSideSurface({
+  tabs,
+  activeTab,
+  state,
+  onChange,
+  onCloseTab,
+  onOpenProject,
+  showContentHeaders = true
+}: {
+  tabs: AgentSideTab[];
+  activeTab: AgentSideTabType;
+  state: AIAssistantState;
+  onChange: (tab: AgentSideTabType) => void;
+  onCloseTab: (tab: AgentSideTabType) => void;
+  onOpenProject: (projectId: string) => void;
+  showContentHeaders?: boolean;
+}) {
+  return (
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => onChange(value as AgentSideTabType)}
+      className='agent-side-tabs'
+    >
+      <div className='agent-side-tabbar'>
+        <TabsList aria-label='右侧工作区页面' variant='line' className='agent-side-tab-list'>
+          {tabs.map((tab) => (
+            <TabsTrigger
+              key={tab.type}
+              value={tab.type}
+              className='agent-side-tab-trigger'
+              title={sideTabLabel(tab)}
+            >
+              <span className='truncate'>{sideTabLabel(tab)}</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <Button
+          type='button'
+          size='icon-sm'
+          variant='ghost'
+          className='agent-side-tab-close'
+          aria-label='关闭当前侧栏页面'
+          title='关闭当前页面'
+          onClick={() => onCloseTab(activeTab)}
+        >
+          <XIcon aria-hidden='true' />
+        </Button>
+      </div>
+      {tabs.map((tab) => (
+        <TabsContent key={tab.type} value={tab.type} className='agent-side-tab-content'>
+          {tab.type === 'subagents' ? (
+            <AgentSubagentsPanel
+              parentRunId={tab.parentRunId}
+              onClose={() => onCloseTab(tab.type)}
+              showHeader={showContentHeaders}
+            />
+          ) : tab.type === 'workflow' ? (
+            <AgentWorkflowCanvas
+              projectId={tab.projectId}
+              state={state}
+              onClose={() => onCloseTab(tab.type)}
+              onOpenProject={() => onOpenProject(tab.projectId)}
+              showHeader={showContentHeaders}
+            />
+          ) : (
+            <AgentPreviewCanvas
+              selection={tab.selection}
+              onClose={() => onCloseTab(tab.type)}
+              showHeader={showContentHeaders}
+            />
+          )}
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+}
+
 function useCompactViewport() {
   const [isCompact, setIsCompact] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia(AGENT_COMPACT_MEDIA_QUERY).matches : false
@@ -249,6 +364,7 @@ function AgentHistory({
   onNew,
   onSelect,
   onOpenProject,
+  onCreateProject,
   onRename,
   onDelete,
   onTogglePinned
@@ -260,12 +376,17 @@ function AgentHistory({
   onNew: () => void;
   onSelect: (conversationId: string) => void;
   onOpenProject: (projectId: string) => void;
+  onCreateProject: (name: string) => Promise<ProjectRead>;
   onRename: (conversationId: string, title: string) => Promise<void>;
   onDelete: (conversationId: string) => Promise<void>;
   onTogglePinned: (conversationId: string, isPinned: boolean) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const committingIdRef = useRef<string | null>(null);
   const commitEditing = (conversationId: string) => {
     if (committingIdRef.current === conversationId) return;
@@ -281,9 +402,15 @@ function AgentHistory({
   };
   const groups = useMemo(() => {
     const next = new Map<string, ChatConversationRead[]>();
-    for (const conversation of conversations.slice(0, 16)) {
+    for (const conversation of conversations) {
       const projectId = conversation.project_id ?? 'personal';
       next.set(projectId, [...(next.get(projectId) ?? []), conversation]);
+    }
+    // Show newly created workspaces before their first conversation exists.
+    // Conversation history is organized by real project records, not by an
+    // inferred date bucket or an automatically invented session group.
+    for (const project of projects) {
+      if (!next.has(project.id)) next.set(project.id, []);
     }
     const currentProjectId =
       conversations.find((conversation) => conversation.id === currentConversationId)?.project_id ??
@@ -308,6 +435,24 @@ function AgentHistory({
       });
   }, [conversations, currentConversationId, projects]);
 
+  const submitWorkspace = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = workspaceName.trim();
+    if (!name || creatingWorkspace) return;
+    setCreatingWorkspace(true);
+    setWorkspaceError(null);
+    try {
+      const project = await onCreateProject(name);
+      setWorkspaceName('');
+      setCreateWorkspaceOpen(false);
+      onOpenProject(project.id);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : '工作区创建失败，请稍后重试。');
+    } finally {
+      setCreatingWorkspace(false);
+    }
+  };
+
   return (
     <div className={`bp-linear-history${open ? ' is-open' : ''}`} aria-hidden={!open}>
       <div className='bp-linear-history-inner'>
@@ -320,128 +465,261 @@ function AgentHistory({
         >
           <PlusIcon data-icon='inline-start' /> 新对话
         </Button>
-        {groups.some(({ id }) => id !== 'personal') ? (
-          <div className='bp-linear-history-section-label'>项目</div>
-        ) : null}
-        {groups.map(({ id, items, project }) => {
-          const label = project?.name ?? '个人会话';
-          return (
-            <section className='bp-linear-history-group' key={id}>
-              <div className='bp-linear-history-project-heading'>
-                <Button
-                  type='button'
-                  className='bp-linear-history-project-main'
-                  onClick={() => id !== 'personal' && onOpenProject(id)}
-                  disabled={id === 'personal'}
-                  size='sm'
-                  variant='ghost'
+        <div className='mt-2 flex items-center justify-between gap-2 px-2'>
+          <span className='text-muted-foreground text-xs font-medium'>工作区</span>
+          <Button
+            type='button'
+            aria-label='新建工作区'
+            title='新建工作区'
+            size='icon-xs'
+            variant='ghost'
+            onClick={() => {
+              setWorkspaceError(null);
+              setCreateWorkspaceOpen(true);
+            }}
+          >
+            <PlusIcon aria-hidden='true' />
+          </Button>
+        </div>
+        {groups.length > 0 ? (
+          <Accordion
+            multiple
+            defaultValue={groups.map(({ id }) => `workspace-${id}`)}
+            className='mt-1'
+          >
+            {groups.map(({ id, items, project }) => {
+              const isPersonal = id === 'personal';
+              const isUnavailable = !isPersonal && !project;
+              const label = project?.name ?? (isPersonal ? '未关联工作区' : '历史工作区');
+              const description = project?.scenario_package
+                ? '项目会话'
+                : isUnavailable
+                  ? '工作区已不可用，会话仍保留'
+                  : `${items.length} 个会话`;
+              return (
+                <AccordionItem
+                  key={id}
+                  value={`workspace-${id}`}
+                  className='border-border px-1 last:border-b-0'
                 >
-                  {id === 'personal' ? (
-                    <MessageSquareTextIcon aria-hidden='true' />
-                  ) : (
-                    <FolderKanbanIcon aria-hidden='true' />
-                  )}
-                  <span>
-                    <strong>{label}</strong>
-                    <small>{project?.scenario_package || `${items.length} 个会话`}</small>
-                  </span>
-                </Button>
-                <span className='bp-linear-history-project-count'>{items.length}</span>
-              </div>
-              {items.map((conversation) => {
-                const isEditing = editingId === conversation.id;
-                const title = conversation.title || '未命名对话';
-                return (
-                  <div
-                    key={conversation.id}
-                    className={`bp-linear-history-row${conversation.id === currentConversationId ? ' is-current' : ''}`}
-                  >
-                    {isEditing ? (
-                      <Input
-                        autoFocus
-                        value={editingTitle}
-                        aria-label='会话名称'
-                        onChange={(event) => setEditingTitle(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            commitEditing(conversation.id);
-                          }
-                          if (event.key === 'Escape') setEditingId(null);
-                        }}
-                        onBlur={() => commitEditing(conversation.id)}
-                      />
-                    ) : (
+                  <div className='flex min-w-0 items-center gap-1'>
+                    <AccordionTrigger className='min-w-0 gap-2 px-1.5 py-2 hover:no-underline'>
+                      <span className='flex min-w-0 items-center gap-2 text-left'>
+                        {isPersonal ? (
+                          <MessageSquareTextIcon className='text-muted-foreground size-4 shrink-0' />
+                        ) : (
+                          <FolderKanbanIcon className='text-muted-foreground size-4 shrink-0' />
+                        )}
+                        <span className='grid min-w-0 gap-0.5'>
+                          <span className='truncate text-sm font-medium'>{label}</span>
+                          <span className='text-muted-foreground truncate text-[11px]'>
+                            {description}
+                          </span>
+                        </span>
+                      </span>
+                    </AccordionTrigger>
+                    <Badge variant={isUnavailable ? 'outline' : 'secondary'} className='shrink-0'>
+                      {items.length}
+                    </Badge>
+                    {project ? (
                       <Button
                         type='button'
-                        className='bp-linear-history-row-main'
-                        onClick={() => onSelect(conversation.id)}
-                        size='sm'
+                        size='icon-xs'
                         variant='ghost'
+                        aria-label={`打开工作区 ${project.name}`}
+                        title='打开工作区'
+                        onClick={() => onOpenProject(project.id)}
                       >
-                        <strong>{title}</strong>
-                        {conversation.id === currentConversationId ? <small>当前</small> : null}
+                        <ArrowUpRightIcon aria-hidden='true' />
                       </Button>
-                    )}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            aria-label='会话操作'
-                            className='bp-linear-history-actions'
-                            size='icon-xs'
-                            variant='ghost'
-                          />
-                        }
-                      >
-                        <MoreHorizontalIcon />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align='end' className='w-44'>
-                        <DropdownMenuGroup>
-                          <DropdownMenuLabel>会话操作</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() =>
-                              void onTogglePinned(conversation.id, !conversation.is_pinned).catch(
-                                (error) => console.error('Failed to pin conversation:', error)
-                              )
-                            }
-                          >
-                            <PinIcon fill={conversation.is_pinned ? 'currentColor' : 'none'} />
-                            {conversation.is_pinned ? '取消收藏会话' : '收藏会话'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditingId(conversation.id);
-                              setEditingTitle(conversation.title || '');
-                            }}
-                          >
-                            <PencilIcon />
-                            重命名会话
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() =>
-                              void onDelete(conversation.id).catch((error) =>
-                                console.error('Failed to delete conversation:', error)
-                              )
-                            }
-                            variant='destructive'
-                          >
-                            <Trash2Icon />
-                            删除会话
-                          </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    ) : null}
                   </div>
-                );
-              })}
-            </section>
-          );
-        })}
-        {groups.length === 0 && <p className='bp-linear-history-empty'>还没有会话记录</p>}
+                  <AccordionContent className='pb-2 pl-4'>
+                    {items.length ? (
+                      <ItemGroup className='gap-1'>
+                        {items.map((conversation) => {
+                          const isEditing = editingId === conversation.id;
+                          const isCurrent = conversation.id === currentConversationId;
+                          const title = conversation.title || '未命名对话';
+                          return (
+                            <Item
+                              key={conversation.id}
+                              size='xs'
+                              variant={isCurrent ? 'muted' : 'default'}
+                              className='min-w-0 gap-1 px-2 py-1'
+                            >
+                              <ItemMedia variant='icon'>
+                                <MessageSquareTextIcon className='text-muted-foreground' />
+                              </ItemMedia>
+                              <ItemContent className='min-w-0'>
+                                {isEditing ? (
+                                  <Input
+                                    autoFocus
+                                    value={editingTitle}
+                                    aria-label='会话名称'
+                                    className='h-7'
+                                    onChange={(event) => setEditingTitle(event.target.value)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter') {
+                                        event.preventDefault();
+                                        commitEditing(conversation.id);
+                                      }
+                                      if (event.key === 'Escape') setEditingId(null);
+                                    }}
+                                    onBlur={() => commitEditing(conversation.id)}
+                                  />
+                                ) : (
+                                  <Button
+                                    type='button'
+                                    variant='ghost'
+                                    size='sm'
+                                    className='h-auto min-w-0 justify-start px-0 py-0 text-left hover:bg-transparent'
+                                    onClick={() => onSelect(conversation.id)}
+                                  >
+                                    <ItemTitle className='min-w-0'>{title}</ItemTitle>
+                                  </Button>
+                                )}
+                              </ItemContent>
+                              {isCurrent ? (
+                                <ItemDescription className='shrink-0'>当前</ItemDescription>
+                              ) : null}
+                              <ItemActions className='shrink-0 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100'>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={
+                                      <Button
+                                        aria-label='会话操作'
+                                        size='icon-xs'
+                                        variant='ghost'
+                                      />
+                                    }
+                                  >
+                                    <MoreHorizontalIcon />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align='end' className='w-44'>
+                                    <DropdownMenuGroup>
+                                      <DropdownMenuLabel>会话操作</DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          void onTogglePinned(
+                                            conversation.id,
+                                            !conversation.is_pinned
+                                          ).catch((error) =>
+                                            console.error('Failed to pin conversation:', error)
+                                          )
+                                        }
+                                      >
+                                        <PinIcon
+                                          fill={conversation.is_pinned ? 'currentColor' : 'none'}
+                                        />
+                                        {conversation.is_pinned ? '取消收藏会话' : '收藏会话'}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setEditingId(conversation.id);
+                                          setEditingTitle(conversation.title || '');
+                                        }}
+                                      >
+                                        <PencilIcon />
+                                        重命名会话
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          void onDelete(conversation.id).catch((error) =>
+                                            console.error('Failed to delete conversation:', error)
+                                          )
+                                        }
+                                        variant='destructive'
+                                      >
+                                        <Trash2Icon />
+                                        删除会话
+                                      </DropdownMenuItem>
+                                    </DropdownMenuGroup>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </ItemActions>
+                            </Item>
+                          );
+                        })}
+                      </ItemGroup>
+                    ) : (
+                      <Empty className='border-0 px-2 py-5 text-left'>
+                        <EmptyHeader className='items-start gap-1'>
+                          <EmptyTitle>还没有会话</EmptyTitle>
+                          <EmptyDescription>打开工作区后，从第一条消息开始。</EmptyDescription>
+                        </EmptyHeader>
+                      </Empty>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+              );
+            })}
+          </Accordion>
+        ) : (
+          <Empty className='items-start border-0 px-2 py-6 text-left'>
+            <EmptyHeader className='items-start'>
+              <EmptyTitle>还没有会话记录</EmptyTitle>
+              <EmptyDescription>新建一次对话，或先创建一个项目工作区。</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        )}
       </div>
+      <Dialog
+        open={createWorkspaceOpen}
+        onOpenChange={(nextOpen) => {
+          setCreateWorkspaceOpen(nextOpen);
+          if (!nextOpen) setWorkspaceError(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新建项目工作区</DialogTitle>
+            <DialogDescription>
+              为一组招标资料建立独立工作区，资料、证据和响应版本都会围绕它保存。
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={submitWorkspace}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor='agent-create-workspace-name'>工作区名称</FieldLabel>
+                <Input
+                  id='agent-create-workspace-name'
+                  autoFocus
+                  placeholder='例如：智慧社区治理项目'
+                  value={workspaceName}
+                  onChange={(event) => setWorkspaceName(event.target.value)}
+                  disabled={creatingWorkspace}
+                  required
+                  minLength={2}
+                  maxLength={80}
+                />
+                <FieldDescription>建议使用招标项目或客户名称，方便团队共同查找。</FieldDescription>
+                <FieldError>{workspaceError}</FieldError>
+              </Field>
+            </FieldGroup>
+            <DialogFooter className='mt-5'>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={creatingWorkspace}
+                onClick={() => setCreateWorkspaceOpen(false)}
+              >
+                取消
+              </Button>
+              <Button type='submit' disabled={creatingWorkspace || workspaceName.trim().length < 2}>
+                {creatingWorkspace ? (
+                  <Spinner data-icon='inline-start' />
+                ) : (
+                  <PlusIcon data-icon='inline-start' />
+                )}
+                创建并打开
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -548,16 +826,10 @@ export function LinearAgentWorkspace() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectRead[]>([]);
   const [environmentPanelOpen, setEnvironmentPanelOpen] = useState(false);
-  const [previewAttachment, setPreviewAttachment] = useState<AttachmentPreviewSelection | null>(
-    null
-  );
-  const [workflowCanvasProjectId, setWorkflowCanvasProjectId] = useState<string | null>(null);
-  const [previewWidth, setPreviewWidth] = useState(420);
-  const [isPreviewResizing, setIsPreviewResizing] = useState(false);
+  const [sideTabs, setSideTabs] = useState<AgentSideTab[]>([]);
+  const [activeSideTab, setActiveSideTab] = useState<AgentSideTabType>('workflow');
   const isCompactViewport = useCompactViewport();
-  const workspaceRef = useRef<HTMLDivElement>(null);
   const historySurfaceRef = useRef<HTMLDivElement>(null);
-  const previewResizeStartRef = useRef({ x: 0, width: 420 });
 
   useEffect(() => {
     void refreshConversations();
@@ -614,10 +886,19 @@ export function LinearAgentWorkspace() {
     setHistoryOpen(false);
   };
   const handleLoadConversation = (conversationId: string) => {
+    const selectedConversation = state.conversations.find((item) => item.id === conversationId);
+    const selectedProjectId =
+      selectedConversation?.project_id &&
+      projects.some((project) => project.id === selectedConversation.project_id)
+        ? selectedConversation.project_id
+        : undefined;
     navigate(
       agentWorkspacePath({
         conversationId,
-        projectId: state.currentContext.projectId
+        // A history item owns its project context. Reusing the currently
+        // visible page context can send a valid conversation to a stale or
+        // unrelated project and produce a misleading "Project not found".
+        projectId: selectedProjectId
       }),
       { replace: true }
     );
@@ -626,37 +907,53 @@ export function LinearAgentWorkspace() {
   const handleExample = (prompt: string) => {
     void sendMessage(prompt, { displayContent: prompt });
   };
+  const handleCreateProject = async (name: string) => {
+    const project = await createProject({ name, scenario_package: 'bidpilot' });
+    setProjects((current) => [project, ...current.filter((item) => item.id !== project.id)]);
+    await refreshConversations();
+    return project;
+  };
+  const openSideTab = (tab: AgentSideTab) => {
+    setSideTabs((current) => {
+      const existing = current.findIndex((item) => item.type === tab.type);
+      if (existing === -1) return [...current, tab];
+      const next = [...current];
+      next[existing] = tab;
+      return next;
+    });
+    setActiveSideTab(tab.type);
+  };
   const openWorkflowCanvas = (projectId: string) => {
-    setPreviewAttachment(null);
-    setWorkflowCanvasProjectId(projectId);
+    openSideTab({ type: 'workflow', projectId });
   };
-  const hasSideCanvas = Boolean(previewAttachment || workflowCanvasProjectId);
-  const showDesktopCanvas = hasSideCanvas && !isCompactViewport;
-  const closeSideSurface = () => {
-    setPreviewAttachment(null);
-    setWorkflowCanvasProjectId(null);
+  const openSubagentsPanel = (parentRunId: string) => {
+    openSideTab({ type: 'subagents', parentRunId });
   };
-  const mobileSurfaceTitle = workflowCanvasProjectId
-    ? '响应工作流'
-    : previewAttachment?.name || '附件预览';
-  const mobileSurfaceDescription = workflowCanvasProjectId
-    ? '查看当前任务的执行路径与节点状态'
-    : previewAttachment
-      ? `${formatPreviewSize(previewAttachment.size)} · ${previewAttachment.kind === 'image' ? '图片' : '文件'}`
-      : '';
-
-  const handlePreviewResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    previewResizeStartRef.current = { x: event.clientX, width: previewWidth };
-    setIsPreviewResizing(true);
+  const openAttachmentPreview = (selection: AttachmentPreviewSelection) => {
+    openSideTab({ type: 'attachment', selection });
   };
-  const handlePreviewResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!isPreviewResizing) return;
-    const delta = previewResizeStartRef.current.x - event.clientX;
-    setPreviewWidth(Math.min(640, Math.max(300, previewResizeStartRef.current.width + delta)));
+  const closeSideTab = (tabType: AgentSideTabType) => {
+    const index = sideTabs.findIndex((tab) => tab.type === tabType);
+    if (index === -1) return;
+    const next = sideTabs.filter((tab) => tab.type !== tabType);
+    setSideTabs(next);
+    if (activeSideTab === tabType) {
+      setActiveSideTab(next[Math.min(index, next.length - 1)]?.type ?? 'workflow');
+    }
   };
-  const handlePreviewResizeEnd = () => setIsPreviewResizing(false);
+  const hasSideSurface = sideTabs.length > 0;
+  const showDesktopSideSurface = hasSideSurface && !isCompactViewport;
+  const closeSideSurface = () => closeSideTab(activeSideTab);
+  const mobileActiveTab = sideTabs.find((tab) => tab.type === activeSideTab) ?? sideTabs[0];
+  const mobileSurfaceTitle = mobileActiveTab ? sideTabLabel(mobileActiveTab) : '侧栏';
+  const mobileSurfaceDescription =
+    mobileActiveTab?.type === 'subagents'
+      ? '查看当前对话中协作助理的处理进度'
+      : mobileActiveTab?.type === 'workflow'
+        ? '查看当前任务的执行路径与节点状态'
+        : mobileActiveTab?.type === 'attachment'
+          ? `${formatPreviewSize(mobileActiveTab.selection.size)} · ${mobileActiveTab.selection.kind === 'image' ? '图片' : '文件'}`
+          : '';
 
   useEffect(() => {
     if (!historyOpen) return;
@@ -669,196 +966,201 @@ export function LinearAgentWorkspace() {
   }, [historyOpen]);
 
   return (
-    <div
-      className={`linear-agent-embedded bidpilot-linear-agent${isPreviewResizing ? ' is-preview-resizing' : ''}`}
-      ref={workspaceRef}
-    >
-      <div
-        className={`linear-main${showDesktopCanvas ? ' has-preview-canvas' : ''}`}
-        style={{ '--preview-width': `${previewWidth}px` } as CSSProperties}
-      >
-        <section className='agent-canvas'>
-          <div className='agent-history-surface' ref={historySurfaceRef}>
-            <header className='agent-topbar'>
-              <Button
-                type='button'
-                className='chat-switch'
-                aria-expanded={historyOpen}
-                onClick={() => setHistoryOpen((value) => !value)}
-                size='sm'
-                variant='ghost'
-              >
-                <span>{conversationTitle}</span>
-                <ChevronDownIcon aria-hidden='true' />
-              </Button>
-              <Button
-                type='button'
-                className={`agent-header-icon${currentConversation?.is_pinned ? ' is-active' : ''}`}
-                aria-label={currentConversation?.is_pinned ? '取消收藏会话' : '收藏会话'}
-                disabled={!currentConversation}
-                title={
-                  currentConversation
-                    ? currentConversation.is_pinned
-                      ? '取消收藏会话'
-                      : '收藏会话'
-                    : '新对话暂无可收藏内容'
-                }
-                onClick={() => {
-                  if (currentConversation) {
-                    void togglePinnedConversation(
-                      currentConversation.id,
-                      !currentConversation.is_pinned
-                    );
-                  }
-                }}
-                size='icon-sm'
-                variant='ghost'
-              >
-                <StarIcon
-                  aria-hidden='true'
-                  fill={currentConversation?.is_pinned ? 'currentColor' : 'none'}
-                />
-              </Button>
-              <Button
-                type='button'
-                className='agent-header-icon'
-                aria-label='Conversation options'
-                onClick={() => setHistoryOpen((value) => !value)}
-                size='icon-sm'
-                variant='ghost'
-              >
-                <MoreHorizontalIcon aria-hidden='true' />
-              </Button>
-              <Popover open={environmentPanelOpen} onOpenChange={setEnvironmentPanelOpen}>
-                <PopoverTrigger
-                  render={
-                    <Button
-                      type='button'
-                      className={`agent-header-icon${environmentPanelOpen ? ' is-active' : ''}`}
-                      aria-label={environmentPanelOpen ? '收起工作概览' : '打开工作概览'}
-                      title={environmentPanelOpen ? '收起工作概览' : '打开工作概览'}
-                      size='icon-sm'
-                      variant='ghost'
-                    />
-                  }
-                >
-                  <PanelRightIcon aria-hidden='true' />
-                </PopoverTrigger>
-                <PopoverContent
-                  align='end'
-                  aria-label='工作概览'
-                  className='agent-environment-popover w-[min(22rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] p-0'
-                  side='bottom'
-                  sideOffset={8}
-                >
-                  <AgentEnvironmentPanel
-                    currentProjectId={state.currentContext.projectId ?? currentConversation?.project_id}
-                    onOpenProject={(projectId) => {
-                      setEnvironmentPanelOpen(false);
-                      navigate(`/projects/${projectId}`);
-                    }}
-                    onOpenRun={(run: RuntimeRunListItem) => {
-                      setEnvironmentPanelOpen(false);
-                      if (run.conversation_id) {
-                        navigate(
-                          agentWorkspacePath({
-                            conversationId: run.conversation_id,
-                            projectId: run.project_id ?? undefined
-                          })
+    <div className='linear-agent-embedded bidpilot-linear-agent'>
+      <div className='linear-main'>
+        <ResizablePanelGroup
+          orientation='horizontal'
+          className='agent-split-layout'
+          data-testid='agent-split-layout'
+        >
+          <ResizablePanel
+            id='agent-conversation-panel'
+            defaultSize={showDesktopSideSurface ? '68%' : '100%'}
+            minSize='0px'
+            className='min-w-0'
+          >
+            <section className='agent-canvas'>
+              <div className='agent-history-surface' ref={historySurfaceRef}>
+                <header className='agent-topbar'>
+                  <Button
+                    type='button'
+                    className='chat-switch'
+                    aria-expanded={historyOpen}
+                    onClick={() => setHistoryOpen((value) => !value)}
+                    size='sm'
+                    variant='ghost'
+                  >
+                    <span>{conversationTitle}</span>
+                    <ChevronDownIcon aria-hidden='true' />
+                  </Button>
+                  <Button
+                    type='button'
+                    className={`agent-header-icon${currentConversation?.is_pinned ? ' is-active' : ''}`}
+                    aria-label={currentConversation?.is_pinned ? '取消收藏会话' : '收藏会话'}
+                    disabled={!currentConversation}
+                    title={
+                      currentConversation
+                        ? currentConversation.is_pinned
+                          ? '取消收藏会话'
+                          : '收藏会话'
+                        : '新对话暂无可收藏内容'
+                    }
+                    onClick={() => {
+                      if (currentConversation) {
+                        void togglePinnedConversation(
+                          currentConversation.id,
+                          !currentConversation.is_pinned
                         );
-                      } else if (run.project_id) {
-                        navigate(`/projects/${run.project_id}`);
                       }
                     }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </header>
-            <AgentHistory
-              open={historyOpen}
-              conversations={state.conversations}
-              projects={projects}
-              currentConversationId={state.currentConversationId}
-              onNew={handleStartNewConversation}
-              onSelect={handleLoadConversation}
-              onOpenProject={(projectId) => {
-                setHistoryOpen(false);
-                navigate(`/projects/${projectId}`);
-              }}
-              onRename={renameConversation}
-              onDelete={deleteConversation}
-              onTogglePinned={togglePinnedConversation}
-            />
-          </div>
-          <div
-            className={`agent-content bidpilot-claude-thread${state.messages.length ? ' has-messages' : ''}`}
-            data-testid='agent-conversation-pane'
-          >
-            {state.messages.length ? (
-              <>
-                <ClaudeAgentThread
-                  state={state}
-                  onCancelWorkflow={cancelWorkflow}
-                  onConfigureProvider={() => navigate('/settings/providers')}
-                  onConfirm={(confirmationText) =>
-                    void confirmAssistantAction(true, confirmationText)
-                  }
-                  onCancelConfirmation={() => void confirmAssistantAction(false)}
-                  onSubmitInput={(content) =>
-                    void sendMessage(content, { displayContent: content })
-                  }
-                  onRetryFromCheckpoint={(checkpointMessageId, content) => {
-                    void retryFromCheckpoint(checkpointMessageId, content);
+                    size='icon-sm'
+                    variant='ghost'
+                  >
+                    <StarIcon
+                      aria-hidden='true'
+                      fill={currentConversation?.is_pinned ? 'currentColor' : 'none'}
+                    />
+                  </Button>
+                  <Button
+                    type='button'
+                    className='agent-header-icon'
+                    aria-label='Conversation options'
+                    onClick={() => setHistoryOpen((value) => !value)}
+                    size='icon-sm'
+                    variant='ghost'
+                  >
+                    <MoreHorizontalIcon aria-hidden='true' />
+                  </Button>
+                  <Popover open={environmentPanelOpen} onOpenChange={setEnvironmentPanelOpen}>
+                    <PopoverTrigger
+                      render={
+                        <Button
+                          type='button'
+                          className={`agent-header-icon${environmentPanelOpen ? ' is-active' : ''}`}
+                          aria-label={environmentPanelOpen ? '收起工作概览' : '打开工作概览'}
+                          title={environmentPanelOpen ? '收起工作概览' : '打开工作概览'}
+                          size='icon-sm'
+                          variant='ghost'
+                        />
+                      }
+                    >
+                      <PanelRightIcon aria-hidden='true' />
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align='end'
+                      aria-label='工作概览'
+                      className='agent-environment-popover w-[min(22rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] p-0'
+                      side='bottom'
+                      sideOffset={8}
+                    >
+                      <AgentEnvironmentPanel
+                        currentProjectId={
+                          state.currentContext.projectId ?? currentConversation?.project_id
+                        }
+                        onOpenProject={(projectId) => {
+                          setEnvironmentPanelOpen(false);
+                          navigate(`/projects/${projectId}`);
+                        }}
+                        onOpenRun={(run: RuntimeRunListItem) => {
+                          setEnvironmentPanelOpen(false);
+                          if (run.conversation_id) {
+                            navigate(
+                              agentWorkspacePath({
+                                conversationId: run.conversation_id,
+                                projectId: run.project_id ?? undefined
+                              })
+                            );
+                          } else if (run.project_id) {
+                            navigate(`/projects/${run.project_id}`);
+                          }
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </header>
+                <AgentHistory
+                  open={historyOpen}
+                  conversations={state.conversations}
+                  projects={projects}
+                  currentConversationId={state.currentConversationId}
+                  onNew={handleStartNewConversation}
+                  onSelect={handleLoadConversation}
+                  onOpenProject={(projectId) => {
+                    setHistoryOpen(false);
+                    navigate(`/projects/${projectId}`);
                   }}
-                  onOpenWorkflowCanvas={openWorkflowCanvas}
+                  onCreateProject={handleCreateProject}
+                  onRename={renameConversation}
+                  onDelete={deleteConversation}
+                  onTogglePinned={togglePinnedConversation}
                 />
-                <div className='bp-linear-agent-composer-slot' aria-label='Agent composer'>
-                  <AIAssistantPanel
-                    variant='linear-agent'
-                    onPreviewAttachment={(selection) => {
-                      setWorkflowCanvasProjectId(null);
-                      setPreviewAttachment(selection);
-                    }}
+              </div>
+              <div
+                className={`agent-content bidpilot-claude-thread${state.messages.length ? ' has-messages' : ''}`}
+                data-testid='agent-conversation-pane'
+              >
+                {state.messages.length ? (
+                  <>
+                    <ClaudeAgentThread
+                      state={state}
+                      onCancelWorkflow={cancelWorkflow}
+                      onConfigureProvider={() => navigate('/settings/providers')}
+                      onConfirm={(confirmationText) =>
+                        void confirmAssistantAction(true, confirmationText)
+                      }
+                      onCancelConfirmation={() => void confirmAssistantAction(false)}
+                      onSubmitInput={(content) =>
+                        void sendMessage(content, { displayContent: content })
+                      }
+                      onRetryFromCheckpoint={(checkpointMessageId, content) => {
+                        void retryFromCheckpoint(checkpointMessageId, content);
+                      }}
+                      onOpenWorkflowCanvas={openWorkflowCanvas}
+                      onOpenSubagents={openSubagentsPanel}
+                    />
+                    <div className='bp-linear-agent-composer-slot' aria-label='Agent composer'>
+                      <AIAssistantPanel
+                        variant='linear-agent'
+                        onPreviewAttachment={openAttachmentPreview}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <AgentWelcome
+                    onExample={handleExample}
+                    onPreviewAttachment={openAttachmentPreview}
                   />
-                </div>
-              </>
-            ) : (
-              <AgentWelcome onExample={handleExample} onPreviewAttachment={setPreviewAttachment} />
-            )}
-          </div>
-        </section>
-        {showDesktopCanvas ? (
-          <div
-            className='agent-preview-resize-handle'
-            aria-label='调整预览画布宽度'
-            role='separator'
-            tabIndex={0}
-            onPointerCancel={handlePreviewResizeEnd}
-            onPointerDown={handlePreviewResizeStart}
-            onPointerMove={handlePreviewResizeMove}
-            onPointerUp={handlePreviewResizeEnd}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowLeft') setPreviewWidth((width) => Math.min(640, width + 16));
-              if (event.key === 'ArrowRight') setPreviewWidth((width) => Math.max(300, width - 16));
-            }}
-          />
-        ) : null}
-        {showDesktopCanvas && workflowCanvasProjectId ? (
-          <AgentWorkflowCanvas
-            projectId={workflowCanvasProjectId}
-            state={state}
-            onClose={() => setWorkflowCanvasProjectId(null)}
-            onOpenProject={() => navigate(`/projects/${workflowCanvasProjectId}?surface=workflow`)}
-          />
-        ) : showDesktopCanvas ? (
-          <AgentPreviewCanvas
-            selection={previewAttachment}
-            onClose={() => setPreviewAttachment(null)}
-          />
-        ) : null}
+                )}
+              </div>
+            </section>
+          </ResizablePanel>
+          {showDesktopSideSurface ? (
+            <>
+              <ResizableHandle withHandle />
+              <ResizablePanel
+                id='agent-side-surface-panel'
+                defaultSize='32%'
+                minSize='300px'
+                maxSize='640px'
+                collapsible
+                collapsedSize='0px'
+                className='min-w-0'
+              >
+                <AgentSideSurface
+                  tabs={sideTabs}
+                  activeTab={activeSideTab}
+                  state={state}
+                  onChange={setActiveSideTab}
+                  onCloseTab={closeSideTab}
+                  onOpenProject={(projectId) => navigate(`/projects/${projectId}?surface=workflow`)}
+                />
+              </ResizablePanel>
+            </>
+          ) : null}
+        </ResizablePanelGroup>
       </div>
       <Sheet
-        open={isCompactViewport && hasSideCanvas}
+        open={isCompactViewport && hasSideSurface}
         onOpenChange={(open) => {
           if (!open) closeSideSurface();
         }}
@@ -871,23 +1173,17 @@ export function LinearAgentWorkspace() {
             <SheetTitle>{mobileSurfaceTitle}</SheetTitle>
             <SheetDescription>{mobileSurfaceDescription}</SheetDescription>
           </SheetHeader>
-          {workflowCanvasProjectId ? (
-            <AgentWorkflowCanvas
-              projectId={workflowCanvasProjectId}
+          {mobileActiveTab ? (
+            <AgentSideSurface
+              tabs={sideTabs}
+              activeTab={mobileActiveTab.type}
               state={state}
-              onClose={closeSideSurface}
-              onOpenProject={() =>
-                navigate(`/projects/${workflowCanvasProjectId}?surface=workflow`)
-              }
-              showHeader={false}
+              onChange={setActiveSideTab}
+              onCloseTab={closeSideTab}
+              onOpenProject={(projectId) => navigate(`/projects/${projectId}?surface=workflow`)}
+              showContentHeaders={false}
             />
-          ) : (
-            <AgentPreviewCanvas
-              selection={previewAttachment}
-              onClose={closeSideSurface}
-              showHeader={false}
-            />
-          )}
+          ) : null}
         </SheetContent>
       </Sheet>
     </div>

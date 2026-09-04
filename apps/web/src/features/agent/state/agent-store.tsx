@@ -893,13 +893,12 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       const incoming = {
         ...baseIncoming,
         executionGroupId:
-          baseIncoming.executionGroupId ?? latestExecutionGroupId(stateWithTurn, baseIncoming.turnId)
+          baseIncoming.executionGroupId ??
+          latestExecutionGroupId(stateWithTurn, baseIncoming.turnId)
       };
       const identity = executionIdentity(incoming);
       const existingIndex = identity
-        ? stateWithTurn.executionItems.findIndex(
-            (item) => executionIdentity(item) === identity
-          )
+        ? stateWithTurn.executionItems.findIndex((item) => executionIdentity(item) === identity)
         : -1;
       if (existingIndex < 0) {
         return {
@@ -976,10 +975,7 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         action.turnId ?? action.patch.turnId
       );
       const targetIndex = existingIndex >= 0 ? existingIndex : executionItems.length - 1;
-      const groupId = latestExecutionGroupId(
-        withTurn,
-        action.turnId ?? action.patch.turnId
-      );
+      const groupId = latestExecutionGroupId(withTurn, action.turnId ?? action.patch.turnId);
       if (targetIndex >= 0 && groupId && !executionItems[targetIndex].executionGroupId) {
         executionItems[targetIndex] = {
           ...executionItems[targetIndex],
@@ -1526,7 +1522,8 @@ function handleAssistantSseEvent(
         kind: linkedRun ? 'workflow' : 'tool',
         status: linkedRun ? (linkedRunIsLive ? 'running' : 'failed') : 'succeeded',
         result,
-        summary: linkedRun && !linkedRunIsLive ? '后台任务状态已过期' : String(parsed.summary ?? ''),
+        summary:
+          linkedRun && !linkedRunIsLive ? '后台任务状态已过期' : String(parsed.summary ?? ''),
         isRunning: linkedRun && linkedRunIsLive,
         errorMessage:
           linkedRun && !linkedRunIsLive ? '后台任务状态已过期，未收到完成结果。' : undefined,
@@ -1838,7 +1835,7 @@ interface AIAssistantContextValue {
   open: (mode?: AssistantMode) => void;
   close: () => void;
   toggle: (mode?: AssistantMode) => void;
-  sendMessage: (content: string, options?: SendAssistantOptions) => Promise<void>;
+  sendMessage: (content: string, options?: SendAssistantOptions) => Promise<boolean>;
   stopAssistantResponse: () => void;
   setSelectedProviderConfig: (providerConfigId: string | null) => void;
   setReasoningEffort: (effort: AssistantReasoningEffort) => void;
@@ -2361,7 +2358,7 @@ export function AIAssistantProvider({
           try {
             runs = normalizeRuntimeRuns(
               await listRuntimeRuns(20, conversationId, undefined, true)
-            );
+            ).filter((run) => !run.parent_run_id);
           } catch {
             // A transient reconnect failure must not turn a durable run into a
             // client-visible failure. The next poll retries from the same cursor.
@@ -2524,7 +2521,7 @@ export function AIAssistantProvider({
           // unless their outbox or real Pi execution is still alive.
           const runs = normalizeRuntimeRuns(
             await listRuntimeRuns(12, conversationId, undefined, true)
-          );
+          ).filter((run) => !run.parent_run_id);
           if (!isCurrentLoad()) return;
           visibleRuns = runs;
           for (const run of runs) liveRuntimeRunIds.add(run.id);
@@ -2642,9 +2639,7 @@ export function AIAssistantProvider({
         // The live-only snapshot above is the authoritative hand-off to the
         // watcher. A second list request here only recreated the navigation
         // waterfall; the watcher immediately rechecks active rows itself.
-        for (const run of visibleRuns.filter(
-          (item) => !isRuntimeRunVisibleOpen(item)
-        )) {
+        for (const run of visibleRuns.filter((item) => !isRuntimeRunVisibleOpen(item))) {
           dispatch({
             type: 'FINALIZE_OPEN_EXECUTION_ITEMS',
             runtimeRunId: run.id,
@@ -2844,7 +2839,10 @@ export function AIAssistantProvider({
     // The route owner restores an explicit ?conversation= selection. Do not
     // start a second mount-time restore from sessionStorage for the same URL;
     // that duplicate replay was the visible navigation delay.
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('conversation')) {
+    if (
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).has('conversation')
+    ) {
       didAutoRestoreRef.current = true;
       return;
     }
@@ -2871,7 +2869,7 @@ export function AIAssistantProvider({
         arguments: Record<string, unknown>;
         approval_id?: string;
       }
-    ) => {
+    ): Promise<boolean> => {
       const isConfirmationRequest = Boolean(confirmation);
       const displayContent = isConfirmationRequest
         ? ''
@@ -2886,7 +2884,7 @@ export function AIAssistantProvider({
         (targetConversationId === state.currentConversationId && isAssistantBusy(state.status)) ||
         targetHasKnownRun
       )
-        return;
+        return false;
       assistantRequestInFlightRef.current = true;
       pendingAssistantCancellationRef.current = false;
       if (targetConversationId && targetConversationId !== state.currentConversationId) {
@@ -3067,7 +3065,7 @@ export function AIAssistantProvider({
 
         if (abortController.signal.aborted) {
           dispatch({ type: 'STOP_ACTIVE_RESPONSE' });
-          return;
+          return true;
         }
 
         if (receivedTerminalEvent) {
@@ -3097,14 +3095,14 @@ export function AIAssistantProvider({
       } catch (err) {
         if (abortController.signal.aborted) {
           dispatch({ type: 'STOP_ACTIVE_RESPONSE' });
-          return;
+          return true;
         }
         try {
           const recovered = await recoverDurableTimeline();
-          if (recovered.terminal) return;
+          if (recovered.terminal) return true;
           if (recovered.replayed && activeRuntimeRunId && activeConversationId) {
             void watchConversationRuntime(activeConversationId, sseOptions);
-            return;
+            return true;
           }
         } catch (recoveryError) {
           console.warn('Failed to replay assistant runtime events:', recoveryError);
@@ -3172,6 +3170,7 @@ export function AIAssistantProvider({
         pendingAssistantCancellationRef.current = false;
         void refreshConversations();
       }
+      return true;
     },
     [
       refreshConversations,
@@ -3190,7 +3189,7 @@ export function AIAssistantProvider({
 
   const sendMessage = useCallback(
     async (content: string, options?: SendAssistantOptions) => {
-      await sendAssistantRequest(content, options);
+      return sendAssistantRequest(content, options);
     },
     [sendAssistantRequest]
   );

@@ -1,6 +1,6 @@
 {
-  "title": "BidPilot AI",
-  "subtitle": "Your document assistant",
+  "title": "BidPilot Copilot",
+  "subtitle": "Your bid-response assistant",
   "inputPlaceholder": "Ask me anything...",
   "thinking": "Thinking",
   "trace": {
@@ -291,7 +291,7 @@
     "running": "Running"
   },
   "floating": {
-    "ariaLabel": "BidPilot AI Assistant",
+    "ariaLabel": "BidPilot Copilot assistant",
     "openPanel": "Open panel",
     "commandPalette": "Command palette",
     "aiChat": "AI chat"

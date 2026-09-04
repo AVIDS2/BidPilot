@@ -752,6 +752,7 @@ export interface RuntimeRunListItem {
   started_at: string | null;
   finished_at: string | null;
   latest_event_summary: string | null;
+  parent_run_id?: string | null;
 }
 
 export interface RuntimeChildRunRead {

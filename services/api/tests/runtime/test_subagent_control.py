@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.auth.schemas import CurrentUser
-from app.models import RuntimeRun, TaskOutboxEvent
+from app.models import ChatConversation, RuntimeRun, TaskOutboxEvent
 from app.runtime.events import list_events_after
 from app.runtime.service import create_runtime_run
 from app.runtime.subagent_control import create_subagent_runs, wait_for_subagent_results
@@ -26,6 +26,7 @@ def test_parallel_subagents_are_durable_and_enqueued(
     monkeypatch,
 ) -> None:
     user = _user(default_org_id, default_user_id)
+    conversation_count = test_db.query(ChatConversation).count()
     parent = create_runtime_run(test_db, user, kind="assistant_turn", engine="pi")
     dispatched: list[str] = []
     monkeypatch.setattr(
@@ -52,6 +53,8 @@ def test_parallel_subagents_are_durable_and_enqueued(
     assert {child.kind for child in children} == {"subagent"}
     assert {child.status for child in children} == {"queued"}
     assert len({child.trace_id for child in children}) == 2
+    assert {child.conversation_id for child in children} == {parent.conversation_id}
+    assert test_db.query(ChatConversation).count() == conversation_count
     for child in children:
         contract = child.input_json["subagent"]["pi_runtime"]
         assert contract["version"] == "1"

@@ -16,8 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
-from app.chat.service import _fallback_conversation_title
-from app.models import ChatConversation, RuntimeRun, TaskOutboxEvent
+from app.models import RuntimeRun, TaskOutboxEvent
 from app.outbox.service import enqueue_workflow_task, request_task_outbox_dispatch
 from contracts.runtime import RuntimeEventType, RuntimeRunKind, RuntimeRunStatus
 
@@ -143,21 +142,17 @@ def create_subagent_runs(
             })
             previous_child_id = existing.id
             continue
-        conversation = ChatConversation(
-            user_id=user.id,
-            project_id=parent.project_id,
-            source_conversation_id=parent.conversation_id,
-            title=_fallback_conversation_title(f"{task.agent}: {task.task}"),
-        )
-        db.add(conversation)
-        db.flush()
         child = create_runtime_run(
             db,
             user,
             kind=RuntimeRunKind.SUBAGENT.value,
             engine="pi_subagent_worker",
             project_id=parent.project_id,
-            conversation_id=conversation.id,
+            # A child is a runtime branch of the current Copilot turn, not a
+            # user conversation. Keep it attached to the parent conversation
+            # for live updates and wake delivery without creating a history
+            # row or a second session for the user.
+            conversation_id=parent.conversation_id,
             parent_run_id=parent.id,
             provider_config_id=parent.provider_config_id,
             model=parent.model,

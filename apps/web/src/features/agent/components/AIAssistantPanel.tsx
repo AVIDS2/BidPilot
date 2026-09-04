@@ -1297,6 +1297,13 @@ export function AIAssistantPanel({
   const isBusy = isAssistantBusy(state.status);
   const isStreaming = state.isStreaming;
   const isStopping = state.cancellationRequested;
+  const isResponseActive =
+    isBusy ||
+    isStreaming ||
+    isStopping ||
+    Boolean(state.pendingConfirmation) ||
+    Boolean(state.pendingInput);
+  const [isDrainingQueue, setIsDrainingQueue] = useState(false);
   const isUploadingAttachments = attachments.some(
     (attachment) => attachment.status === 'uploading'
   );
@@ -1568,7 +1575,7 @@ export function AIAssistantPanel({
     setInput('');
     setAttachments([]);
 
-    if (isBusy) {
+    if (isResponseActive) {
       setQueuedPrompts((current) => [...current, queuedPrompt]);
       return;
     }
@@ -1584,7 +1591,7 @@ export function AIAssistantPanel({
   }, [
     attachments,
     input,
-    isBusy,
+    isResponseActive,
     isUploadingAttachments,
     sendMessage,
     state.reasoningEffort,
@@ -1625,28 +1632,42 @@ export function AIAssistantPanel({
     });
   }, []);
 
-  useEffect(() => {
-    if (queueDrainingRef.current || isAssistantBusy(state.status) || queuedPrompts.length === 0)
-      return;
+  const drainNextQueuedPrompt = useCallback(async () => {
+    if (queueDrainingRef.current || isResponseActive || queuedPrompts.length === 0) {
+      return false;
+    }
 
     const nextPrompt = queuedPrompts[0];
     queueDrainingRef.current = true;
-    setQueuedPrompts((current) => current.slice(1));
-    void sendMessage(nextPrompt.prompt, {
-      displayContent: nextPrompt.displayContent,
-      attachments: nextPrompt.attachments,
-      requestAttachments: nextPrompt.requestAttachments,
-      providerConfigId: nextPrompt.providerConfigId,
-      reasoningEffort: nextPrompt.reasoningEffort,
-      approvalMode: nextPrompt.approvalMode
-    }).finally(() => {
+    setIsDrainingQueue(true);
+    try {
+      const accepted =
+        (await sendMessage(nextPrompt.prompt, {
+          displayContent: nextPrompt.displayContent,
+          attachments: nextPrompt.attachments,
+          requestAttachments: nextPrompt.requestAttachments,
+          providerConfigId: nextPrompt.providerConfigId,
+          reasoningEffort: nextPrompt.reasoningEffort,
+          approvalMode: nextPrompt.approvalMode
+        })) !== false;
+      if (accepted) {
+        setQueuedPrompts((current) => current.filter((item) => item.id !== nextPrompt.id));
+      }
+      return accepted;
+    } finally {
       queueDrainingRef.current = false;
-    });
-  }, [queuedPrompts, sendMessage, state.status]);
+      setIsDrainingQueue(false);
+    }
+  }, [isResponseActive, queuedPrompts, sendMessage]);
+
+  useEffect(() => {
+    if (isResponseActive || queuedPrompts.length === 0) return;
+    void drainNextQueuedPrompt();
+  }, [drainNextQueuedPrompt, isResponseActive, queuedPrompts.length]);
 
   const handleQuickAction = useCallback(
     (text: string) => {
-      if (isBusy) {
+      if (isResponseActive) {
         setQueuedPrompts((current) => [
           ...current,
           {
@@ -1669,7 +1690,13 @@ export function AIAssistantPanel({
         approvalMode: state.approvalMode
       });
     },
-    [isBusy, sendMessage, state.approvalMode, state.reasoningEffort, state.selectedProviderConfigId]
+    [
+      isResponseActive,
+      sendMessage,
+      state.approvalMode,
+      state.reasoningEffort,
+      state.selectedProviderConfigId
+    ]
   );
 
   const beginRenameConversation = useCallback((id: string, title: string | null) => {
@@ -1787,8 +1814,22 @@ export function AIAssistantPanel({
         {queuedPrompts.length > 0 && (
           <section className='bp-linear-agent-queue' aria-label='待发送队列'>
             <header>
-              <span>待发送</span>
-              <small>{queuedPrompts.length}</small>
+              <span className='flex items-center gap-1.5'>
+                <span>待发送</span>
+                <small>{queuedPrompts.length}</small>
+              </span>
+              <Button
+                type='button'
+                size='sm'
+                variant='ghost'
+                className='h-7 gap-1 px-2 text-[11px]'
+                disabled={isResponseActive || isDrainingQueue}
+                title={isResponseActive ? '当前任务完成后会自动发送' : '发送队列中的下一条消息'}
+                onClick={() => void drainNextQueuedPrompt()}
+              >
+                <SendIcon aria-hidden='true' />
+                发送下一条
+              </Button>
             </header>
             <ol>
               {queuedPrompts.map((queued, index) => (
@@ -1858,7 +1899,7 @@ export function AIAssistantPanel({
           onKeyDown={(event) => {
             if (event.key !== 'Enter' || event.shiftKey) return;
             event.preventDefault();
-            if (isStreaming) {
+            if (isStreaming && !input.trim() && attachments.length === 0) {
               if (!isStopping) stopAssistantResponse();
               return;
             }
@@ -1891,7 +1932,8 @@ export function AIAssistantPanel({
               onAddFromProject={handleAddFromProject}
             />
             <span className='bp-linear-agent-keyhint'>
-              <CornerDownLeftIcon size={13} /> {isBusy ? 'Enter to queue' : 'Enter to send'}
+              <CornerDownLeftIcon size={13} />{' '}
+              {isResponseActive ? 'Enter to queue' : 'Enter to send'}
             </span>
           </div>
           <div className='bp-linear-agent-composer-right'>
@@ -2276,36 +2318,62 @@ export function AIAssistantPanel({
             <ComposerFrame className={cn('w-full', isWorkspace && 'mx-auto max-w-4xl')}>
               <div className='rounded-xl border bg-card px-2 py-2 shadow-sm transition-colors focus-within:border-muted-foreground/35'>
                 {(attachments.length > 0 || queuedPrompts.length > 0) && (
-                  <div className='mb-2 flex max-h-40 gap-2 overflow-x-auto overflow-y-hidden px-1 pb-2 pt-1'>
-                    {attachments.map((attachment) => (
-                      <AttachmentPreviewCard
-                        key={attachment.id}
-                        name={attachment.file.name}
-                        kind={attachment.kind}
-                        size={attachment.file.size}
-                        status={attachment.status}
-                        file={attachment.file}
-                        error={attachment.error}
-                        onRemove={() => handleRemoveAttachment(attachment.id)}
-                      />
-                    ))}
-                    {queuedPrompts.map((queued) => (
-                      <div
-                        key={queued.id}
-                        className='flex h-16 w-[min(13.5rem,72vw)] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs'
-                        style={{
-                          background: 'color-mix(in oklch, var(--background) 88%, transparent)',
-                          borderColor: 'color-mix(in oklch, var(--border) 72%, transparent)',
-                          color: 'var(--muted-foreground)'
-                        }}
-                      >
-                        <Loader2Icon className='h-4 w-4 shrink-0 animate-spin' />
-                        <span className='min-w-0 truncate'>
-                          {t('panel.queuedPrompt', { defaultValue: 'Queued' })}:{' '}
-                          {queued.displayContent}
+                  <div className='mb-2 flex max-h-40 flex-col gap-2 px-1 pb-2 pt-1'>
+                    {queuedPrompts.length > 0 && (
+                      <div className='flex items-center justify-between gap-2 text-xs text-muted-foreground'>
+                        <span className='flex items-center gap-1.5'>
+                          <span>待发送</span>
+                          <span className='rounded-full bg-muted px-1.5 py-0.5 text-[10px]'>
+                            {queuedPrompts.length}
+                          </span>
                         </span>
+                        <Button
+                          type='button'
+                          size='sm'
+                          variant='ghost'
+                          className='h-7 gap-1 px-2 text-[11px]'
+                          disabled={isResponseActive || isDrainingQueue}
+                          title={
+                            isResponseActive ? '当前任务完成后会自动发送' : '发送队列中的下一条消息'
+                          }
+                          onClick={() => void drainNextQueuedPrompt()}
+                        >
+                          <SendIcon aria-hidden='true' />
+                          发送下一条
+                        </Button>
                       </div>
-                    ))}
+                    )}
+                    <div className='flex max-h-32 gap-2 overflow-x-auto overflow-y-hidden'>
+                      {attachments.map((attachment) => (
+                        <AttachmentPreviewCard
+                          key={attachment.id}
+                          name={attachment.file.name}
+                          kind={attachment.kind}
+                          size={attachment.file.size}
+                          status={attachment.status}
+                          file={attachment.file}
+                          error={attachment.error}
+                          onRemove={() => handleRemoveAttachment(attachment.id)}
+                        />
+                      ))}
+                      {queuedPrompts.map((queued) => (
+                        <div
+                          key={queued.id}
+                          className='flex h-16 w-[min(13.5rem,72vw)] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs'
+                          style={{
+                            background: 'color-mix(in oklch, var(--background) 88%, transparent)',
+                            borderColor: 'color-mix(in oklch, var(--border) 72%, transparent)',
+                            color: 'var(--muted-foreground)'
+                          }}
+                        >
+                          <Loader2Icon className='h-4 w-4 shrink-0 animate-spin' />
+                          <span className='min-w-0 truncate'>
+                            {t('panel.queuedPrompt', { defaultValue: 'Queued' })}:{' '}
+                            {queued.displayContent}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 <div className='flex min-h-10 items-center gap-1.5'>
@@ -2358,7 +2426,7 @@ export function AIAssistantPanel({
                       requestAnimationFrame(resizeComposer);
                     }}
                     onSubmit={handleSend}
-                    isLoading={isBusy || isUploadingAttachments}
+                    isLoading={isResponseActive || isUploadingAttachments}
                     className='min-w-0 flex-1 rounded-lg border-0 bg-transparent p-0 shadow-none'
                   >
                     <PromptInputTextarea
@@ -2433,7 +2501,7 @@ export function AIAssistantPanel({
                     ) : (
                       <>
                         <CornerDownLeftIcon className='w-3 h-3' />{' '}
-                        {isBusy
+                        {isResponseActive
                           ? t('panel.enterToQueue', {
                               defaultValue: 'Enter queues'
                             })

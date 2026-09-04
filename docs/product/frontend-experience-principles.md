@@ -52,6 +52,16 @@ The Agent workspace uses two user-facing context surfaces:
   the bottom, new streamed content follows automatically; once the reader
   scrolls upward, the viewport is left alone and a single "回到底部" action is
   provided.
+- The Agent's contextual right surface is one user-owned panel, not a second
+  conversation. It uses the installed `Tabs` and `ResizablePanelGroup` to keep
+  collaboration progress, response workflow, and attachment preview available
+  as sibling pages. On mobile the same tabs live inside the installed `Sheet`.
+- A child Agent is a branch of the current Copilot process. It has runtime
+  status and useful business progress, but no independent user history entry
+  or synthetic chat message.
+- Pending messages are visible as a real queue with an explicit `发送下一条`
+  action. Queue state is derived from the live response boundary and never
+  replaces a failed or rejected send with a fake success state.
 
 Runtime implementation details such as provider names, tool counts, MCP
 registration, sandbox/network profiles, raw event payloads, and internal engine
@@ -75,6 +85,12 @@ groups, `Field` for form rows, and `Avatar`, `Badge`, `Switch`, `Progress`,
 `Skeleton`, and `Empty` for identity, preferences, usage, and async states. Use
 the shared `Button` and menu primitives for actions instead of bespoke control
 markup when the primitive already covers the interaction.
+
+All new product UI should start from the installed Kiranism/shadcn components
+and their documented composition. Local CSS is reserved for domain layout,
+responsive geometry, and visual tokens; it must not replace an existing
+`Tabs`, `Accordion`, `Dialog`, `Sheet`, `Field`, `Item`, `Empty`, `Select`, or
+`Resizable` interaction with a bespoke control.
 
 Theme choice uses the upstream Kiranism `ThemeSelector` and its registered theme
 files. Do not invent a second palette picker or hard-code feature colors; the

@@ -13,6 +13,7 @@ import {
   FolderOpenIcon,
   Globe2Icon,
   Loader2Icon,
+  PanelRightIcon,
   TimerIcon,
   type LucideIcon
 } from 'lucide-react';
@@ -42,6 +43,7 @@ interface ClaudeActivityTimelineProps {
   onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider?: () => void;
   onOpenWorkflowCanvas?: (projectId: string) => void;
+  onOpenSubagents?: (parentRunId: string) => void;
 }
 
 function statusIsActive(status: ActivityStatus) {
@@ -859,7 +861,13 @@ function ToolStep({
   );
 }
 
-function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
+function SubagentExecutionViewer({
+  item,
+  onOpenSubagents
+}: {
+  item: AssistantExecutionItem;
+  onOpenSubagents?: (parentRunId: string) => void;
+}) {
   const [children, setChildren] = useState<RuntimeChildRunRead[]>([]);
   const [selected, setSelected] = useState(0);
   const [events, setEvents] = useState<Array<{ type: string; public_summary: string }>>([]);
@@ -978,6 +986,17 @@ function SubagentExecutionViewer({ item }: { item: AssistantExecutionItem }) {
           </Button>
         </div>
       )}
+      {onOpenSubagents && parentRunId ? (
+        <Button
+          type='button'
+          size='sm'
+          variant='outline'
+          onClick={() => onOpenSubagents(parentRunId)}
+        >
+          <PanelRightIcon data-icon='inline-start' aria-hidden='true' />
+          在右侧查看协作任务
+        </Button>
+      ) : null}
     </section>
   );
 }
@@ -1148,6 +1167,7 @@ function TaskTurn({
   onCancelWorkflow,
   onConfigureProvider,
   onOpenWorkflowCanvas,
+  onOpenSubagents,
   cancellingRunId
 }: {
   turn: ActivityTurn;
@@ -1156,6 +1176,7 @@ function TaskTurn({
   onCancelWorkflow?: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider?: () => void;
   onOpenWorkflowCanvas?: (projectId: string) => void;
+  onOpenSubagents?: (parentRunId: string) => void;
   cancellingRunId: string | null;
 }) {
   const tone = aggregateStatus(turn.items);
@@ -1195,7 +1216,7 @@ function TaskTurn({
             ) : (
               turn.items.map((item) => (
                 <div key={item.toolCallId || item.id}>
-                  <SubagentExecutionViewer item={item} />
+                  <SubagentExecutionViewer item={item} onOpenSubagents={onOpenSubagents} />
                   <ToolStep
                     item={item}
                     t={t}
@@ -1220,7 +1241,8 @@ export function ClaudeActivityTimeline({
   nested = false,
   onCancelWorkflow,
   onConfigureProvider,
-  onOpenWorkflowCanvas
+  onOpenWorkflowCanvas,
+  onOpenSubagents
 }: ClaudeActivityTimelineProps) {
   const { t } = useTranslation('ai-assistant');
   // Child runs have their own environment surface. Keeping them out of the
@@ -1262,6 +1284,7 @@ export function ClaudeActivityTimeline({
             onCancelWorkflow={onCancelWorkflow ? requestCancellation : undefined}
             onConfigureProvider={onConfigureProvider}
             onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+            onOpenSubagents={onOpenSubagents}
             cancellingRunId={cancellingRunId}
           />
         ))}

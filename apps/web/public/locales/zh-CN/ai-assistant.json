@@ -1,6 +1,6 @@
 {
-  "title": "BidPilot AI",
-  "subtitle": "您的文档助手",
+  "title": "BidPilot Copilot",
+  "subtitle": "您的投标响应助理",
   "inputPlaceholder": "问我任何问题...",
   "thinking": "思考中",
   "trace": {
@@ -291,7 +291,7 @@
     "running": "运行中"
   },
   "floating": {
-    "ariaLabel": "BidPilot AI 助手",
+    "ariaLabel": "BidPilot Copilot 助理",
     "openPanel": "打开面板",
     "commandPalette": "命令面板",
     "aiChat": "AI 对话"

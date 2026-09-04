@@ -1,6 +1,7 @@
 'use client';
 
 import { useThemeConfig } from '@/components/themes/active-theme';
+import { useId } from 'react';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -18,10 +19,11 @@ import { THEMES } from './theme.config';
 
 export function ThemeSelector() {
   const { activeTheme, setActiveTheme } = useThemeConfig();
+  const selectorId = useId();
 
   return (
     <div className='flex items-center gap-2'>
-      <Label htmlFor='theme-selector' className='sr-only'>
+      <Label htmlFor={selectorId} className='sr-only'>
         Theme
       </Label>
       <Select
@@ -32,7 +34,8 @@ export function ThemeSelector() {
         }}
       >
         <SelectTrigger
-          id='theme-selector'
+          id={selectorId}
+          aria-label='选择主题'
           className='justify-start *:data-[slot=select-value]:w-24'
         >
           <span className='text-muted-foreground hidden sm:block'>

@@ -327,28 +327,82 @@
 
 .bidpilot-linear-agent .linear-main {
   position: relative;
-  display: grid;
+  display: flex;
+  height: 100%;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
   padding: 8px 8px 36px 0;
 }
-.bidpilot-linear-agent .linear-main.has-preview-canvas {
-  grid-template-columns: minmax(0, 1fr) 8px minmax(300px, var(--preview-width, 420px));
+.bidpilot-linear-agent .agent-split-layout {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
 }
-.bidpilot-linear-agent .linear-main.has-environment-panel {
-  grid-template-columns: minmax(0, 1fr) minmax(276px, 320px);
+.bidpilot-linear-agent .agent-split-layout > [data-panel] {
+  min-width: 0;
+  min-height: 0;
 }
-.bidpilot-linear-agent .linear-main.has-preview-canvas.has-environment-panel {
-  grid-template-columns: minmax(0, 1fr) 8px minmax(300px, var(--preview-width, 420px)) minmax(
-      276px,
-      320px
-    );
+.bidpilot-linear-agent .agent-side-tabs {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  background: var(--linear-surface-raised);
+}
+.bidpilot-linear-agent .agent-side-tabbar {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--linear-line);
+  padding: 0 8px 0 10px;
+}
+.bidpilot-linear-agent .agent-side-tab-list {
+  min-width: 0;
+  flex: 1;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.bidpilot-linear-agent .agent-side-tab-list::-webkit-scrollbar {
+  display: none;
+}
+.bidpilot-linear-agent .agent-side-tab-trigger {
+  min-width: 0;
+  max-width: 12rem;
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-align: left;
+}
+.bidpilot-linear-agent .agent-side-tab-close {
+  flex: 0 0 auto;
+}
+.bidpilot-linear-agent .agent-side-tab-content {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+.bidpilot-linear-agent .agent-side-tab-content[hidden] {
+  display: none;
+}
+.bidpilot-linear-agent .agent-side-tab-content > .agent-preview-canvas {
+  min-height: 0;
+  flex: 1;
 }
 .bidpilot-linear-agent .agent-canvas {
   position: relative;
   display: flex;
-  height: calc(100dvh - 44px);
+  height: 100%;
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
@@ -1355,29 +1409,6 @@
 .bidpilot-linear-agent .agent-workflow-footer button:hover {
   background: var(--linear-surface-muted);
 }
-.bidpilot-linear-agent .agent-preview-resize-handle {
-  position: relative;
-  z-index: 3;
-  width: 8px;
-  cursor: col-resize;
-  outline: 0;
-}
-.bidpilot-linear-agent .agent-preview-resize-handle::after {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 3px;
-  width: 1px;
-  background: var(--linear-line-strong);
-  content: '';
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-.bidpilot-linear-agent .agent-preview-resize-handle:hover::after,
-.bidpilot-linear-agent .agent-preview-resize-handle:focus-visible::after,
-.bidpilot-linear-agent.is-preview-resizing .agent-preview-resize-handle::after {
-  opacity: 1;
-}
 .agent-mobile-side-sheet {
   --linear-line: var(--border);
   --linear-text: var(--foreground);
@@ -1417,22 +1448,16 @@
     display: none;
   }
   .bidpilot-linear-agent .linear-main {
+    height: 100%;
     padding: 0;
   }
   .bidpilot-linear-agent .agent-canvas {
-    height: 100dvh;
+    height: 100%;
     border: 0;
     border-radius: 0;
   }
-  .bidpilot-linear-agent .linear-main.has-preview-canvas {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .bidpilot-linear-agent .linear-main.has-environment-panel,
-  .bidpilot-linear-agent .linear-main.has-preview-canvas.has-environment-panel {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .bidpilot-linear-agent .agent-preview-resize-handle {
-    display: none;
+  .bidpilot-linear-agent .agent-split-layout {
+    min-height: 0;
   }
   .bidpilot-linear-agent .agent-workflow-footer {
     align-items: flex-start;

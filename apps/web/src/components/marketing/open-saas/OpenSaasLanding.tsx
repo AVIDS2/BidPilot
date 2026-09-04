@@ -824,7 +824,7 @@ function Faq() {
           <AccordionItem
             key={question}
             value={`faq-${index}`}
-            className='border-border hover:bg-muted/20 rounded-lg border px-6 py-2 transition-colors duration-200'
+            className='px-2 py-1 transition-colors duration-200 hover:bg-muted/30'
           >
             <AccordionTrigger className='text-foreground py-5 text-left text-sm font-semibold hover:no-underline'>
               {question}

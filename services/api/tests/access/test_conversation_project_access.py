@@ -102,6 +102,24 @@ def test_conversation_context_requires_project_membership(conversation_db) -> No
     assert mismatch_error.value.status_code == 409
 
 
+def test_deleted_project_conversation_is_recoverable_as_unbound_history(conversation_db) -> None:
+    from app.chat.service import resolve_conversation_project_context
+
+    db, users, project, conversation = conversation_db
+    project.status = "deleted"
+    db.commit()
+
+    assert resolve_conversation_project_context(
+        db,
+        _current(users["owner"]),
+        conversation_id=conversation.id,
+        requested_project_id=project.id,
+    ) is None
+
+    db.refresh(conversation)
+    assert conversation.project_id is None
+
+
 def test_chat_and_assistant_reject_inaccessible_project_context(conversation_db, monkeypatch) -> None:
     _db, users, project, _conversation = conversation_db
     engine = _db.bind

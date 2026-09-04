@@ -197,7 +197,6 @@ def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = Non
             return {"status": "failed", "runtime_run_id": runtime_run_id}
 
         from app.runtime.model import resolve_agent_model
-        from app.chat.service import save_message
         from app.providers.service import get_provider_config
         from app.security.secrets import decrypt_secret
 
@@ -347,7 +346,6 @@ def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = Non
             fail_runtime_run(runtime_run_id, "子 Agent 未能安全完成。", error_code="subagent_stream_incomplete")
             complete_workflow_task_delivery(outbox_event_id)
             return {"status": "failed", "runtime_run_id": runtime_run_id}
-        save_message(db, runtime_run.conversation_id or "", "assistant", text or "子 Agent 完成但没有生成文字结果。", runtime_run_id=runtime_run_id)
         result = {"status": "succeeded", "runtime_run_id": runtime_run_id, "profile": profile, "summary": text[:4000]}
         publish_runtime_event(runtime_run_id, RuntimeEventType.CAPABILITY_SUCCEEDED, "子 Agent 已完成委派任务。", {"capability": "subagent", "profile": profile})
         complete_runtime_run(runtime_run_id, result=result)

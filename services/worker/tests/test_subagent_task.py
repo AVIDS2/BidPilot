@@ -180,8 +180,10 @@ def test_chain_subagent_receives_previous_result_and_persists_terminal_state(mon
         assert persisted is not None
         assert persisted.status == "succeeded"
         assert persisted.result_json["summary"] == "复核完成：证据一致。"
+        # Child output belongs to the parent runtime panel/result. It must not
+        # become a second assistant message in the user's conversation.
         messages = db.query(ChatMessage).filter(ChatMessage.runtime_run_id == child_id).all()
-        assert [message.content for message in messages] == ["复核完成：证据一致。"]
+        assert messages == []
         progress_events = (
             db.query(RuntimeEvent)
             .filter(

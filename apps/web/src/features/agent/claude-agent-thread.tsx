@@ -346,7 +346,8 @@ function ClaudeAssistantMessage({
   sessionError,
   onCancelWorkflow,
   onConfigureProvider,
-  onOpenWorkflowCanvas
+  onOpenWorkflowCanvas,
+  onOpenSubagents
 }: {
   message: ChatMessage;
   activityItems: AssistantExecutionItem[];
@@ -356,6 +357,7 @@ function ClaudeAssistantMessage({
   onCancelWorkflow: (runtimeRunId: string) => Promise<void>;
   onConfigureProvider: () => void;
   onOpenWorkflowCanvas?: (projectId: string) => void;
+  onOpenSubagents?: (parentRunId: string) => void;
 }) {
   const { t } = useTranslation('ai-assistant');
   const [copied, setCopied] = useState(false);
@@ -464,6 +466,7 @@ function ClaudeAssistantMessage({
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
                 onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+                onOpenSubagents={onOpenSubagents}
               />
             ) : null;
           })}
@@ -475,6 +478,7 @@ function ClaudeAssistantMessage({
               onCancelWorkflow={onCancelWorkflow}
               onConfigureProvider={onConfigureProvider}
               onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+              onOpenSubagents={onOpenSubagents}
             />
           )}
           {message.content &&
@@ -492,6 +496,7 @@ function ClaudeAssistantMessage({
               onCancelWorkflow={onCancelWorkflow}
               onConfigureProvider={onConfigureProvider}
               onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+              onOpenSubagents={onOpenSubagents}
             />
           )}
           {message.content ? renderNarrative(message.content, message.id) : null}
@@ -533,7 +538,8 @@ export function ClaudeAgentThread({
   onCancelConfirmation,
   onSubmitInput,
   onRetryFromCheckpoint,
-  onOpenWorkflowCanvas
+  onOpenWorkflowCanvas,
+  onOpenSubagents
 }: {
   state: AIAssistantState;
   onCancelWorkflow: (runtimeRunId: string) => Promise<void>;
@@ -543,6 +549,7 @@ export function ClaudeAgentThread({
   onSubmitInput?: (content: string) => void;
   onRetryFromCheckpoint?: (checkpointMessageId: string, content: string) => void;
   onOpenWorkflowCanvas?: (projectId: string) => void;
+  onOpenSubagents?: (parentRunId: string) => void;
 }) {
   const threadRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -648,6 +655,7 @@ export function ClaudeAgentThread({
                 onCancelWorkflow={onCancelWorkflow}
                 onConfigureProvider={onConfigureProvider}
                 onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+                onOpenSubagents={onOpenSubagents}
               />
               {confirmation && (
                 <ClaudeApproval
@@ -666,6 +674,7 @@ export function ClaudeAgentThread({
               onCancelWorkflow={onCancelWorkflow}
               onConfigureProvider={onConfigureProvider}
               onOpenWorkflowCanvas={onOpenWorkflowCanvas}
+              onOpenSubagents={onOpenSubagents}
             />
           </article>
         )}
