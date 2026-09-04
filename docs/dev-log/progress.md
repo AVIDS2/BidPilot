@@ -29,6 +29,10 @@
   `491.24ms`, readiness `450.06ms`). The three script regression tests pass.
   Web root, sign-in, API liveness, API readiness, and OpenResty syntax checks
   all returned success after the reload and rebuild.
+- Unauthenticated Playwright verification against the public deployment loaded
+  the landing page (`BidPilot | AI 招标响应工作台`) and sign-in page
+  (`登录 | BidPilot`) with the expected navigation, theme selector, product
+  content, and form controls; no credentials were entered.
 - Rebuilt the full Pi-enabled production Compose stack and passed readiness,
   migration, checkpoint initialization, API/Pi health, Worker, Worker Beat,
   and Web startup. MiMo remains the workflow provider and OpenRouter remains
