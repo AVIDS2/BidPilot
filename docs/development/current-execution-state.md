@@ -1,5 +1,15 @@
 # Current Execution State
 
+## Current Tasks
+
+- [x] 把项目、资料、需求、知识、响应、评审和交付物串成项目优先的用户流程；项目关联入口不再无条件跳转到 Agent。
+- [x] 使用现有 Kiranism/Base UI 组件完成资料上传、真实解析/索引状态、章节起草、人工审核和 DOCX/PDF 导出。
+- [x] 完成公网登录、项目创建、三类资料上传、Worker 解析索引、章节起草、审核批准和导出记录验收。
+- [x] 生产运行时切换到 MiMo Worker 合同：关闭 Worker 结构化调用的隐藏思考并使用 `max_completion_tokens`；第二次公网起草不再出现结构化响应错误。
+- [x] 公网部署 `eceb42c4088e5886017615c70b25ac314df36155`，完成 readiness、migration、checkpoint、健康检查和 Docker 垃圾清理。
+- [ ] Supabase 托管迁移：当前 `bidpilot` 项目状态为 `INACTIVE`，且本机只有 Management PAT，没有数据库 Session Pooler 密码或 Storage S3 access key/secret；恢复项目并补齐连接凭据后再做备份迁移、对象校验和完整回归。
+- [ ] 商业 GA 之外的长期事项：隐藏回归数据集/质量证据、恢复演练、告警和支付运营；这些不阻塞本项目作为个人面试展示项目的公网演示，但不能被表述为企业商业 GA。
+
 ## 2026-09-01 Kiranism Next migration
 
 - active branch: `codex/kiranism-bidpilot` in the isolated `BidPilot-kiranism`

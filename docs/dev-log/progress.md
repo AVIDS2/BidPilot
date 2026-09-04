@@ -1,5 +1,62 @@
 # Progress Log
 
+## 2026-09-04 project-first workflow closure and public acceptance
+
+- Completed the product route audit against the project-first response pattern
+  seen in official Loopio, Responsive and PandaDoc materials. Project detail is
+  now the business hub: its tabs expose overview, project materials, and
+  response/delivery; requirements, knowledge, reviews and deliverables retain
+  the selected `project_id`; project-linked tasks from Dashboard, Inbox and My
+  Work land on the relevant requirements or response surface instead of
+  silently opening Agent. The only remaining Agent links are explicit Copilot
+  entry points or genuinely projectless conversation runs.
+- Added real project materials and response surfaces using the installed Kiranism
+  Base UI/shadcn components. Users can create a project, choose an existing
+  project as a workspace, upload role-separated bundles, wait for parse/index
+  status, search project knowledge, compile project memory, start a specific
+  response section, reject/approve immutable versions, and export approved
+  DOCX/PDF content. The Agent link preserves project context and provides a
+  direct return to the project response workspace.
+- Public acceptance on the deployed site succeeded for one test account:
+  login reached the normal Dashboard, project creation succeeded, synthetic
+  RFP/supplier/case materials were uploaded through the UI, the Worker parsed
+  and indexed them, a technical section was generated with evidence, human
+  approval changed the section to approved, and the export record became
+  `generated` with both DOCX and PDF SHA-256 values. The public deliverables
+  page showed `approved / exported`; API export responses returned HTTP 200.
+  The Browser download-event helper timed out once even though the API request
+  completed in about 0.7 seconds, so the server-side export record and hashes
+  are the authoritative evidence for this run.
+- The first live drafting attempt exposed a real provider integration problem:
+  MiMo's default thinking mode made structured extraction and quality review
+  return invalid structured content after roughly 160 seconds. Based on the
+  official MiMo contract, Worker structured and drafting requests now send
+  `thinking.type=disabled` and `max_completion_tokens`; Worker full tests pass
+  `204/204`. A second public section run completed in `55.8s` with no
+  `provider_response_invalid` log and reached human review. This improves the
+  path materially but does not claim a sub-second long-form draft.
+- Runtime release `eceb42c4088e5886017615c70b25ac314df36155` is deployed at
+  `/app/bidpilot/repo`. Readiness, migration and checkpoint jobs exited `0`;
+  API, Pi, Worker, Worker Beat, PostgreSQL, Redis and MinIO are healthy; public
+  web/API liveness and readiness returned `200`. Production backup
+  `/app/bidpilot/backups/pre-deploy-eceb42c/database.sql` is retained. Docker
+  BuildKit cache and unused image cleanup was run after release; data volumes
+  were retained.
+- The public acceptance project contains one early automation attempt where a
+  supplier file was classified as a buyer bundle before the Select interaction
+  fix. That bundle was excluded from the acceptance claim; subsequent supplier
+  and case uploads show the correct roles. The product fix is in `2761bcc` and
+  the performance fix is in `eceb42c`; remove or archive the test-only project
+  before presenting a pristine demo account.
+- Supabase was checked with the configured Management API token without
+  exposing its value. The `bidpilot` project was found in `INACTIVE` state;
+  the documented project restart endpoint returned an error and the project
+  stayed inactive. No database or object-storage cutover was attempted: a
+  Supabase database password/Session Pooler URL and Storage S3 access-key pair
+  are still required. The verified public release therefore remains on the
+  VPS PostgreSQL/Redis/MinIO profile, with this migration boundary recorded in
+  `docs/development/configuration-and-secrets.md`.
+
 ## 2026-09-04 streaming path optimization and re-release
 
 - Traced the reported public latency across the path instead of treating a

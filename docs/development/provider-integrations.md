@@ -35,6 +35,23 @@ active form submission. Saved keys are encrypted by the backend secret layer.
 | Xiaomi MiMo direct balance | OpenAI-compatible | `https://api.xiaomimimo.com/v1` | `mimo-v2.5-pro` | [MiMo OpenAI Chat Completions docs](https://mimo.mi.com/docs/en-US/api/chat/openai-api) | Uses the documented `api-key` or Bearer header. No-key chat endpoint probe returned `405`, confirming the host/path is reachable but requires the proper method and auth. |
 | Custom Claude Protocol | Anthropic Messages-compatible | User supplied | `claude-sonnet-4-20250514` | User gateway docs | For Claude proxies, enterprise gateways, and protocol adapters. |
 
+### MiMo Workflow Call Policy
+
+MiMo V2.5 models enable thinking by default. The official Chat Completions
+contract exposes `thinking.type` with `enabled`/`disabled`, returns visible
+text in `choices[].message.content`, and uses `max_completion_tokens` for the
+completion budget. BidPilot therefore disables thinking for Worker-owned
+structured requirement extraction, quality review, and section drafting. These
+steps already have deterministic retrieval, evidence binding and human review
+around the model; leaving hidden reasoning enabled made a structured request
+consume its budget before returning JSON and caused a 160-second degraded
+workflow in the 2026-09-04 public rehearsal. The interactive Pi Assistant keeps
+its own native streaming/reasoning policy and is not changed by this rule.
+
+This policy is based on the [MiMo OpenAI Chat Completions
+documentation](https://mimo.mi.com/docs/en-US/api/chat/openai-api) and its
+[API integration FAQ](https://mimo.mi.com/docs/en-US/quick-start/faq/api-integration).
+
 ## Logo Policy
 
 - Known provider marks should render through the local `ProviderBrandMark`

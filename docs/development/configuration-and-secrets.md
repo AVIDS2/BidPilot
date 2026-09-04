@@ -79,6 +79,39 @@ stores bearer tokens.
 - `DOCPILOT_S3_ACCESS_KEY`
 - `DOCPILOT_S3_SECRET_KEY`
 
+### Supabase managed profile (optional)
+
+Supabase can host the PostgreSQL/pgvector control plane and can provide private
+object storage. It does not replace the internal Redis/Celery queue. The
+current public pilot still uses the verified VPS PostgreSQL, Redis and MinIO
+profile because the configured `bidpilot` Supabase project is paused and the
+required project-level connection credentials are not present.
+
+The configured `SUPABASE_API_KEY` was classified as a Management API personal
+access token and was used only to read the project list. It must never be
+passed to the application as a database password, Supabase service key, or
+Storage S3 secret. Supabase's official connection flow requires a database
+password plus a direct or Session Pooler connection string, and its S3 flow
+requires a separately generated access key pair and endpoint/region.
+
+When a managed migration is deliberately scheduled, keep the application
+contract stable and provide the following server-side values through the
+secret store:
+
+- `DOCPILOT_DATABASE_URL`: the active Supabase Session Pooler URL with its
+  database password, suitable for API, Worker and checkpoint migrations;
+- `SUPABASE_URL` and a project secret/service key only if the Storage REST
+  adapter is selected and tested;
+- the existing `DOCPILOT_MINIO_*`/S3-compatible storage contract only after
+  the chosen Supabase Storage endpoint, bucket policy and private download
+  behavior pass an integration test.
+
+The migration order is: retain a verified VPS backup, activate and inspect the
+target project, restore schema/data, migrate and checksum source/export
+objects, apply Alembic and checkpoint setup, run the authenticated golden path,
+then switch the deployment and retain a rollback window. Never make a partial
+database-only or storage-only switch in production.
+
 ### AI adapters
 
 - `DOCPILOT_PROVIDER_OPENAI_BASE_URL`
