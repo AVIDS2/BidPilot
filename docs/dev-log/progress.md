@@ -63,6 +63,16 @@
   check, the VPS reported Docker BuildKit cache `0B`, reclaimable images `0B`,
   all 11 data volumes retained, and root disk usage at `53%`; stopped one-shot
   migration containers were retained as release evidence.
+- A further public run completed the `past-performance` section and the page
+  approved it, bringing the demo deliverable to `3/5` approved sections. A
+  fresh DOCX and PDF export both produced browser download notifications; API
+  logs returned HTTP 200 and the newest `deliverable_export` row is
+  `generated` with both storage keys and 64-character SHA-256 values. The two
+  remaining sections were deliberately not faked: the authenticated account's
+  starter workflow allowance is `3/3`, and its non-admin account correctly
+  receives HTTP 403 for another official workflow run. Full five-section
+  export remains an explicit acceptance task requiring an admin entitlement
+  change or an already configured BYOK provider.
 
 ## 2026-09-04 streaming path optimization and re-release
 
