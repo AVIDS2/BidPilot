@@ -449,9 +449,14 @@ function UploadMaterialsDialog({
           </Field>
           <Field>
             <FieldLabel>资料用途</FieldLabel>
-            <Select value={sourceType} onValueChange={(value) => value && setSourceType(value)}>
+            <Select
+              value={sourceType || null}
+              onValueChange={(value) => setSourceType(value ?? 'buyer_rfp')}
+            >
               <SelectTrigger aria-label='选择资料用途'>
-                <SelectValue />
+                <SelectValue>
+                  {SOURCE_TYPES.find((item) => item.value === sourceType)?.label || '选择资料用途'}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
