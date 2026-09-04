@@ -2,6 +2,21 @@
 
 ## 2026-09-04 project-first workflow closure and public acceptance
 
+- Prepared the repository for public open-source presentation. The root README
+  was rewritten around the product story, project-first golden path, Pi versus
+  LangGraph runtime boundary, architecture, local setup, interview acceptance,
+  deployment and honest scope. Added root MIT licensing and a private security
+  reporting policy; the existing frontend third-party attribution remains the
+  canonical upstream notice.
+- Public-release secret review found no current-environment MiMo, OpenRouter or
+  Supabase credential match in the working tree or Git history, and no live key
+  in the current tracked source. It did find one old provider-key-shaped value
+  in development documentation in commit `bcd2fb3c`, repeated five times. It is
+  absent from the current tree and does not match the current environment, but
+  it is still a public-history blocker: revoke/rotate the old provider value,
+  rewrite every ref that will be published, and rescan before making the
+  repository public. README and `SECURITY.md` record this status explicitly.
+
 - Completed the product route audit against the project-first response pattern
   seen in official Loopio, Responsive and PandaDoc materials. Project detail is
   now the business hub: its tabs expose overview, project materials, and
