@@ -1,5 +1,13 @@
 # Progress Log
 
+## 2026-09-04 production promotion and cleanup
+
+- Promoted the reviewed Pi/Agent workspace release `dec3fd6c3dc007e19757d5e29b1cfca82f1f6981` to `/app/bidpilot/repo` on the VPS. The full production Compose path passed `readiness`, Alembic migration, and LangGraph checkpoint initialization before the application services were started.
+- Post-deploy verification passed for the BidPilot API, Pi sidecar, PostgreSQL, Redis, Worker, Worker Beat, and Web containers. The public web root, sign-in page, icon, API `/health`, and API `/health/ready` all returned HTTP `200` after cleanup.
+- Created a pre-deploy PostgreSQL logical backup at `/app/bidpilot/backups/pre-deploy-dec3fd6/database.sql` (19,404,971 bytes) and retained it on the VPS. PostgreSQL, Redis, and MinIO data volumes were not changed.
+- Removed all Docker images with no container references and pruned the BuildKit builder cache. Reclaimable images dropped from `8.847 GB` to `0 B`, build cache from `6.011 GB` to `0 B`, and the host root filesystem moved from about `80%` used to `52%` used. Running services and their data volumes remained intact; the temporary release bundle was removed.
+- The HTTPS API load smoke completed 40 requests with zero failures. Its `/health` p95 was about `2.06 s` and the combined p95 was about `2.03 s`, above the runbook's `1 s` target; `/health/ready` p95 was about `0.97 s`. This is retained as a latency follow-up rather than reported as a clean performance-gate pass.
+
 ## 2026-09-04 Agent workspace and template interaction pass
 
 - Rechecked the Kiranism upstream theme and Base UI contracts. The public
@@ -55,9 +63,8 @@
   Browser acceptance covered Supabase theme migration, FAQ expansion, local
   MIMO Copilot SSE, desktop/mobile Agent layout, native subagent side-panel
   open/collapse, and sidebar soft navigation with no console errors.
-- This correction pass is local and not yet promoted to the VPS. Production
-  remains on the previous verified release until the full local gate and a
-  separately authorized deployment pass succeed.
+- Superseded by the production promotion and cleanup recorded in the
+  `2026-09-04 production promotion and cleanup` section above.
 - Verification: Web TypeScript check, production build, formatting, full Web
   tests (`116 passed`), Pi sidecar tests (`18 passed`), API chat/access/
   subagent tests (`43 passed`), API runtime listing tests (`7 passed`), Worker
