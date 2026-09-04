@@ -1,5 +1,41 @@
 # Progress Log
 
+## 2026-09-04 streaming path optimization and re-release
+
+- Traced the reported public latency across the path instead of treating a
+  cold HTTPS smoke request as Agent first-token latency. VPS-local API health
+  stayed in the single-digit milliseconds, the MiMo direct streaming probe
+  returned its first data in about `2.31s`, and the original smoke opened a
+  fresh `urllib` connection for every request. The public response was served
+  by Cloudflare before reaching OpenResty, so client route, TLS, and edge
+  selection were visible in the measured p95.
+- Updated the versioned OpenResty configurations to use upstream keep-alive
+  pools, clear the upstream `Connection` header for ordinary HTTP/1.1
+  requests, and remove the Web host's unconditional `Connection: upgrade`.
+  Web `/api/*` and the direct API host now disable proxy buffering and caching
+  and allow one-hour active Assistant streams. The actual 1Panel bind-mounted
+  files were syntax-checked and reloaded; previous files remain as
+  `.pre-2cebebf` rollback copies.
+- Kept the API SSE contract stream-safe with `Cache-Control: no-cache,
+  no-transform`, the existing `Content-Type: text/event-stream`, heartbeat,
+  and `X-Accel-Buffering: no`. Cloudflare Rulesets were inspected read-only;
+  the available credential returned `403` for that endpoint, so no unknown
+  Cloudflare rule was changed.
+- Reworked `scripts/load_smoke.py` to reuse one HTTP/1.1 connection per worker
+  and retry a stale keep-alive once. The re-release commit is
+  `2cebebf22e225bae3557ef30edb88eda7260a5ed`; its final public smoke passed
+  40/40 requests with zero failures and p95 `532.68ms` (health `532.68ms`,
+  readiness `524.50ms`). Web root, sign-in, API liveness, API readiness, and
+  OpenResty syntax checks all returned success after the reload and rebuild.
+- Rebuilt the full Pi-enabled production Compose stack and passed readiness,
+  migration, checkpoint initialization, API/Pi health, Worker, Worker Beat,
+  and Web startup. MiMo remains the workflow provider and OpenRouter remains
+  the embedding provider.
+- Removed unreferenced Docker images and BuildKit cache after the release.
+  The final VPS report has `28` images with `28` active, `0 B` reclaimable
+  image space, `0 B` BuildKit cache, and the root filesystem at about `52%`
+  used. PostgreSQL, Redis, and MinIO volumes were retained.
+
 ## 2026-09-04 production promotion and cleanup
 
 - Promoted the reviewed Pi/Agent workspace release `dec3fd6c3dc007e19757d5e29b1cfca82f1f6981` to `/app/bidpilot/repo` on the VPS. The full production Compose path passed `readiness`, Alembic migration, and LangGraph checkpoint initialization before the application services were started.
