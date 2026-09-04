@@ -38,7 +38,7 @@
   and Web startup. MiMo remains the workflow provider and OpenRouter remains
   the embedding provider.
 - Removed unreferenced Docker images and BuildKit cache after the release.
-  The final VPS report has `28` images with `28` active, `0 B` reclaimable
+  The final VPS report has `27` images with `27` active, `0 B` reclaimable
   image space, `0 B` BuildKit cache, and the root filesystem at about `52%`
   used. PostgreSQL, Redis, and MinIO volumes were retained.
 
