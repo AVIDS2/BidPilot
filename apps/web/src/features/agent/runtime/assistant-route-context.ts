@@ -6,9 +6,9 @@ import type { PageContext } from '@/features/agent/state/agent-store';
  */
 export function assistantContextForLocation(pathname: string, search = ''): PageContext {
   const projectMatch = pathname.match(/^\/projects\/([^/]+)/);
+  const agentParams = pathname === '/agent' ? new URLSearchParams(search) : null;
   const projectId =
-    projectMatch?.[1] ??
-    (pathname === '/agent' ? (new URLSearchParams(search).get('project') ?? undefined) : undefined);
+    projectMatch?.[1] ?? agentParams?.get('project_id') ?? agentParams?.get('project') ?? undefined;
 
   return projectId ? { page: pathname, projectId } : { page: pathname };
 }

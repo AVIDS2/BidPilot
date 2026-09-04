@@ -926,6 +926,30 @@ function AgentWelcome({
   );
 }
 
+function AgentProjectContext({
+  projectId,
+  projects,
+  onOpenProject
+}: {
+  projectId: string;
+  projects: ProjectRead[];
+  onOpenProject: (projectId: string) => void;
+}) {
+  const project = projects.find((item) => item.id === projectId);
+  return (
+    <div className='agent-project-context' role='status'>
+      <FolderKanbanIcon className='agent-project-context-icon' aria-hidden='true' />
+      <div className='agent-project-context-copy'>
+        <span>当前项目</span>
+        <strong>{project?.name ?? '项目工作区'}</strong>
+      </div>
+      <Button type='button' size='sm' variant='ghost' onClick={() => onOpenProject(projectId)}>
+        打开项目 <ArrowUpRightIcon data-icon='inline-end' />
+      </Button>
+    </div>
+  );
+}
+
 export function LinearAgentWorkspace() {
   const router = useRouter();
   const navigate = (href: string, options?: { replace?: boolean }) => {
@@ -1257,6 +1281,13 @@ export function LinearAgentWorkspace() {
                   onDelete={deleteConversation}
                   onTogglePinned={togglePinnedConversation}
                 />
+                {state.currentContext.projectId ? (
+                  <AgentProjectContext
+                    projectId={state.currentContext.projectId}
+                    projects={projects}
+                    onOpenProject={(projectId) => navigate(`/projects/${projectId}?tab=response`)}
+                  />
+                ) : null}
               </div>
               <div
                 className={`agent-content bidpilot-claude-thread${state.messages.length ? ' has-messages' : ''}`}

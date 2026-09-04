@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowUpRight, FileCheck2, FileDown } from 'lucide-react';
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
@@ -11,6 +10,8 @@ import { ProjectPicker } from '@/components/bidpilot/project-picker';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { LoadingButton } from '@/components/ui/loading-button';
+import { useProjectSelection } from '@/hooks/use-project-selection';
 import {
   Table,
   TableBody,
@@ -19,7 +20,13 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { listDeliverables, listProjects } from '@/lib/bidpilot-api';
+import {
+  exportDeliverableDocx,
+  exportDeliverablePdf,
+  listDeliverables,
+  listProjects
+} from '@/lib/bidpilot-api';
+import { toast } from 'sonner';
 
 export default function DeliverablesPage() {
   const projects = useQuery({
@@ -28,8 +35,7 @@ export default function DeliverablesPage() {
     refetchInterval: 30_000,
     refetchOnWindowFocus: true
   });
-  const [selectedProjectId, setSelectedProjectId] = useState('');
-  const projectId = selectedProjectId || projects.data?.[0]?.id || '';
+  const { projectId, onChange: setSelectedProjectId } = useProjectSelection(projects.data);
   const query = useQuery({
     queryKey: ['deliverables', projectId],
     queryFn: () => listDeliverables(projectId),
@@ -82,7 +88,7 @@ export default function DeliverablesPage() {
           />
         ) : (
           <Card>
-            <CardContent className='p-0'>
+            <CardContent className='overflow-x-auto p-0'>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -109,15 +115,18 @@ export default function DeliverablesPage() {
                         <Badge variant='outline'>{item.status}</Badge>
                       </TableCell>
                       <TableCell>
-                        <span className='text-muted-foreground inline-flex items-center gap-1.5 text-xs'>
-                          <FileDown className='size-3.5' />
-                          {item.export_status}
-                        </span>
+                        <div className='flex flex-wrap items-center gap-1'>
+                          <span className='text-muted-foreground mr-1 inline-flex items-center gap-1.5 text-xs'>
+                            <FileDown className='size-3.5' />
+                            {item.export_status}
+                          </span>
+                          <DeliverableExportActions deliverableId={item.id} />
+                        </div>
                       </TableCell>
                       <TableCell className='text-right'>
                         <Link
                           className={buttonVariants({ size: 'sm', variant: 'ghost' })}
-                          href={`/projects/${item.project_id}?deliverable=${item.id}`}
+                          href={`/projects/${item.project_id}?tab=response&deliverable=${item.id}`}
                           aria-label='查看交付物'
                         >
                           查看 <ArrowUpRight data-icon='inline-end' />
@@ -132,5 +141,41 @@ export default function DeliverablesPage() {
         )}
       </div>
     </>
+  );
+}
+
+function DeliverableExportActions({ deliverableId }: { deliverableId: string }) {
+  const mutation = useMutation({
+    mutationFn: (format: 'docx' | 'pdf') =>
+      format === 'docx'
+        ? exportDeliverableDocx(deliverableId)
+        : exportDeliverablePdf(deliverableId),
+    onSuccess: (_, format) => toast.success(`${format.toUpperCase()} 文件已开始下载。`),
+    onError: () => toast.error('导出失败，请先通过至少一个章节版本。')
+  });
+
+  return (
+    <div className='flex items-center gap-1'>
+      <LoadingButton
+        aria-label='导出 DOCX'
+        loading={mutation.isPending && mutation.variables === 'docx'}
+        loadingLabel='正在生成 DOCX'
+        onClick={() => mutation.mutate('docx')}
+        size='xs'
+        variant='ghost'
+      >
+        DOCX
+      </LoadingButton>
+      <LoadingButton
+        aria-label='导出 PDF'
+        loading={mutation.isPending && mutation.variables === 'pdf'}
+        loadingLabel='正在生成 PDF'
+        onClick={() => mutation.mutate('pdf')}
+        size='xs'
+        variant='ghost'
+      >
+        PDF
+      </LoadingButton>
+    </div>
   );
 }

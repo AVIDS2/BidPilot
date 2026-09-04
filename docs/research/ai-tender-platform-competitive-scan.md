@@ -18,6 +18,31 @@ BidPilot 的控制面和证据链已经具备明显基础：项目、资料包�
 厂商自报，不能直接当作 BidPilot 的验收标准；比较必须有相同数据集、样本量、任务
 定义、人工基线和错误分类。
 
+## 2026-09-04 产品工作流复核
+
+本轮补查 Loopio、Responsive 和 PandaDoc 的官方产品资料，重点看实际工作流和
+信息架构，而不是照搬营销用语。三类产品共同点很明确：用户先进入一个项目或响应
+工作区，再把资料、要求、协作者、内容复用、审核和交付组织在同一条业务链上；AI
+是项目中的协作者，不能替代项目、资料库、审核和最终文件这些持久化对象。
+
+- Loopio 将项目响应和 Content Library 作为相邻的核心工作面，内容从项目中复用，
+  而不是把所有入口收敛为一个聊天窗口。来源：[Loopio 官网](https://loopio.com)、
+  [Loopio Content Library](https://loopio.com/blog/loopio-content-library)。
+- Responsive 把项目管理、任务分工、截止时间、内容库和审批放进同一个响应中枢，
+  让团队可以看到谁负责什么以及下一步是什么。来源：[Responsive Proposal
+  Development Workflow](https://www.responsive.io/blog/proposal-development-workflow)、
+  [Responsive Project Management](https://www.responsive.io/capability/project-management)。
+- PandaDoc 以工作区、模板/内容块、审批和最终文档为交付对象，生成结果仍需经过
+  人工确认并导出，而不是停留在模型消息里。来源：[PandaDoc Proposal
+  Software](https://www.pandadoc.com/proposal-software)、[What is Proposal
+  Software](https://www.pandadoc.com/blog/what-is-proposal-software)。
+
+因此本项目的产品原则落地为：项目是业务主线；资料、需求、知识、评审和交付物都
+有各自页面和真实状态；只有用户明确选择“问 Copilot”时才进入 Agent；从 Agent
+进入项目时必须保留 `project_id` 上下文并提供回到项目响应工作区的入口；子代理是
+当前运行的协作分支，不成为历史会话；导出只能读取已批准章节。这个原则比增加更多
+说明性文案更重要，也直接作为本轮导航审计和黄金路径验收标准。
+
 ## 产品观察
 
 ### 科大讯飞：招采智能体 / 智能评标

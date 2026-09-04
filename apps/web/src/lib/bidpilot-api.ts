@@ -587,6 +587,7 @@ export function draftSection(data: {
   project_id: string;
   section_key: string;
   section_id?: string;
+  client_request_id?: string;
   provider_config_id?: string;
   reasoning_effort?: 'low' | 'medium' | 'high' | 'extra' | 'max';
   max_iterations?: number;
@@ -601,6 +602,7 @@ export function redraftSection(data: {
   project_id: string;
   section_key: string;
   section_id?: string;
+  client_request_id?: string;
   review_feedback?: string;
   provider_config_id?: string;
   reasoning_effort?: 'low' | 'medium' | 'high' | 'extra' | 'max';
@@ -1511,6 +1513,7 @@ export interface SectionVersionRead {
   content_markdown: string | null;
   created_by_actor: string;
   generation_run_id: string | null;
+  evidence_set_id?: string | null;
 }
 
 export function listSectionVersions(sectionId: string) {

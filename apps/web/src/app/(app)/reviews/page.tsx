@@ -1,7 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, ClipboardCheck, MessageSquare, Users } from 'lucide-react';
+import Link from 'next/link';
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  CheckCircle2,
+  ClipboardCheck,
+  MessageSquare,
+  Users
+} from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
@@ -9,6 +16,8 @@ import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/que
 import { ProjectPicker } from '@/components/bidpilot/project-picker';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { buttonVariants } from '@/components/ui/button';
+import { useProjectSelection } from '@/hooks/use-project-selection';
 import { listProjects, getCollaborationBoard } from '@/lib/bidpilot-api';
 
 export default function ReviewsPage() {
@@ -18,8 +27,7 @@ export default function ReviewsPage() {
     refetchInterval: 30_000,
     refetchOnWindowFocus: true
   });
-  const [selectedProjectId, setSelectedProjectId] = useState('');
-  const projectId = selectedProjectId || projects.data?.[0]?.id || '';
+  const { projectId, onChange: setSelectedProjectId } = useProjectSelection(projects.data);
   const board = useQuery({
     queryKey: ['collaboration-board', projectId],
     queryFn: () => getCollaborationBoard(projectId),
@@ -98,9 +106,19 @@ export default function ReviewsPage() {
               />
             </div>
             <Card>
-              <CardHeader className='border-b'>
-                <h2 className='font-medium'>需求审核队列</h2>
-                <p className='text-muted-foreground mt-1 text-sm'>按当前项目返回的真实协作看板。</p>
+              <CardHeader className='flex flex-col gap-3 border-b sm:flex-row sm:items-start sm:justify-between'>
+                <div>
+                  <h2 className='font-medium'>需求审核队列</h2>
+                  <p className='text-muted-foreground mt-1 text-sm'>
+                    按当前项目返回的真实协作看板。
+                  </p>
+                </div>
+                <Link
+                  className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                  href={`/projects/${projectId}?tab=response`}
+                >
+                  审核响应章节 <ArrowUpRight data-icon='inline-end' />
+                </Link>
               </CardHeader>
               <CardContent className='p-0'>
                 {board.data.requirement_items.length ? (

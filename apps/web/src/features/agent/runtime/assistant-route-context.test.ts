@@ -11,9 +11,14 @@ describe('assistantContextForLocation', () => {
 
   it('keeps global pages unscoped unless the Agent target is explicit', () => {
     expect(assistantContextForLocation('/dashboard')).toEqual({ page: '/dashboard' });
-    expect(assistantContextForLocation('/agent', '?project=project-456')).toEqual({
+    expect(assistantContextForLocation('/agent', '?project_id=project-456')).toEqual({
       page: '/agent',
       projectId: 'project-456'
+    });
+
+    expect(assistantContextForLocation('/agent', '?project=project-legacy')).toEqual({
+      page: '/agent',
+      projectId: 'project-legacy'
     });
   });
 });

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { useProjectSelection } from '@/hooks/use-project-selection';
 import {
   Table,
   TableBody,
@@ -29,9 +30,8 @@ export default function RequirementsPage() {
     refetchInterval: 30_000,
     refetchOnWindowFocus: true
   });
-  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const { projectId, onChange: setSelectedProjectId } = useProjectSelection(projects.data);
   const [search, setSearch] = useState('');
-  const projectId = selectedProjectId || projects.data?.[0]?.id || '';
   const requirements = useQuery({
     queryKey: ['requirements', projectId],
     queryFn: () => listRequirements(projectId),

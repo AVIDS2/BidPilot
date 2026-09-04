@@ -308,7 +308,7 @@ export function InboxPage() {
                         className='min-w-0 flex-1'
                         href={
                           run.project_id
-                            ? `/projects/${run.project_id}`
+                            ? `/projects/${run.project_id}?tab=response&run=${run.id}`
                             : run.conversation_id
                               ? `/agent?conversation=${run.conversation_id}`
                               : '/my-work'
@@ -340,7 +340,7 @@ export function InboxPage() {
                           onClick={() =>
                             router.push(
                               run.project_id
-                                ? `/projects/${run.project_id}`
+                                ? `/projects/${run.project_id}?tab=response&run=${run.id}`
                                 : run.conversation_id
                                   ? `/agent?conversation=${run.conversation_id}`
                                   : '/my-work'
@@ -552,7 +552,13 @@ export function MyWorkPage() {
                       {visibleItems.slice(0, 30).map((item) => (
                         <Link
                           className='hover:bg-muted/40 flex items-center gap-3 px-5 py-4 transition-colors'
-                          href={item.projectId ? `/projects/${item.projectId}` : '/my-work'}
+                          href={
+                            item.projectId
+                              ? item.kind === 'compliance'
+                                ? `/requirements?project_id=${item.projectId}`
+                                : `/projects/${item.projectId}?tab=response`
+                              : '/my-work'
+                          }
                           key={item.id}
                         >
                           <span className='bg-muted flex size-8 shrink-0 items-center justify-center rounded-lg'>

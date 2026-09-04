@@ -28,7 +28,10 @@ The pilot owner prepares these items before inviting a non-developer:
 Create a project named `智慧社区 AI 治理平台投标演示`. The platform creates a
 project scope, an initial deliverable/outline, membership, and audit history.
 
-You may use the normal project screen or ask the Assistant:
+Use the normal project screen first: click **新建项目**, then continue from the
+project's **资料与知识** and **响应与交付** tabs. The Assistant is an optional
+Copilot entry for questions or actions that need natural-language help; it is
+not the only way to enter the workflow. You may also ask the Assistant:
 
 > 创建一个名为“智慧社区 AI 治理平台投标演示”的项目
 
@@ -96,7 +99,10 @@ rerun.
 
 ### 6. Export approved content
 
-Request a DOCX or PDF export after the required sections are approved.
+From the project's **响应与交付** tab, or from the **交付物** list, request a
+DOCX or PDF export after the required sections are approved. Partial exports
+contain only approved sections; the final-file label appears only when every
+section in the selected deliverable is approved.
 
 **Verify:** the exported artifact is associated with approved versions only;
 the export record and audit entry are visible. A draft that was rejected must

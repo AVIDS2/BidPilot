@@ -1,22 +1,39 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, FileCheck2, Files, ListChecks, MessageSquare, PlayCircle } from 'lucide-react';
 import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
-import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
+import { QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ProjectMaterialsPanel } from '@/features/workbench/project-materials-panel';
+import { ProjectResponsePanel } from '@/features/workbench/project-response-panel';
 import { getProject, getReadinessSummary, listBundles, listDeliverables } from '@/lib/bidpilot-api';
 
+type ProjectTab = 'overview' | 'materials' | 'response';
+
+function projectTab(value: string | null): ProjectTab {
+  return value === 'materials'
+    ? 'materials'
+    : value === 'response' || value === 'delivery'
+      ? 'response'
+      : 'overview';
+}
+
 export default function ProjectDetailPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
+  const activeTab = projectTab(searchParams.get('tab'));
+  const requestedDeliverableId = searchParams.get('deliverable');
+  const requestedRunId = searchParams.get('run');
   const project = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => getProject(projectId),
@@ -83,6 +100,11 @@ export default function ProjectDetailPage() {
       readiness.refetch()
     ]);
   };
+  const setActiveTab = (tab: ProjectTab) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set('tab', tab);
+    router.replace(`/projects/${projectId}?${nextParams.toString()}`, { scroll: false });
+  };
   const readinessScore = readiness.data
     ? Math.min(100, Math.max(0, Math.round(readiness.data.readiness_score)))
     : 0;
@@ -103,13 +125,19 @@ export default function ProjectDetailPage() {
             />
             <Link
               className={buttonVariants({ variant: 'outline' })}
-              href={`/agent?project_id=${item.id}`}
+              href={`/projects/${item.id}?tab=materials`}
             >
-              <MessageSquare data-icon='inline-start' />
-              打开助手
+              <Files data-icon='inline-start' />
+              查看资料
             </Link>
-            <Link className={buttonVariants()} href={`/agent?project_id=${item.id}`}>
-              开始任务 <ArrowRight data-icon='inline-end' />
+            <Link className={buttonVariants()} href={`/projects/${item.id}?tab=response`}>
+              进入响应工作区 <ArrowRight data-icon='inline-end' />
+            </Link>
+            <Link
+              className={buttonVariants({ variant: 'outline' })}
+              href={`/agent?project_id=${item.id}&entry=project`}
+            >
+              <MessageSquare data-icon='inline-start' />问 Copilot
             </Link>
           </div>
         }
@@ -165,11 +193,11 @@ export default function ProjectDetailPage() {
             </CardContent>
           </Card>
         ) : null}
-        <Tabs defaultValue='overview'>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(projectTab(value))}>
           <TabsList>
             <TabsTrigger value='overview'>项目概览</TabsTrigger>
             <TabsTrigger value='materials'>资料与知识</TabsTrigger>
-            <TabsTrigger value='delivery'>响应与交付</TabsTrigger>
+            <TabsTrigger value='response'>响应与交付</TabsTrigger>
           </TabsList>
           <TabsContent value='overview' className='mt-5'>
             <div className='grid gap-6 lg:grid-cols-2'>
@@ -180,22 +208,22 @@ export default function ProjectDetailPage() {
                 </CardHeader>
                 <CardContent className='grid gap-3 p-5'>
                   <ActionLink
-                    href={`/agent?project_id=${item.id}`}
-                    icon={<MessageSquare />}
-                    title='让 Agent 检查资料完整度'
-                    copy='使用真实 Pi 运行读取项目范围内的资料和需求。'
+                    href={`/projects/${item.id}?tab=materials`}
+                    icon={<Files />}
+                    title='整理项目资料'
+                    copy='上传招标文件和企业依据，查看解析与索引状态。'
                   />
                   <ActionLink
-                    href={`/agent?project_id=${item.id}`}
+                    href={`/requirements?project_id=${item.id}`}
                     icon={<ListChecks />}
                     title='拆解投标要求'
-                    copy='把资格、商务和技术要求整理为可追踪条目。'
+                    copy='在需求清单中确认要求、优先级和证据覆盖。'
                   />
                   <ActionLink
-                    href={`/agent?project_id=${item.id}`}
+                    href={`/projects/${item.id}?tab=response`}
                     icon={<FileCheck2 />}
                     title='开始起草响应'
-                    copy='在证据准备完成后生成可审阅的章节草稿。'
+                    copy='选择章节发起起草，审核通过后导出交付文件。'
                   />
                 </CardContent>
               </Card>
@@ -213,10 +241,19 @@ export default function ProjectDetailPage() {
             </div>
           </TabsContent>
           <TabsContent value='materials' className='mt-5'>
-            <Materials bundles={bundles.data} loading={bundles.isPending} error={bundles.error} />
+            <ProjectMaterialsPanel
+              projectId={item.id}
+              bundles={bundles.data}
+              loading={bundles.isPending}
+              error={bundles.error}
+            />
           </TabsContent>
-          <TabsContent value='delivery' className='mt-5'>
-            <Delivery
+          <TabsContent value='response' className='mt-5'>
+            <ProjectResponsePanel
+              key={`${item.id}:${requestedDeliverableId ?? ''}:${requestedRunId ?? ''}`}
+              projectId={item.id}
+              requestedDeliverableId={requestedDeliverableId}
+              requestedRunId={requestedRunId}
               deliverables={deliverables.data}
               loading={deliverables.isPending}
               error={deliverables.error}
@@ -316,87 +353,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <div className='flex items-start justify-between gap-4 border-b pb-3 last:border-0 last:pb-0'>
       <span className='text-muted-foreground'>{label}</span>
       <span className='max-w-[65%] break-all text-right font-medium'>{value}</span>
-    </div>
-  );
-}
-function Materials({
-  bundles,
-  loading,
-  error
-}: {
-  bundles?: Awaited<ReturnType<typeof listBundles>>;
-  loading: boolean;
-  error: Error | null;
-}) {
-  if (loading) return <QuerySkeleton rows={3} />;
-  if (error) return <QueryError message={error.message} />;
-  if (!bundles?.length)
-    return (
-      <EmptyState
-        title='还没有资料包'
-        description='先上传招标文件或企业材料，再让 Agent 进行解析。'
-      />
-    );
-  return (
-    <div className='grid gap-4 md:grid-cols-2'>
-      {bundles.map((bundle) => (
-        <Card key={bundle.id}>
-          <CardHeader>
-            <h2 className='font-medium'>{bundle.label}</h2>
-            <p className='text-muted-foreground text-sm'>{bundle.source_type}</p>
-          </CardHeader>
-          <CardContent>
-            <Link
-              className={buttonVariants({ size: 'sm', variant: 'outline' })}
-              href={`/knowledge?project_id=${bundle.project_id}`}
-            >
-              查看资料 <ArrowRight data-icon='inline-end' />
-            </Link>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-function Delivery({
-  deliverables,
-  loading,
-  error
-}: {
-  deliverables?: Awaited<ReturnType<typeof listDeliverables>>;
-  loading: boolean;
-  error: Error | null;
-}) {
-  if (loading) return <QuerySkeleton rows={3} />;
-  if (error) return <QueryError message={error.message} />;
-  if (!deliverables?.length)
-    return (
-      <EmptyState
-        title='还没有交付物'
-        description='Agent 完成起草和审核后，交付版本会显示在这里。'
-      />
-    );
-  return (
-    <div className='grid gap-4 md:grid-cols-2'>
-      {deliverables.map((deliverable) => (
-        <Card key={deliverable.id}>
-          <CardHeader className='flex flex-row items-start justify-between gap-3'>
-            <div>
-              <h2 className='font-medium'>{deliverable.title}</h2>
-              <p className='text-muted-foreground mt-1 text-sm'>{deliverable.type}</p>
-            </div>
-            <Badge variant='outline'>{deliverable.status}</Badge>
-          </CardHeader>
-          <CardContent>
-            <Link
-              className={buttonVariants({ size: 'sm', variant: 'outline' })}
-              href={`/deliverables?deliverable=${deliverable.id}`}
-            >
-              打开交付物 <ArrowRight data-icon='inline-end' />
-            </Link>
-          </CardContent>
-        </Card>
-      ))}
     </div>
   );
 }

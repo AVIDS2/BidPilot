@@ -292,7 +292,7 @@ export default function DashboardPage() {
                           className='hover:bg-muted/40 block px-5 py-4 transition-colors'
                           href={
                             run.project_id
-                              ? `/projects/${run.project_id}?run=${run.id}`
+                              ? `/projects/${run.project_id}?tab=response&run=${run.id}`
                               : run.conversation_id
                                 ? `/agent?conversation=${run.conversation_id}`
                                 : '/my-work'

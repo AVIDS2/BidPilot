@@ -537,6 +537,44 @@
     0 2px 8px rgba(0, 0, 0, 0.05);
   padding: 7px;
 }
+.bidpilot-linear-agent .agent-project-context {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid var(--linear-line);
+  background: color-mix(in oklch, var(--linear-surface-muted) 30%, var(--linear-surface));
+  padding: 7px 12px;
+}
+.bidpilot-linear-agent .agent-project-context-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--linear-primary);
+}
+.bidpilot-linear-agent .agent-project-context-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+.bidpilot-linear-agent .agent-project-context-copy span {
+  color: var(--linear-text-soft);
+  font-size: 11px;
+}
+.bidpilot-linear-agent .agent-project-context-copy strong {
+  overflow: hidden;
+  color: var(--linear-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bidpilot-linear-agent .agent-project-context button {
+  flex: 0 0 auto;
+  color: var(--linear-primary);
+  font-size: 12px;
+}
 .bidpilot-linear-agent .bp-linear-history-new {
   display: flex;
   width: 100%;
