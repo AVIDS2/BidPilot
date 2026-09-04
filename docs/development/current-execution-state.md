@@ -7,7 +7,8 @@
 - [x] 完成公网登录、项目创建、三类资料上传、Worker 解析索引、三章真实起草、审核批准和 DOCX/PDF 导出记录验收。
 - [ ] 生成五章全部批准的最终文件：当前验收账户 starter 官方工作流额度为 `3/3`，剩余两章被后端正常拒绝；需要管理员套餐 entitlement 或账户已有 BYOK MiMo 配置后，再按同一页面流程完成最后两章。
 - [x] 生产运行时切换到 MiMo Worker 合同：关闭 Worker 结构化调用的隐藏思考并使用 `max_completion_tokens`；第二次公网起草不再出现结构化响应错误。
-- [x] 公网部署 `eceb42c4088e5886017615c70b25ac314df36155`，完成 readiness、migration、checkpoint、健康检查和 Docker 垃圾清理。
+- [x] 收口已消费、conversation 缺失和永久失效的 Agent wake 通知，避免 Beat 每 10 秒重复派发历史 404；生产扫描已连续返回 `count: 0`。
+- [x] 公网部署最终运行提交 `6b6aba9df1f636725da4e28d274efa6e24f019b2`，完成 readiness、migration、checkpoint、健康检查和 Docker 垃圾清理。
 - [ ] Supabase 托管迁移：当前 `bidpilot` 项目状态为 `INACTIVE`，且本机只有 Management PAT，没有数据库 Session Pooler 密码或 Storage S3 access key/secret；恢复项目并补齐连接凭据后再做备份迁移、对象校验和完整回归。
 - [ ] 商业 GA 之外的长期事项：隐藏回归数据集/质量证据、恢复演练、告警和支付运营；这些不阻塞本项目作为个人面试展示项目的公网演示，但不能被表述为企业商业 GA。
 

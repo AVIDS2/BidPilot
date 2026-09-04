@@ -73,6 +73,13 @@
   receives HTTP 403 for another official workflow run. Full five-section
   export remains an explicit acceptance task requiring an admin entitlement
   change or an already configured BYOK provider.
+- Production logs then exposed a second real queue issue: unread historical
+  wake notifications for deleted conversations were being redispatched every
+  ten seconds. Commit `6b6aba9` closes a wake notification after a successful,
+  ignored, or permanent 4xx delivery while preserving retryable 5xx/409
+  behavior; the new Worker test raises the full suite to `205/205`. The fix was
+  deployed with a fresh database backup, and subsequent Beat cycles reported
+  `count: 0` with zero unread wake notifications.
 
 ## 2026-09-04 streaming path optimization and re-release
 
