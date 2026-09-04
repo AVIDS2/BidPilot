@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any
 
 from contracts.runtime import RuntimeRiskLevel
@@ -16,10 +18,18 @@ from .tool_catalog import (
     build_capability_tool_specs,
 )
 
+_MCP_DISCOVERY_TIMEOUT_SECONDS = 1.0
+_MCP_SPEC_CACHE_TTL_SECONDS = 60.0
+_mcp_specs_cache: tuple[float, list[Any]] | None = None
+
 
 def pi_tools() -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
-    for spec in [*build_capability_tool_specs(), _READ_SKILL_TOOL_SPEC, _READ_SKILL_RESOURCE_TOOL_SPEC]:
+    for spec in [
+        *build_capability_tool_specs(),
+        _READ_SKILL_TOOL_SPEC,
+        _READ_SKILL_RESOURCE_TOOL_SPEC,
+    ]:
         function = spec.get("function") if isinstance(spec, dict) else None
         if not isinstance(function, dict):
             continue
@@ -27,15 +37,20 @@ def pi_tools() -> list[dict[str, Any]]:
         if not name:
             continue
         definition = CAPABILITY_REGISTRY.get(name)
-        read_only = definition is not None and definition.risk_level is RuntimeRiskLevel.READ
+        read_only = (
+            definition is not None and definition.risk_level is RuntimeRiskLevel.READ
+        )
         result.append(
             {
                 "name": name,
                 "label": (definition.label_zh if definition else name),
                 "description": str(function.get("description") or name),
-                "parameters": function.get("parameters") or _TOOL_PARAMETER_SCHEMAS.get(name, {}),
+                "parameters": function.get("parameters")
+                or _TOOL_PARAMETER_SCHEMAS.get(name, {}),
                 "executionMode": "parallel" if read_only else "sequential",
-                "resourceKind": "skill" if name in {"read_skill", "read_skill_resource"} else "tool",
+                "resourceKind": "skill"
+                if name in {"read_skill", "read_skill_resource"}
+                else "tool",
             }
         )
     return result
@@ -49,13 +64,24 @@ async def pi_tools_for_run() -> list[dict[str, Any]]:
     """
 
     result = pi_tools()
-    try:
-        mcp_specs = await list_mcp_tool_specs()
-    except Exception:
-        # An optional MCP server must not prevent a normal Pi turn from
-        # starting. The actual call will return a structured unavailable result
-        # if a stale tool is ever selected.
-        mcp_specs = []
+    global _mcp_specs_cache
+    now = time.monotonic()
+    if (
+        _mcp_specs_cache is not None
+        and now - _mcp_specs_cache[0] < _MCP_SPEC_CACHE_TTL_SECONDS
+    ):
+        mcp_specs = _mcp_specs_cache[1]
+    else:
+        try:
+            mcp_specs = await asyncio.wait_for(
+                list_mcp_tool_specs(), timeout=_MCP_DISCOVERY_TIMEOUT_SECONDS
+            )
+            _mcp_specs_cache = (now, mcp_specs)
+        except Exception:
+            # Optional MCP discovery must never hold the first visible Pi
+            # response open. A previous successful catalog remains usable;
+            # otherwise the first-party tool set starts immediately.
+            mcp_specs = _mcp_specs_cache[1] if _mcp_specs_cache is not None else []
     for spec in mcp_specs:
         server_name = spec.server_name
         tool_name = spec.tool_name or spec.name
@@ -121,4 +147,10 @@ def pi_execution_contract() -> dict[str, Any]:
     }
 
 
-__all__ = ["pi_execution_contract", "pi_resources", "pi_sandbox", "pi_tools", "pi_tools_for_run"]
+__all__ = [
+    "pi_execution_contract",
+    "pi_resources",
+    "pi_sandbox",
+    "pi_tools",
+    "pi_tools_for_run",
+]

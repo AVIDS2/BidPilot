@@ -48,10 +48,11 @@ vi.mock('@/lib/api', () => ({
 describe('AgentEnvironmentPanel', () => {
   it('renders live runs and the server-owned Pi resource contract', async () => {
     const onOpenRun = vi.fn();
+    const onOpenSubagents = vi.fn();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
-        <AgentEnvironmentPanel onOpenRun={onOpenRun} />
+        <AgentEnvironmentPanel onOpenRun={onOpenRun} onOpenSubagents={onOpenSubagents} />
       </QueryClientProvider>
     );
 
@@ -63,7 +64,8 @@ describe('AgentEnvironmentPanel', () => {
     expect(screen.getByText('项目工作区')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /子 Agent/ }));
-    expect(onOpenRun).toHaveBeenCalledWith(expect.objectContaining({ id: 'run-1' }));
+    expect(onOpenSubagents).toHaveBeenCalledWith('run-1');
+    expect(onOpenRun).not.toHaveBeenCalled();
   });
 
   it('keeps assistant turns out of the background-work overview', async () => {

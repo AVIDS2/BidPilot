@@ -104,14 +104,18 @@ inventory is the current authority.
    event replay is used only after reconnect, refresh, or a missed live
    channel, and closing the browser does not cancel the Worker task.
 
-The assistant response has no product-imposed character or turn cap. The chat message,
-runtime result, and completed-message event retain the full redacted response;
-the `runtime_event.public_summary` column is PostgreSQL `TEXT` and must not add
-an artificial Pydantic length limit. Tool input/observation bounds are separate
-security controls for the governed bridge and do not truncate model replies. The
-Pi adapter leaves `AgentSession` continuation behavior unchanged; an explicit
-`maxTurns` is accepted only for a caller that intentionally opts into that
-policy, and is not sent by the public assistant route.
+The public assistant request remains bounded by the normal message and tool
+observation limits, while each provider completion uses the configurable
+`DOCPILOT_ASSISTANT_MAX_COMPLETION_TOKENS` budget (default `16384`, hard cap
+`32768`). MiMo counts reasoning and visible output together, so the bound
+prevents an ordinary turn from reserving its native `131072` maximum and keeps
+time-to-first-token predictable. The chat message, runtime result, and
+completed-message event retain the full redacted response that was produced;
+the `runtime_event.public_summary` column is PostgreSQL `TEXT`. Tool
+input/observation bounds remain separate security controls. The Pi adapter
+leaves `AgentSession` continuation behavior unchanged; an explicit `maxTurns`
+is accepted only for a caller that intentionally opts into that policy, and is
+not sent by the public assistant route.
 
 ### Queue and reconnect contract
 
@@ -128,9 +132,19 @@ from `RuntimeRun`, not inferred from a closed socket.
 The Worker task is idempotent through the outbox delivery lease and the run
 ID. A transient API/Pi transport failure releases the outbox row for retry;
 the internal execution endpoint rejects a second active loop for the same
-run. Pi remains unchanged: its AgentSession is created by the Worker-owned
+run. While a Pi session is active, `POST /assistant/runs/{run_id}/messages`
+passes the user instruction to the sidecar's official `AgentSession.steer()`
+or `AgentSession.followUp()` method. It persists the accepted user message
+against the existing runtime run and never creates a synthetic continuation
+run. Pi remains unchanged: its `AgentSession` is created by the Worker-owned
 execution attempt, while PostgreSQL `RuntimeRun`/`RuntimeEvent` remains the
 cloud source of truth.
+
+The sidecar emits a `turn.completed` frame for every native assistant turn.
+The API persists each visible turn as its own assistant chat row at that
+boundary, then uses the final `agent.completed` frame only to close the parent
+runtime run. This preserves the interleaving of user messages, tool events,
+and assistant turns when a conversation is restored.
 
 The web projection is conversation-scoped. Each browser tab keeps its selected
 conversation in `sessionStorage`, while durable runs remain account/server
@@ -140,6 +154,13 @@ poller, never the Worker task. The composer cancellation control resolves the
 run ID for the currently selected conversation, so two open conversations (or
 two tabs) cannot share one stop target. Late replay events from an old
 conversation are ignored by the visible projection.
+
+Optional MCP discovery is cached and bounded to one second on a cold catalog;
+the first-party tool set is sent immediately when an MCP server is unavailable.
+Optional Mem0 profile recall is skipped entirely when disabled and otherwise
+runs concurrently with PostgreSQL memory recall using its own DB session. A
+slow optional context provider therefore cannot add an unbounded pre-first-
+token delay.
 
 ### Long-lived transport resource handling
 

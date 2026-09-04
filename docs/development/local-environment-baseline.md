@@ -40,6 +40,11 @@ The browser must never use `https://bidpilot-api.rglens.com` during this profile
 The Next BFF uses the loopback API and derives the cookie `Secure` flag from
 the actual request or forwarded protocol. This keeps `next start` over local
 HTTP usable while retaining secure cookies behind the HTTPS production proxy.
+When `DOCPILOT_AUTH_REQUIRED` is not `true`, the BFF `/api/auth/me` endpoint
+forwards the API's dev fallback so the authenticated shell can be exercised
+without putting a real account password into a local browser session. Production
+must set `DOCPILOT_AUTH_REQUIRED=true` and therefore requires the normal
+HttpOnly session cookies.
 
 ## Python environment
 

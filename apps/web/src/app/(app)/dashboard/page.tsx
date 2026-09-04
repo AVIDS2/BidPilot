@@ -60,6 +60,9 @@ export default function DashboardPage() {
       refetchOnWindowFocus: true
     }))
   });
+  // Child agents belong to the current Copilot turn. They are presented in
+  // the Agent collaboration surface, not as separate user tasks here.
+  const rootRuns = (runs.data ?? []).filter((run) => !run.parent_run_id);
   // Runtime summary is an administrator-only aggregate. It must not block the
   // member dashboard when the scoped project/run queries are available.
   const loading = projects.isPending || runs.isPending;
@@ -72,7 +75,7 @@ export default function DashboardPage() {
     }))
     .filter((_, index) => Boolean(readinessQueries[index]?.data))
     .slice(0, 6);
-  const finishedRuns = (runs.data ?? []).filter((run) =>
+  const finishedRuns = rootRuns.filter((run) =>
     ['completed', 'succeeded', 'failed', 'error'].includes(run.status)
   );
   const successfulRuns = finishedRuns.filter((run) =>
@@ -81,21 +84,19 @@ export default function DashboardPage() {
   const runChartData = [
     {
       status: '处理中',
-      count:
-        runs.data?.filter((run) => ['running', 'queued', 'pending'].includes(run.status)).length ??
-        0
+      count: rootRuns.filter((run) => ['running', 'queued', 'pending'].includes(run.status)).length
     },
     {
       status: '待审批',
-      count: runs.data?.filter((run) => run.status === 'awaiting_approval').length ?? 0
+      count: rootRuns.filter((run) => run.status === 'awaiting_approval').length
     },
     {
       status: '已完成',
-      count: runs.data?.filter((run) => ['completed', 'succeeded'].includes(run.status)).length ?? 0
+      count: rootRuns.filter((run) => ['completed', 'succeeded'].includes(run.status)).length
     },
     {
       status: '失败',
-      count: runs.data?.filter((run) => ['failed', 'error'].includes(run.status)).length ?? 0
+      count: rootRuns.filter((run) => ['failed', 'error'].includes(run.status)).length
     }
   ];
   const isRefreshing =
@@ -158,7 +159,7 @@ export default function DashboardPage() {
                 label='待处理任务'
                 value={
                   runtime.data?.queue_depth ??
-                  runs.data?.filter((run) => run.status === 'queued').length
+                  rootRuns.filter((run) => run.status === 'queued').length
                 }
                 href='/my-work'
               />
@@ -167,12 +168,12 @@ export default function DashboardPage() {
                 label='需要关注'
                 value={
                   runtime.data?.failed_runs ??
-                  runs.data?.filter((run) => ['failed', 'error'].includes(run.status)).length
+                  rootRuns.filter((run) => ['failed', 'error'].includes(run.status)).length
                 }
                 href='/my-work'
                 tone={
                   (runtime.data?.failed_runs ??
-                    runs.data?.filter((run) => ['failed', 'error'].includes(run.status)).length ??
+                    rootRuns.filter((run) => ['failed', 'error'].includes(run.status)).length ??
                     0) > 0
                     ? 'danger'
                     : 'default'
@@ -200,7 +201,7 @@ export default function DashboardPage() {
                   </p>
                 </CardHeader>
                 <CardContent className='p-5'>
-                  {runs.data?.length ? (
+                  {rootRuns.length ? (
                     <ChartContainer className='h-56 w-full' config={runChartConfig}>
                       <BarChart accessibilityLayer data={runChartData}>
                         <CartesianGrid vertical={false} />
@@ -275,15 +276,18 @@ export default function DashboardPage() {
                         真实 Pi/工作流运行的最新状态。
                       </p>
                     </div>
-                    <Link className={buttonVariants({ size: 'sm', variant: 'ghost' })} href='/my-work'>
+                    <Link
+                      className={buttonVariants({ size: 'sm', variant: 'ghost' })}
+                      href='/my-work'
+                    >
                       查看我的工作 <ArrowUpRight data-icon='inline-end' />
                     </Link>
                   </div>
                 </CardHeader>
                 <CardContent className='p-0'>
-                  {runs.data?.length ? (
+                  {rootRuns.length ? (
                     <div className='divide-y'>
-                      {runs.data.slice(0, 6).map((run) => (
+                      {rootRuns.slice(0, 6).map((run) => (
                         <Link
                           className='hover:bg-muted/40 block px-5 py-4 transition-colors'
                           href={

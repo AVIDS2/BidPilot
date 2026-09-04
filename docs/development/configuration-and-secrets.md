@@ -209,12 +209,29 @@ catalogue, and invoice matching are still separate launch requirements.
 
 `DOCPILOT_ASSISTANT_ENGINE=pi` is the production default for new assistant turns. The Pi sidecar owns the model/tool loop and native streaming; the API remains authoritative for policy, idempotency, approval, audit, and business writes. `operator` and `streaming_harness` are historical parser aliases only and must not appear in new deployment files. There is no automatic fallback to the retired Python loop.
 
+`DOCPILOT_ASSISTANT_MAX_COMPLETION_TOKENS` controls the maximum completion
+budget sent to Pi for one provider request. It defaults to `16384` and is
+clamped to `512..32768`. For MiMo this budget includes reasoning and visible
+tokens; bounding it avoids the provider's large native maximum becoming a
+time-to-first-token penalty. Increase it only for a workflow that demonstrably
+needs longer output and measure latency and truncation together.
+
 Pi runtime variables:
 
 - `DOCPILOT_PI_AGENT_URL` — internal Pi sidecar URL, for example `http://pi-agent:8787`.
 - `DOCPILOT_PI_TOOL_BRIDGE_URL` — API-only callback URL for governed tool execution.
 - `DOCPILOT_PI_INTERNAL_SECRET` — dedicated short-lived bridge-token signing secret; production must not reuse `DOCPILOT_JWT_SECRET`.
 - `DOCPILOT_INTERNAL_API_URL` — Worker-to-API internal URL for queued assistant execution and system wakes; defaults to `http://api:8000` inside Compose.
+
+The active Pi session also accepts a structured continuation endpoint owned by
+the API. The web queue sends attachment-free mid-turn instructions as native
+`steer` messages. A client that deliberately needs a native post-turn queue may
+use Pi's `followUp` behavior while the same session is still active; once that
+session has settled, the web queue starts a normal durable assistant turn.
+Neither path uses keyword routing or creates a synthetic confirmation message;
+the mid-turn path also does not create a second RuntimeRun. The request is
+rejected unless the existing Pi session is active; the browser keeps the queued
+item for an explicit retry in that case.
 
 The production Pi sidecar currently accepts only the server-authored
 `governed_cloud` sandbox snapshot. It loads the compiled trusted extensions

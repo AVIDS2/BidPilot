@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { runPiAgent } from "./runtime.js";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { PiRunRequest, PiRuntimeEvent } from "./contracts.js";
 import { createPiModelCatalog } from "./catalog.js";
 
@@ -11,6 +12,7 @@ const PENDING_ABORT_TTL_MS = 30_000;
 type ActiveRun = {
   controller: AbortController;
   response: ServerResponse;
+  session: AgentSession | null;
 };
 
 const activeRuns = new Map<string, ActiveRun>();
@@ -60,6 +62,13 @@ function writeJson(response: ServerResponse, statusCode: number, body: Record<st
   response.end(JSON.stringify(body));
 }
 
+type StreamingBehavior = "steer" | "followUp";
+
+function parseStreamingBehavior(value: unknown): StreamingBehavior | null {
+  if (value === "steer" || value === "followUp") return value;
+  return null;
+}
+
 function hasInternalAuth(request: IncomingMessage): boolean {
   return Boolean(internalSecret) && request.headers.authorization === `Bearer ${internalSecret}`;
 }
@@ -97,6 +106,49 @@ const server = createServer(async (request, response) => {
   }
 
   const pathname = new URL(request.url ?? "/", "http://pi-agent").pathname;
+  const messageMatch = pathname.match(/^\/v1\/runs\/([^/]+)\/messages$/);
+  if (request.method === "POST" && messageMatch) {
+    if (!hasInternalAuth(request)) {
+      writeJson(response, 401, { error: "unauthorized" });
+      return;
+    }
+    const runId = decodeURIComponent(messageMatch[1]);
+    const activeRun = activeRuns.get(runId);
+    if (!activeRun?.session) {
+      writeJson(response, 409, { error: "run_not_active", run_id: runId });
+      return;
+    }
+    let payload: { message?: unknown; streamingBehavior?: unknown };
+    try {
+      payload = (await readJson(request)) as { message?: unknown; streamingBehavior?: unknown };
+    } catch {
+      writeJson(response, 400, { error: "invalid_json" });
+      return;
+    }
+    const message = typeof payload.message === "string" ? payload.message.trim() : "";
+    const streamingBehavior = parseStreamingBehavior(payload.streamingBehavior);
+    if (!message || message.length > 4_000 || !streamingBehavior) {
+      writeJson(response, 422, { error: "invalid_runtime_message", run_id: runId });
+      return;
+    }
+    try {
+      if (streamingBehavior === "steer") await activeRun.session.steer(message);
+      else await activeRun.session.followUp(message);
+    } catch (error) {
+      writeJson(response, 409, {
+        error: "runtime_message_rejected",
+        run_id: runId,
+        detail: error instanceof Error ? error.message : "Pi rejected the queued message",
+      });
+      return;
+    }
+    writeJson(response, 202, {
+      status: "accepted",
+      run_id: runId,
+      streaming_behavior: streamingBehavior,
+    });
+    return;
+  }
   const abortMatch = pathname.match(/^\/v1\/runs\/([^/]+)\/abort$/);
   if (request.method === "POST" && abortMatch) {
     if (!hasInternalAuth(request)) {
@@ -142,7 +194,7 @@ const server = createServer(async (request, response) => {
     return;
   }
   const abortController = new AbortController();
-  const activeRun: ActiveRun = { controller: abortController, response };
+  const activeRun: ActiveRun = { controller: abortController, response, session: null };
   activeRuns.set(payload.runId, activeRun);
   consumePendingAbort(payload.runId, activeRun);
   const abortOnResponseClose = () => {
@@ -155,7 +207,15 @@ const server = createServer(async (request, response) => {
     connection: "keep-alive",
   });
   try {
-    await runPiAgent(payload, (event) => writeEvent(response, event), {}, abortController.signal);
+    await runPiAgent(
+      payload,
+      (event) => writeEvent(response, event),
+      {},
+      abortController.signal,
+      (session) => {
+        activeRun.session = session;
+      },
+    );
   } catch (error) {
     writeEvent(response, {
       type: "agent.failed",

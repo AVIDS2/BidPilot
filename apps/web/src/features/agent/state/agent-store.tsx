@@ -15,8 +15,11 @@ import {
   listRuntimeEvents,
   listRuntimeRuns,
   listChatConversations,
+  sendAssistantRuntimeMessage,
+  type AssistantRuntimeMessageDelivery,
   type ChatConversationRead,
   type ChatMessageRead,
+  type RuntimeEventRead,
   type RuntimeRunListItem
 } from '@/lib/api';
 import {
@@ -31,6 +34,7 @@ import {
   advanceRuntimeSequenceCursor,
   isRuntimeSequenceNewer,
   isTerminalRuntimeEvent,
+  parseRuntimeTimestamp,
   recoverRuntimeMessageFromEvents,
   runtimeEventToAssistantEvents,
   type RuntimeEventCursor
@@ -246,6 +250,7 @@ type Action =
   | { type: 'SET_CONVERSATIONS'; conversations: ChatConversationRead[] }
   | { type: 'UPDATE_CONVERSATION_TITLE'; conversationId: string; title: string }
   | { type: 'ADD_MESSAGE'; message: ChatMessage }
+  | { type: 'REMOVE_MESSAGES'; messageIds: string[] }
   | { type: 'MERGE_MESSAGES'; messages: ChatMessage[] }
   | { type: 'REPLACE_MESSAGES'; messages: ChatMessage[] }
   | { type: 'SET_LAST_USER_DURABLE_ID'; durableId: string }
@@ -292,6 +297,7 @@ type Action =
       currentNode?: string | null;
     }
   | { type: 'SET_SESSION_ERROR'; message: string; errorCode?: string; runtimeRunId?: string }
+  | { type: 'CLEAR_SESSION_ERROR' }
   | { type: 'SET_PENDING_CONFIRMATION'; confirmation: AssistantConfirmationRequest | null }
   | { type: 'SET_PENDING_INPUT'; request: AssistantInputRequest | null }
   | { type: 'SET_SELECTED_PROVIDER_CONFIG'; providerConfigId: string | null }
@@ -713,6 +719,17 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
       };
     case 'ADD_MESSAGE':
       return { ...state, messages: [...state.messages, action.message] };
+    case 'REMOVE_MESSAGES': {
+      const messageIds = new Set(action.messageIds);
+      return {
+        ...state,
+        messages: state.messages.filter((message) => !messageIds.has(message.id)),
+        activeAssistantMessageId:
+          state.activeAssistantMessageId && messageIds.has(state.activeAssistantMessageId)
+            ? null
+            : state.activeAssistantMessageId
+      };
+    }
     case 'MERGE_MESSAGES': {
       return { ...state, messages: mergeAssistantMessages(state.messages, action.messages) };
     }
@@ -1049,6 +1066,12 @@ function reducer(state: AIAssistantState, action: Action): AIAssistantState {
         sessionErrorRuntimeRunId: action.runtimeRunId ?? null,
         isThinking: false,
         cancellationRequested: false
+      };
+    case 'CLEAR_SESSION_ERROR':
+      return {
+        ...state,
+        sessionError: null,
+        sessionErrorRuntimeRunId: null
       };
     case 'CLEAR_TRANSIENT_STATE':
       return {
@@ -1836,6 +1859,10 @@ interface AIAssistantContextValue {
   close: () => void;
   toggle: (mode?: AssistantMode) => void;
   sendMessage: (content: string, options?: SendAssistantOptions) => Promise<boolean>;
+  sendRuntimeMessage: (
+    content: string,
+    streamingBehavior: AssistantRuntimeMessageDelivery
+  ) => Promise<boolean>;
   stopAssistantResponse: () => void;
   setSelectedProviderConfig: (providerConfigId: string | null) => void;
   setReasoningEffort: (effort: AssistantReasoningEffort) => void;
@@ -2195,9 +2222,7 @@ function toStoredChatMessages(items: ChatMessageRead[]): ChatMessage[] {
     runtimeRunId: item.runtime_run_id ?? undefined,
     role: item.role,
     content: item.content,
-    timestamp: item.created_at
-      ? Date.parse(item.created_at) || Date.now() + index
-      : Date.now() + index,
+    timestamp: parseRuntimeTimestamp(item.created_at) || Date.now() + index,
     attachments: item.attachments?.map((attachment) => ({
       id: attachment.assistant_attachment_id ?? attachment.id,
       name: attachment.name,
@@ -2226,6 +2251,19 @@ function mergeRecoveredRuntimeMessage(
     return { messages, messageId: messages[exactIndex].id };
   }
 
+  const sameRuntimeRun = messages.filter(
+    (message) => message.role === 'assistant' && message.runtimeRunId === recovered.runId
+  );
+  if (sameRuntimeRun.length > 1) {
+    const combined = sameRuntimeRun
+      .map((message) => message.content)
+      .join('')
+      .trim();
+    if (normalizeTranscriptText(combined) === normalizeTranscriptText(recovered.content)) {
+      return { messages, messageId: sameRuntimeRun.at(-1)?.id };
+    }
+  }
+
   const partialIndex = messages.findIndex(
     (message) =>
       sameTurn(message) &&
@@ -2240,6 +2278,7 @@ function mergeRecoveredRuntimeMessage(
 
   const message: ChatMessage = {
     id: `runtime-${recovered.runId}-assistant-message`,
+    runtimeRunId: recovered.runId,
     role: 'assistant',
     content: recovered.content,
     timestamp
@@ -2252,11 +2291,49 @@ function mergeRecoveredRuntimeMessage(
   };
 }
 
+function runtimeEventTargetMessageId(
+  messages: ChatMessage[],
+  runId: string,
+  event: RuntimeEventRead
+): string | undefined {
+  const assistantMessages = messages.filter(
+    (message) => message.role === 'assistant' && message.runtimeRunId === runId
+  );
+  if (assistantMessages.length === 0) return undefined;
+  if (['message.completed', 'run.completed', 'run.failed', 'run.cancelled'].includes(event.type)) {
+    return assistantMessages.at(-1)?.id;
+  }
+  const eventTimestamp = parseRuntimeTimestamp(event.timestamp);
+  if (!Number.isFinite(eventTimestamp)) return assistantMessages.at(-1)?.id;
+  return (
+    assistantMessages.find((message) => message.timestamp > eventTimestamp)?.id ??
+    assistantMessages.at(-1)?.id
+  );
+}
+
+export function groupRuntimeEventsByAssistantMessage(
+  messages: ChatMessage[],
+  runId: string,
+  events: RuntimeEventRead[],
+  fallbackMessageId?: string
+): Array<{ messageId: string; events: RuntimeEventRead[] }> {
+  const grouped = new Map<string, RuntimeEventRead[]>();
+  for (const event of events) {
+    const messageId = runtimeEventTargetMessageId(messages, runId, event) ?? fallbackMessageId;
+    if (!messageId) continue;
+    grouped.set(messageId, [...(grouped.get(messageId) ?? []), event]);
+  }
+  return [...grouped.entries()].map(([messageId, groupedEvents]) => ({
+    messageId,
+    events: groupedEvents
+  }));
+}
+
 function findAssistantMessageNearTimestamp(
   messages: ChatMessage[],
   timestampSource: string | null | undefined
 ): string | undefined {
-  const timestamp = timestampSource ? Date.parse(timestampSource) : Number.NaN;
+  const timestamp = parseRuntimeTimestamp(timestampSource);
   if (!Number.isFinite(timestamp)) return undefined;
   const candidates = messages.filter((message) => message.role === 'assistant');
   if (candidates.length === 0) return undefined;
@@ -2534,7 +2611,7 @@ export function AIAssistantProvider({
                   runtimeRunId: activeRun.id,
                   role: 'assistant',
                   content: '',
-                  timestamp: Date.parse(activeRun.created_at) || Date.now()
+                  timestamp: parseRuntimeTimestamp(activeRun.created_at) || Date.now()
                 }
               ];
             }
@@ -2548,17 +2625,20 @@ export function AIAssistantProvider({
               recoverRuntimeMessageFromEvents(run.id, response.items)
             );
             restoredMessages = merged.messages;
-            runtimeReplay.push({
-              runId: run.id,
-              messageId:
-                restoredMessages.find((message) => message.runtimeRunId === run.id)?.id ??
-                merged.messageId ??
-                findAssistantMessageNearTimestamp(
-                  restoredMessages,
-                  run.finished_at ?? run.created_at
-                ),
-              events: response.items
-            });
+            const fallbackMessageId =
+              merged.messageId ??
+              findAssistantMessageNearTimestamp(
+                restoredMessages,
+                run.finished_at ?? run.created_at
+              );
+            for (const group of groupRuntimeEventsByAssistantMessage(
+              restoredMessages,
+              run.id,
+              response.items,
+              fallbackMessageId
+            )) {
+              runtimeReplay.push({ runId: run.id, ...group });
+            }
           }
           if (!isCurrentLoad()) return;
           if (restoredMessages !== messages) {
@@ -2932,6 +3012,7 @@ export function AIAssistantProvider({
       activeAssistantRuntimeRunRef.current = null;
       let activeConversationId = targetConversationId;
       let receivedTerminalEvent = false;
+      let requestAccepted = false;
       const abortController = new AbortController();
       activeStreamAbortRef.current = abortController;
       if (targetConversationId) {
@@ -3038,6 +3119,7 @@ export function AIAssistantProvider({
             errorCode
           });
         }
+        requestAccepted = true;
 
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
@@ -3065,7 +3147,7 @@ export function AIAssistantProvider({
 
         if (abortController.signal.aborted) {
           dispatch({ type: 'STOP_ACTIVE_RESPONSE' });
-          return true;
+          return requestAccepted;
         }
 
         if (receivedTerminalEvent) {
@@ -3095,14 +3177,14 @@ export function AIAssistantProvider({
       } catch (err) {
         if (abortController.signal.aborted) {
           dispatch({ type: 'STOP_ACTIVE_RESPONSE' });
-          return true;
+          return requestAccepted;
         }
         try {
           const recovered = await recoverDurableTimeline();
-          if (recovered.terminal) return true;
+          if (recovered.terminal) return requestAccepted;
           if (recovered.replayed && activeRuntimeRunId && activeConversationId) {
             void watchConversationRuntime(activeConversationId, sseOptions);
-            return true;
+            return requestAccepted;
           }
         } catch (recoveryError) {
           console.warn('Failed to replay assistant runtime events:', recoveryError);
@@ -3170,7 +3252,7 @@ export function AIAssistantProvider({
         pendingAssistantCancellationRef.current = false;
         void refreshConversations();
       }
-      return true;
+      return requestAccepted;
     },
     [
       refreshConversations,
@@ -3192,6 +3274,61 @@ export function AIAssistantProvider({
       return sendAssistantRequest(content, options);
     },
     [sendAssistantRequest]
+  );
+
+  const sendRuntimeMessage = useCallback(
+    async (content: string, streamingBehavior: AssistantRuntimeMessageDelivery) => {
+      const message = content.trim();
+      const conversationId = currentConversationIdRef.current;
+      const runtimeRunId = conversationId
+        ? (runtimeRunByConversationRef.current[conversationId] ??
+          (conversationId === currentConversationIdRef.current
+            ? (activeAssistantRuntimeRunRef.current ?? watchedRuntimeRunRef.current)
+            : undefined))
+        : undefined;
+      if (!message || !conversationId || !runtimeRunId) return false;
+
+      // Insert the new transcript lane before the sidecar request returns.
+      // Pi may accept a steer and emit its first token in that small window.
+      const userMessageId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const assistantMessageId = `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const optimisticMessages: ChatMessage[] = [
+        {
+          id: userMessageId,
+          role: 'user',
+          content: message,
+          timestamp: Date.now(),
+          runtimeRunId
+        },
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: '',
+          timestamp: Date.now(),
+          runtimeRunId
+        }
+      ];
+      dispatch({ type: 'ADD_MESSAGE', message: optimisticMessages[0] });
+      dispatch({ type: 'ADD_MESSAGE', message: optimisticMessages[1] });
+      dispatch({ type: 'SET_ACTIVE_ASSISTANT_MESSAGE', messageId: assistantMessageId });
+
+      try {
+        await sendAssistantRuntimeMessage(runtimeRunId, message, streamingBehavior);
+      } catch (error) {
+        console.error('Failed to deliver native Pi runtime message:', error);
+        dispatch({ type: 'REMOVE_MESSAGES', messageIds: [userMessageId, assistantMessageId] });
+        dispatch({
+          type: 'SET_SESSION_ERROR',
+          message: '当前任务还没有准备好接收这条消息，请稍后再试。',
+          runtimeRunId
+        });
+        return false;
+      }
+
+      dispatch({ type: 'CLEAR_SESSION_ERROR' });
+      return true;
+    },
+    []
   );
 
   const retryFromCheckpoint = useCallback(
@@ -3281,6 +3418,7 @@ export function AIAssistantProvider({
         close,
         toggle,
         sendMessage,
+        sendRuntimeMessage,
         stopAssistantResponse,
         setSelectedProviderConfig,
         setReasoningEffort,

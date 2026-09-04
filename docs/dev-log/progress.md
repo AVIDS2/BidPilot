@@ -9,22 +9,55 @@
   default for users without a saved theme preference.
 - Rebuilt Agent history around real project workspaces: project records and
   conversation rows use the installed `Accordion`, `Item`, `Empty`, `Dialog`,
-  `Field`, `Input`, `Badge`, `Button`, and `DropdownMenu` components. Users can
-  create a project workspace from the history surface; stale project IDs no
-  longer navigate to a broken project page, and deleted-project conversations
-  are recovered as unbound history without weakening project access checks.
+  `Field`, `Input`, `Badge`, `Button`, and `DropdownMenu` components. The
+  history surface lets users choose multiple existing projects, or temporarily
+  show no project groups; it does not create or infer workspaces. Stale project
+  IDs no longer navigate to a broken project page, and deleted-project
+  conversations are recovered as recent history without weakening project
+  access checks.
 - Removed the legacy child-agent conversation/message path. New Pi child runs
   share the parent conversation and remain runtime branches; the user-facing
   history contains only the parent conversation. Legacy child session rows are
   filtered from the user list but retained for operator recovery.
 - Added a Kiranism `ResizablePanelGroup` side surface with template `Tabs` for
   collaboration tasks, response workflow canvas, and attachment preview. The
-  same tabs are used inside the mobile `Sheet`; child agents are displayed as
-  current-process collaboration progress, not independent chats.
+  panel stays mounted and uses the library's native collapse/expand API, while
+  the same tabs are used inside the mobile `Sheet`; child agents are displayed
+  as current-process collaboration progress, not independent chats.
 - Queue sending now uses actual response state, preserves messages rejected by
-  a request race, and exposes a `发送下一条` action in both linear and floating
-  composers. Copilot identity is explicit in the Pi and legacy chat prompt;
+  a request race, and exposes native Pi `steer` for an attachment-free live
+  instruction. Once the active runtime settles, the remaining queue drains via
+  a normal durable assistant turn because the Pi session has already ended.
+  The native API also accepts `followUp` for an active client-owned session;
+  neither path creates a synthetic confirmation message or a second runtime
+  run. Copilot identity is explicit in the Pi and legacy compatibility prompt;
   MiMo remains a runtime provider detail only when the user asks for it.
+
+## 2026-09-04 native Pi continuation and chronology correction
+
+- Wired the active Pi `AgentSession` through the sidecar's authenticated
+  `/v1/runs/{run_id}/messages` endpoint. The API validates ownership and
+  runtime state, persists an accepted user instruction against the existing
+  run, and calls Pi's documented `steer()` or `followUp()` method. Keyword
+  routing and text-simulated continuation are not used.
+- Pi `turn_end` frames now carry the invocation-local turn id. The API persists
+  each visible native assistant turn at that boundary and reserves the final
+  `agent.completed` frame for closing the parent run. History replay therefore
+  keeps assistant text, user steering, and tool events in their actual order.
+- Bounded the MiMo completion budget to `16384` by default (configurable up to
+  `32768`) because MiMo counts reasoning and visible tokens together. Optional
+  MCP discovery now has a one-second cold-start timeout and a short cache;
+  disabled Mem0 recall is skipped, and enabled profile recall runs alongside
+  authorized PostgreSQL memory recall.
+- Verification for this correction: Web full Vitest `117 passed`, Web
+  TypeScript and production build passed, Pi sidecar `18 passed`, API focused
+  Pi/chat/auth/subagent suites `59 passed`, API Ruff and compileall passed.
+  Browser acceptance covered Supabase theme migration, FAQ expansion, local
+  MIMO Copilot SSE, desktop/mobile Agent layout, native subagent side-panel
+  open/collapse, and sidebar soft navigation with no console errors.
+- This correction pass is local and not yet promoted to the VPS. Production
+  remains on the previous verified release until the full local gate and a
+  separately authorized deployment pass succeed.
 - Verification: Web TypeScript check, production build, formatting, full Web
   tests (`116 passed`), Pi sidecar tests (`18 passed`), API chat/access/
   subagent tests (`43 passed`), API runtime listing tests (`7 passed`), Worker

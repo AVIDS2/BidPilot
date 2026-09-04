@@ -10,7 +10,7 @@ import {
 } from "@earendil-works/pi-ai/providers/faux";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
-import { agentTerminalEvent, runPiAgent } from "./runtime.js";
+import { agentTerminalEvent, applyModelCompletionBudget, runPiAgent } from "./runtime.js";
 import type { PiRunRequest } from "./contracts.js";
 
 function request(): PiRunRequest {
@@ -64,6 +64,26 @@ test("Pi does not install a project turn cap unless the caller opts in", () => {
   const source = readFileSync(new URL("./runtime.ts", import.meta.url), "utf8");
   assert.match(source, /if \(request\.maxTurns !== undefined\)/);
   assert.doesNotMatch(source, /request\.maxTurns \?\? 24/);
+});
+
+test("Pi applies a request completion budget to built-in or registered model metadata", async () => {
+  const model = {
+    provider: "test-provider",
+    id: "test-model",
+    name: "Test model",
+    api: "openai-completions" as const,
+    baseUrl: "http://test.invalid/v1",
+    reasoning: true,
+    input: ["text"] as ("text" | "image")[],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 16_000,
+    maxTokens: 131_072,
+  };
+
+  const bounded = applyModelCompletionBudget(model, 16_384);
+
+  assert.equal(bounded.maxTokens, 16_384);
+  assert.equal(model.maxTokens, 131_072);
 });
 
 async function testRuntime(streamSimple: ReturnType<typeof createFauxCore>["streamSimple"]): Promise<ModelRuntime> {

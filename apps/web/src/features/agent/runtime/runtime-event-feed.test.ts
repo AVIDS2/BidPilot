@@ -5,6 +5,7 @@ import {
   isRuntimeEventNewer,
   isRuntimeSequenceNewer,
   isTerminalRuntimeEvent,
+  parseRuntimeTimestamp,
   recoverRuntimeMessageFromEvents,
   runtimeEventToAssistantEvents,
   type RuntimeEventRead
@@ -23,6 +24,14 @@ function runtimeEvent(overrides: Partial<RuntimeEventRead> = {}): RuntimeEventRe
 }
 
 describe('runtime event feed', () => {
+  it('preserves fractional seconds used to order adjacent Pi turns', () => {
+    const first = parseRuntimeTimestamp('2026-09-04T05:00:00.123456Z');
+    const second = parseRuntimeTimestamp('2026-09-04T05:00:00.123789Z');
+
+    expect(first).toBeLessThan(second);
+    expect(first).toBeGreaterThan(Date.parse('2026-09-04T05:00:00.123Z'));
+  });
+
   it('advances a cursor only for a newer event in the same run', () => {
     const first = runtimeEvent({ sequence: 2 });
     const cursor = advanceRuntimeEventCursor({}, first);

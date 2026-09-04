@@ -1,15 +1,18 @@
 /* oxlint-disable nextjs/no-img-element -- previews use local blob URLs. */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   ArrowUpRightIcon,
   BotIcon,
   ChevronDownIcon,
+  Clock3Icon,
   FileSearchIcon,
   FileTextIcon,
   FolderKanbanIcon,
   MessageSquareTextIcon,
   MoreHorizontalIcon,
   PanelRightIcon,
+  PanelRightCloseIcon,
   PanelTopIcon,
   PencilIcon,
   PinIcon,
@@ -26,6 +29,7 @@ import {
 import { WorkflowCanvas } from '@/components/workflow-canvas';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Accordion,
   AccordionContent,
@@ -50,7 +54,15 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet
+} from '@/components/ui/field';
 import {
   Item,
   ItemActions,
@@ -61,7 +73,6 @@ import {
   ItemTitle
 } from '@/components/ui/item';
 import { Input } from '@/components/ui/input';
-import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ClaudeAgentThread } from './claude-agent-thread';
 import { AgentEnvironmentPanel } from './components/agent-environment-panel';
@@ -69,7 +80,6 @@ import { AgentSubagentsPanel } from './components/agent-subagents-panel';
 import { useAIAssistant, type AIAssistantState } from '@/features/agent/state/agent-store';
 import {
   deleteChatConversation,
-  createProject,
   listProjects,
   renameChatConversation,
   setChatConversationPinned,
@@ -77,6 +87,7 @@ import {
   type ProjectRead,
   type RuntimeRunListItem
 } from '@/lib/api';
+import { getSessionStoredValue, setSessionStoredValue } from '@/lib/browser-storage';
 import {
   Sheet,
   SheetContent,
@@ -86,6 +97,7 @@ import {
 } from '@/components/ui/sheet';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { usePanelRef } from 'react-resizable-panels';
 import './linear-agent-workspace.css';
 
 const AGENT_COMPACT_MEDIA_QUERY = '(max-width: 1024px)';
@@ -249,6 +261,7 @@ function AgentSideSurface({
   state,
   onChange,
   onCloseTab,
+  onCollapse,
   onOpenProject,
   showContentHeaders = true
 }: {
@@ -257,6 +270,7 @@ function AgentSideSurface({
   state: AIAssistantState;
   onChange: (tab: AgentSideTabType) => void;
   onCloseTab: (tab: AgentSideTabType) => void;
+  onCollapse: () => void;
   onOpenProject: (projectId: string) => void;
   showContentHeaders?: boolean;
 }) {
@@ -279,6 +293,17 @@ function AgentSideSurface({
             </TabsTrigger>
           ))}
         </TabsList>
+        <Button
+          type='button'
+          size='icon-sm'
+          variant='ghost'
+          className='agent-side-tab-close'
+          aria-label='收起右侧区域'
+          title='收起右侧区域'
+          onClick={onCollapse}
+        >
+          <PanelRightCloseIcon aria-hidden='true' />
+        </Button>
         <Button
           type='button'
           size='icon-sm'
@@ -356,6 +381,127 @@ function agentWorkspacePath({
   return query ? `/agent?${query}` : '/agent';
 }
 
+function ConversationHistoryItems({
+  items,
+  currentConversationId,
+  editingId,
+  editingTitle,
+  onSelect,
+  onBeginRename,
+  onEditTitleChange,
+  onCommitEditing,
+  onCancelEditing,
+  onTogglePinned,
+  onDelete
+}: {
+  items: ChatConversationRead[];
+  currentConversationId: string | null;
+  editingId: string | null;
+  editingTitle: string;
+  onSelect: (conversationId: string) => void;
+  onBeginRename: (conversationId: string, title: string | null) => void;
+  onEditTitleChange: (title: string) => void;
+  onCommitEditing: (conversationId: string) => void;
+  onCancelEditing: () => void;
+  onTogglePinned: (conversationId: string, isPinned: boolean) => Promise<void>;
+  onDelete: (conversationId: string) => Promise<void>;
+}) {
+  return (
+    <ItemGroup className='gap-1'>
+      {items.map((conversation) => {
+        const isEditing = editingId === conversation.id;
+        const isCurrent = conversation.id === currentConversationId;
+        const title = conversation.title || '未命名对话';
+        return (
+          <Item
+            key={conversation.id}
+            size='xs'
+            variant={isCurrent ? 'muted' : 'default'}
+            className='group/item min-w-0 gap-1 px-2 py-1'
+          >
+            <ItemMedia variant='icon'>
+              <MessageSquareTextIcon className='text-muted-foreground' />
+            </ItemMedia>
+            <ItemContent className='min-w-0'>
+              {isEditing ? (
+                <Input
+                  autoFocus
+                  value={editingTitle}
+                  aria-label='会话名称'
+                  className='h-7'
+                  onChange={(event) => onEditTitleChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      onCommitEditing(conversation.id);
+                    }
+                    if (event.key === 'Escape') onCancelEditing();
+                  }}
+                  onBlur={() => onCommitEditing(conversation.id)}
+                />
+              ) : (
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='sm'
+                  className='h-auto min-w-0 justify-start px-0 py-0 text-left hover:bg-transparent'
+                  onClick={() => onSelect(conversation.id)}
+                >
+                  <ItemTitle className='min-w-0'>{title}</ItemTitle>
+                </Button>
+              )}
+            </ItemContent>
+            {isCurrent ? <ItemDescription className='shrink-0'>当前</ItemDescription> : null}
+            <ItemActions className='shrink-0 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100'>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button aria-label='会话操作' size='icon-xs' variant='ghost' />}
+                >
+                  <MoreHorizontalIcon />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='end' className='w-44'>
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>会话操作</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() =>
+                        void onTogglePinned(conversation.id, !conversation.is_pinned).catch(
+                          (error) => console.error('Failed to pin conversation:', error)
+                        )
+                      }
+                    >
+                      <PinIcon fill={conversation.is_pinned ? 'currentColor' : 'none'} />
+                      {conversation.is_pinned ? '取消收藏会话' : '收藏会话'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => onBeginRename(conversation.id, conversation.title)}
+                    >
+                      <PencilIcon />
+                      重命名会话
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() =>
+                        void onDelete(conversation.id).catch((error) =>
+                          console.error('Failed to delete conversation:', error)
+                        )
+                      }
+                      variant='destructive'
+                    >
+                      <Trash2Icon />
+                      删除会话
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </ItemActions>
+          </Item>
+        );
+      })}
+    </ItemGroup>
+  );
+}
+
 function AgentHistory({
   open,
   conversations,
@@ -364,7 +510,6 @@ function AgentHistory({
   onNew,
   onSelect,
   onOpenProject,
-  onCreateProject,
   onRename,
   onDelete,
   onTogglePinned
@@ -376,17 +521,15 @@ function AgentHistory({
   onNew: () => void;
   onSelect: (conversationId: string) => void;
   onOpenProject: (projectId: string) => void;
-  onCreateProject: (name: string) => Promise<ProjectRead>;
   onRename: (conversationId: string, title: string) => Promise<void>;
   onDelete: (conversationId: string) => Promise<void>;
   onTogglePinned: (conversationId: string, isPinned: boolean) => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
-  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
-  const [workspaceName, setWorkspaceName] = useState('');
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [draftProjectIds, setDraftProjectIds] = useState<string[]>([]);
   const committingIdRef = useRef<string | null>(null);
   const commitEditing = (conversationId: string) => {
     if (committingIdRef.current === conversationId) return;
@@ -400,17 +543,33 @@ function AgentHistory({
         if (committingIdRef.current === conversationId) committingIdRef.current = null;
       });
   };
+  useEffect(() => {
+    const stored = getSessionStoredValue('agentWorkspaceProjectIds');
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as unknown;
+      if (!Array.isArray(parsed)) return;
+      const projectIds = new Set(projects.map((project) => project.id));
+      setSelectedProjectIds(
+        parsed.filter(
+          (value): value is string => typeof value === 'string' && projectIds.has(value)
+        )
+      );
+    } catch {
+      setSelectedProjectIds([]);
+    }
+  }, [projects]);
+
   const groups = useMemo(() => {
     const next = new Map<string, ChatConversationRead[]>();
+    const selected = new Set(selectedProjectIds);
     for (const conversation of conversations) {
       const projectId = conversation.project_id ?? 'personal';
+      if (projectId !== 'personal' && !selected.has(projectId)) continue;
       next.set(projectId, [...(next.get(projectId) ?? []), conversation]);
     }
-    // Show newly created workspaces before their first conversation exists.
-    // Conversation history is organized by real project records, not by an
-    // inferred date bucket or an automatically invented session group.
     for (const project of projects) {
-      if (!next.has(project.id)) next.set(project.id, []);
+      if (selected.has(project.id) && !next.has(project.id)) next.set(project.id, []);
     }
     const currentProjectId =
       conversations.find((conversation) => conversation.id === currentConversationId)?.project_id ??
@@ -433,24 +592,21 @@ function AgentHistory({
           ? Date.parse(right.items[0].created_at) - Date.parse(left.items[0].created_at)
           : 0;
       });
-  }, [conversations, currentConversationId, projects]);
+  }, [conversations, currentConversationId, projects, selectedProjectIds]);
 
-  const submitWorkspace = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = workspaceName.trim();
-    if (!name || creatingWorkspace) return;
-    setCreatingWorkspace(true);
-    setWorkspaceError(null);
-    try {
-      const project = await onCreateProject(name);
-      setWorkspaceName('');
-      setCreateWorkspaceOpen(false);
-      onOpenProject(project.id);
-    } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : '工作区创建失败，请稍后重试。');
-    } finally {
-      setCreatingWorkspace(false);
-    }
+  const recentConversations = useMemo(() => {
+    const selected = new Set(selectedProjectIds);
+    return conversations.filter(
+      (conversation) => conversation.project_id !== null && !selected.has(conversation.project_id)
+    );
+  }, [conversations, selectedProjectIds]);
+
+  const saveWorkspaceSelection = (projectIds: string[]) => {
+    const available = new Set(projects.map((project) => project.id));
+    const next = projectIds.filter((projectId) => available.has(projectId));
+    setSelectedProjectIds(next);
+    setSessionStoredValue('agentWorkspaceProjectIds', JSON.stringify(next));
+    setWorkspacePickerOpen(false);
   };
 
   return (
@@ -469,255 +625,217 @@ function AgentHistory({
           <span className='text-muted-foreground text-xs font-medium'>工作区</span>
           <Button
             type='button'
-            aria-label='新建工作区'
-            title='新建工作区'
+            aria-label='添加工作区'
+            title='添加工作区'
             size='icon-xs'
             variant='ghost'
             onClick={() => {
-              setWorkspaceError(null);
-              setCreateWorkspaceOpen(true);
+              setDraftProjectIds(selectedProjectIds);
+              setWorkspacePickerOpen(true);
             }}
           >
             <PlusIcon aria-hidden='true' />
           </Button>
         </div>
-        {groups.length > 0 ? (
-          <Accordion
-            multiple
-            defaultValue={groups.map(({ id }) => `workspace-${id}`)}
-            className='mt-1'
-          >
-            {groups.map(({ id, items, project }) => {
-              const isPersonal = id === 'personal';
-              const isUnavailable = !isPersonal && !project;
-              const label = project?.name ?? (isPersonal ? '未关联工作区' : '历史工作区');
-              const description = project?.scenario_package
-                ? '项目会话'
-                : isUnavailable
-                  ? '工作区已不可用，会话仍保留'
-                  : `${items.length} 个会话`;
-              return (
-                <AccordionItem
-                  key={id}
-                  value={`workspace-${id}`}
-                  className='border-border px-1 last:border-b-0'
-                >
-                  <div className='flex min-w-0 items-center gap-1'>
-                    <AccordionTrigger className='min-w-0 gap-2 px-1.5 py-2 hover:no-underline'>
-                      <span className='flex min-w-0 items-center gap-2 text-left'>
-                        {isPersonal ? (
-                          <MessageSquareTextIcon className='text-muted-foreground size-4 shrink-0' />
-                        ) : (
-                          <FolderKanbanIcon className='text-muted-foreground size-4 shrink-0' />
-                        )}
-                        <span className='grid min-w-0 gap-0.5'>
-                          <span className='truncate text-sm font-medium'>{label}</span>
-                          <span className='text-muted-foreground truncate text-[11px]'>
-                            {description}
+        {groups.length > 0 || recentConversations.length > 0 ? (
+          <>
+            {groups.length > 0 ? (
+              <Accordion
+                multiple
+                defaultValue={groups.map(({ id }) => `workspace-${id}`)}
+                className='mt-1'
+              >
+                {groups.map(({ id, items, project }) => {
+                  const isPersonal = id === 'personal';
+                  const label = project?.name ?? (isPersonal ? '个人会话' : '项目');
+                  const description = project?.scenario_package
+                    ? project.scenario_package
+                    : `${items.length} 个会话`;
+                  return (
+                    <AccordionItem
+                      key={id}
+                      value={`workspace-${id}`}
+                      className='border-border px-1 last:border-b-0'
+                    >
+                      <div className='flex min-w-0 items-center gap-1'>
+                        <AccordionTrigger className='min-w-0 gap-2 px-1.5 py-2 hover:no-underline'>
+                          <span className='flex min-w-0 items-center gap-2 text-left'>
+                            {isPersonal ? (
+                              <MessageSquareTextIcon className='text-muted-foreground size-4 shrink-0' />
+                            ) : (
+                              <FolderKanbanIcon className='text-muted-foreground size-4 shrink-0' />
+                            )}
+                            <span className='grid min-w-0 gap-0.5'>
+                              <span className='truncate text-sm font-medium'>{label}</span>
+                              <span className='text-muted-foreground truncate text-[11px]'>
+                                {description}
+                              </span>
+                            </span>
                           </span>
-                        </span>
-                      </span>
-                    </AccordionTrigger>
-                    <Badge variant={isUnavailable ? 'outline' : 'secondary'} className='shrink-0'>
-                      {items.length}
-                    </Badge>
-                    {project ? (
-                      <Button
-                        type='button'
-                        size='icon-xs'
-                        variant='ghost'
-                        aria-label={`打开工作区 ${project.name}`}
-                        title='打开工作区'
-                        onClick={() => onOpenProject(project.id)}
-                      >
-                        <ArrowUpRightIcon aria-hidden='true' />
-                      </Button>
-                    ) : null}
-                  </div>
-                  <AccordionContent className='pb-2 pl-4'>
-                    {items.length ? (
-                      <ItemGroup className='gap-1'>
-                        {items.map((conversation) => {
-                          const isEditing = editingId === conversation.id;
-                          const isCurrent = conversation.id === currentConversationId;
-                          const title = conversation.title || '未命名对话';
-                          return (
-                            <Item
-                              key={conversation.id}
-                              size='xs'
-                              variant={isCurrent ? 'muted' : 'default'}
-                              className='min-w-0 gap-1 px-2 py-1'
-                            >
-                              <ItemMedia variant='icon'>
-                                <MessageSquareTextIcon className='text-muted-foreground' />
-                              </ItemMedia>
-                              <ItemContent className='min-w-0'>
-                                {isEditing ? (
-                                  <Input
-                                    autoFocus
-                                    value={editingTitle}
-                                    aria-label='会话名称'
-                                    className='h-7'
-                                    onChange={(event) => setEditingTitle(event.target.value)}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter') {
-                                        event.preventDefault();
-                                        commitEditing(conversation.id);
-                                      }
-                                      if (event.key === 'Escape') setEditingId(null);
-                                    }}
-                                    onBlur={() => commitEditing(conversation.id)}
-                                  />
-                                ) : (
-                                  <Button
-                                    type='button'
-                                    variant='ghost'
-                                    size='sm'
-                                    className='h-auto min-w-0 justify-start px-0 py-0 text-left hover:bg-transparent'
-                                    onClick={() => onSelect(conversation.id)}
-                                  >
-                                    <ItemTitle className='min-w-0'>{title}</ItemTitle>
-                                  </Button>
-                                )}
-                              </ItemContent>
-                              {isCurrent ? (
-                                <ItemDescription className='shrink-0'>当前</ItemDescription>
-                              ) : null}
-                              <ItemActions className='shrink-0 opacity-0 transition-opacity group-hover/item:opacity-100 group-focus-within/item:opacity-100'>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger
-                                    render={
-                                      <Button
-                                        aria-label='会话操作'
-                                        size='icon-xs'
-                                        variant='ghost'
-                                      />
-                                    }
-                                  >
-                                    <MoreHorizontalIcon />
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align='end' className='w-44'>
-                                    <DropdownMenuGroup>
-                                      <DropdownMenuLabel>会话操作</DropdownMenuLabel>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          void onTogglePinned(
-                                            conversation.id,
-                                            !conversation.is_pinned
-                                          ).catch((error) =>
-                                            console.error('Failed to pin conversation:', error)
-                                          )
-                                        }
-                                      >
-                                        <PinIcon
-                                          fill={conversation.is_pinned ? 'currentColor' : 'none'}
-                                        />
-                                        {conversation.is_pinned ? '取消收藏会话' : '收藏会话'}
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => {
-                                          setEditingId(conversation.id);
-                                          setEditingTitle(conversation.title || '');
-                                        }}
-                                      >
-                                        <PencilIcon />
-                                        重命名会话
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          void onDelete(conversation.id).catch((error) =>
-                                            console.error('Failed to delete conversation:', error)
-                                          )
-                                        }
-                                        variant='destructive'
-                                      >
-                                        <Trash2Icon />
-                                        删除会话
-                                      </DropdownMenuItem>
-                                    </DropdownMenuGroup>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </ItemActions>
-                            </Item>
-                          );
-                        })}
-                      </ItemGroup>
-                    ) : (
-                      <Empty className='border-0 px-2 py-5 text-left'>
-                        <EmptyHeader className='items-start gap-1'>
-                          <EmptyTitle>还没有会话</EmptyTitle>
-                          <EmptyDescription>打开工作区后，从第一条消息开始。</EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-              );
-            })}
-          </Accordion>
+                        </AccordionTrigger>
+                        <Badge variant='secondary' className='shrink-0'>
+                          {items.length}
+                        </Badge>
+                        {project ? (
+                          <Button
+                            type='button'
+                            size='icon-xs'
+                            variant='ghost'
+                            aria-label={`打开工作区 ${project.name}`}
+                            title='打开工作区'
+                            onClick={() => onOpenProject(project.id)}
+                          >
+                            <ArrowUpRightIcon aria-hidden='true' />
+                          </Button>
+                        ) : null}
+                      </div>
+                      <AccordionContent className='pb-2 pl-4'>
+                        {items.length ? (
+                          <ConversationHistoryItems
+                            currentConversationId={currentConversationId}
+                            editingId={editingId}
+                            editingTitle={editingTitle}
+                            items={items}
+                            onBeginRename={(conversationId, title) => {
+                              setEditingId(conversationId);
+                              setEditingTitle(title || '');
+                            }}
+                            onCancelEditing={() => setEditingId(null)}
+                            onCommitEditing={commitEditing}
+                            onDelete={onDelete}
+                            onEditTitleChange={setEditingTitle}
+                            onSelect={onSelect}
+                            onTogglePinned={onTogglePinned}
+                          />
+                        ) : (
+                          <Empty className='border-0 px-2 py-5 text-left'>
+                            <EmptyHeader className='items-start gap-1'>
+                              <EmptyTitle>还没有会话</EmptyTitle>
+                              <EmptyDescription>打开工作区后，从第一条消息开始。</EmptyDescription>
+                            </EmptyHeader>
+                          </Empty>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
+            ) : null}
+            {recentConversations.length > 0 ? (
+              <section aria-label='最近会话' className='mt-3 px-1'>
+                <div className='flex items-center gap-2 px-1.5 py-2'>
+                  <Clock3Icon className='text-muted-foreground size-4 shrink-0' />
+                  <span className='text-sm font-medium'>最近</span>
+                  <Badge variant='outline' className='ml-auto'>
+                    {recentConversations.length}
+                  </Badge>
+                </div>
+                <ConversationHistoryItems
+                  currentConversationId={currentConversationId}
+                  editingId={editingId}
+                  editingTitle={editingTitle}
+                  items={recentConversations}
+                  onBeginRename={(conversationId, title) => {
+                    setEditingId(conversationId);
+                    setEditingTitle(title || '');
+                  }}
+                  onCancelEditing={() => setEditingId(null)}
+                  onCommitEditing={commitEditing}
+                  onDelete={onDelete}
+                  onEditTitleChange={setEditingTitle}
+                  onSelect={onSelect}
+                  onTogglePinned={onTogglePinned}
+                />
+              </section>
+            ) : null}
+          </>
         ) : (
           <Empty className='items-start border-0 px-2 py-6 text-left'>
             <EmptyHeader className='items-start'>
               <EmptyTitle>还没有会话记录</EmptyTitle>
-              <EmptyDescription>新建一次对话，或先创建一个项目工作区。</EmptyDescription>
+              <EmptyDescription>新建一次对话，或从已有项目添加工作区。</EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}
       </div>
       <Dialog
-        open={createWorkspaceOpen}
+        open={workspacePickerOpen}
         onOpenChange={(nextOpen) => {
-          setCreateWorkspaceOpen(nextOpen);
-          if (!nextOpen) setWorkspaceError(null);
+          setWorkspacePickerOpen(nextOpen);
+          if (nextOpen) setDraftProjectIds(selectedProjectIds);
         }}
       >
-        <DialogContent>
+        <DialogContent className='sm:max-w-lg'>
           <DialogHeader>
-            <DialogTitle>新建项目工作区</DialogTitle>
+            <DialogTitle>添加工作区</DialogTitle>
             <DialogDescription>
-              为一组招标资料建立独立工作区，资料、证据和响应版本都会围绕它保存。
+              选择已有项目显示在会话侧栏中，可同时选择多个项目；也可以暂不选择。
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={submitWorkspace}>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor='agent-create-workspace-name'>工作区名称</FieldLabel>
-                <Input
-                  id='agent-create-workspace-name'
-                  autoFocus
-                  placeholder='例如：智慧社区治理项目'
-                  value={workspaceName}
-                  onChange={(event) => setWorkspaceName(event.target.value)}
-                  disabled={creatingWorkspace}
-                  required
-                  minLength={2}
-                  maxLength={80}
-                />
-                <FieldDescription>建议使用招标项目或客户名称，方便团队共同查找。</FieldDescription>
-                <FieldError>{workspaceError}</FieldError>
-              </Field>
+          <FieldSet>
+            <FieldLegend variant='label'>已有项目</FieldLegend>
+            <FieldDescription>
+              会话只会按你选择的项目分组，不会自动创建或猜测工作区。
+            </FieldDescription>
+            <FieldGroup className='max-h-64 overflow-y-auto rounded-lg border p-2'>
+              {projects.length ? (
+                projects.map((project) => {
+                  const id = `agent-workspace-project-${project.id}`;
+                  const checked = draftProjectIds.includes(project.id);
+                  return (
+                    <Field key={project.id} orientation='horizontal' className='rounded-lg p-2.5'>
+                      <Checkbox
+                        id={id}
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          setDraftProjectIds((current) =>
+                            value === true
+                              ? [...current, project.id].filter(
+                                  (projectId, index, values) => values.indexOf(projectId) === index
+                                )
+                              : current.filter((projectId) => projectId !== project.id)
+                          );
+                        }}
+                      />
+                      <FieldContent>
+                        <FieldLabel htmlFor={id} className='cursor-pointer'>
+                          {project.name}
+                        </FieldLabel>
+                        <FieldDescription>
+                          {project.scenario_package || '投标项目'}
+                        </FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  );
+                })
+              ) : (
+                <Empty className='border-0 px-4 py-8'>
+                  <EmptyHeader>
+                    <EmptyTitle>还没有可添加的项目</EmptyTitle>
+                    <EmptyDescription>
+                      请先在{' '}
+                      <Link className='text-primary underline underline-offset-4' href='/projects'>
+                        项目
+                      </Link>{' '}
+                      页面创建项目。
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              )}
             </FieldGroup>
-            <DialogFooter className='mt-5'>
-              <Button
-                type='button'
-                variant='outline'
-                disabled={creatingWorkspace}
-                onClick={() => setCreateWorkspaceOpen(false)}
-              >
-                取消
-              </Button>
-              <Button type='submit' disabled={creatingWorkspace || workspaceName.trim().length < 2}>
-                {creatingWorkspace ? (
-                  <Spinner data-icon='inline-start' />
-                ) : (
-                  <PlusIcon data-icon='inline-start' />
-                )}
-                创建并打开
-              </Button>
-            </DialogFooter>
-          </form>
+          </FieldSet>
+          <DialogFooter className='mt-5'>
+            <Button type='button' variant='ghost' onClick={() => saveWorkspaceSelection([])}>
+              暂不选择
+            </Button>
+            <Button type='button' variant='outline' onClick={() => setWorkspacePickerOpen(false)}>
+              取消
+            </Button>
+            <Button type='button' onClick={() => saveWorkspaceSelection(draftProjectIds)}>
+              <PlusIcon data-icon='inline-start' />
+              保存工作区
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -828,6 +946,8 @@ export function LinearAgentWorkspace() {
   const [environmentPanelOpen, setEnvironmentPanelOpen] = useState(false);
   const [sideTabs, setSideTabs] = useState<AgentSideTab[]>([]);
   const [activeSideTab, setActiveSideTab] = useState<AgentSideTabType>('workflow');
+  const [sideSurfaceOpen, setSideSurfaceOpen] = useState(false);
+  const sidePanelRef = usePanelRef();
   const isCompactViewport = useCompactViewport();
   const historySurfaceRef = useRef<HTMLDivElement>(null);
 
@@ -907,12 +1027,6 @@ export function LinearAgentWorkspace() {
   const handleExample = (prompt: string) => {
     void sendMessage(prompt, { displayContent: prompt });
   };
-  const handleCreateProject = async (name: string) => {
-    const project = await createProject({ name, scenario_package: 'bidpilot' });
-    setProjects((current) => [project, ...current.filter((item) => item.id !== project.id)]);
-    await refreshConversations();
-    return project;
-  };
   const openSideTab = (tab: AgentSideTab) => {
     setSideTabs((current) => {
       const existing = current.findIndex((item) => item.type === tab.type);
@@ -922,6 +1036,7 @@ export function LinearAgentWorkspace() {
       return next;
     });
     setActiveSideTab(tab.type);
+    setSideSurfaceOpen(true);
   };
   const openWorkflowCanvas = (projectId: string) => {
     openSideTab({ type: 'workflow', projectId });
@@ -937,13 +1052,13 @@ export function LinearAgentWorkspace() {
     if (index === -1) return;
     const next = sideTabs.filter((tab) => tab.type !== tabType);
     setSideTabs(next);
+    if (next.length === 0) setSideSurfaceOpen(false);
     if (activeSideTab === tabType) {
       setActiveSideTab(next[Math.min(index, next.length - 1)]?.type ?? 'workflow');
     }
   };
   const hasSideSurface = sideTabs.length > 0;
   const showDesktopSideSurface = hasSideSurface && !isCompactViewport;
-  const closeSideSurface = () => closeSideTab(activeSideTab);
   const mobileActiveTab = sideTabs.find((tab) => tab.type === activeSideTab) ?? sideTabs[0];
   const mobileSurfaceTitle = mobileActiveTab ? sideTabLabel(mobileActiveTab) : '侧栏';
   const mobileSurfaceDescription =
@@ -954,6 +1069,34 @@ export function LinearAgentWorkspace() {
         : mobileActiveTab?.type === 'attachment'
           ? `${formatPreviewSize(mobileActiveTab.selection.size)} · ${mobileActiveTab.selection.kind === 'image' ? '图片' : '文件'}`
           : '';
+
+  useEffect(() => {
+    if (!showDesktopSideSurface) return;
+    let retryFrame: number | null = null;
+    const syncPanel = () => {
+      try {
+        if (sideSurfaceOpen) sidePanelRef.current?.expand();
+        else sidePanelRef.current?.collapse();
+      } catch {
+        // The panel registers with its group in an effect. A newly opened
+        // side tab can reach this effect one frame before that registration;
+        // retry after the group has committed its constraints.
+        retryFrame = window.requestAnimationFrame(() => {
+          try {
+            if (sideSurfaceOpen) sidePanelRef.current?.expand();
+            else sidePanelRef.current?.collapse();
+          } catch {
+            // A panel removed during a responsive transition needs no action.
+          }
+        });
+      }
+    };
+    const frame = window.requestAnimationFrame(syncPanel);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (retryFrame !== null) window.cancelAnimationFrame(retryFrame);
+    };
+  }, [showDesktopSideSurface, sideSurfaceOpen, sidePanelRef]);
 
   useEffect(() => {
     if (!historyOpen) return;
@@ -1031,6 +1174,23 @@ export function LinearAgentWorkspace() {
                   >
                     <MoreHorizontalIcon aria-hidden='true' />
                   </Button>
+                  {hasSideSurface ? (
+                    <Button
+                      type='button'
+                      className='agent-header-icon'
+                      aria-label={sideSurfaceOpen ? '收起右侧区域' : '展开右侧区域'}
+                      title={sideSurfaceOpen ? '收起右侧区域' : '展开右侧区域'}
+                      onClick={() => setSideSurfaceOpen((value) => !value)}
+                      size='icon-sm'
+                      variant='ghost'
+                    >
+                      {sideSurfaceOpen ? (
+                        <PanelRightCloseIcon aria-hidden='true' />
+                      ) : (
+                        <PanelRightIcon aria-hidden='true' />
+                      )}
+                    </Button>
+                  ) : null}
                   <Popover open={environmentPanelOpen} onOpenChange={setEnvironmentPanelOpen}>
                     <PopoverTrigger
                       render={
@@ -1061,6 +1221,10 @@ export function LinearAgentWorkspace() {
                           setEnvironmentPanelOpen(false);
                           navigate(`/projects/${projectId}`);
                         }}
+                        onOpenSubagents={(parentRunId) => {
+                          setEnvironmentPanelOpen(false);
+                          openSubagentsPanel(parentRunId);
+                        }}
                         onOpenRun={(run: RuntimeRunListItem) => {
                           setEnvironmentPanelOpen(false);
                           if (run.conversation_id) {
@@ -1089,7 +1253,6 @@ export function LinearAgentWorkspace() {
                     setHistoryOpen(false);
                     navigate(`/projects/${projectId}`);
                   }}
-                  onCreateProject={handleCreateProject}
                   onRename={renameConversation}
                   onDelete={deleteConversation}
                   onTogglePinned={togglePinnedConversation}
@@ -1142,6 +1305,7 @@ export function LinearAgentWorkspace() {
                 defaultSize='32%'
                 minSize='300px'
                 maxSize='640px'
+                panelRef={sidePanelRef}
                 collapsible
                 collapsedSize='0px'
                 className='min-w-0'
@@ -1152,6 +1316,7 @@ export function LinearAgentWorkspace() {
                   state={state}
                   onChange={setActiveSideTab}
                   onCloseTab={closeSideTab}
+                  onCollapse={() => setSideSurfaceOpen(false)}
                   onOpenProject={(projectId) => navigate(`/projects/${projectId}?surface=workflow`)}
                 />
               </ResizablePanel>
@@ -1160,10 +1325,8 @@ export function LinearAgentWorkspace() {
         </ResizablePanelGroup>
       </div>
       <Sheet
-        open={isCompactViewport && hasSideSurface}
-        onOpenChange={(open) => {
-          if (!open) closeSideSurface();
-        }}
+        open={isCompactViewport && hasSideSurface && sideSurfaceOpen}
+        onOpenChange={setSideSurfaceOpen}
       >
         <SheetContent
           side='right'
@@ -1180,6 +1343,7 @@ export function LinearAgentWorkspace() {
               state={state}
               onChange={setActiveSideTab}
               onCloseTab={closeSideTab}
+              onCollapse={() => setSideSurfaceOpen(false)}
               onOpenProject={(projectId) => navigate(`/projects/${projectId}?surface=workflow`)}
               showContentHeaders={false}
             />

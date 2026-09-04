@@ -15,13 +15,15 @@ from sqlalchemy.orm import Session
 
 from app.auth.schemas import CurrentUser
 from app.auth.service import require_auth, require_stream_auth
-from app.chat.service import resolve_conversation_project_context
+from app.chat.service import resolve_conversation_project_context, save_message
 from app.db import get_db
 from app.providers.service import get_provider_config
 from app.runtime.service import (
     assistant_turn_idempotency_key,
     find_idempotent_runtime_run,
 )
+from app.runtime.repository import get_visible_runtime_run
+from app.runtime.pi_control import request_pi_message
 from app.runtime.model import AgentModelConfigurationError, resolve_agent_model
 from app.security.secrets import decrypt_secret
 from app.usage.schemas import ProviderSource
@@ -38,13 +40,22 @@ from .attachments import (
     hydrate_assistant_attachments,
     stage_assistant_attachment,
 )
-from .schemas import AssistantAttachmentUploadResponse, AssistantRequest
-from app.runtime.operator_adapter import stream_existing_assistant_run, stream_operator_assistant_response
+from .schemas import (
+    AssistantAttachmentUploadResponse,
+    AssistantRequest,
+    AssistantRuntimeMessageRequest,
+)
+from app.runtime.operator_adapter import (
+    stream_existing_assistant_run,
+    stream_operator_assistant_response,
+)
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 logger = logging.getLogger(__name__)
 
-SSE_HEARTBEAT_SECONDS = max(5, int(os.getenv("DOCPILOT_ASSISTANT_SSE_HEARTBEAT_SECONDS", "12")))
+SSE_HEARTBEAT_SECONDS = max(
+    5, int(os.getenv("DOCPILOT_ASSISTANT_SSE_HEARTBEAT_SECONDS", "12"))
+)
 
 
 async def _with_sse_heartbeats(
@@ -58,7 +69,9 @@ async def _with_sse_heartbeats(
     cancelling it would also cancel the Harness/provider generator that owns
     the durable run. A comment frame is valid SSE and ignored by clients.
     """
-    interval = heartbeat_seconds if heartbeat_seconds is not None else SSE_HEARTBEAT_SECONDS
+    interval = (
+        heartbeat_seconds if heartbeat_seconds is not None else SSE_HEARTBEAT_SECONDS
+    )
     iterator = stream.__aiter__()
     pending: asyncio.Future[str] | None = None
     try:
@@ -187,7 +200,15 @@ async def assistant_stream(
         }
     )
 
-    provider_source, provider_type, provider_id, api_key, base_url, model, provider_config_id = _resolve_request_provider(db, user, payload)
+    (
+        provider_source,
+        provider_type,
+        provider_id,
+        api_key,
+        base_url,
+        model,
+        provider_config_id,
+    ) = _resolve_request_provider(db, user, payload)
     payload = payload.model_copy(update={"provider_config_id": provider_config_id})
     try:
         _record_assistant_usage(db, user, payload, provider_source)
@@ -209,11 +230,76 @@ async def assistant_stream(
     )
 
 
+@router.post("/runs/{run_id}/messages")
+async def send_native_runtime_message(
+    run_id: str,
+    payload: AssistantRuntimeMessageRequest,
+    user: CurrentUser = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Send a steer/follow-up through the active Pi session.
+
+    This endpoint never creates another assistant run. Pi owns the native
+    delivery queue and the existing assistant SSE stream projects the result.
+    """
+
+    run = get_visible_runtime_run(db, run_id, user)
+    if run.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Runtime run not found"
+        )
+    if run.kind != "assistant_turn" or run.engine != "pi" or not run.conversation_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Runtime run cannot receive follow-up messages",
+        )
+    if run.status != "running":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Runtime run is not actively running",
+        )
+
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Message cannot be empty",
+        )
+    # Persist before handing the instruction to Pi so any response generated
+    # immediately after acceptance has a durable user-message timestamp before
+    # its assistant turn. Remove it again if the sidecar rejects the request.
+    user_message = save_message(
+        db, run.conversation_id, "user", message, runtime_run_id=run.id
+    )
+    accepted = await request_pi_message(
+        run.id,
+        message,
+        streaming_behavior=payload.streaming_behavior,
+    )
+    if not accepted:
+        db.delete(user_message)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pi session is not ready to receive this message",
+        )
+
+    # The accepted instruction belongs to the existing runtime run. The
+    # existing Pi stream remains the execution boundary.
+    return {
+        "status": "accepted",
+        "run_id": run.id,
+        "streaming_behavior": payload.streaming_behavior,
+    }
+
+
 def _resolve_request_provider(
     db: Session,
     user: CurrentUser,
     payload: AssistantRequest,
-) -> tuple[ProviderSource, str, str | None, str | None, str | None, str | None, str | None]:
+) -> tuple[
+    ProviderSource, str, str | None, str | None, str | None, str | None, str | None
+]:
     if not payload.provider_config_id:
         try:
             resolved = resolve_agent_model()
@@ -237,7 +323,9 @@ def _resolve_request_provider(
         # An explicit provider_config_id selects a user-owned billing and
         # authorization boundary. Never silently replace a deleted BYOK choice
         # with a platform-funded model.
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider config not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Provider config not found"
+        )
 
     try:
         resolved = resolve_agent_model(
@@ -248,7 +336,9 @@ def _resolve_request_provider(
             model=config.model,
         )
     except AgentModelConfigurationError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
 
     return (
         ProviderSource.BYOK,

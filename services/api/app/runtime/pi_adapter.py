@@ -40,9 +40,24 @@ from .service import (
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_ASSISTANT_MAX_COMPLETION_TOKENS = 16_384
+_MAX_ASSISTANT_MAX_COMPLETION_TOKENS = 32_768
 
 _thinking_level = pi_thinking_level
 _pi_api = pi_model_api
+
+
+def _assistant_max_completion_tokens() -> int:
+    raw_value = os.getenv("DOCPILOT_ASSISTANT_MAX_COMPLETION_TOKENS")
+    try:
+        value = (
+            int(raw_value)
+            if raw_value is not None
+            else _DEFAULT_ASSISTANT_MAX_COMPLETION_TOKENS
+        )
+    except ValueError:
+        value = _DEFAULT_ASSISTANT_MAX_COMPLETION_TOKENS
+    return min(max(value, 512), _MAX_ASSISTANT_MAX_COMPLETION_TOKENS)
 
 
 def _content(value: Any) -> str:
@@ -124,7 +139,9 @@ def _assembled_prompt(
         previous_terminal_action=previous,
         include_skill_index=False,
     )
-    systems = "\n\n".join(_content(message.content) for message in assembly.messages[:-1])
+    systems = "\n\n".join(
+        _content(message.content) for message in assembly.messages[:-1]
+    )
     current = _content(assembly.messages[-1].content)
     return systems, current, assembly.trace
 
@@ -164,8 +181,22 @@ async def stream_pi_assistant_response(
         message = "当前模型配置不完整，缺少 API 密钥或模型名称。"
         fail_runtime_run(db, run.id, message, error_code="model_configuration_missing")
         save_message(db, conversation_id, "assistant", message)
-        yield await emit_live(_sse("assistant.message", {"runtime_run_id": run.id, "content": message, "state": "failed"}))
-        yield await emit_live(_sse("assistant.end", {"conversation_id": conversation_id, "runtime_run_id": run.id, "state": "failed"}))
+        yield await emit_live(
+            _sse(
+                "assistant.message",
+                {"runtime_run_id": run.id, "content": message, "state": "failed"},
+            )
+        )
+        yield await emit_live(
+            _sse(
+                "assistant.end",
+                {
+                    "conversation_id": conversation_id,
+                    "runtime_run_id": run.id,
+                    "state": "failed",
+                },
+            )
+        )
         return
 
     notifications = collect_completed_notifications(
@@ -198,14 +229,20 @@ async def stream_pi_assistant_response(
     run.input_json = input_json
     db.commit()
 
-    callback_url = os.getenv("DOCPILOT_PI_TOOL_BRIDGE_URL", "http://api:8000/internal/pi/tools/execute")
+    callback_url = os.getenv(
+        "DOCPILOT_PI_TOOL_BRIDGE_URL", "http://api:8000/internal/pi/tools/execute"
+    )
     sidecar_url = os.getenv("DOCPILOT_PI_AGENT_URL", "http://pi-agent:8787").rstrip("/")
     try:
         bridge_token = create_pi_bridge_token(run=run, user=user)
     except RuntimeError:
         logger.exception("Pi tool bridge configuration is unavailable: run=%s", run.id)
-        message = "执行服务配置不完整，暂时无法安全调用业务工具。请联系管理员检查运行环境。"
-        fail_runtime_run(db, run.id, message, error_code="pi_bridge_configuration_missing")
+        message = (
+            "执行服务配置不完整，暂时无法安全调用业务工具。请联系管理员检查运行环境。"
+        )
+        fail_runtime_run(
+            db, run.id, message, error_code="pi_bridge_configuration_missing"
+        )
         save_message(db, conversation_id, "assistant", message)
         yield await emit_live(
             _sse(
@@ -240,14 +277,21 @@ async def stream_pi_assistant_response(
             "apiKey": api_key,
             "reasoning": reasoning_effort not in {None, "off"},
             "thinkingLevel": _thinking_level(reasoning_effort),
+            "maxTokens": _assistant_max_completion_tokens(),
         },
         "tools": await _pi_tools_for_run(),
         "resources": _pi_resources(),
         "sandbox": _pi_sandbox(),
         "toolCallback": {"url": callback_url, "token": bridge_token},
     }
-    pi_internal_secret = (os.getenv("DOCPILOT_PI_INTERNAL_SECRET") or os.getenv("DOCPILOT_JWT_SECRET") or "").strip()
-    pi_headers = {"authorization": f"Bearer {pi_internal_secret}"} if pi_internal_secret else {}
+    pi_internal_secret = (
+        os.getenv("DOCPILOT_PI_INTERNAL_SECRET")
+        or os.getenv("DOCPILOT_JWT_SECRET")
+        or ""
+    ).strip()
+    pi_headers = (
+        {"authorization": f"Bearer {pi_internal_secret}"} if pi_internal_secret else {}
+    )
 
     cursor = latest_event_sequence(db, run.id)
     text_parts: list[str] = []
@@ -258,10 +302,15 @@ async def stream_pi_assistant_response(
     terminal_tool_failure: dict[str, Any] | None = None
     terminal_tool_pause: dict[str, Any] | None = None
     projected_terminal = False
+    persisted_turn_texts: list[str] = []
 
     def flush_events() -> list[str]:
         nonlocal cursor, projected_terminal
-        rendered = list(_render_runtime_events(db, run.id, after_sequence=cursor, conversation_id=conversation_id))
+        rendered = list(
+            _render_runtime_events(
+                db, run.id, after_sequence=cursor, conversation_id=conversation_id
+            )
+        )
         if any(event.startswith("event: assistant.end") for event in rendered):
             projected_terminal = True
         cursor = latest_event_sequence(db, run.id)
@@ -286,6 +335,36 @@ async def stream_pi_assistant_response(
             return True
         return run.status == "cancelled"
 
+    def persist_completed_turn(text: str) -> None:
+        normalized = text.strip()
+        if not normalized:
+            return
+        save_message(
+            db, conversation_id, "assistant", normalized, runtime_run_id=run.id
+        )
+        # Keep the raw form for comparing the cumulative stream later; the
+        # stored chat row remains normalized for display.
+        persisted_turn_texts.append(text)
+
+    def persist_uncommitted_text(text: str) -> None:
+        """Keep a partial turn if Pi ends without its normal turn_end frame."""
+        normalized = text.strip()
+        if not normalized:
+            return
+        persisted_raw = "".join(persisted_turn_texts)
+        persisted_text = persisted_raw.strip()
+        if persisted_text == normalized:
+            return
+        if persisted_raw and text.startswith(persisted_raw):
+            normalized = text[len(persisted_raw) :].strip()
+        elif persisted_text and normalized.startswith(persisted_text):
+            normalized = normalized[len(persisted_text) :].strip()
+        if normalized:
+            save_message(
+                db, conversation_id, "assistant", normalized, runtime_run_id=run.id
+            )
+            persisted_turn_texts.append(normalized)
+
     try:
         # Cancellation can arrive while the API is assembling context or while
         # the Worker is waiting for the sidecar connection. Do not start Pi
@@ -305,7 +384,9 @@ async def stream_pi_assistant_response(
                 headers=pi_headers,
             ) as response:
                 if response.status_code >= 400:
-                    raise RuntimeError(f"Pi runtime rejected the run ({response.status_code})")
+                    raise RuntimeError(
+                        f"Pi runtime rejected the run ({response.status_code})"
+                    )
                 async for line in response.aiter_lines():
                     if not line.strip():
                         continue
@@ -356,7 +437,23 @@ async def stream_pi_assistant_response(
                         yield await emit_live(
                             _sse(
                                 "assistant.turn_started",
-                                {"runtime_run_id": run.id, "turn_id": current_turn_id, "state": "thinking"},
+                                {
+                                    "runtime_run_id": run.id,
+                                    "turn_id": current_turn_id,
+                                    "state": "thinking",
+                                },
+                            )
+                        )
+                    elif event_type == "turn.completed":
+                        persist_completed_turn(str(event.get("text") or ""))
+                        yield await emit_live(
+                            _sse(
+                                "assistant.turn_finished",
+                                {
+                                    "runtime_run_id": run.id,
+                                    "turn_id": event.get("turn_id") or current_turn_id,
+                                    "state": "thinking",
+                                },
                             )
                         )
                     elif event_type in {
@@ -382,16 +479,26 @@ async def stream_pi_assistant_response(
                                 },
                             )
                         )
-                    elif event_type in {"tool.started", "tool.updated", "tool.completed"}:
-                        if event_type == "tool.completed" and isinstance(event.get("result"), dict):
+                    elif event_type in {
+                        "tool.started",
+                        "tool.updated",
+                        "tool.completed",
+                    }:
+                        if event_type == "tool.completed" and isinstance(
+                            event.get("result"), dict
+                        ):
                             result = event["result"]
                             if result.get("kind") == "blocked" or (
-                                result.get("kind") == "failed" and result.get("recoverable") is False
+                                result.get("kind") == "failed"
+                                and result.get("recoverable") is False
                             ):
                                 terminal_tool_failure = result
                             elif result.get("kind") == "paused":
                                 terminal_tool_pause = result
-                            elif event.get("is_error") is True and event.get("terminate") is True:
+                            elif (
+                                event.get("is_error") is True
+                                and event.get("terminate") is True
+                            ):
                                 terminal_tool_failure = {
                                     "publicSummary": "工具调用被安全策略阻止，本轮已停止。",
                                     "errorCode": "pi_tool_blocked",
@@ -417,7 +524,9 @@ async def stream_pi_assistant_response(
                                 "state": "executing_tool",
                                 "live": True,
                             }
-                            yield await emit_live(_sse("assistant.tool_started", live_tool_payload))
+                            yield await emit_live(
+                                _sse("assistant.tool_started", live_tool_payload)
+                            )
                         for rendered in flush_events():
                             yield await emit_live(rendered)
                     elif event_type == "agent.failed":
@@ -441,14 +550,16 @@ async def stream_pi_assistant_response(
             return
         final_text = "".join(text_parts).strip()
         if run.status == "awaiting_approval":
-            if final_text:
-                save_message(db, conversation_id, "assistant", final_text)
+            persist_uncommitted_text(final_text)
             for rendered in flush_events():
                 yield await emit_live(rendered)
             if rendered_terminal := terminal_event("needs_confirmation"):
                 yield await emit_live(rendered_terminal)
             return
-        if terminal_tool_pause is not None and terminal_tool_pause.get("pauseReason") == "needs_input":
+        if (
+            terminal_tool_pause is not None
+            and terminal_tool_pause.get("pauseReason") == "needs_input"
+        ):
             await_runtime_input(db, run.id)
             for rendered in flush_events():
                 yield await emit_live(rendered)
@@ -462,7 +573,9 @@ async def stream_pi_assistant_response(
                 "recoverable": False,
             }
         if terminal_tool_failure is not None:
-            summary = str(terminal_tool_failure.get("publicSummary") or "本轮操作未能完成。")
+            summary = str(
+                terminal_tool_failure.get("publicSummary") or "本轮操作未能完成。"
+            )
             has_partial_text = bool(final_text)
             if terminal_tool_failure.get("native") is True:
                 row = publish_event(
@@ -472,20 +585,24 @@ async def stream_pi_assistant_response(
                         type=RuntimeEventType.CAPABILITY_FAILED,
                         public_summary=summary,
                         payload={
-                            "capability": terminal_tool_failure.get("capability") or "unknown",
+                            "capability": terminal_tool_failure.get("capability")
+                            or "unknown",
                             "tool_call_id": terminal_tool_failure.get("tool_call_id"),
                             "turn_id": terminal_tool_failure.get("turn_id"),
-                            "reason_code": terminal_tool_failure.get("errorCode") or "pi_tool_blocked",
+                            "reason_code": terminal_tool_failure.get("errorCode")
+                            or "pi_tool_blocked",
                         },
                     ),
                 )
                 cursor = max(cursor, row.sequence)
-            save_message(db, conversation_id, "assistant", final_text, runtime_run_id=run.id)
+            persist_uncommitted_text(final_text)
             fail_runtime_run(
                 db,
                 run.id,
                 summary,
-                error_code=str(terminal_tool_failure.get("errorCode") or "capability_failed"),
+                error_code=str(
+                    terminal_tool_failure.get("errorCode") or "capability_failed"
+                ),
                 message_delta_emitted=has_partial_text,
             )
             for rendered in flush_events():
@@ -495,9 +612,13 @@ async def stream_pi_assistant_response(
             return
         has_partial_text = bool(text_parts)
         if terminal_type == "failed":
-            logger.warning("Pi agent failed: run=%s error=%s", run.id, terminal_error or "unknown")
-            failure_message = "模型运行未能完成，已安全停止。请稍后重试；如仍失败，请联系管理员。"
-            save_message(db, conversation_id, "assistant", final_text, runtime_run_id=run.id)
+            logger.warning(
+                "Pi agent failed: run=%s error=%s", run.id, terminal_error or "unknown"
+            )
+            failure_message = (
+                "模型运行未能完成，已安全停止。请稍后重试；如仍失败，请联系管理员。"
+            )
+            persist_uncommitted_text(final_text)
             fail_runtime_run(
                 db,
                 run.id,
@@ -509,7 +630,7 @@ async def stream_pi_assistant_response(
         else:
             if not final_text:
                 final_text = "本轮没有产生需要展示的文字结果。"
-            save_message(db, conversation_id, "assistant", final_text, runtime_run_id=run.id)
+            persist_uncommitted_text(final_text)
             complete_runtime_run(
                 db,
                 run.id,
@@ -537,11 +658,15 @@ async def stream_pi_assistant_response(
             if rendered_terminal := terminal_event("cancelled"):
                 yield await emit_live(rendered_terminal)
             return
-        logger.exception("Pi assistant stream failed: run=%s error_type=%s", run.id, type(exc).__name__)
+        logger.exception(
+            "Pi assistant stream failed: run=%s error_type=%s",
+            run.id,
+            type(exc).__name__,
+        )
         message = "助手运行未完成，已安全停止。请稍后重试；如仍失败，请联系管理员。"
         has_partial_text = bool(text_parts)
         try:
-            save_message(db, conversation_id, "assistant", "".join(text_parts).strip() or message, runtime_run_id=run.id)
+            persist_uncommitted_text("".join(text_parts).strip() or message)
             fail_runtime_run(
                 db,
                 run.id,
@@ -553,7 +678,9 @@ async def stream_pi_assistant_response(
             db.rollback()
         for rendered in flush_events():
             yield await emit_live(rendered)
-        if rendered_terminal := terminal_event("failed", error_code="assistant_stream_incomplete"):
+        if rendered_terminal := terminal_event(
+            "failed", error_code="assistant_stream_incomplete"
+        ):
             yield await emit_live(rendered_terminal)
 
 

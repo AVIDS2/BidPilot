@@ -17,7 +17,11 @@ from app.auth.schemas import CurrentUser
 from app.chat.service import get_recent_conversation_messages
 from app.memory.schemas import MemoryContextRead
 from app.memory.service import memory_context_for_agent
-from app.memory.mem0_provider import profile_context_records, search_profile_memory
+from app.memory.mem0_provider import (
+    mem0_enabled,
+    profile_context_records,
+    search_profile_memory,
+)
 from app.models import RuntimeEvent, RuntimeRun
 
 from .model_limits import (
@@ -82,7 +86,12 @@ def load_conversation_context(
         source = source[-MAX_CONVERSATION_SOURCE_MESSAGES:]
     return compact_conversation_context(
         [
-            {"role": role, "content": content[:OPERATOR_PLANNER_MAX_CONVERSATION_MESSAGE_CHARACTERS]}
+            {
+                "role": role,
+                "content": content[
+                    :OPERATOR_PLANNER_MAX_CONVERSATION_MESSAGE_CHARACTERS
+                ],
+            }
             for _, role, content in source
         ],
         history_window_truncated=history_window_truncated,
@@ -113,7 +122,9 @@ def load_authorized_memory(
         return None
 
 
-def memory_context_records(memory_context: MemoryContextRead | None) -> list[dict[str, Any]]:
+def memory_context_records(
+    memory_context: MemoryContextRead | None,
+) -> list[dict[str, Any]]:
     """Convert authorized memory records into Pi model observations."""
 
     if memory_context is None or not memory_context.items:
@@ -145,6 +156,9 @@ async def load_mem0_profile_context(
     query: str,
 ) -> list[dict[str, Any]]:
     """Recall low-risk profile memory without blocking the Pi event loop."""
+
+    if not mem0_enabled():
+        return []
 
     memories = await asyncio.to_thread(
         search_profile_memory,

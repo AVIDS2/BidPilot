@@ -5,7 +5,9 @@
 export const DEFAULT_THEME = 'supabase';
 export const THEME_COOKIE_NAME = 'active_theme';
 export const THEME_PREFERENCE_COOKIE = 'active_theme_preference';
-export const THEME_PREFERENCE_VERSION = '2';
+// Bump this when the template's shipped default changes. Existing Vercel
+// cookies from the migration build are defaults, not an explicit choice.
+export const THEME_PREFERENCE_VERSION = '3';
 
 export const THEMES = [
   {

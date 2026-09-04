@@ -11,7 +11,9 @@ AssistantMode = Literal["answer", "needs_input", "tool_action", "workflow_trigge
 AssistantAttachmentKind = Literal["file", "image"]
 AssistantAttachmentStatus = Literal["extracted", "empty", "unsupported", "failed"]
 AssistantReasoningEffort = Literal["low", "medium", "high", "extra", "max"]
-AssistantApprovalMode = Literal["request_approval", "risky_only", "full_access", "custom"]
+AssistantApprovalMode = Literal[
+    "request_approval", "risky_only", "full_access", "custom"
+]
 AssistantState = Literal[
     "idle",
     "queued",
@@ -66,6 +68,13 @@ class AssistantRequest(BaseModel):
     locale: Literal["en", "zh-CN"] = "zh-CN"
     confirmation: AssistantConfirmation | None = None
     attachments: list[AssistantAttachmentPayload] = Field(default_factory=list)
+
+
+class AssistantRuntimeMessageRequest(BaseModel):
+    """A native Pi follow-up delivered to an already-running session."""
+
+    message: str = Field(min_length=1, max_length=4_000)
+    streaming_behavior: Literal["steer", "followUp"]
 
 
 class AssistantIntent(BaseModel):

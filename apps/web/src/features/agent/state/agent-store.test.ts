@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { acceptRuntimeProjection, mergeAssistantMessages, type ChatMessage } from './agent-store';
+import {
+  acceptRuntimeProjection,
+  groupRuntimeEventsByAssistantMessage,
+  mergeAssistantMessages,
+  type ChatMessage
+} from './agent-store';
 
 const message = (overrides: Partial<ChatMessage>): ChatMessage => ({
   id: 'local',
@@ -93,5 +98,49 @@ describe('acceptRuntimeProjection', () => {
       })
     ).toBe(false);
     expect(cursors).toEqual({ 'run-1': 9 });
+  });
+});
+
+describe('groupRuntimeEventsByAssistantMessage', () => {
+  it('keeps interleaved runtime events with the assistant turn that follows them', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '先检查资料。',
+        runtimeRunId: 'run-1',
+        timestamp: 2_000
+      },
+      {
+        id: 'assistant-2',
+        role: 'assistant',
+        content: '资料已准备好。',
+        runtimeRunId: 'run-1',
+        timestamp: 4_000
+      }
+    ];
+    const event = (id: string, timestamp: string, type = 'capability.started') => ({
+      event_id: id,
+      run_id: 'run-1',
+      parent_event_id: null,
+      sequence: Number(id.slice(-1)),
+      type,
+      public_summary: id,
+      payload: {},
+      schema_version: '1.2',
+      timestamp
+    });
+
+    const groups = groupRuntimeEventsByAssistantMessage(messages, 'run-1', [
+      event('event-1', '1970-01-01T00:00:01.000Z'),
+      event('event-2', '1970-01-01T00:00:03.000Z'),
+      event('event-3', '1970-01-01T00:00:05.000Z', 'message.completed')
+    ]);
+
+    expect(groups.map((group) => group.messageId)).toEqual(['assistant-1', 'assistant-2']);
+    expect(groups.map((group) => group.events.map((item) => item.event_id))).toEqual([
+      ['event-1'],
+      ['event-2', 'event-3']
+    ]);
   });
 });

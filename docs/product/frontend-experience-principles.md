@@ -55,13 +55,18 @@ The Agent workspace uses two user-facing context surfaces:
 - The Agent's contextual right surface is one user-owned panel, not a second
   conversation. It uses the installed `Tabs` and `ResizablePanelGroup` to keep
   collaboration progress, response workflow, and attachment preview available
-  as sibling pages. On mobile the same tabs live inside the installed `Sheet`.
+  as sibling pages. Desktop collapse/expand uses the panel's native imperative
+  API so the surface remains mounted while it animates; on mobile the same tabs
+  live inside the installed `Sheet`.
 - A child Agent is a branch of the current Copilot process. It has runtime
   status and useful business progress, but no independent user history entry
   or synthetic chat message.
-- Pending messages are visible as a real queue with an explicit `发送下一条`
-  action. Queue state is derived from the live response boundary and never
-  replaces a failed or rejected send with a fake success state.
+- Pending messages are visible as a real queue with two explicit semantics:
+  `引导当前任务` sends an attachment-free instruction through Pi's native
+  `steer` path while the current turn is active; `发送下一条` uses the normal
+  durable-turn path after the current runtime has settled. Queue state is
+  derived from the live response boundary and a rejected request stays in the
+  queue instead of becoming a fake success state.
 
 Runtime implementation details such as provider names, tool counts, MCP
 registration, sandbox/network profiles, raw event payloads, and internal engine

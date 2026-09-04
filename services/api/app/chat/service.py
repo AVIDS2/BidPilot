@@ -35,7 +35,10 @@ from contracts.chat_config import (
     OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL,
     OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL,
 )
-from contracts.untrusted_context import build_untrusted_context_packet, with_untrusted_context_guard
+from contracts.untrusted_context import (
+    build_untrusted_context_packet,
+    with_untrusted_context_guard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +71,14 @@ class PlatformChatProvider:
 def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
     """Resolve the platform-owned chat provider from server env."""
     assistant_key = os.getenv("DOCPILOT_ASSISTANT_API_KEY")
-    assistant_provider_id = (os.getenv("DOCPILOT_ASSISTANT_PROVIDER_ID") or "").strip().casefold()
+    assistant_provider_id = (
+        (os.getenv("DOCPILOT_ASSISTANT_PROVIDER_ID") or "").strip().casefold()
+    )
     if assistant_key and assistant_provider_id in {"mimo", "xiaomi"}:
         return PlatformChatProvider(
             api_key=assistant_key,
-            base_url=os.getenv("DOCPILOT_ASSISTANT_BASE_URL") or MIMO_CHAT_COMPLETIONS_BASE_URL,
+            base_url=os.getenv("DOCPILOT_ASSISTANT_BASE_URL")
+            or MIMO_CHAT_COMPLETIONS_BASE_URL,
             model=os.getenv("DOCPILOT_ASSISTANT_MODEL") or MIMO_V2_5_PRO_MODEL,
             provider_id="mimo",
         )
@@ -81,7 +87,9 @@ def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
     if api_key:
         return PlatformChatProvider(
             api_key=api_key,
-            base_url=os.getenv("OPENCODE_BASE_URL", OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL),
+            base_url=os.getenv(
+                "OPENCODE_BASE_URL", OPENCODE_GO_CHAT_COMPLETIONS_BASE_URL
+            ),
             model=os.getenv("OPENCODE_MODEL", OPENCODE_GO_DEEPSEEK_V4_FLASH_MODEL),
             provider_id="opencode-go",
         )
@@ -101,9 +109,13 @@ def _resolve_platform_chat_provider() -> PlatformChatProvider | None:
         or os.getenv("DASHSCOPE_API_KEY")
     )
     if api_key:
-        base_url = os.getenv("DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", _PLATFORM_CHAT_BASE_URL)
+        base_url = os.getenv(
+            "DOCPILOT_PROVIDER_DOMESTIC_BASE_URL", _PLATFORM_CHAT_BASE_URL
+        )
         model = os.getenv("DOCPILOT_LLM_MODEL_PRIMARY", _PLATFORM_CHAT_MODEL)
-        return PlatformChatProvider(api_key=api_key, base_url=base_url, model=model, provider_id="dashscope")
+        return PlatformChatProvider(
+            api_key=api_key, base_url=base_url, model=model, provider_id="dashscope"
+        )
     return None
 
 
@@ -119,10 +131,14 @@ def _resolve_provider_config(
     2. Active config of any type
     """
     if provider_config_id:
-        config = db.query(ProviderConfig).filter(
-            ProviderConfig.id == provider_config_id,
-            ProviderConfig.user_id == user_id,
-        ).first()
+        config = (
+            db.query(ProviderConfig)
+            .filter(
+                ProviderConfig.id == provider_config_id,
+                ProviderConfig.user_id == user_id,
+            )
+            .first()
+        )
         if config is not None:
             return config
 
@@ -142,13 +158,17 @@ def _build_messages(
 ) -> list[dict[str, str]]:
     """Build one trusted system message and one explicitly untrusted context packet."""
 
-    history = json.dumps(conversation_history, ensure_ascii=False)[:_MAX_CHAT_HISTORY_CHARACTERS]
+    history = json.dumps(conversation_history, ensure_ascii=False)[
+        :_MAX_CHAT_HISTORY_CHARACTERS
+    ]
     packet = build_untrusted_context_packet(
         "legacy_chat",
         (
             {
                 "user_message": user_message[:_MAX_CHAT_USER_MESSAGE_CHARACTERS],
-                "project_context": project_context[:_MAX_CHAT_PROJECT_CONTEXT_CHARACTERS],
+                "project_context": project_context[
+                    :_MAX_CHAT_PROJECT_CONTEXT_CHARACTERS
+                ],
                 "conversation_history_json": history,
             },
         ),
@@ -186,7 +206,9 @@ def _is_failed_assistant_reply(content: str) -> bool:
 
 def _looks_like_failed_auto_title(title: str) -> bool:
     normalized = title.lower()
-    return any(marker in normalized for marker in ("错误", "失败", "异常", "error", "failed"))
+    return any(
+        marker in normalized for marker in ("错误", "失败", "异常", "error", "failed")
+    )
 
 
 def _generate_conversation_title(
@@ -222,7 +244,9 @@ def _generate_conversation_title(
     )
 
     try:
-        request = resolve_provider_chat_request("openai", provider.provider_id, provider.base_url, provider.api_key)
+        request = resolve_provider_chat_request(
+            "openai", provider.provider_id, provider.base_url, provider.api_key
+        )
         response = httpx.post(
             request.url,
             headers=request.headers,
@@ -260,13 +284,21 @@ def _maybe_refresh_conversation_title(db: Session, conversation_id: str) -> None
         return
 
     messages = get_conversation_messages(db, conversation_id)
-    first_user_message = next((message for message in messages if message.role == "user"), None)
+    first_user_message = next(
+        (message for message in messages if message.role == "user"), None
+    )
     if first_user_message is None:
         return
 
-    assistant_messages = [message for message in messages if message.role == "assistant"]
+    assistant_messages = [
+        message for message in messages if message.role == "assistant"
+    ]
     first_successful_reply = next(
-        (message for message in assistant_messages if not _is_failed_assistant_reply(message.content)),
+        (
+            message
+            for message in assistant_messages
+            if not _is_failed_assistant_reply(message.content)
+        ),
         None,
     )
     if first_successful_reply is None:
@@ -354,15 +386,24 @@ def save_message(
         conversation.updated_at = datetime.now(UTC)
 
     if role == "assistant" and runtime_run_id is None:
-        runtime_run_id = db.query(RuntimeRun.id).filter(
-            RuntimeRun.conversation_id == conversation_id,
-        ).order_by(RuntimeRun.created_at.desc()).limit(1).scalar()
+        runtime_run_id = (
+            db.query(RuntimeRun.id)
+            .filter(
+                RuntimeRun.conversation_id == conversation_id,
+            )
+            .order_by(RuntimeRun.created_at.desc())
+            .limit(1)
+            .scalar()
+        )
 
     msg = ChatMessageModel(
         conversation_id=conversation_id,
         runtime_run_id=runtime_run_id,
         role=role,
         content=content,
+        # Server defaults may only have second-level precision. Explicit
+        # timestamps keep interleaved Pi turns ordered in history.
+        created_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(msg)
     if attachments:
@@ -370,7 +411,11 @@ def save_message(
         records = {
             record.id: record
             for record in db.query(AssistantAttachment)
-            .filter(AssistantAttachment.id.in_([attachment_id for attachment_id in attachment_ids if attachment_id]))
+            .filter(
+                AssistantAttachment.id.in_(
+                    [attachment_id for attachment_id in attachment_ids if attachment_id]
+                )
+            )
             .all()
         }
         for attachment in attachments:
@@ -415,7 +460,11 @@ def fork_conversation_from_checkpoint(
 
     source_messages = get_conversation_messages(db, source.id)
     checkpoint_index = next(
-        (index for index, message in enumerate(source_messages) if message.id == checkpoint_message_id),
+        (
+            index
+            for index, message in enumerate(source_messages)
+            if message.id == checkpoint_message_id
+        ),
         None,
     )
     if checkpoint_index is None:
@@ -435,11 +484,12 @@ def fork_conversation_from_checkpoint(
     db.flush()
     for message in source_messages[:checkpoint_index]:
         branch_message = ChatMessageModel(
-                conversation_id=branch.id,
-                runtime_run_id=message.runtime_run_id,
-                role=message.role,
-                content=message.content,
-            )
+            conversation_id=branch.id,
+            runtime_run_id=message.runtime_run_id,
+            role=message.role,
+            content=message.content,
+            created_at=message.created_at,
+        )
         db.add(branch_message)
         db.flush()
         for attachment in message.attachments:
@@ -468,10 +518,14 @@ def get_conversation(
     user_id: str,
 ) -> ChatConversation | None:
     """Get a conversation by ID, scoped to user."""
-    return db.query(ChatConversation).filter(
-        ChatConversation.id == conversation_id,
-        ChatConversation.user_id == user_id,
-    ).first()
+    return (
+        db.query(ChatConversation)
+        .filter(
+            ChatConversation.id == conversation_id,
+            ChatConversation.user_id == user_id,
+        )
+        .first()
+    )
 
 
 def resolve_conversation_project_context(
@@ -500,7 +554,9 @@ def resolve_conversation_project_context(
 
     if effective_project_id:
         project = db.get(Project, effective_project_id)
-        if conversation is not None and (project is None or project.status == "deleted"):
+        if conversation is not None and (
+            project is None or project.status == "deleted"
+        ):
             # Projects are soft-deleted. Historical conversations remain useful
             # even after their workspace is gone, but must become unbound before
             # the next turn so no missing project context reaches the tools.
@@ -524,7 +580,7 @@ def get_conversation_messages(
     return (
         db.query(ChatMessageModel)
         .filter(ChatMessageModel.conversation_id == conversation_id)
-        .order_by(ChatMessageModel.created_at.asc())
+        .order_by(ChatMessageModel.created_at.asc(), ChatMessageModel.id.asc())
         .all()
     )
 
@@ -541,7 +597,7 @@ def get_recent_conversation_messages(
     rows = (
         db.query(ChatMessageModel)
         .filter(ChatMessageModel.conversation_id == conversation_id)
-        .order_by(ChatMessageModel.created_at.desc())
+        .order_by(ChatMessageModel.created_at.desc(), ChatMessageModel.id.desc())
         .limit(limit + 1)
         .all()
     )
@@ -568,14 +624,18 @@ def list_conversations(
     legacy_child_conversations = (
         select(child_run.conversation_id)
         .join(parent_run, parent_run.id == child_run.parent_run_id)
-        .join(legacy_child_conversation, legacy_child_conversation.id == child_run.conversation_id)
+        .join(
+            legacy_child_conversation,
+            legacy_child_conversation.id == child_run.conversation_id,
+        )
         .where(
             child_run.kind == "subagent",
             child_run.conversation_id.is_not(None),
             child_run.user_id == user_id,
             legacy_child_conversation.user_id == user_id,
             legacy_child_conversation.id != parent_run.conversation_id,
-            legacy_child_conversation.source_conversation_id == parent_run.conversation_id,
+            legacy_child_conversation.source_conversation_id
+            == parent_run.conversation_id,
         )
     )
     query = query.filter(~ChatConversation.id.in_(legacy_child_conversations))
@@ -664,7 +724,10 @@ async def stream_chat_response(
     if conversation_id:
         conversation = get_conversation(db, conversation_id, user.id)
         if conversation is None:
-            yield _sse("error", {"error_message": "Conversation not found", "timestamp": timestamp})
+            yield _sse(
+                "error",
+                {"error_message": "Conversation not found", "timestamp": timestamp},
+            )
             return
     else:
         conversation = create_conversation(db, user.id, project_id)
@@ -701,14 +764,22 @@ async def stream_chat_response(
         platform_provider = _resolve_platform_chat_provider()
         if platform_provider:
             logger.info("Using platform chat provider for chat")
-            async for chunk in _call_platform_streaming(platform_provider, llm_messages):
+            async for chunk in _call_platform_streaming(
+                platform_provider, llm_messages
+            ):
                 full_response += chunk
                 yield _sse("content", {"content": chunk})
         else:
             # Fall back to user's provider config
             config = _resolve_provider_config(db, user.id, provider_config_id)
             if config is None:
-                yield _sse("error", {"error_message": "No LLM provider configured. Please add a provider in settings.", "timestamp": timestamp})
+                yield _sse(
+                    "error",
+                    {
+                        "error_message": "No LLM provider configured. Please add a provider in settings.",
+                        "timestamp": timestamp,
+                    },
+                )
                 return
 
             logger.info("Using user provider config for chat: %s", config.provider_type)
@@ -731,11 +802,14 @@ async def stream_chat_response(
         save_message(db, conversation_id, "assistant", full_response)
 
     # Emit end event
-    yield _sse("end", {
-        "conversation_id": conversation_id,
-        "full_response": full_response,
-        "timestamp": datetime.now(UTC).isoformat(),
-    })
+    yield _sse(
+        "end",
+        {
+            "conversation_id": conversation_id,
+            "full_response": full_response,
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    )
 
 
 async def _call_platform_streaming(
@@ -743,7 +817,9 @@ async def _call_platform_streaming(
     messages: list[dict[str, str]],
 ) -> AsyncGenerator[str, None]:
     """Stream from the platform-owned chat provider."""
-    request = resolve_provider_chat_request("openai", provider.provider_id, provider.base_url, provider.api_key)
+    request = resolve_provider_chat_request(
+        "openai", provider.provider_id, provider.base_url, provider.api_key
+    )
     payload = {
         "model": provider.model,
         "messages": messages,
@@ -752,9 +828,13 @@ async def _call_platform_streaming(
     }
 
     async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-        async with client.stream("POST", request.url, headers=request.headers, json=payload) as resp:
+        async with client.stream(
+            "POST", request.url, headers=request.headers, json=payload
+        ) as resp:
             if resp.status_code != 200:
-                raise RuntimeError(f"Platform provider returned HTTP {resp.status_code}")
+                raise RuntimeError(
+                    f"Platform provider returned HTTP {resp.status_code}"
+                )
 
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):
@@ -807,7 +887,9 @@ async def _call_openai_streaming(
     }
 
     async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-        async with client.stream("POST", request.url, headers=request.headers, json=payload) as resp:
+        async with client.stream(
+            "POST", request.url, headers=request.headers, json=payload
+        ) as resp:
             if resp.status_code != 200:
                 raise RuntimeError(f"Provider returned HTTP {resp.status_code}")
 
@@ -858,7 +940,9 @@ async def _call_anthropic_streaming(
         payload["system"] = system_text
 
     async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-        async with client.stream("POST", request.url, headers=request.headers, json=payload) as resp:
+        async with client.stream(
+            "POST", request.url, headers=request.headers, json=payload
+        ) as resp:
             if resp.status_code != 200:
                 raise RuntimeError(f"Provider returned HTTP {resp.status_code}")
 

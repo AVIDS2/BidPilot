@@ -19,6 +19,17 @@ export interface AssistantCompatibilityEvent {
   data: Record<string, unknown>;
 }
 
+/** Parse API ISO timestamps without discarding sub-millisecond ordering. */
+export function parseRuntimeTimestamp(value: string | null | undefined): number {
+  if (!value) return Number.NaN;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return Number.NaN;
+  const fraction = value.match(/\.(\d+)(?=(?:Z|[+-]\d{2}:?\d{2})?$)/)?.[1];
+  if (!fraction || fraction.length <= 3) return parsed;
+  const extraMilliseconds = Number(fraction.slice(3)) / 10 ** (fraction.length - 3);
+  return Number.isFinite(extraMilliseconds) ? parsed + extraMilliseconds : parsed;
+}
+
 const WORKFLOW_CAPABILITIES = new Set([
   'start_draft_section',
   'start_redraft_section',
@@ -138,7 +149,7 @@ export function recoverRuntimeMessageFromEvents(
   const timestampSource =
     completed?.timestamp ??
     [...events].reverse().find((event) => event.type === 'message.delta')?.timestamp;
-  const parsedTimestamp = timestampSource ? Date.parse(timestampSource) : Number.NaN;
+  const parsedTimestamp = parseRuntimeTimestamp(timestampSource);
   return {
     runId,
     content,

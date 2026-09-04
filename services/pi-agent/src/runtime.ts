@@ -5,6 +5,7 @@ import {
   SessionManager,
   SettingsManager,
   createAgentSession,
+  type AgentSession,
   defineTool,
   type AgentSessionEvent,
   type ToolDefinition,
@@ -59,6 +60,21 @@ async function createModelRuntime(request: PiRunRequest): Promise<{ runtime: Mod
   const model = runtime.getModel(request.model.provider, request.model.id) as Model<PiApi> | undefined;
   if (!model) throw new Error(`Pi model registration failed: ${request.model.provider}/${request.model.id}`);
   return { runtime, model };
+}
+
+export function applyModelCompletionBudget(
+  model: Model<PiApi>,
+  requestedMaxTokens?: number,
+): Model<PiApi> {
+  if (
+    requestedMaxTokens === undefined ||
+    (model.maxTokens > 0 && requestedMaxTokens >= model.maxTokens)
+  ) {
+    return model;
+  }
+  // Built-in catalog entries are resolved before request-local model options.
+  // Clone the metadata instead of mutating the shared Pi catalog object.
+  return { ...model, maxTokens: Math.max(1, Math.floor(requestedMaxTokens)) };
 }
 
 function toolObservation(response: PiToolBridgeResponse, sandbox: ResolvedSandbox): string {
@@ -351,6 +367,7 @@ export async function runPiAgent(
   sink: EventSink,
   dependencies: PiRuntimeDependencies = {},
   abortSignal?: AbortSignal,
+  onSessionReady?: (session: AgentSession) => void,
 ): Promise<void> {
   const fetchImpl = dependencies.fetch ?? globalThis.fetch;
   const sandbox = resolveSandbox(request);
@@ -362,6 +379,7 @@ export async function runPiAgent(
     model = registered.runtime.getModel(request.model.provider, request.model.id) as Model<PiApi> | undefined;
   }
   if (!model) throw new Error(`Pi model is unavailable: ${request.model.provider}/${request.model.id}`);
+  model = applyModelCompletionBudget(model, request.model.maxTokens);
 
   const turnState: TurnState = { id: "turn-0", step: 0 };
   const tools = createTools(request, fetchImpl, turnState, sandbox);
@@ -402,6 +420,7 @@ export async function runPiAgent(
     sessionManager: SessionManager.inMemory(cwd, { id: normalizePiSessionId(request.sessionId) }),
     settingsManager,
   });
+  onSessionReady?.(session);
 
   let turns = 0;
   let terminalEmitted = false;
@@ -485,7 +504,7 @@ export async function runPiAgent(
     const projected = publicSessionEvent(event);
     if (projected) {
       const enriched = enrichToolLifecycleEvent(projected, request);
-      if (event.type === "turn_start" || event.type.startsWith("tool_execution_")) {
+      if (event.type === "turn_start" || event.type === "turn_end" || event.type.startsWith("tool_execution_")) {
         enriched.turn_id = turnState.id;
       }
       enqueueSink(enriched);

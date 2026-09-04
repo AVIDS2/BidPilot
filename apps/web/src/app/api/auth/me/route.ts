@@ -3,7 +3,8 @@ import {
   requestBackend,
   renewSession,
   unavailableResponse,
-  ACCESS_COOKIE
+  ACCESS_COOKIE,
+  REFRESH_COOKIE
 } from '@/lib/backend';
 import { cookies } from 'next/headers';
 
@@ -18,8 +19,22 @@ export async function GET(request: Request) {
           '/auth/me',
           { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } },
           false
-        )
+      )
       : null;
+
+    // The local profile deliberately uses the API's dev fallback when auth is
+    // disabled. Production still requires a browser session cookie.
+    if (
+      !accessToken &&
+      !cookieStore.get(REFRESH_COOKIE)?.value &&
+      process.env.DOCPILOT_AUTH_REQUIRED?.toLowerCase() !== 'true'
+    ) {
+      upstream = await requestBackend(
+        '/auth/me',
+        { headers: { Accept: 'application/json' } },
+        false
+      );
+    }
 
     // A missing or expired access token is an expected refresh boundary, not
     // an unauthenticated browser. Only a definitive refresh rejection clears

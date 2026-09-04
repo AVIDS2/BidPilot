@@ -240,7 +240,9 @@ export function InboxPage() {
     onError: () => toast.error('当前任务无法停止，请稍后重试。')
   });
   const visibleRuns = useMemo(() => {
-    const all = runs.data ?? [];
+    // Child agents are shown in the Agent collaboration panel. Keeping them
+    // out of the inbox prevents a user from opening a synthetic second chat.
+    const all = (runs.data ?? []).filter((run) => !run.parent_run_id);
     if (filter === 'active') return all.filter((run) => ACTIVE_RUN_STATUSES.has(run.status));
     if (filter === 'approval') return all.filter((run) => run.status === 'awaiting_approval');
     if (filter === 'failed') return all.filter((run) => ['failed', 'error'].includes(run.status));
@@ -312,8 +314,8 @@ export function InboxPage() {
                               : '/my-work'
                         }
                       >
-                          <p className='truncate text-sm font-medium'>
-                            {run.latest_event_summary || 'Agent 任务'}
+                        <p className='truncate text-sm font-medium'>
+                          {run.latest_event_summary || 'Agent 任务'}
                         </p>
                         <p className='text-muted-foreground mt-1 truncate text-xs'>
                           {run.project_name || '未关联项目'} · {formatDate(run.created_at)}
@@ -426,6 +428,7 @@ export function MyWorkPage() {
       });
     });
     (runs.data ?? [])
+      .filter((run) => !run.parent_run_id)
       .filter((run) => ['awaiting_approval', 'failed'].includes(run.status))
       .forEach((run) => {
         items.push({

@@ -10,18 +10,13 @@ import {
   FolderKanbanIcon,
   Globe2Icon,
   Layers3Icon,
+  PanelRightIcon,
   SparklesIcon,
   WorkflowIcon
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -60,6 +55,7 @@ const EMPTY_PROJECTS: ProjectRead[] = [];
 interface AgentEnvironmentPanelProps {
   currentProjectId?: string | null;
   onOpenProject?: (projectId: string) => void;
+  onOpenSubagents?: (parentRunId: string) => void;
   onOpenRun: (run: RuntimeRunListItem) => void;
 }
 
@@ -102,17 +98,26 @@ function statusVariant(status: string): 'default' | 'secondary' | 'outline' | 'd
 
 function ActiveRunRow({
   run,
-  onOpen
+  onOpen,
+  onOpenSubagents
 }: {
   run: RuntimeRunListItem;
   onOpen: (run: RuntimeRunListItem) => void;
+  onOpenSubagents?: (parentRunId: string) => void;
 }) {
   const isLive = ACTIVE_STATUSES.has(run.status);
+  const opensSubagents = run.kind === 'subagent' && Boolean(onOpenSubagents);
   return (
     <Button
       aria-label={`${runLabel(run)}${run.latest_event_summary ? `：${run.latest_event_summary}` : ''}`}
       className='h-auto w-full justify-start gap-2.5 px-2.5 py-2 text-left'
-      onClick={() => onOpen(run)}
+      onClick={() => {
+        if (opensSubagents) {
+          onOpenSubagents?.(run.parent_run_id || run.id);
+          return;
+        }
+        onOpen(run);
+      }}
       size='sm'
       variant='ghost'
     >
@@ -135,7 +140,11 @@ function ActiveRunRow({
           {run.latest_event_summary || run.project_name || '后台工作'}
         </span>
       </span>
-      {isLive ? <ChevronRightIcon className='size-3.5 shrink-0 text-muted-foreground' /> : null}
+      {opensSubagents ? (
+        <PanelRightIcon className='size-3.5 shrink-0 text-muted-foreground' />
+      ) : isLive ? (
+        <ChevronRightIcon className='size-3.5 shrink-0 text-muted-foreground' />
+      ) : null}
     </Button>
   );
 }
@@ -173,6 +182,7 @@ function ProjectRow({
 export function AgentEnvironmentPanel({
   currentProjectId,
   onOpenProject,
+  onOpenSubagents,
   onOpenRun
 }: AgentEnvironmentPanelProps) {
   const runsQuery = useQuery<RuntimeRunListItem[]>({
@@ -268,7 +278,12 @@ export function AgentEnvironmentPanel({
             ) : activeRuns.length ? (
               <div className='flex flex-col gap-1'>
                 {activeRuns.slice(0, 8).map((run) => (
-                  <ActiveRunRow key={run.id} onOpen={onOpenRun} run={run} />
+                  <ActiveRunRow
+                    key={run.id}
+                    onOpen={onOpenRun}
+                    onOpenSubagents={onOpenSubagents}
+                    run={run}
+                  />
                 ))}
               </div>
             ) : (
@@ -294,7 +309,12 @@ export function AgentEnvironmentPanel({
                 </div>
                 <div className='flex flex-col gap-1'>
                   {completedRuns.slice(0, 3).map((run) => (
-                    <ActiveRunRow key={run.id} onOpen={onOpenRun} run={run} />
+                    <ActiveRunRow
+                      key={run.id}
+                      onOpen={onOpenRun}
+                      onOpenSubagents={onOpenSubagents}
+                      run={run}
+                    />
                   ))}
                 </div>
               </section>

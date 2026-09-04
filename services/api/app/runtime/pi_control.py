@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from urllib.parse import quote
 from typing import Any
+from typing import Literal
+from urllib.parse import quote
 
 import httpx
 
@@ -47,7 +48,11 @@ async def request_pi_abort(run_id: str) -> bool:
     """Ask the active Pi AgentSession to abort through its official API."""
 
     sidecar_url = os.getenv("DOCPILOT_PI_AGENT_URL", "http://pi-agent:8787").rstrip("/")
-    secret = (os.getenv("DOCPILOT_PI_INTERNAL_SECRET") or os.getenv("DOCPILOT_JWT_SECRET") or "").strip()
+    secret = (
+        os.getenv("DOCPILOT_PI_INTERNAL_SECRET")
+        or os.getenv("DOCPILOT_JWT_SECRET")
+        or ""
+    ).strip()
     if not secret:
         logger.error("Pi abort skipped because the internal secret is unavailable")
         return False
@@ -59,7 +64,9 @@ async def request_pi_abort(run_id: str) -> bool:
                 headers={"authorization": f"Bearer {secret}"},
             )
     except httpx.HTTPError:
-        logger.warning("Pi abort request could not reach the sidecar", extra={"run_id": run_id})
+        logger.warning(
+            "Pi abort request could not reach the sidecar", extra={"run_id": run_id}
+        )
         return False
 
     if response.status_code in {202, 404}:
@@ -67,7 +74,11 @@ async def request_pi_abort(run_id: str) -> bool:
         # durable cancellation state remains authoritative in either case.
         logger.info(
             "Pi abort accepted",
-            extra={"run_id": run_id, "sidecar_url": sidecar_url, "status_code": response.status_code},
+            extra={
+                "run_id": run_id,
+                "sidecar_url": sidecar_url,
+                "status_code": response.status_code,
+            },
         )
         return True
     logger.warning(
@@ -77,9 +88,48 @@ async def request_pi_abort(run_id: str) -> bool:
     return False
 
 
+async def request_pi_message(
+    run_id: str,
+    message: str,
+    *,
+    streaming_behavior: Literal["steer", "followUp"],
+) -> bool:
+    """Deliver a user follow-up through Pi's native active-session queue."""
+
+    sidecar_url = os.getenv("DOCPILOT_PI_AGENT_URL", "http://pi-agent:8787").rstrip("/")
+    secret = (
+        os.getenv("DOCPILOT_PI_INTERNAL_SECRET")
+        or os.getenv("DOCPILOT_JWT_SECRET")
+        or ""
+    ).strip()
+    if not secret:
+        logger.error("Pi message skipped because the internal secret is unavailable")
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.post(
+                f"{sidecar_url}/v1/runs/{quote(run_id, safe='')}/messages",
+                headers={"authorization": f"Bearer {secret}"},
+                json={"message": message, "streamingBehavior": streaming_behavior},
+            )
+    except httpx.HTTPError:
+        logger.warning(
+            "Pi message request could not reach the sidecar", extra={"run_id": run_id}
+        )
+        return False
+    if response.status_code == 202:
+        return True
+    logger.info(
+        "Pi message request was not accepted",
+        extra={"run_id": run_id, "status_code": response.status_code},
+    )
+    return False
+
+
 __all__ = [
     "cancel_active_pi_execution",
     "is_pi_execution_active",
+    "request_pi_message",
     "register_pi_execution",
     "request_pi_abort",
     "unregister_pi_execution",

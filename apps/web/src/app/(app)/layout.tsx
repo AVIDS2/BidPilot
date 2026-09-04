@@ -6,9 +6,12 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
   const cookieStore = await cookies();
   const accessToken = cookieStore.get('bidpilot_access_token')?.value;
   const refreshToken = cookieStore.get('bidpilot_refresh_token')?.value;
+  const authRequired = process.env.DOCPILOT_AUTH_REQUIRED?.toLowerCase() === 'true';
   // The access token is intentionally short-lived. Keep the App Router tree
   // mounted when only the refresh cookie remains so /api/auth/me can renew the
   // session instead of turning an ordinary browser refresh into a logout.
-  if (!accessToken && !refreshToken) redirect('/auth/sign-in');
+  // Local development uses the API's documented dev fallback; production sets
+  // authRequired=true and still redirects before rendering the workbench.
+  if (authRequired && !accessToken && !refreshToken) redirect('/auth/sign-in');
   return <AppShell>{children}</AppShell>;
 }

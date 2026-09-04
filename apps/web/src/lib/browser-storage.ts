@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   assistantProviderConfigId: 'bidpilot_assistant_provider_config_id',
   assistantReasoningEffort: 'bidpilot_assistant_reasoning_effort',
   assistantApprovalMode: 'bidpilot_assistant_approval_mode',
+  agentWorkspaceProjectIds: 'bidpilot_agent_workspace_project_ids',
   lastAssistantConversationId: 'bidpilot_last_assistant_conversation_id'
 } as const;
 

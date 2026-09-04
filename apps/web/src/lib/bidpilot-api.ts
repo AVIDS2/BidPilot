@@ -800,6 +800,22 @@ export function listRuntimeChildRuns(runId: string, limit = 20) {
   );
 }
 
+export type AssistantRuntimeMessageDelivery = 'steer' | 'followUp';
+
+export function sendAssistantRuntimeMessage(
+  runId: string,
+  message: string,
+  streamingBehavior: AssistantRuntimeMessageDelivery
+) {
+  return request<{ status: string; run_id: string; streaming_behavior: string }>(
+    `/assistant/runs/${encodeURIComponent(runId)}/messages`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ message, streaming_behavior: streamingBehavior })
+    }
+  );
+}
+
 export function cancelRuntimeWorkflow(runId: string) {
   return request<RuntimeRunRead>(`/runtime/runs/${encodeURIComponent(runId)}/cancel`, {
     method: 'POST'

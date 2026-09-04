@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,7 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.assistant.audit import redact_arguments
 from app.models import RuntimeEvent
-from contracts.runtime import RUNTIME_EVENT_SCHEMA_VERSION, RuntimeEventRecord, RuntimeEventType
+from contracts.runtime import (
+    RUNTIME_EVENT_SCHEMA_VERSION,
+    RuntimeEventRecord,
+    RuntimeEventType,
+)
 
 from .repository import get_runtime_run_for_update
 
@@ -45,6 +50,7 @@ def append_events(
     latest_sequence = db.scalar(
         select(func.max(RuntimeEvent.sequence)).where(RuntimeEvent.run_id == run.id)
     )
+    created_at = datetime.now(UTC).replace(tzinfo=None)
     rows = [
         RuntimeEvent(
             run_id=run.id,
@@ -54,6 +60,9 @@ def append_events(
             public_summary=event.public_summary,
             payload_json=redact_arguments(event.payload),
             schema_version=RUNTIME_EVENT_SCHEMA_VERSION,
+            # Server defaults can be second-precision. Event timestamps are
+            # used to restore Pi's interleaved turns after a refresh.
+            created_at=created_at + timedelta(microseconds=offset),
         )
         for offset, event in enumerate(events, start=1)
     ]
@@ -85,7 +94,9 @@ def publish_events(
     return rows
 
 
-def list_events_after(db: Session, run_id: str, *, after_sequence: int = 0) -> list[RuntimeEvent]:
+def list_events_after(
+    db: Session, run_id: str, *, after_sequence: int = 0
+) -> list[RuntimeEvent]:
     if after_sequence < 0:
         raise ValueError("after_sequence must be non-negative")
     stmt = (
@@ -98,7 +109,12 @@ def list_events_after(db: Session, run_id: str, *, after_sequence: int = 0) -> l
 
 def latest_event_sequence(db: Session, run_id: str) -> int:
     """Return the last durable sequence for a run without reading its payloads."""
-    return db.scalar(select(func.max(RuntimeEvent.sequence)).where(RuntimeEvent.run_id == run_id)) or 0
+    return (
+        db.scalar(
+            select(func.max(RuntimeEvent.sequence)).where(RuntimeEvent.run_id == run_id)
+        )
+        or 0
+    )
 
 
 def to_contract_event(event: RuntimeEvent) -> RuntimeEventRecord:

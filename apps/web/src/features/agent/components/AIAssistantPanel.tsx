@@ -23,6 +23,7 @@ import {
   MoreHorizontalIcon,
   PencilIcon,
   ArrowUpIcon,
+  Clock3Icon,
   FileIcon,
   FileTextIcon,
   FolderOpenIcon,
@@ -1248,6 +1249,7 @@ export function AIAssistantPanel({
     state,
     close,
     sendMessage,
+    sendRuntimeMessage,
     toggle,
     loadConversation,
     refreshConversations,
@@ -1303,6 +1305,7 @@ export function AIAssistantPanel({
     isStopping ||
     Boolean(state.pendingConfirmation) ||
     Boolean(state.pendingInput);
+  const canSteerCurrentRun = isStreaming && !isStopping;
   const [isDrainingQueue, setIsDrainingQueue] = useState(false);
   const isUploadingAttachments = attachments.some(
     (attachment) => attachment.status === 'uploading'
@@ -1660,6 +1663,29 @@ export function AIAssistantPanel({
     }
   }, [isResponseActive, queuedPrompts, sendMessage]);
 
+  const steerQueuedPrompt = useCallback(
+    async (id?: string) => {
+      if (queueDrainingRef.current || !canSteerCurrentRun || queuedPrompts.length === 0) {
+        return false;
+      }
+      const nextPrompt = queuedPrompts.find((item) => item.id === id) ?? queuedPrompts[0];
+      if (nextPrompt.requestAttachments.length > 0) return false;
+      queueDrainingRef.current = true;
+      setIsDrainingQueue(true);
+      try {
+        const accepted = await sendRuntimeMessage(nextPrompt.prompt, 'steer');
+        if (accepted) {
+          setQueuedPrompts((current) => current.filter((item) => item.id !== nextPrompt.id));
+        }
+        return accepted;
+      } finally {
+        queueDrainingRef.current = false;
+        setIsDrainingQueue(false);
+      }
+    },
+    [canSteerCurrentRun, queuedPrompts, sendRuntimeMessage]
+  );
+
   useEffect(() => {
     if (isResponseActive || queuedPrompts.length === 0) return;
     void drainNextQueuedPrompt();
@@ -1823,12 +1849,14 @@ export function AIAssistantPanel({
                 size='sm'
                 variant='ghost'
                 className='h-7 gap-1 px-2 text-[11px]'
-                disabled={isResponseActive || isDrainingQueue}
-                title={isResponseActive ? '当前任务完成后会自动发送' : '发送队列中的下一条消息'}
-                onClick={() => void drainNextQueuedPrompt()}
+                disabled={isDrainingQueue}
+                title={canSteerCurrentRun ? '使用 Pi 引导当前任务' : '发送队列中的下一条消息'}
+                onClick={() =>
+                  void (canSteerCurrentRun ? steerQueuedPrompt() : drainNextQueuedPrompt())
+                }
               >
                 <SendIcon aria-hidden='true' />
-                发送下一条
+                {canSteerCurrentRun ? '引导当前任务' : '发送下一条'}
               </Button>
             </header>
             <ol>
@@ -1848,6 +1876,20 @@ export function AIAssistantPanel({
                     {queued.displayContent}
                   </Button>
                   <div className='bp-linear-agent-queue-actions'>
+                    {canSteerCurrentRun && queued.requestAttachments.length === 0 ? (
+                      <Button
+                        type='button'
+                        onClick={() => void steerQueuedPrompt(queued.id)}
+                        title='使用 Pi 引导当前任务'
+                        aria-label='引导当前任务'
+                        size='sm'
+                        variant='ghost'
+                        className='h-7 gap-1 px-2 text-[11px]'
+                      >
+                        <SendIcon aria-hidden='true' />
+                        引导
+                      </Button>
+                    ) : null}
                     {index > 0 && (
                       <Button
                         type='button'
@@ -2332,14 +2374,18 @@ export function AIAssistantPanel({
                           size='sm'
                           variant='ghost'
                           className='h-7 gap-1 px-2 text-[11px]'
-                          disabled={isResponseActive || isDrainingQueue}
+                          disabled={isDrainingQueue}
                           title={
-                            isResponseActive ? '当前任务完成后会自动发送' : '发送队列中的下一条消息'
+                            canSteerCurrentRun ? '使用 Pi 引导当前任务' : '发送队列中的下一条消息'
                           }
-                          onClick={() => void drainNextQueuedPrompt()}
+                          onClick={() =>
+                            void (canSteerCurrentRun
+                              ? steerQueuedPrompt()
+                              : drainNextQueuedPrompt())
+                          }
                         >
                           <SendIcon aria-hidden='true' />
-                          发送下一条
+                          {canSteerCurrentRun ? '引导当前任务' : '发送下一条'}
                         </Button>
                       </div>
                     )}
@@ -2359,17 +2405,50 @@ export function AIAssistantPanel({
                       {queuedPrompts.map((queued) => (
                         <div
                           key={queued.id}
-                          className='flex h-16 w-[min(13.5rem,72vw)] shrink-0 items-center gap-2 rounded-2xl border px-2.5 text-xs'
-                          style={{
-                            background: 'color-mix(in oklch, var(--background) 88%, transparent)',
-                            borderColor: 'color-mix(in oklch, var(--border) 72%, transparent)',
-                            color: 'var(--muted-foreground)'
-                          }}
+                          className='flex min-h-16 w-[min(15rem,72vw)] shrink-0 items-center gap-2 rounded-lg border bg-muted/20 px-2.5 text-left text-xs text-muted-foreground'
                         >
-                          <Loader2Icon className='h-4 w-4 shrink-0 animate-spin' />
-                          <span className='min-w-0 truncate'>
-                            {t('panel.queuedPrompt', { defaultValue: 'Queued' })}:{' '}
-                            {queued.displayContent}
+                          <Clock3Icon className='size-4 shrink-0' aria-hidden='true' />
+                          <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                            <span className='text-[10px]'>
+                              {canSteerCurrentRun ? '可引导当前任务' : '待发送'}
+                            </span>
+                            <span className='line-clamp-2 min-w-0 text-foreground'>
+                              {queued.displayContent}
+                            </span>
+                          </span>
+                          <span className='flex shrink-0 items-center gap-0.5'>
+                            {canSteerCurrentRun && queued.requestAttachments.length === 0 ? (
+                              <Button
+                                type='button'
+                                size='icon-sm'
+                                variant='ghost'
+                                aria-label='引导当前任务'
+                                title='使用 Pi 引导当前任务'
+                                onClick={() => void steerQueuedPrompt(queued.id)}
+                              >
+                                <SendIcon aria-hidden='true' />
+                              </Button>
+                            ) : null}
+                            <Button
+                              type='button'
+                              size='icon-sm'
+                              variant='ghost'
+                              aria-label='编辑待发送消息'
+                              title='编辑待发送消息'
+                              onClick={() => handleEditQueuedPrompt(queued.id)}
+                            >
+                              <PencilIcon aria-hidden='true' />
+                            </Button>
+                            <Button
+                              type='button'
+                              size='icon-sm'
+                              variant='ghost'
+                              aria-label='取消待发送消息'
+                              title='取消待发送消息'
+                              onClick={() => handleCancelQueuedPrompt(queued.id)}
+                            >
+                              <XIcon aria-hidden='true' />
+                            </Button>
                           </span>
                         </div>
                       ))}
