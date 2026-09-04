@@ -33,7 +33,14 @@
   expansion, mobile navigation, and mobile viewport reflow. The API focused
   runs use dedicated SQLite databases ending in `_test`; SQLAlchemy reports the
   repository's existing foreign-key-cycle warning while dropping those test
-  tables. No production deployment was performed in this interaction yet.
+  tables.
+- Production promotion then completed from commit `59be3d3` using the full
+  Pi-enabled Compose topology. The remote API, Pi, PostgreSQL, and Redis
+  containers were healthy; Web, Worker, and Worker Beat were running; public
+  Web, public API health, and `/icon.svg` checks returned `200`. The deployment
+  pruned `5.459 GB` of reclaimable Docker build cache. BuildKit retained
+  `3.554 GB` of active cache with `0 B` reclaimable; no images, containers,
+  volumes, or database data were removed.
 
 ## 2026-09-03 production delivery
 
