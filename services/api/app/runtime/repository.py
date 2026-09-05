@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 from fastapi import HTTPException
 from sqlalchemy import and_, false, or_, select
@@ -136,7 +137,12 @@ def list_visible_runtime_runs(
             )
         )
     fetch_limit = min(400, max(limit, limit * 4)) if live_only else limit
-    rows = db.execute(stmt.order_by(RuntimeRun.created_at.desc()).limit(fetch_limit)).all()
+    rows = cast(
+        list[tuple[RuntimeRun, str | None, str | None]],
+        db.execute(stmt.order_by(RuntimeRun.created_at.desc()).limit(fetch_limit))
+        .tuples()
+        .all(),
+    )
     if live_only:
         rows = _filter_live_runtime_rows(db, rows, limit=limit)
     return [

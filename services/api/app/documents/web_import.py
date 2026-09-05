@@ -244,13 +244,19 @@ def download_remote_artifact_to_tempfile(
                 "如需保存公告正文，请明确选择“保存网页正文”。",
                 retryable=False,
             )
+        candidate_filename = filename or response_filename
+        resolved_filename = (
+            _safe_filename(candidate_filename)
+            if candidate_filename
+            else _filename_from_url(final_url)
+        )
         return DownloadedRemoteArtifact(
             file_path=temp_path,
             byte_count=total,
             checksum=checksum.hexdigest(),
             signature=prefix,
             content_type=response_content_type or "application/octet-stream",
-            filename=_safe_filename(filename or response_filename) if (filename or response_filename) else _filename_from_url(final_url),
+            filename=resolved_filename,
             source_url=final_url,
         )
     except httpx.TimeoutException as exc:

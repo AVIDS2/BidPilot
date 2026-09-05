@@ -426,7 +426,7 @@ async def resume_pi_from_system_wake(
             available_attachments=[],
             attachment_context="",
             active_project_id=source.project_id,
-            pending_input=pending_input_context(db, conversation_id),
+            pending_input=pending_input_context(db, conversation_id) or {},
             approval_mode=str((source.policy_snapshot_json or {}).get("approval_mode") or "risky_only"),
             reasoning_effort=source.reasoning_effort,
             wake_runtime_run_id=source.id,

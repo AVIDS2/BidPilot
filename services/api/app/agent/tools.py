@@ -56,7 +56,7 @@ from app.versions.service import list_versions_query
 from contracts import MemoryKind, MemoryScope
 
 from .policy import ApprovalMode, get_tool_policy, tool_requires_approval
-from .llm import ReasoningEffort
+from app.runtime.model_impl import ReasoningEffort
 
 
 def _normalize_reasoning_effort(value: str | None) -> ReasoningEffort | None:

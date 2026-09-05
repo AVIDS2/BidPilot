@@ -79,6 +79,9 @@ class _PreparedSkillResource:
     body: str
 
 
+PreparedAction = _PreparedCapability | _PreparedMcpTool | _PreparedSkill | _PreparedSkillResource
+
+
 class BidPilotToolExecutor:
     """Translate core tool calls into one governed RuntimeAction each.
 
@@ -120,7 +123,7 @@ class BidPilotToolExecutor:
         self.on_project_bound = on_project_bound
         self.parent_event_id_provider = parent_event_id_provider
         self.preflight_guard = preflight_guard
-        self._prepared: dict[str, _PreparedCapability | _PreparedMcpTool] = {}
+        self._prepared: dict[str, PreparedAction] = {}
         self._successful_mutations: dict[tuple[str, str], HarnessToolOutcome] = {}
 
     async def prepare(

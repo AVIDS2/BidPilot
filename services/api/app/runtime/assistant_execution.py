@@ -47,16 +47,10 @@ def _current_user(row: User) -> CurrentUser:
 
 def _request_from_run(run: RuntimeRun) -> AssistantRequest:
     source = run.input_json if isinstance(run.input_json, dict) else {}
-    names = (
-        source.get("attachment_names")
-        if isinstance(source.get("attachment_names"), list)
-        else []
-    )
-    ids = (
-        source.get("attachment_ids")
-        if isinstance(source.get("attachment_ids"), list)
-        else []
-    )
+    raw_names = source.get("attachment_names")
+    names: list[object] = raw_names if isinstance(raw_names, list) else []
+    raw_ids = source.get("attachment_ids")
+    ids: list[object] = raw_ids if isinstance(raw_ids, list) else []
     attachments = [
         AssistantAttachmentPayload(
             id=str(attachment_id),
@@ -196,7 +190,7 @@ async def execute_queued_assistant_run(
         run.conversation_id,
         exclude_message_id=user_message_id,
     )
-    pending_input = pending_input_context(db, run.conversation_id)
+    pending_input = pending_input_context(db, run.conversation_id) or {}
     # These are additive context sources. Run them concurrently with separate
     # DB ownership so a slow optional provider cannot delay the other one.
     memory_context, profile_context = await asyncio.gather(

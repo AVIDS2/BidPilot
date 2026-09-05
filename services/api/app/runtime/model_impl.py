@@ -390,9 +390,15 @@ def get_required_tool_choice_llm(llm: BaseChatModel) -> BaseChatModel:
         return llm
 
     client_class = DeepSeekChatOpenAI if is_official_deepseek else ChatOpenAI
+    source_api_key: SecretStr | None = getattr(llm, "openai_api_key", None)
+    if isinstance(source_api_key, str):
+        source_api_key = SecretStr(source_api_key)
+    elif source_api_key is not None and not isinstance(source_api_key, SecretStr):
+        source_api_key = SecretStr(str(source_api_key))
+    source_base_url = str(getattr(llm, "openai_api_base", "") or "")
     return client_class(
-        api_key=llm.openai_api_key,
-        base_url=llm.openai_api_base,
+        api_key=source_api_key,
+        base_url=source_base_url,
         model=model_name,
         streaming=True,
         temperature=0.1 if is_official_deepseek else 0.7,

@@ -861,7 +861,7 @@ def _finish_runtime_run(
             finished_at=finished_at,
         )
     )
-    if claimed.rowcount != 1:
+    if getattr(claimed, "rowcount", 0) != 1:
         # Another request won the terminal transition. Refresh the identity
         # map before deciding whether this is an idempotent duplicate or a
         # genuinely invalid state transition.

@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import CurrentUser
 from app.memory.schemas import MemoryContextRead
 
-from .llm import ReasoningEffort, get_agent_llm
+from app.runtime.model_impl import ReasoningEffort, get_agent_llm
 from .tools import create_tools
 
 logger = logging.getLogger(__name__)

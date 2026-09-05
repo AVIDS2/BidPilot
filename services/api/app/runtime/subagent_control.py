@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import time
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -66,6 +66,7 @@ def _normalize_tasks(arguments: dict[str, Any]) -> tuple[Literal["single", "para
     mode = arguments.get("mode")
     if mode not in {"single", "parallel", "chain"}:
         raise ValueError("subagent_mode_invalid")
+    raw_tasks: list[Any]
     if mode == "single":
         task = str(arguments.get("task") or "").strip()
         if not task:
@@ -73,9 +74,10 @@ def _normalize_tasks(arguments: dict[str, Any]) -> tuple[Literal["single", "para
         raw_tasks = [{"task": task, "agent": arguments.get("agent")}]
     else:
         key = "tasks" if mode == "parallel" else "chain"
-        raw_tasks = arguments.get(key)
-        if not isinstance(raw_tasks, list) or not raw_tasks:
+        raw_tasks_value = arguments.get(key)
+        if not isinstance(raw_tasks_value, list) or not raw_tasks_value:
             raise ValueError("subagent_tasks_required")
+        raw_tasks = cast(list[Any], raw_tasks_value)
     if len(raw_tasks) > MAX_CHILDREN_PER_RUN:
         raise ValueError("subagent_children_limit")
     normalized: list[SubagentTask] = []

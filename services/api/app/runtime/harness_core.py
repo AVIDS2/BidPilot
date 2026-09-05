@@ -436,15 +436,16 @@ class HarnessLoop:
                 # the siblings is started; every model tool call still receives
                 # a result so the next turn has a coherent transcript.
                 prepared = [await self._prepare_call(call, context) for call in calls]
+                outcomes: list[HarnessToolOutcome]
                 if any(outcome is not None for outcome in prepared):
-                    outcomes = tuple(
+                    outcomes = [
                         outcome
                         or HarnessToolOutcome.blocked(
                             "parallel read was not started because another requested read needs attention",
                             error_code="parallel_batch_interrupted",
                         )
                         for outcome in prepared
-                    )
+                    ]
                 else:
                     for call in calls:
                         async for event in self._emit(
@@ -457,8 +458,10 @@ class HarnessLoop:
                             )
                         ):
                             yield event
-                    outcomes = await asyncio.gather(
-                        *(self._execute_call(call, context) for call in calls),
+                    outcomes = list(
+                        await asyncio.gather(
+                            *(self._execute_call(call, context) for call in calls),
+                        )
                     )
                 paused_outcome: HarnessToolOutcome | None = None
                 terminal_failure: HarnessToolOutcome | None = None

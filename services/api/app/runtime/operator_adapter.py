@@ -306,11 +306,11 @@ async def stream_operator_assistant_response(
         emitted_end = False
         try:
             while True:
-                event = await event_queue.get()
-                if event is None:
+                frame = await event_queue.get()
+                if frame is None:
                     break
-                emitted_end = emitted_end or event.startswith("event: assistant.end")
-                yield event
+                emitted_end = emitted_end or frame.startswith("event: assistant.end")
+                yield frame
             await executor_task
         except asyncio.CancelledError:
             if not executor_task.done():
