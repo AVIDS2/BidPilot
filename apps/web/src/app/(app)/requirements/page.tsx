@@ -23,6 +23,16 @@ import {
 } from '@/components/ui/table';
 import { listProjects, listRequirements } from '@/lib/bidpilot-api';
 
+function decodeEmbeddedUrls(value: string) {
+  return value.replace(/(?:mailto:|https?:\/\/)[^\s)\]}，。；;]+/g, (candidate) => {
+    try {
+      return decodeURIComponent(candidate);
+    } catch {
+      return candidate;
+    }
+  });
+}
+
 export default function RequirementsPage() {
   const projects = useQuery({
     queryKey: ['projects'],
@@ -40,9 +50,11 @@ export default function RequirementsPage() {
     refetchOnWindowFocus: true
   });
   const rows =
-    requirements.data?.filter((item) =>
-      `${item.requirement_text} ${item.section_key}`.toLowerCase().includes(search.toLowerCase())
-    ) ?? [];
+    requirements.data
+      ?.map((item) => ({ ...item, displayText: decodeEmbeddedUrls(item.requirement_text) }))
+      .filter((item) =>
+        `${item.displayText} ${item.section_key}`.toLowerCase().includes(search.toLowerCase())
+      ) ?? [];
   return (
     <>
       <PageHeader
@@ -105,27 +117,74 @@ export default function RequirementsPage() {
                 </span>
               </div>
               {rows.length ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>需求</TableHead>
-                      <TableHead>章节</TableHead>
-                      <TableHead>优先级</TableHead>
-                      <TableHead>验证</TableHead>
-                      <TableHead className='text-right'>来源</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  <div className='hidden sm:block'>
+                    <Table className='table-fixed'>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className='w-[55%]'>需求</TableHead>
+                          <TableHead className='w-[16%]'>章节</TableHead>
+                          <TableHead className='w-[10%]'>优先级</TableHead>
+                          <TableHead className='w-[10%]'>验证</TableHead>
+                          <TableHead className='w-[9%] text-right'>来源</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rows.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell className='w-[55%] max-w-0 whitespace-normal'>
+                              <div className='flex items-start gap-3'>
+                                <ListChecks className='text-primary mt-0.5 size-4 shrink-0' />
+                                <span className='[overflow-wrap:anywhere] text-sm leading-6'>
+                                  {item.displayText}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className='text-muted-foreground w-[16%] max-w-0 truncate'>
+                              {item.section_key}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  item.priority === 'critical' || item.priority === 'high'
+                                    ? 'destructive'
+                                    : 'outline'
+                                }
+                              >
+                                {item.priority}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant='outline'>{item.verification_status}</Badge>
+                            </TableCell>
+                            <TableCell className='text-right'>
+                              {item.source_document_id ? (
+                                <Link
+                                  className={buttonVariants({ size: 'sm', variant: 'ghost' })}
+                                  href={`/knowledge?project_id=${item.project_id}`}
+                                >
+                                  查看 <ArrowUpRight data-icon='inline-end' />
+                                </Link>
+                              ) : (
+                                <span className='text-muted-foreground'>—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className='flex flex-col divide-y sm:hidden'>
                     {rows.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className='max-w-xl whitespace-normal'>
-                          <div className='flex items-start gap-3'>
-                            <ListChecks className='text-primary mt-0.5 size-4 shrink-0' />
-                            <span className='text-sm leading-6'>{item.requirement_text}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className='text-muted-foreground'>{item.section_key}</TableCell>
-                        <TableCell>
+                      <div className='flex flex-col gap-3 p-4' key={item.id}>
+                        <div className='flex items-start gap-3'>
+                          <ListChecks className='text-primary mt-0.5 size-4 shrink-0' />
+                          <p className='[overflow-wrap:anywhere] min-w-0 text-sm leading-6'>
+                            {item.displayText}
+                          </p>
+                        </div>
+                        <div className='text-muted-foreground flex flex-wrap items-center gap-2 pl-7 text-xs'>
+                          <span>章节：{item.section_key}</span>
                           <Badge
                             variant={
                               item.priority === 'critical' || item.priority === 'high'
@@ -135,26 +194,20 @@ export default function RequirementsPage() {
                           >
                             {item.priority}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
                           <Badge variant='outline'>{item.verification_status}</Badge>
-                        </TableCell>
-                        <TableCell className='text-right'>
-                          {item.source_document_id ? (
+                          {item.source_document_id && (
                             <Link
                               className={buttonVariants({ size: 'sm', variant: 'ghost' })}
                               href={`/knowledge?project_id=${item.project_id}`}
                             >
-                              查看 <ArrowUpRight data-icon='inline-end' />
+                              查看来源 <ArrowUpRight data-icon='inline-end' />
                             </Link>
-                          ) : (
-                            <span className='text-muted-foreground'>—</span>
                           )}
-                        </TableCell>
-                      </TableRow>
+                        </div>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                </>
               ) : (
                 <div className='p-5'>
                   <EmptyState

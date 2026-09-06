@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cpu, Plus, Server, Trash2 } from 'lucide-react';
+import { CheckCircle2, Cpu, Plus, RefreshCw, Server, Trash2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
@@ -25,9 +25,19 @@ import {
   deleteProviderConfig,
   getPiModelCatalog,
   getPiRuntimeContract,
+  listProviderModels,
   listProviderConfigs,
+  testProviderConnection,
+  type ProviderModelInfo,
   type ProviderConfigCreate
 } from '@/lib/bidpilot-api';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 
 export default function ProviderSettingsPage() {
   const { user } = useAuth();
@@ -42,11 +52,40 @@ export default function ProviderSettingsPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ProviderConfigCreate>({
     provider_type: 'openai',
-    provider_id: 'xiaomi',
+    provider_id: 'mimo',
     api_key: '',
     api_url: '',
     model: '',
     label: '小米 MiMo'
+  });
+  const [modelOptions, setModelOptions] = useState<ProviderModelInfo[]>([]);
+  const [modelDiscoveryMessage, setModelDiscoveryMessage] = useState<string | null>(null);
+  const discover = useMutation({
+    mutationFn: () =>
+      listProviderModels({
+        provider_type: form.provider_type,
+        provider_id: form.provider_id,
+        api_key: form.api_key,
+        api_url: form.api_url
+      }),
+    onSuccess: (result) => {
+      const discovered = result.data.models;
+      setModelOptions(discovered);
+      setModelDiscoveryMessage(result.data.message || null);
+      if (discovered.length === 1) {
+        setForm((current) => ({ ...current, model: discovered[0].id }));
+      }
+    }
+  });
+  const test = useMutation({
+    mutationFn: () =>
+      testProviderConnection({
+        provider_type: form.provider_type,
+        provider_id: form.provider_id,
+        api_key: form.api_key,
+        api_url: form.api_url,
+        model: form.model
+      })
   });
   const create = useMutation({
     mutationFn: createProviderConfig,
@@ -54,6 +93,8 @@ export default function ProviderSettingsPage() {
       await client.invalidateQueries({ queryKey: ['provider-configs'] });
       setOpen(false);
       setForm((current) => ({ ...current, api_key: '' }));
+      setModelOptions([]);
+      setModelDiscoveryMessage(null);
     }
   });
   const remove = useMutation({
@@ -215,6 +256,29 @@ export default function ProviderSettingsPage() {
           >
             <FieldGroup>
               <Field>
+                <FieldLabel htmlFor='provider-type'>协议</FieldLabel>
+                <Select
+                  value={form.provider_type}
+                  onValueChange={(value) => {
+                    setForm((current) => ({
+                      ...current,
+                      provider_type: value as ProviderConfigCreate['provider_type'],
+                      model: ''
+                    }));
+                    setModelOptions([]);
+                    setModelDiscoveryMessage(null);
+                  }}
+                >
+                  <SelectTrigger id='provider-type' className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='openai'>OpenAI 兼容</SelectItem>
+                    <SelectItem value='anthropic'>Anthropic</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
                 <FieldLabel htmlFor='provider-label'>显示名称</FieldLabel>
                 <Input
                   id='provider-label'
@@ -229,7 +293,7 @@ export default function ProviderSettingsPage() {
                   id='provider-id'
                   value={form.provider_id || ''}
                   onChange={(event) => setForm({ ...form, provider_id: event.target.value })}
-                  placeholder='例如 xiaomi'
+                  placeholder='例如 mimo'
                 />
                 <FieldDescription>用于平台模型目录中的供应商标识。</FieldDescription>
               </Field>
@@ -244,12 +308,56 @@ export default function ProviderSettingsPage() {
               </Field>
               <Field>
                 <FieldLabel htmlFor='provider-model'>模型 ID</FieldLabel>
-                <Input
-                  id='provider-model'
-                  value={form.model}
-                  onChange={(event) => setForm({ ...form, model: event.target.value })}
-                  required
-                />
+                <div className='flex items-center gap-2'>
+                  {modelOptions.length ? (
+                    <Select
+                      value={form.model}
+                      onValueChange={(value) =>
+                        setForm((current) => ({ ...current, model: value ?? '' }))
+                      }
+                    >
+                      <SelectTrigger id='provider-model' className='min-w-0 flex-1'>
+                        <SelectValue placeholder='选择模型' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {modelOptions.map((model) => (
+                          <SelectItem key={model.id} value={model.id}>
+                            {model.name && model.name !== model.id
+                              ? `${model.name} · ${model.id}`
+                              : model.id}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id='provider-model'
+                      className='min-w-0 flex-1'
+                      value={form.model}
+                      onChange={(event) => setForm({ ...form, model: event.target.value })}
+                      placeholder='先获取模型，或手动填写模型 ID'
+                      required
+                    />
+                  )}
+                  <Button
+                    type='button'
+                    variant='outline'
+                    onClick={() => discover.mutate()}
+                    disabled={discover.isPending || !form.api_key.trim()}
+                  >
+                    <RefreshCw
+                      data-icon='inline-start'
+                      className={discover.isPending ? 'animate-spin' : undefined}
+                    />
+                    {discover.isPending ? '获取中…' : '获取模型'}
+                  </Button>
+                </div>
+                <FieldDescription>
+                  服务端会请求该供应商的模型目录；密钥不会发送到浏览器以外的第三方。
+                </FieldDescription>
+                {modelDiscoveryMessage && (
+                  <p className='text-muted-foreground text-xs'>{modelDiscoveryMessage}</p>
+                )}
               </Field>
               <Field>
                 <FieldLabel htmlFor='provider-key'>API 密钥</FieldLabel>
@@ -268,6 +376,15 @@ export default function ProviderSettingsPage() {
                 取消
               </Button>
               <Button
+                type='button'
+                variant='outline'
+                onClick={() => test.mutate()}
+                disabled={test.isPending || !form.api_key.trim() || !form.model.trim()}
+              >
+                <CheckCircle2 data-icon='inline-start' />
+                {test.isPending ? '测试中…' : '测试连接'}
+              </Button>
+              <Button
                 type='submit'
                 disabled={create.isPending || !form.api_key.trim() || !form.model.trim()}
               >
@@ -277,6 +394,26 @@ export default function ProviderSettingsPage() {
             {create.error && (
               <p className='text-destructive text-sm' role='alert'>
                 {create.error instanceof Error ? create.error.message : '保存失败'}
+              </p>
+            )}
+            {discover.error && (
+              <p className='text-destructive text-sm' role='alert'>
+                {discover.error instanceof Error ? discover.error.message : '获取模型失败'}
+              </p>
+            )}
+            {test.data?.data && (
+              <p
+                className={
+                  test.data.data.success ? 'text-sm text-emerald-600' : 'text-destructive text-sm'
+                }
+                role='status'
+              >
+                {test.data.data.message}
+              </p>
+            )}
+            {test.error && (
+              <p className='text-destructive text-sm' role='alert'>
+                {test.error instanceof Error ? test.error.message : '连接测试失败'}
               </p>
             )}
           </form>

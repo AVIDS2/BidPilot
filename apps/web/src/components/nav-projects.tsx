@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Icons } from '@/components/icons';
 import {
   DropdownMenu,
@@ -44,7 +45,7 @@ export function NavProjects({
         )}
         {projects.map((item) => (
           <SidebarMenuItem key={item.name}>
-            <SidebarMenuButton render={<a href={item.url} aria-label={item.name} />}>
+            <SidebarMenuButton render={<Link href={item.url} aria-label={item.name} />}>
               <item.icon />
               <span>{item.name}</span>
             </SidebarMenuButton>

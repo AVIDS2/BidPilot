@@ -1,5 +1,32 @@
 # Progress Log
 
+## 2026-09-06 navigation, encoding, and provider discovery repair
+
+- Reproduced the user-reported browser behavior with Playwright instead of
+  treating a successful HTTP response as visual acceptance. The active
+  sidebar already uses Next internal links; the remaining template navigation
+  components that used raw anchors now use `next/link`, and the local Next
+  development host allows both loopback names so HMR failures do not look like
+  application reloads.
+- Fixed requirements-table presentation for URL-encoded source text such as
+  `mailto:` and procurement links. Encoded URL segments are decoded for
+  display, table columns use a stable layout, and long URLs can wrap inside
+  the requirement cell instead of creating a misleading乱码-style overflow.
+- Connected the existing FastAPI `/auth/me/providers/models` contract to the
+  provider form with protocol selection, server-side model discovery, model
+  selection, and connection testing. MiMo now uses its documented `/v1/models`
+  endpoint; the historical `xiaomi` provider ID remains a compatibility alias
+  for `mimo`.
+- Verification: Web Vitest `118 passed`, TypeScript and targeted formatting
+  passed, API Ruff passed, provider-profile contract passed, and Playwright
+  confirmed sidebar navigation changes the URL with one browser navigation
+  entry plus an RSC resource rather than a second document navigation. A
+  local full data screenshot remains dependent on the dedicated API/storage
+  services; the UI was also checked against the seeded local API profile.
+  Desktop and 390px mobile screenshots cover the decoded requirement text,
+  mobile stacked requirement rows, the provider model selector, and the
+  provider connection-success state using a local mock endpoint.
+
 ## 2026-09-06 public repository release closure
 
 - Published the open-source repository as `AVIDS2/BidPilot` with the default

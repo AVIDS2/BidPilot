@@ -33,6 +33,31 @@ def test_mimo_profile_uses_its_documented_api_key_header() -> None:
     assert "Authorization" not in request.headers
 
 
+def test_mimo_profile_supports_documented_model_discovery() -> None:
+    request = resolve_provider_model_list_request(
+        "openai",
+        "mimo",
+        "https://api.xiaomimimo.com/v1",
+        "test-key",
+    )
+
+    assert request is not None
+    assert request.url == "https://api.xiaomimimo.com/v1/models"
+    assert request.headers["api-key"] == "test-key"
+
+
+def test_xiaomi_provider_id_remains_a_mimo_compatibility_alias() -> None:
+    request = resolve_provider_chat_request(
+        "openai",
+        "xiaomi",
+        "https://mimo.example.test/v1",
+        "test-key",
+    )
+
+    assert request.url == "https://mimo.example.test/v1/chat/completions"
+    assert request.headers["api-key"] == "test-key"
+
+
 def test_manual_model_profiles_do_not_probe_an_undocumented_models_endpoint() -> None:
     request = resolve_provider_model_list_request(
         "openai",

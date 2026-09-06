@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Icons } from '@/components/icons';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -54,7 +55,7 @@ export function NavMain({
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton
-                        render={<a href={subItem.url} aria-label={subItem.title} />}
+                        render={<Link href={subItem.url} aria-label={subItem.title} />}
                       >
                         <span>{subItem.title}</span>
                       </SidebarMenuSubButton>

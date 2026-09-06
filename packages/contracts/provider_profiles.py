@@ -183,7 +183,7 @@ PROVIDER_PROFILES: dict[str, ProviderProfile] = {
         default_base_url="https://api.xiaomimimo.com/v1",
         default_model="mimo-v2.5-pro",
         docs_url="https://mimo.mi.com/docs/en-US/api/chat/openai-api",
-        model_discovery="manual",
+        model_discovery="supported",
     ),
     "custom-anthropic": ProviderProfile(
         id="custom-anthropic",
@@ -205,6 +205,11 @@ def get_provider_profile(provider_id: str | None, protocol: str) -> ProviderProf
     """Return a profile validated against the selected transport protocol."""
     normalized_protocol = normalize_provider_protocol(protocol)
     resolved_id = provider_id or default_provider_id(normalized_protocol)
+    # ``xiaomi`` was used by an earlier Pi-facing configuration path. Keep it
+    # as a read/write compatibility alias while the product profile remains
+    # ``mimo`` everywhere user-facing.
+    if resolved_id == "xiaomi":
+        resolved_id = "mimo"
     profile = PROVIDER_PROFILES.get(resolved_id)
     if profile is None:
         raise ProviderProfileError("provider_profile_invalid", "Unknown provider profile")
