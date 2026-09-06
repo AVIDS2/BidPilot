@@ -35,6 +35,10 @@ jobs:
       DOCPILOT_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
       DOCPILOT_TEST_DATABASE_URL: postgresql://docpilot:docpilot123@localhost:5432/docpilot_test
       DOCPILOT_REDIS_URL: redis://localhost:6379/0
+      DOCPILOT_MINIO_ENDPOINT: localhost:9000
+      DOCPILOT_MINIO_ACCESS_KEY: docpilot
+      DOCPILOT_MINIO_SECRET_KEY: docpilot123
+      DOCPILOT_MINIO_SECURE: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -43,6 +47,18 @@ jobs:
       - run: pip install uv
       - name: Install workspace deps
         run: uv sync --all-packages --locked
+      - name: Start MinIO for object-storage tests
+        run: |
+          docker run --detach --rm --name docpilot-minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=docpilot \
+            -e MINIO_ROOT_PASSWORD=docpilot123 \
+            minio/minio:RELEASE.2025-01-20T14-49-07Z server /data
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:9000/minio/health/live && exit 0
+            sleep 1
+          done
+          echo "MinIO did not become healthy" >&2
+          exit 1
       - name: Lint
         working-directory: services/api
         run: uv run --locked --no-sync ruff check app/ tests/

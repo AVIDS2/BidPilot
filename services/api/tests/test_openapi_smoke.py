@@ -10,9 +10,13 @@ def test_openapi_schema_available() -> None:
     assert "paths" in response.json()
 
 
-def test_openapi_exposes_one_assistant_execution_path() -> None:
+def test_openapi_exposes_the_assistant_execution_contract() -> None:
     paths = app.openapi()["paths"]
     assistant_paths = {path for path in paths if path.startswith("/assistant")}
 
-    assert assistant_paths == {"/assistant/attachments", "/assistant/stream"}
+    assert {
+        "/assistant/attachments",
+        "/assistant/stream",
+        "/assistant/runs/{run_id}/messages",
+    }.issubset(assistant_paths)
     assert not any("operator" in path for path in paths)
