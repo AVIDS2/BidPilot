@@ -23,7 +23,7 @@
   <img src="https://img.shields.io/badge/Pi-native%20agent-111827.svg" alt="Pi native agent" />
 </p>
 
-> **当前状态**：BidPilot 的个人面试展示版已经部署到公网，支持真实登录、项目创建、资料上传、解析索引、证据检索、MiMo 起草、人工审核和 DOCX/PDF 导出。本仓库是一个可运行的 controlled pilot / interview-grade reference implementation，不把演示版包装成已经完成企业商业 GA 的 SaaS。本次公开发布会先清理 Git 历史中的旧凭据形状值，再发布经过复扫的 `master`。
+> **当前状态**：BidPilot 的个人面试展示版已经部署到公网，支持真实登录、项目创建、资料上传、解析索引、证据检索、MiMo 起草、人工审核和 DOCX/PDF 导出。本仓库是一个可运行的 controlled pilot / interview-grade reference implementation，不把演示版包装成已经完成企业商业 GA 的 SaaS。公开 `master` 已完成历史凭据形状清理、复扫和 CI 验收。
 
 ## 为什么是 BidPilot
 
@@ -240,7 +240,7 @@ uv run --directory services/worker pytest -q
 python scripts/production_readiness.py --target production
 ```
 
-最近一次发布前验证记录：Web 单元测试 `118/118`，Worker 全套测试 `205/205`，Pi package tests `12` 通过；Web typecheck、Next production build、Worker Ruff 和生产 readiness/migration/checkpoint 也通过。严格 lint 仍需结合 CI 里已有的历史 warning 清单阅读，不能把“局部 lint 通过”写成全仓库零 warning。
+2026-09-06 公开发布验收：API `862 passed / 60 skipped / 27 warnings`，Worker `205 passed`，Web `118 passed`，Pi package tests 通过；Web typecheck、Next production build、依赖审计、API/Worker Ruff、migrations 和 migration health 也通过。严格 lint 仍需结合 CI 里已有的历史 warning 清单阅读，不能把“局部 lint 通过”写成全仓库零 warning。
 
 面试验收建议严格走这条路径：
 
@@ -268,7 +268,7 @@ python scripts/production_readiness.py --target production
 
 ## 安全与密钥审计
 
-### 本次审计结论（2026-09-04）
+### 公开发布审计结论（2026-09-06）
 
 在准备公开 README 时，对当前 Git 工作树、已跟踪文件和 Git 历史做了密钥形状扫描，并对本地已配置的 MiMo、OpenRouter 和 Supabase 凭据做了“不输出值”的历史精确匹配检查。结论分为两部分：
 
@@ -278,7 +278,7 @@ python scripts/production_readiness.py --target production
 - 跟踪的 secret-shaped 文件只有 `.env.production.example` 和 `services/api/.env.example`，它们使用示例/占位值；真实 `.env`、备份、数据库 dump、bundle 和临时文件均不在 Git 跟踪范围；
 - 用户提供过的 provider key、Supabase Management PAT 和生产 `.env` 没有写入本 README，也没有写入代码或文档。
 
-**本次发布处理**：公开 refs 会移除早期开发文档中的旧 provider key 形状值，并在 force-push 前重新扫描当前树和完整公开历史。provider 控制台的撤销/轮换状态无法通过本仓库权限验证；拥有该 provider 账户的人仍必须确保历史值已撤销。只删除当前文件或新增 `.gitignore` 不会清理 Git 历史。
+**本次发布处理**：公开 refs 已移除早期开发文档中的旧 provider key 形状值，并在 force-push 前重新扫描当前树和完整公开历史。provider 控制台的撤销/轮换状态无法通过本仓库权限验证；拥有该 provider 账户的人仍必须确保历史值已撤销。只删除当前文件或新增 `.gitignore` 不会清理 Git 历史。
 
 “没有进入当前工作树”不等于“没有暴露”。任何曾经出现在聊天、截图、终端、CI 日志、浏览器录屏或共享机器上的凭据，在把仓库设为公开前都应撤销并重新生成。
 
@@ -291,7 +291,7 @@ python scripts/production_readiness.py --target production
 - 项目访问、审核、导出和配额由 FastAPI/Worker 服务端裁决；
 - 日志和用户界面只展示稳定的公开错误类别，不回显原始 provider payload、密钥、数据库 DSN 或内部工具参数。
 
-这是一次性发布前审计，不替代开源后的持续 secret scanning。历史清理完成并通过复扫后，公开 `master` 才是本次发布的安全门槛。发现安全问题请不要开公开 Issue，按照 [`SECURITY.md`](SECURITY.md) 的私下报告流程提交。
+这是一次性发布审计，不替代开源后的持续 secret scanning。公开 `master` 已通过本次历史清理和复扫安全门槛；发现安全问题请不要开公开 Issue，按照 [`SECURITY.md`](SECURITY.md) 的私下报告流程提交。
 
 ## 当前边界，诚实地说
 
@@ -313,7 +313,7 @@ python scripts/production_readiness.py --target production
 4. 为行为变更补测试，并在 PR 中写清复现步骤和验收证据；
 5. 不提交自动生成但未经理解和验证的批量代码。
 
-本仓库的原始 BidPilot 代码使用 MIT License。前端复用的 Kiranism dashboard、ixartz landing composition 和 Wasp Open SaaS 相关结构分别保留其上游归属与许可证，见 [`apps/web/THIRD_PARTY_NOTICES.md`](apps/web/THIRD_PARTY_NOTICES.md)。完成历史凭据清理后，再将仓库切换为公开可见。
+本仓库的原始 BidPilot 代码使用 MIT License。前端复用的 Kiranism dashboard、ixartz landing composition 和 Wasp Open SaaS 相关结构分别保留其上游归属与许可证，见 [`apps/web/THIRD_PARTY_NOTICES.md`](apps/web/THIRD_PARTY_NOTICES.md)。仓库已公开发布，第三方归属和许可证边界保持不变。
 
 ## License
 

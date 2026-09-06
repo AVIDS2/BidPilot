@@ -45,7 +45,7 @@ through a private channel before publishing technical details.
 
 ## Public release audit status
 
-The 2026-09-04 release audit found no current-environment credential match in
+The 2026-09-06 release audit found no current-environment credential match in
 the working tree or in the history selected for publication. An old
 provider-key-shaped value existed in early development documentation and was
 removed from the public refs during the release history rewrite. The value did

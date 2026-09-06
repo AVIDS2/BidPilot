@@ -1,5 +1,28 @@
 # Progress Log
 
+## 2026-09-06 public repository release closure
+
+- Published the open-source repository as `AVIDS2/BidPilot` with the default
+  branch `master`, MIT metadata, the public demo homepage, root `README.md`,
+  `LICENSE`, and `SECURITY.md`. The public history rewrite leaves only
+  `master`; the final public mirror scan found zero key-shaped matches in
+  history or the tip tree and zero unreachable objects after garbage
+  collection.
+- Fixed the first public CI blockers without changing Agent behavior: added
+  the frontend SVG module declaration, made the API runtime type boundaries
+  explicit, and aligned legacy compatibility imports with the canonical model
+  implementation. The CI API job now starts the same MinIO test profile used
+  by the deployment compose, so DOCX/PDF and end-to-end export tests exercise
+  real object storage instead of silently skipping that boundary.
+- Updated the OpenAPI smoke contract for the durable Assistant follow-up
+  endpoint `/assistant/runs/{run_id}/messages`; this is a real runtime surface,
+  not a second Agent execution engine.
+- Final public GitHub Actions run passed: API `862 passed / 60 skipped / 27
+  warnings`, Worker `205 passed`, Web `118 passed`, Pi package tests, typecheck,
+  production build, dependency audit, migrations and readiness checks. The
+  deployed public web, API health, and API readiness endpoints each returned
+  HTTP 200.
+
 ## 2026-09-04 project-first workflow closure and public acceptance
 
 - Prepared the repository for public open-source presentation. The root README
