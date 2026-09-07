@@ -27,6 +27,17 @@
   mobile stacked requirement rows, the provider model selector, and the
   provider connection-success state using a local mock endpoint.
 
+## 2026-09-07 authenticated client navigation and cache continuity repair
+
+- Root cause was not a browser document reload: Next was performing an RSC
+  navigation, but `AuthProvider` temporarily changed an already authenticated
+  workbench to `loading` on every pathname change, while the only loading
+  boundary was root-level and replaced the whole viewport with a skeleton.
+- Authenticated route changes now keep the AppShell mounted and use an
+  `(app)`-scoped content loading boundary. React Query's browser client and
+  its existing 60-second query cache remain alive across sidebar navigation,
+  so cached page data renders immediately while a background refresh may run.
+
 ## 2026-09-06 public repository release closure
 
 - Published the open-source repository as `AVIDS2/BidPilot` with the default

@@ -155,8 +155,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [needsSession, pathname, refresh, user]);
 
+  // A pathname change inside the authenticated workbench is a client
+  // transition, not a new session check. Keep the shell mounted while the
+  // App Router streams the next page and let React Query render cached data.
   const visibleStatus: AuthStatus =
-    needsSession && checkedPathname !== pathname ? 'loading' : status;
+    status === 'authenticated' && user
+      ? 'authenticated'
+      : needsSession && checkedPathname !== pathname
+        ? 'loading'
+        : status;
 
   const login = useCallback(
     async (email: string, password: string, turnstileToken?: string | null) => {
