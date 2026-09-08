@@ -108,7 +108,7 @@ export default function ReviewsPage() {
             <Card>
               <CardHeader className='flex flex-col gap-3 border-b sm:flex-row sm:items-start sm:justify-between'>
                 <div>
-                  <h2 className='font-medium'>需求审核队列</h2>
+                  <h2 className='font-medium'>待审核需求</h2>
                   <p className='text-muted-foreground mt-1 text-sm'>
                     按当前项目返回的真实协作看板。
                   </p>

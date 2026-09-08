@@ -276,8 +276,8 @@
     "closeHistory": "关闭历史会话",
     "renameConversation": "重命名会话",
     "renameConversationHint": "双击重命名",
-    "enterToQueue": "回车排队",
-    "queuedPrompt": "已排队",
+    "enterToQueue": "回车暂存",
+    "queuedPrompt": "已暂存",
     "running": "运行中"
   },
   "history": {

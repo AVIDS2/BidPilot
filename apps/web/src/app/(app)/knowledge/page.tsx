@@ -50,7 +50,7 @@ export default function KnowledgePage() {
     mutationFn: () => startMemoryCompilation({ project_id: projectId }),
     onSuccess: () => {
       void portfolio.refetch();
-      toast.success('项目记忆编译已加入工作队列。');
+      toast.success('知识库正在更新，完成后会显示在这里。');
     },
     onError: () => toast.error('项目记忆暂时无法编译，请先确认资料已经处理完成。')
   });

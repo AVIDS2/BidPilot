@@ -429,7 +429,7 @@ function statusLabel(value: string) {
       {
         active: '进行中',
         running: '运行中',
-        queued: '排队中',
+        queued: '准备中',
         pending: '等待中',
         awaiting_approval: '等待审批',
         awaiting_input: '需要补充信息',

@@ -5,7 +5,7 @@
   "metrics": {
     "projects": "可访问项目",
     "sharedKnowledge": "共享知识条目",
-    "reviewQueue": "待审核队列"
+    "reviewQueue": "待审核事项"
   },
   "filters": {
     "all": "全部",
@@ -28,7 +28,7 @@
   "emptyFilterTitle": "没有符合此筛选条件的项目",
   "emptyFilterDescription": "切换筛选条件，或进入项目建立受治理的知识资产。",
   "compilationStatuses": {
-    "queued": "已进入编译队列",
+    "queued": "正在准备编译",
     "running": "正在编译",
     "succeeded": "已编译",
     "failed": "编译失败",

@@ -1187,3 +1187,14 @@
   isolation probe passed. Runtime pytest remained gated because the repository
   requires an explicitly configured dedicated PostgreSQL database ending in
   `_test`; no business database was substituted.
+### 2026-09-07: stabilize authenticated client navigation
+
+- Root cause: the authenticated sidebar allowed Next.js to prefetch every visible route, producing a burst of RSC requests on the low-resource VPS. When one client navigation response was interrupted, the nested app loading boundary replaced the content area with a large skeleton even though the shell, session, and API were healthy.
+- Change: authenticated sidebar links now use `prefetch={false}` so navigation remains an intentional client transition; the current content remains visible until the target RSC payload arrives. The route-level app loading fallback was removed to avoid presenting a misleading full content skeleton during a transient network interruption.
+- Acceptance: verify one client navigation request per sidebar click, no route-prefetch burst, shell/sidebar persistence, and no console errors in Playwright at desktop and mobile widths before public deployment.
+
+### 2026-09-08: make extracted requirements and status copy user-facing
+
+- Requirement text now decodes percent-encoded URL segments independently, tolerates malformed fragments, and renders web/mail sources as readable links instead of exposing raw `%E6...` sequences.
+- Customer-facing status copy no longer exposes queue terminology: processing, preparation, review, and delivery surfaces use terms such as `准备中`, `处理中`, `待审核事项`, and `待发送消息`; backend status values remain unchanged for contracts and reconciliation.
+- Added focused coverage for mixed encoded URLs and clickable source links in `apps/web/src/app/(app)/requirements/requirement-text.test.tsx`.

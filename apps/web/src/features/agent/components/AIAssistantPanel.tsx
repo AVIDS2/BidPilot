@@ -1838,7 +1838,7 @@ export function AIAssistantPanel({
           </div>
         )}
         {queuedPrompts.length > 0 && (
-          <section className='bp-linear-agent-queue' aria-label='待发送队列'>
+          <section className='bp-linear-agent-queue' aria-label='待发送消息'>
             <header>
               <span className='flex items-center gap-1.5'>
                 <span>待发送</span>
@@ -1850,7 +1850,7 @@ export function AIAssistantPanel({
                 variant='ghost'
                 className='h-7 gap-1 px-2 text-[11px]'
                 disabled={isDrainingQueue}
-                title={canSteerCurrentRun ? '使用 Pi 引导当前任务' : '发送队列中的下一条消息'}
+                title={canSteerCurrentRun ? '使用 Pi 引导当前任务' : '发送下一条消息'}
                 onClick={() =>
                   void (canSteerCurrentRun ? steerQueuedPrompt() : drainNextQueuedPrompt())
                 }
@@ -1894,8 +1894,8 @@ export function AIAssistantPanel({
                       <Button
                         type='button'
                         onClick={() => handlePrioritizeQueuedPrompt(queued.id)}
-                        title='移到队列最前'
-                        aria-label='移到队列最前'
+                        title='优先处理'
+                        aria-label='优先处理'
                         size='icon-xs'
                         variant='ghost'
                       >
@@ -1974,8 +1974,7 @@ export function AIAssistantPanel({
               onAddFromProject={handleAddFromProject}
             />
             <span className='bp-linear-agent-keyhint'>
-              <CornerDownLeftIcon size={13} />{' '}
-              {isResponseActive ? 'Enter to queue' : 'Enter to send'}
+              <CornerDownLeftIcon size={13} /> {isResponseActive ? '回车暂存' : '回车发送'}
             </span>
           </div>
           <div className='bp-linear-agent-composer-right'>
@@ -2375,9 +2374,7 @@ export function AIAssistantPanel({
                           variant='ghost'
                           className='h-7 gap-1 px-2 text-[11px]'
                           disabled={isDrainingQueue}
-                          title={
-                            canSteerCurrentRun ? '使用 Pi 引导当前任务' : '发送队列中的下一条消息'
-                          }
+                          title={canSteerCurrentRun ? '使用 Pi 引导当前任务' : '发送下一条消息'}
                           onClick={() =>
                             void (canSteerCurrentRun
                               ? steerQueuedPrompt()
@@ -2582,7 +2579,7 @@ export function AIAssistantPanel({
                         <CornerDownLeftIcon className='w-3 h-3' />{' '}
                         {isResponseActive
                           ? t('panel.enterToQueue', {
-                              defaultValue: 'Enter queues'
+                              defaultValue: 'Enter to hold'
                             })
                           : t('panel.enterToSend')}
                       </>

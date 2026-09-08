@@ -55,7 +55,9 @@ export function NavMain({
                   {item.items?.map((subItem) => (
                     <SidebarMenuSubItem key={subItem.title}>
                       <SidebarMenuSubButton
-                        render={<Link href={subItem.url} aria-label={subItem.title} />}
+                        render={
+                          <Link href={subItem.url} prefetch={false} aria-label={subItem.title} />
+                        }
                       >
                         <span>{subItem.title}</span>
                       </SidebarMenuSubButton>

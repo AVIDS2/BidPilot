@@ -73,7 +73,7 @@
     "approved": "已批准",
     "rejected": "已拒绝",
     "pending": "待处理",
-    "queued": "排队中",
+    "queued": "准备中",
     "processing": "处理中",
     "running": "运行中",
     "awaiting_approval": "待审批",

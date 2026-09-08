@@ -125,7 +125,7 @@ function statusLabel(value: string) {
   return (
     (
       {
-        queued: '排队中',
+        queued: '准备中',
         running: '运行中',
         awaiting_approval: '等待审批',
         awaiting_input: '需要补充信息',
@@ -266,7 +266,7 @@ export function InboxPage() {
         <Card>
           <CardHeader className='gap-4 border-b sm:flex-row sm:items-center sm:justify-between'>
             <div>
-              <CardTitle>处理队列</CardTitle>
+              <CardTitle>任务进展</CardTitle>
               <CardDescription>只显示当前账户有权限查看的真实运行。</CardDescription>
             </div>
             <Tabs value={filter} onValueChange={(value) => setFilter(value as RunFilter)}>
@@ -974,7 +974,7 @@ export function RadarPage() {
               <CardHeader className='gap-4 border-b'>
                 <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
                   <div>
-                    <CardTitle>机会队列</CardTitle>
+                    <CardTitle>机会列表</CardTitle>
                     <CardDescription>每条机会都保留来源、匹配理由和后续动作。</CardDescription>
                   </div>
                   <div className='relative w-full sm:max-w-xs'>
@@ -1436,9 +1436,9 @@ function AdministrationContent() {
               <CardContent className='grid gap-4 sm:grid-cols-3'>
                 <RuntimeMetric
                   icon={Clock3}
-                  label='排队运行'
+                  label='准备中的任务'
                   value={runtimeSummary.data?.queue_depth ?? '—'}
-                  detail='服务端队列中的任务'
+                  detail='等待开始处理的任务'
                 />
                 <RuntimeMetric
                   icon={AlertCircle}

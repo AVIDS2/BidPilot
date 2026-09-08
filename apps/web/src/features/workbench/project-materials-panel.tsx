@@ -78,7 +78,7 @@ function bundleStatusLabel(status: string) {
       {
         awaiting_upload: '等待上传',
         ready_to_ingest: '等待处理',
-        queued: '排队中',
+        queued: '准备处理',
         running: '解析中',
         indexing: '建立索引',
         ingested: '已完成',
@@ -97,7 +97,7 @@ function documentStatusLabel(status: string) {
         parsed: '已解析',
         failed: '解析失败',
         not_applicable: '无需解析',
-        queued: '排队中',
+        queued: '准备处理',
         indexed: '已入库'
       } as Record<string, string>
     )[status] || status
@@ -158,7 +158,7 @@ export function ProjectMaterialsPanel({
         client.invalidateQueries({ queryKey: ['requirements', projectId] }),
         client.invalidateQueries({ queryKey: ['knowledge-portfolio'] })
       ]);
-      toast.success('资料处理已重新排队。');
+      toast.success('资料已重新开始处理。');
     },
     onError: () => toast.error('资料暂时无法重新处理，请稍后重试。')
   });
@@ -304,7 +304,7 @@ function BundleDocuments({
         {canProcess ? (
           <LoadingButton
             loading={processing}
-            loadingLabel='正在排队'
+            loadingLabel='正在准备处理'
             onClick={onProcess}
             size='xs'
             variant='outline'

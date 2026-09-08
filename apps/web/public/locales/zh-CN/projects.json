@@ -355,7 +355,7 @@
     "graphExtractionTitle": "实体关系提案",
     "graphExtractionHint": "只基于这条已启用知识及其来源生成待审核提案，不会自动写入图谱或智能体上下文。",
     "extractGraph": "生成实体关系提案",
-    "graphExtractionQueued": "实体关系提案已进入运行队列",
+    "graphExtractionQueued": "实体关系提案已开始处理",
     "graphExtractionAlreadyQueued": "这条知识的实体关系提案已在处理或可审核",
     "graphExtractionFailed": "无法启动实体关系提案生成",
     "graphProposalTitle": "待审核实体关系",
@@ -406,12 +406,12 @@
       "references": "引用",
       "submitted_by": "由其提交"
     },
-    "compilationQueued": "Bid Wiki 编译任务已排队",
+    "compilationQueued": "Bid Wiki 编译任务已开始处理",
     "compilationFailed": "无法启动 Bid Wiki 编译",
     "compilationProgress": "正在整理 {{count}} 份已解析源资料。",
     "compilationFinished": "已生成 {{count}} 条可审核建议。",
     "compilationStates": {
-      "queued": "Bid Wiki 编译已排队",
+      "queued": "Bid Wiki 编译已开始处理",
       "running": "正在生成可审核建议",
       "succeeded": "建议已可审核",
       "failed": "编译失败",

@@ -263,7 +263,7 @@ function RemoteDocumentImport({ item }: { item: AssistantExecutionItem }) {
       <header>
         <span>
           <FileCheck2Icon size={14} />
-          {queued ? '后台导入已排队' : '已加入项目资料包'}
+          {queued ? '后台导入已开始' : '已加入项目资料包'}
         </span>
         <small
           className={queued || storedWithoutParsing || parsingQueued ? 'is-ready' : 'is-attention'}

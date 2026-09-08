@@ -84,7 +84,7 @@ function runStatusLabel(status: string) {
     (
       {
         pending: '等待处理',
-        queued: '排队中',
+        queued: '准备起草',
         running: '执行中',
         awaiting_human: '等待审核',
         succeeded: '已完成',
@@ -170,7 +170,7 @@ export function ProjectResponsePanel({
     },
     onSuccess: async () => {
       await refresh();
-      toast.success('章节起草已加入工作队列。');
+      toast.success('章节起草已开始，完成后会显示在这里。');
     },
     onError: () => toast.error('章节暂时无法起草，请先确认资料已经处理完成。')
   });
@@ -487,7 +487,7 @@ export function ProjectResponsePanel({
                           </EmptyHeader>
                           <LoadingButton
                             loading={draftPending}
-                            loadingLabel='正在加入队列'
+                            loadingLabel='正在准备起草'
                             onClick={() => draftMutation.mutate({ section })}
                             size='sm'
                           >

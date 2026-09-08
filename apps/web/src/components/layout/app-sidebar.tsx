@@ -45,7 +45,7 @@ export default function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton
-                      render={<Link href={item.url} aria-label={item.title} />}
+                      render={<Link href={item.url} prefetch={false} aria-label={item.title} />}
                       tooltip={item.title}
                       isActive={active}
                       onClick={() => {

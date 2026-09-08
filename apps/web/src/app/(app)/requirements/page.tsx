@@ -22,16 +22,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { listProjects, listRequirements } from '@/lib/bidpilot-api';
-
-function decodeEmbeddedUrls(value: string) {
-  return value.replace(/(?:mailto:|https?:\/\/)[^\s)\]}，。；;]+/g, (candidate) => {
-    try {
-      return decodeURIComponent(candidate);
-    } catch {
-      return candidate;
-    }
-  });
-}
+import { decodeEmbeddedUrls, RequirementText } from './requirement-text';
 
 export default function RequirementsPage() {
   const projects = useQuery({
@@ -136,7 +127,7 @@ export default function RequirementsPage() {
                               <div className='flex items-start gap-3'>
                                 <ListChecks className='text-primary mt-0.5 size-4 shrink-0' />
                                 <span className='[overflow-wrap:anywhere] text-sm leading-6'>
-                                  {item.displayText}
+                                  <RequirementText value={item.displayText} />
                                 </span>
                               </div>
                             </TableCell>
@@ -180,7 +171,7 @@ export default function RequirementsPage() {
                         <div className='flex items-start gap-3'>
                           <ListChecks className='text-primary mt-0.5 size-4 shrink-0' />
                           <p className='[overflow-wrap:anywhere] min-w-0 text-sm leading-6'>
-                            {item.displayText}
+                            <RequirementText value={item.displayText} />
                           </p>
                         </div>
                         <div className='text-muted-foreground flex flex-wrap items-center gap-2 pl-7 text-xs'>
