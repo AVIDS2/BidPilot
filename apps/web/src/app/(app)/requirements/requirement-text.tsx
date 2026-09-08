@@ -4,7 +4,7 @@ const EMBEDDED_URL_PATTERN =
   /(?:mailto:|https?:\/\/)[^\s()[\]{}<>，。；;：、！？“”‘’"'（）【】《》]+/gu;
 
 function decodePercentRuns(value: string) {
-  return value.replace(/(?:%[0-9a-f]{2})+/gi, (encoded) => {
+  return value.replace(/(?:%[0-9a-f]{2})+(?:%[0-9a-f]{0,1})?/gi, (encoded) => {
     let rest = encoded;
     let decoded = '';
     while (rest) {
@@ -23,9 +23,8 @@ function decodePercentRuns(value: string) {
       }
       if (consumed) continue;
 
-      // Keep malformed source visible as a replacement character rather than
-      // exposing a long percent-encoded fragment to the user.
-      decoded += '�';
+      // Drop an incomplete byte fragment rather than exposing replacement
+      // characters or a raw percent-encoded tail in the customer UI.
       rest = rest.slice(3);
     }
     return decoded;
@@ -40,7 +39,7 @@ export function decodeEmbeddedUrls(value: string) {
       if (next === decoded) break;
       decoded = next;
     }
-    return decoded;
+    return decoded.replace(/%[0-9a-f]?/gi, '');
   });
 }
 
