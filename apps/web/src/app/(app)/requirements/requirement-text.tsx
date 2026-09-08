@@ -5,11 +5,30 @@ const EMBEDDED_URL_PATTERN =
 
 function decodePercentRuns(value: string) {
   return value.replace(/(?:%[0-9a-f]{2})+/gi, (encoded) => {
-    try {
-      return decodeURIComponent(encoded);
-    } catch {
-      return encoded;
+    let rest = encoded;
+    let decoded = '';
+    while (rest) {
+      let consumed = false;
+      for (let length = rest.length; length >= 3; length -= 3) {
+        const candidate = rest.slice(0, length);
+        try {
+          decoded += decodeURIComponent(candidate);
+          rest = rest.slice(length);
+          consumed = true;
+          break;
+        } catch {
+          // A truncated UTF-8 sequence should not prevent earlier characters
+          // in the same URL from being decoded.
+        }
+      }
+      if (consumed) continue;
+
+      // Keep malformed source visible as a replacement character rather than
+      // exposing a long percent-encoded fragment to the user.
+      decoded += '�';
+      rest = rest.slice(3);
     }
+    return decoded;
   });
 }
 

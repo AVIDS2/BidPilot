@@ -9,6 +9,7 @@ describe('RequirementText', () => {
 
     expect(decodeEmbeddedUrls(value)).toContain('HomeIndex）/”');
     expect(decodeEmbeddedUrls(value)).toContain('mailto:招标@example.com');
+    expect(decodeEmbeddedUrls('来源：http://example.com/%E6%8B%9B%E6%')).not.toContain('%E6');
   });
 
   it('renders decoded web and mail links as links', () => {
