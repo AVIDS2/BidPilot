@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth';
+import { useNotifications } from '@/hooks/use-notifications';
 import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { EmptyState, QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
@@ -368,6 +369,7 @@ export function InboxPage() {
 
 export function MyWorkPage() {
   const router = useRouter();
+  const notificationState = useNotifications({ enabled: true });
   const [scope, setScope] = useState<'all' | 'compliance' | 'approval'>('all');
   const projects = useQuery({
     queryKey: ['projects'],
@@ -402,8 +404,9 @@ export function MyWorkPage() {
       projectName: string;
       title: string;
       detail: string;
+      href: string;
       tone: 'destructive' | 'outline';
-      kind: 'compliance' | 'approval';
+      kind: 'compliance' | 'approval' | 'notification';
     }> = [];
     (projects.data ?? []).forEach((project, index) => {
       const summary = readinessQueries[index]?.data;
@@ -421,6 +424,7 @@ export function MyWorkPage() {
             projectName: project.name,
             title: requirement.requirement_text,
             detail: `${label} · ${requirement.section_key}`,
+            href: `/requirements?project_id=${project.id}`,
             tone: 'destructive',
             kind: 'compliance'
           });
@@ -437,16 +441,39 @@ export function MyWorkPage() {
           projectName: run.project_name || '未关联项目',
           title: run.latest_event_summary || '运行需要处理',
           detail: `${statusLabel(run.status)} · ${formatDate(run.created_at)}`,
+          href: run.project_id
+            ? `/projects/${run.project_id}?tab=response&run=${run.id}`
+            : run.conversation_id
+              ? `/agent?conversation=${run.conversation_id}`
+              : '/my-work',
           tone: run.status === 'failed' ? 'destructive' : 'outline',
           kind: 'approval'
         });
       });
+    notificationState.notifications
+      .filter((notification) => !notification.read)
+      .slice(0, 30)
+      .forEach((notification) => {
+        items.push({
+          id: `notification-${notification.id}`,
+          projectId: '',
+          projectName: '工作提醒',
+          title: notification.title,
+          detail: notification.description || '有一项工作需要你查看。',
+          href: notification.link || '/my-work',
+          tone: 'outline',
+          kind: 'notification'
+        });
+      });
     return items;
-  }, [projects.data, readinessQueries, runs.data]);
+  }, [notificationState.notifications, projects.data, readinessQueries, runs.data]);
   const visibleItems =
     scope === 'all' ? workItems : workItems.filter((item) => item.kind === scope);
   const loading =
-    projects.isPending || runs.isPending || readinessQueries.some((query) => query.isPending);
+    projects.isPending ||
+    runs.isPending ||
+    notificationState.loading ||
+    readinessQueries.some((query) => query.isPending);
   const error = projects.error || runs.error;
   const chartData = useMemo(() => {
     const projectsWithSummary = (projects.data ?? [])
@@ -463,7 +490,10 @@ export function MyWorkPage() {
     readiness: { label: '就绪度', color: 'var(--primary)' }
   } satisfies ChartConfig;
   const isRefreshing =
-    projects.isFetching || runs.isFetching || readinessQueries.some((query) => query.isFetching);
+    projects.isFetching ||
+    runs.isFetching ||
+    readinessQueries.some((query) => query.isFetching) ||
+    notificationState.loading;
   const dataUpdatedAt = Math.max(
     projects.dataUpdatedAt,
     runs.dataUpdatedAt,
@@ -473,6 +503,7 @@ export function MyWorkPage() {
     void Promise.all([
       projects.refetch(),
       runs.refetch(),
+      notificationState.refresh(),
       ...readinessQueries.map((query) => query.refetch())
     ]);
   };
@@ -552,13 +583,7 @@ export function MyWorkPage() {
                       {visibleItems.slice(0, 30).map((item) => (
                         <Link
                           className='hover:bg-muted/40 flex items-center gap-3 px-5 py-4 transition-colors'
-                          href={
-                            item.projectId
-                              ? item.kind === 'compliance'
-                                ? `/requirements?project_id=${item.projectId}`
-                                : `/projects/${item.projectId}?tab=response`
-                              : '/my-work'
-                          }
+                          href={item.href}
                           key={item.id}
                         >
                           <span className='bg-muted flex size-8 shrink-0 items-center justify-center rounded-lg'>
@@ -571,7 +596,11 @@ export function MyWorkPage() {
                             </span>
                           </span>
                           <Badge variant={item.tone}>
-                            {item.kind === 'approval' ? '查看任务' : '处理缺口'}
+                            {item.kind === 'approval'
+                              ? '查看任务'
+                              : item.kind === 'notification'
+                                ? '查看提醒'
+                                : '处理缺口'}
                           </Badge>
                         </Link>
                       ))}

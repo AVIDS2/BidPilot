@@ -63,9 +63,9 @@ both the user and user-scoped assistant entity records.
   ownership.
 - [x] Remove `/runs` from ordinary sidebar navigation; preserve deep links and
   expose recovery links only from failed/interrupted business objects.
-- [x] Remove ordinary `/inbox` from the primary sidebar; the route remains a
-  compatibility/recovery surface until its attention items are merged into
-  `我的工作`.
+- [x] Remove ordinary `/inbox` from the primary sidebar and merge unread
+  notifications into `我的工作`; the route remains a compatibility/recovery
+  surface for direct links.
 - [x] Add a project workspace tab bar and make project links preserve project and
   section context.
 - [x] Replace generic “open Agent” links with contextual action labels such as

@@ -17,6 +17,8 @@
   delivery links scoped to the active project.
 - [x] Add the first project knowledge view with source citations and proposal
   confirmation.
+- [x] Merge unread notifications into `我的工作`; keep `/inbox` only as a
+  compatibility route.
 - [ ] Make project knowledge proposals/review/source drill-down a complete user workflow.
 - [ ] Collapse runtime-shaped pages into `我的工作`, project tabs, and admin/recovery entry points.
 - [ ] Add episodic `工作记录` and procedural `团队方法` projections with scoped retrieval labels.
