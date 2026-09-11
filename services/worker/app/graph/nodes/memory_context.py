@@ -108,6 +108,7 @@ def load_memory_context_node(state: BidPilotState) -> dict:
             query_embedding=embedding.embedding if embedding.is_success else None,
             top_k=_TOP_K,
             max_characters=_MAX_CHARACTERS,
+            include_user_private=user.memory_enabled,
         )
         items: list[MemoryContextEntry] = [
             MemoryContextEntry(

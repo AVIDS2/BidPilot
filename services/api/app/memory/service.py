@@ -17,6 +17,12 @@ from app.audit.service import record_audit_event
 from app.celery_client import celery
 from app.outbox.service import enqueue_workflow_task, request_task_outbox_dispatch
 from app.runtime.service import create_workflow_bridge_run
+from app.memory.mem0_provider import (
+    delete_profile_memory,
+    delete_profile_memory_item,
+    list_profile_memory,
+    mem0_enabled,
+)
 from app.models import (
     AuditEvent,
     Bundle,
@@ -86,6 +92,9 @@ from .schemas import (
     MemoryGraphReviewDecisionCreate,
     MemoryGraphReviewDecisionRead,
     MemoryPortfolioProjectRead,
+    PersonalMemoryClearRead,
+    PersonalMemoryRead,
+    PersonalProfileMemoryRead,
     MemoryRead,
 )
 
@@ -363,6 +372,87 @@ def list_memory_query(
         for record in records
         if record.project_id is None
     ]
+
+
+def list_personal_memory_query(
+    db: Session,
+    current_user: CurrentUser,
+) -> PersonalMemoryRead:
+    local_records = list_memory_query(
+        db,
+        current_user,
+        project_id=None,
+        scope=MemoryScope.USER_PRIVATE,
+        include_proposed=False,
+    )
+    profile_records = [
+        PersonalProfileMemoryRead(
+            id=item.memory_id,
+            text=item.text,
+            score=item.score,
+            categories=item.categories,
+        )
+        for item in (
+            list_profile_memory(user_id=current_user.id, org_id=_org_id(current_user))
+            if mem0_enabled()
+            else []
+        )
+    ]
+    return PersonalMemoryRead(
+        enabled=current_user.memory_enabled,
+        provider_enabled=mem0_enabled(),
+        local_records=local_records,
+        profile_records=profile_records,
+    )
+
+
+def clear_personal_memory_command(
+    db: Session,
+    current_user: CurrentUser,
+) -> PersonalMemoryClearRead:
+    records = list_memory_records(
+        db,
+        org_id=_org_id(current_user),
+        project_id=None,
+        owner_user_id=current_user.id,
+        include_proposed=False,
+        scope=MemoryScope.USER_PRIVATE.value,
+    )
+    for record in records:
+        record.status = MemoryStatus.DELETED.value
+        record.deleted_at = _utc_naive_now()
+        record.embedding = None
+        record.embedding_profile = None
+        record.embedding_status = "deleted"
+        record.embedding_error_code = None
+        _record_event(db, record, current_user, "memory.deleted", {"reason": "personal_memory_clear"})
+    db.commit()
+    try:
+        provider_status = str(
+            delete_profile_memory(user_id=current_user.id, org_id=_org_id(current_user)).get("status")
+            or "failed"
+        )
+    except Exception:  # noqa: BLE001 - provider deletion must not roll back local deletion
+        logger.warning("Personal provider memory clear failed", exc_info=True)
+        provider_status = "failed"
+    return PersonalMemoryClearRead(
+        local_deleted_count=len(records),
+        provider_status=provider_status,
+    )
+
+
+def delete_personal_profile_memory_command(
+    current_user: CurrentUser,
+    memory_id: str,
+) -> None:
+    if not mem0_enabled():
+        raise HTTPException(status_code=404, detail="Personal profile memory not found")
+    visible = list_profile_memory(user_id=current_user.id, org_id=_org_id(current_user))
+    if not any(item.memory_id == memory_id for item in visible):
+        raise HTTPException(status_code=404, detail="Personal profile memory not found")
+    result = delete_profile_memory_item(memory_id=memory_id)
+    if result.get("status") != "deleted":
+        raise HTTPException(status_code=503, detail="Personal profile memory could not be deleted")
 
 
 def list_memory_portfolio_query(
@@ -825,6 +915,7 @@ def _memory_context_for_user(
         user_id=current_user.id,
         project_id=project_id,
         now=now,
+        include_user_private=current_user.memory_enabled,
     ):
         pack = build_memory_context_pack(
             db,
@@ -836,6 +927,7 @@ def _memory_context_for_user(
             query_embedding=None,
             top_k=top_k,
             max_characters=max_characters,
+            include_user_private=current_user.memory_enabled,
         )
         return _to_memory_context_read(pack)
 
@@ -856,6 +948,7 @@ def _memory_context_for_user(
         query_embedding=embedding.vector if embedding.is_success else None,
         top_k=top_k,
         max_characters=max_characters,
+        include_user_private=current_user.memory_enabled,
     )
     return _to_memory_context_read(pack)
 

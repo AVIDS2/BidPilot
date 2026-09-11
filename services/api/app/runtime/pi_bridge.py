@@ -80,6 +80,7 @@ def create_pi_bridge_token(*, run: RuntimeRun, user: CurrentUser) -> str:
         role=user.role,
         plan=user.plan,
         org_slug=user.org_slug,
+        memory_enabled=user.memory_enabled,
         secret=_secret(),
         ttl_seconds=_TOKEN_TTL_SECONDS,
     )
@@ -108,6 +109,7 @@ def _user_from_claims(claims: dict[str, Any]) -> CurrentUser:
         org_id=str(claims["org_id"]),
         org_slug=str(claims.get("org_slug") or ""),
         email_verified=True,
+        memory_enabled=bool(claims.get("memory_enabled", True)),
     )
 
 
@@ -287,6 +289,7 @@ def _runtime_user(db: Session, row: User) -> CurrentUser:
         plan=row.subscription.plan if row.subscription is not None else "starter",
         email_verified=row.email_verified,
         disabled=row.disabled,
+        memory_enabled=row.memory_enabled,
         org_id=row.org_id,
         org_slug=row.organization.slug if row.organization is not None else "",
     )
@@ -402,6 +405,7 @@ async def resume_pi_from_system_wake(
             user_id=user.id,
             org_id=user.org_id,
             query=summary or "后台任务状态更新",
+            memory_enabled=user.memory_enabled,
         )
 
         # Keep the internal bridge import direction one-way. The public Pi

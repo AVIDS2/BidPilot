@@ -74,6 +74,58 @@ names stay out of the user surface. They belong in the operations and
 observability views. The overview must still be backed by live project/run APIs,
 not demo counters or replay-only UI state.
 
+### Product information architecture decision (2026-09-09)
+
+The authenticated product is organized around the user's work, not around the
+runtime that performs it.
+
+Primary navigation has four jobs:
+
+1. `总览`: what needs attention today and the next useful action.
+2. `项目`: the portfolio of opportunities and active engagements.
+3. `我的工作`: assigned reviews, approvals, failures, deadlines, and personal
+   follow-ups.
+4. `助手`: the conversational entry point for asking the Copilot to act in the
+   current project context.
+
+The project workspace owns the durable workflow tabs: overview, materials,
+requirements, response, review, deliverables, and project knowledge. These are
+facts and actions about one project and must not send a user to a generic Agent
+page without preserving the project context.
+
+The following surfaces are deliberately secondary:
+
+- `知识库` is a cross-project index of source-backed project knowledge and
+  published team methods. It is not a developer memory console.
+- `收件箱` is a notification/attention surface and may be merged into `我的工作`;
+  it must not expose broker or runtime queue terminology.
+- `运行记录` is an administrator/recovery view, reachable from a failed or
+  interrupted business object. It is not a customer-facing primary route.
+- provider settings, webhooks, members, billing, and memory controls belong in
+  a settings center with task-oriented labels.
+
+No page should explain the implementation in its default copy. A user needs to
+know what happened, what it affects, and what they can do next. Terms such as
+`queued`, `queue`, `Mem0`, `checkpointer`, `Store`, `RuntimeRun`, and `embedding`
+belong in diagnostics or documentation only.
+
+### Memory control surface
+
+The account/settings area must provide one `个性化与记忆` surface with:
+
+- one global toggle for personal preference memory;
+- a clear explanation that disabling it stops new personal-memory writes and
+  recalls but does not delete existing records;
+- a list of personal preferences with source conversation, last used time,
+  scope, and delete/edit actions;
+- `清除全部个人偏好` with a confirmation step and completion state;
+- project knowledge and team methods linked to their project/workspace pages,
+  not mixed into the personal list.
+
+The UI should never claim that the assistant “remembers everything”. The four
+engineering types map to the user terms `当前工作上下文`, `工作记录`, `项目知识`,
+and `团队方法`; `用户偏好` is the only cross-project personalization layer.
+
 The detailed runtime event view at `/runs` is an administrator-only diagnostic
 surface. Ordinary users follow a task from the Agent conversation, project
 workspace, or `我的工作` page and should never be sent to the raw event view.

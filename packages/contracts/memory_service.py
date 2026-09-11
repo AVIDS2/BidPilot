@@ -99,6 +99,7 @@ def build_memory_context_pack(
     query_embedding: list[float] | None,
     top_k: int,
     max_characters: int,
+    include_user_private: bool = True,
 ) -> MemoryContextPack:
     """Build a scope-safe context pack without ever fabricating semantic recall."""
     if top_k < 1:
@@ -123,6 +124,7 @@ def build_memory_context_pack(
             query_embedding=query_embedding,
             now=now,
             top_k=candidate_limit,
+            include_user_private=include_user_private,
         )
         _add_ranked_records(rankings, records, "dense", dense_candidates)
     else:
@@ -137,6 +139,7 @@ def build_memory_context_pack(
         normalized_query=normalized_query,
         now=now,
         top_k=candidate_limit,
+        include_user_private=include_user_private,
     )
     _add_ranked_records(rankings, records, "fts", fts_candidates)
 
@@ -148,6 +151,7 @@ def build_memory_context_pack(
         raw_query=raw_query,
         now=now,
         top_k=candidate_limit,
+        include_user_private=include_user_private,
     )
     _add_ranked_records(rankings, records, "trigram", trigram_candidates)
 
@@ -159,6 +163,7 @@ def build_memory_context_pack(
         project_id=project_id,
         now=now,
         top_k=min(top_k, 3),
+        include_user_private=include_user_private,
     )
     ordered_records = [records[fused_record.chunk_id].record for fused_record in fused]
     seen_record_ids = {record.id for record in ordered_records}

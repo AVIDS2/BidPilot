@@ -154,6 +154,9 @@ def current_user(
     if credentials is None:
         if AUTH_REQUIRED:
             raise HTTPException(status_code=401, detail="Authentication required")
+        dev_user = db.get(User, "dev-user")
+        if dev_user is not None:
+            return _user_to_current(db, dev_user)
         return get_dev_user()
     user = get_current_user_from_token(db, credentials.credentials)
     if user is None:

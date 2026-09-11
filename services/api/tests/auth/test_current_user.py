@@ -12,6 +12,24 @@ def test_current_user_dev_fallback() -> None:
     data = response.json()
     assert data["id"] == "dev-user"
     assert data["role"] == "admin"
+    assert isinstance(data["memory_enabled"], bool)
+
+
+def test_current_user_can_update_personal_memory_preference(default_user_id: str) -> None:
+    client = TestClient(app)
+
+    response = client.patch("/auth/me", json={"memory_enabled": False})
+    assert response.status_code == 200
+    assert response.json()["memory_enabled"] is False
+
+    response = client.get("/auth/me")
+    assert response.status_code == 200
+    assert response.json()["memory_enabled"] is False
+
+    # Keep the dev fallback deterministic for other tests in the same database.
+    response = client.patch("/auth/me", json={"memory_enabled": True})
+    assert response.status_code == 200
+    assert response.json()["memory_enabled"] is True
 
 
 def test_register_login_me_flow() -> None:

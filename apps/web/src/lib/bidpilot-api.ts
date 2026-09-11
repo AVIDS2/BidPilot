@@ -1261,6 +1261,7 @@ export interface CurrentUser {
   plan?: string;
   disabled?: boolean;
   email_verified?: boolean;
+  memory_enabled?: boolean;
   org_id?: string;
   org_slug?: string;
   verification_email_accepted?: boolean | null;
@@ -1311,6 +1312,7 @@ export interface UserUpdate {
   display_name?: string;
   current_password?: string;
   new_password?: string;
+  memory_enabled?: boolean;
 }
 
 export function updateCurrentUser(payload: UserUpdate) {
@@ -1694,6 +1696,25 @@ export interface MemoryRead {
   updated_at: string | null;
 }
 
+export interface PersonalProfileMemoryRead {
+  id: string;
+  text: string;
+  score: number | null;
+  categories: string[];
+}
+
+export interface PersonalMemoryRead {
+  enabled: boolean;
+  provider_enabled: boolean;
+  local_records: MemoryRead[];
+  profile_records: PersonalProfileMemoryRead[];
+}
+
+export interface PersonalMemoryClearRead {
+  local_deleted_count: number;
+  provider_status: string;
+}
+
 export interface MemoryPortfolioProjectRead {
   project_id: string;
   project_name: string;
@@ -1763,6 +1784,22 @@ export function listProjectMemory(projectId: string, includeProposed = false) {
   });
   if (includeProposed) params.set('include_proposed', 'true');
   return request<MemoryRead[]>(`/memory?${params.toString()}`);
+}
+
+export function getPersonalMemory() {
+  return request<PersonalMemoryRead>('/memory/profile');
+}
+
+export function deleteMemory(memoryId: string) {
+  return request<void>(`/memory/${memoryId}`, { method: 'DELETE' });
+}
+
+export function deletePersonalProfileMemory(memoryId: string) {
+  return request<void>(`/memory/profile/${memoryId}`, { method: 'DELETE' });
+}
+
+export function clearPersonalMemory() {
+  return request<PersonalMemoryClearRead>('/memory/profile', { method: 'DELETE' });
 }
 
 export function listKnowledgePortfolio(limit = 50) {

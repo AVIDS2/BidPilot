@@ -41,6 +41,7 @@ class CurrentUser(BaseModel):
     plan: str = "starter"
     email_verified: bool = False
     disabled: bool = False
+    memory_enabled: bool = True
     org_id: str = ""
     org_slug: str = ""
     # Present only on registration. True means the provider accepted the
@@ -52,6 +53,7 @@ class UserUpdate(BaseModel):
     display_name: str | None = None
     current_password: str | None = None
     new_password: str | None = None
+    memory_enabled: bool | None = None
 
 
 class SubscriptionRead(BaseModel):

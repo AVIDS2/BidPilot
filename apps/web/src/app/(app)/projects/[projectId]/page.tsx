@@ -3,7 +3,15 @@
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, FileCheck2, Files, ListChecks, MessageSquare, PlayCircle } from 'lucide-react';
+import {
+  ArrowRight,
+  ClipboardCheck,
+  FileCheck2,
+  Files,
+  ListChecks,
+  MessageSquare,
+  PlayCircle
+} from 'lucide-react';
 import { LiveSyncStatus } from '@/components/bidpilot/live-sync-status';
 import { PageHeader } from '@/components/bidpilot/page-header';
 import { QueryError, QuerySkeleton } from '@/components/bidpilot/query-state';
@@ -13,17 +21,31 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ProjectMaterialsPanel } from '@/features/workbench/project-materials-panel';
+import { ProjectKnowledgePanel } from '@/features/workbench/project-knowledge-panel';
 import { ProjectResponsePanel } from '@/features/workbench/project-response-panel';
 import { getProject, getReadinessSummary, listBundles, listDeliverables } from '@/lib/bidpilot-api';
 
-type ProjectTab = 'overview' | 'materials' | 'response';
+type ProjectTab =
+  | 'overview'
+  | 'materials'
+  | 'requirements'
+  | 'response'
+  | 'review'
+  | 'deliverables'
+  | 'knowledge';
 
 function projectTab(value: string | null): ProjectTab {
-  return value === 'materials'
-    ? 'materials'
-    : value === 'response' || value === 'delivery'
-      ? 'response'
-      : 'overview';
+  if (
+    value === 'materials' ||
+    value === 'requirements' ||
+    value === 'response' ||
+    value === 'review' ||
+    value === 'deliverables' ||
+    value === 'knowledge'
+  ) {
+    return value;
+  }
+  return 'overview';
 }
 
 export default function ProjectDetailPage() {
@@ -194,10 +216,14 @@ export default function ProjectDetailPage() {
           </Card>
         ) : null}
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(projectTab(value))}>
-          <TabsList>
+          <TabsList className='max-w-full overflow-x-auto'>
             <TabsTrigger value='overview'>项目概览</TabsTrigger>
-            <TabsTrigger value='materials'>资料与知识</TabsTrigger>
-            <TabsTrigger value='response'>响应与交付</TabsTrigger>
+            <TabsTrigger value='materials'>资料</TabsTrigger>
+            <TabsTrigger value='requirements'>要求</TabsTrigger>
+            <TabsTrigger value='response'>响应</TabsTrigger>
+            <TabsTrigger value='review'>评审</TabsTrigger>
+            <TabsTrigger value='deliverables'>交付</TabsTrigger>
+            <TabsTrigger value='knowledge'>项目知识</TabsTrigger>
           </TabsList>
           <TabsContent value='overview' className='mt-5'>
             <div className='grid gap-6 lg:grid-cols-2'>
@@ -248,6 +274,15 @@ export default function ProjectDetailPage() {
               error={bundles.error}
             />
           </TabsContent>
+          <TabsContent value='requirements' className='mt-5'>
+            <ProjectLinkedSection
+              icon={<ListChecks />}
+              title='项目要求'
+              description='按当前项目查看要求、优先级、验证状态和证据覆盖。'
+              href={`/requirements?project_id=${item.id}`}
+              action='打开要求清单'
+            />
+          </TabsContent>
           <TabsContent value='response' className='mt-5'>
             <ProjectResponsePanel
               key={`${item.id}:${requestedDeliverableId ?? ''}:${requestedRunId ?? ''}`}
@@ -259,9 +294,66 @@ export default function ProjectDetailPage() {
               error={deliverables.error}
             />
           </TabsContent>
+          <TabsContent value='review' className='mt-5'>
+            <ProjectLinkedSection
+              icon={<ClipboardCheck />}
+              title='项目评审'
+              description='集中处理当前项目的分配、审核和待回复讨论。'
+              href={`/reviews?project_id=${item.id}`}
+              action='打开评审看板'
+            />
+          </TabsContent>
+          <TabsContent value='deliverables' className='mt-5'>
+            <ProjectLinkedSection
+              icon={<FileCheck2 />}
+              title='项目交付'
+              description='查看响应文档、版本状态，并导出最终文件。'
+              href={`/deliverables?project_id=${item.id}`}
+              action='打开交付物'
+            />
+          </TabsContent>
+          <TabsContent value='knowledge' className='mt-5'>
+            <ProjectKnowledgePanel projectId={item.id} />
+          </TabsContent>
         </Tabs>
       </div>
     </>
+  );
+}
+
+function ProjectLinkedSection({
+  icon,
+  title,
+  description,
+  href,
+  action
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  href: string;
+  action: string;
+}) {
+  return (
+    <Card>
+      <CardHeader className='border-b'>
+        <div className='flex items-center gap-3'>
+          <span className='bg-primary/10 text-primary flex size-9 items-center justify-center rounded-lg'>
+            {icon}
+          </span>
+          <div>
+            <h2 className='font-medium'>{title}</h2>
+            <p className='text-muted-foreground mt-1 text-sm'>{description}</p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className='flex items-center justify-between gap-4 p-5'>
+        <p className='text-muted-foreground text-sm'>已保留当前项目上下文。</p>
+        <Link className={buttonVariants({ size: 'sm' })} href={href}>
+          {action} <ArrowRight data-icon='inline-end' />
+        </Link>
+      </CardContent>
+    </Card>
   );
 }
 

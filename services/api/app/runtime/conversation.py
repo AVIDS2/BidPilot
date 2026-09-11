@@ -154,10 +154,11 @@ async def load_mem0_profile_context(
     user_id: str,
     org_id: str,
     query: str,
+    memory_enabled: bool = True,
 ) -> list[dict[str, Any]]:
     """Recall low-risk profile memory without blocking the Pi event loop."""
 
-    if not mem0_enabled():
+    if not memory_enabled or not mem0_enabled():
         return []
 
     memories = await asyncio.to_thread(

@@ -20,6 +20,7 @@ export interface CurrentUser {
   plan?: string;
   disabled?: boolean;
   email_verified?: boolean;
+  memory_enabled?: boolean;
   org_id?: string;
   org_slug?: string;
   verification_email_accepted?: boolean | null;

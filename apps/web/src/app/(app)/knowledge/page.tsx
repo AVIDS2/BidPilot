@@ -107,7 +107,7 @@ export default function KnowledgePage() {
                     variant='outline'
                   >
                     <Sparkles data-icon='inline-start' />
-                    编译项目记忆
+                    生成知识建议
                   </Button>
                 </CardHeader>
                 <CardContent className='flex flex-col gap-4 p-5'>
@@ -195,14 +195,14 @@ export default function KnowledgePage() {
             ) : (
               <EmptyState
                 title='当前项目还没有共享知识'
-                description='资料完成解析后，点击“编译项目记忆”即可生成可检索的项目知识。'
+                description='资料完成解析后，生成知识建议并审核，即可形成可检索的项目知识。'
               />
             )}
           </>
         ) : (
           <EmptyState
             title='还没有项目知识'
-            description='项目资料被解析并形成共享记忆后，会按项目显示在这里。'
+            description='项目资料被解析并形成共享知识后，会按项目显示在这里。'
           />
         )}
       </div>

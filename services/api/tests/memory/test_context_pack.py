@@ -265,6 +265,30 @@ def test_context_pack_only_uses_matching_profile_for_dense_memory() -> None:
     assert [item.record_id for item in pack.items] == [record_ids["project"]]
 
 
+def test_context_pack_can_disable_private_preferences_without_hiding_project_knowledge() -> None:
+    org_id, user_id, project_id, _foreign_project_id, record_ids = _seed_memory()
+    db = SessionLocal()
+    try:
+        pack = build_memory_context_pack(
+            db,
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            raw_query="私有化部署和写作偏好",
+            profile_id=None,
+            query_embedding=None,
+            top_k=8,
+            max_characters=2000,
+            include_user_private=False,
+        )
+    finally:
+        db.close()
+
+    record_ids_in_pack = {item.record_id for item in pack.items}
+    assert record_ids["project"] in record_ids_in_pack
+    assert record_ids["private"] not in record_ids_in_pack
+
+
 def test_context_pack_tombstones_change_the_memory_version() -> None:
     org_id, user_id, project_id, _foreign_project_id, record_ids = _seed_memory()
     db = SessionLocal()

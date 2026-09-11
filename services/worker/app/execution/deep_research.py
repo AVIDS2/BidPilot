@@ -201,6 +201,7 @@ def _current_user(row: User) -> CurrentUser:
         plan=row.subscription.plan if row.subscription is not None else "starter",
         email_verified=row.email_verified,
         disabled=row.disabled,
+        memory_enabled=row.memory_enabled,
         org_id=row.org_id,
         org_slug=row.organization.slug if row.organization is not None else "",
     )

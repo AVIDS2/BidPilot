@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.auth.schemas import CurrentUser
 from app.auth.service import _hash_password, require_auth
 from app.db import Base, get_db
+from app.memory.mem0_provider import Mem0ProfileMemory
 from app.main import app
 from app.models import (
     Bundle,
@@ -44,6 +45,7 @@ def _current(user: User) -> CurrentUser:
         plan="professional",
         email_verified=True,
         disabled=False,
+        memory_enabled=user.memory_enabled,
         org_id=user.org_id,
         org_slug="acme",
     )
@@ -623,6 +625,72 @@ def test_private_memory_is_owner_scoped_and_tombstoned_on_delete(memory_client, 
             "memory.embedding_deferred",
             "memory.deleted",
         ]
+
+
+def test_personal_memory_control_surface_lists_and_clears_both_ledgers(
+    memory_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, SessionLocal, users, _project, set_user = memory_client
+    monkeypatch.setattr("app.retrieval.embedding.get_embedding_profile", lambda: None)
+    set_user(users["owner"])
+
+    local = client.post(
+        "/memory",
+        json={
+            "scope": "user_private",
+            "kind": "preference",
+            "title": "回答格式",
+            "body_markdown": "先给结论，再补充依据。",
+        },
+    )
+    assert local.status_code == 201, local.text
+
+    provider_memory = Mem0ProfileMemory(
+        memory_id="profile-1",
+        text="使用中文回答。",
+        score=0.9,
+        categories=("preferences",),
+    )
+    monkeypatch.setattr("app.memory.service.mem0_enabled", lambda: True)
+    monkeypatch.setattr(
+        "app.memory.service.list_profile_memory",
+        lambda *, user_id, org_id: [provider_memory],
+    )
+    deleted_provider_ids: list[str] = []
+    monkeypatch.setattr(
+        "app.memory.service.delete_profile_memory_item",
+        lambda *, memory_id: deleted_provider_ids.append(memory_id) or {"status": "deleted"},
+    )
+    monkeypatch.setattr(
+        "app.memory.service.delete_profile_memory",
+        lambda *, user_id, org_id: {"status": "deleted"},
+    )
+
+    listed = client.get("/memory/profile")
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["enabled"] is True
+    assert listed.json()["local_records"][0]["title"] == "回答格式"
+    assert listed.json()["profile_records"] == [
+        {
+            "id": "profile-1",
+            "text": "使用中文回答。",
+            "score": 0.9,
+            "categories": ["preferences"],
+        }
+    ]
+
+    deleted = client.delete("/memory/profile/profile-1")
+    assert deleted.status_code == 204
+    assert deleted_provider_ids == ["profile-1"]
+
+    cleared = client.delete("/memory/profile")
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json() == {"local_deleted_count": 1, "provider_status": "deleted"}
+    assert client.get("/memory", params={"scope": "user_private"}).json() == []
+
+    with SessionLocal() as db:
+        assert db.query(MemoryRecord).filter_by(owner_user_id=users["owner"].id, status="active").count() == 0
 
 
 def test_project_private_memory_requires_the_authorized_project_scope(memory_client, monkeypatch: pytest.MonkeyPatch) -> None:

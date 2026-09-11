@@ -9,6 +9,8 @@ class FakeMem0Client:
     def __init__(self) -> None:
         self.add_calls: list[dict[str, Any]] = []
         self.search_calls: list[dict[str, Any]] = []
+        self.get_all_calls: list[dict[str, Any]] = []
+        self.delete_memory_calls: list[str] = []
         self.delete_calls: list[dict[str, Any]] = []
 
     def add(self, messages, options=None, **kwargs):  # noqa: ANN001
@@ -30,6 +32,23 @@ class FakeMem0Client:
 
     def delete_all(self, **kwargs):  # noqa: ANN001
         self.delete_calls.append(kwargs)
+        return {"message": "deleted"}
+
+    def get_all(self, **kwargs):  # noqa: ANN001
+        self.get_all_calls.append(kwargs)
+        return {
+            "results": [
+                {
+                    "id": "memory-1",
+                    "memory": "用户偏好中文、先给结论。",
+                    "score": 0.91,
+                    "categories": ["preferences"],
+                }
+            ]
+        }
+
+    def delete(self, memory_id):  # noqa: ANN001
+        self.delete_memory_calls.append(memory_id)
         return {"message": "deleted"}
 
 
@@ -66,6 +85,14 @@ def test_mem0_profile_provider_uses_official_scoped_operations(monkeypatch) -> N
     assert {"user_id": "user-1"} in filters["OR"]
     assert {"agent_id": "bidpilot-assistant:user-1"} in filters["OR"]
     assert filters["AND"] == [{"app_id": "org-1"}]
+
+    listed = mem0_provider.list_profile_memory(user_id="user-1", org_id="org-1")
+    assert listed[0].memory_id == "memory-1"
+    assert fake.get_all_calls[0]["filters"]["AND"] == [{"app_id": "org-1"}]
+
+    deleted_one = mem0_provider.delete_profile_memory_item(memory_id="memory-1")
+    assert deleted_one["status"] == "deleted"
+    assert fake.delete_memory_calls == ["memory-1"]
 
     deleted = mem0_provider.delete_profile_memory(user_id="user-1", org_id="org-1")
     assert deleted["status"] == "deleted"

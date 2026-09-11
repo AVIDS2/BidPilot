@@ -18,6 +18,8 @@ from .schemas import (
     MemoryGraphReviewDecisionCreate,
     MemoryGraphReviewDecisionRead,
     MemoryPortfolioProjectRead,
+    PersonalMemoryClearRead,
+    PersonalMemoryRead,
     MemoryRead,
 )
 from .service import (
@@ -28,6 +30,9 @@ from .service import (
     get_memory_compilation_query,
     list_memory_portfolio_query,
     list_memory_query,
+    list_personal_memory_query,
+    clear_personal_memory_command,
+    delete_personal_profile_memory_command,
     memory_context_query,
     start_memory_compilation_command,
     start_memory_graph_extraction_command,
@@ -62,6 +67,31 @@ def list_memory(
         scope=scope,
         include_proposed=include_proposed,
     )
+
+
+@router.get("/profile", response_model=PersonalMemoryRead)
+def list_personal_memory(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> PersonalMemoryRead:
+    return list_personal_memory_query(db, current_user)
+
+
+@router.delete("/profile", response_model=PersonalMemoryClearRead)
+def clear_personal_memory(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> PersonalMemoryClearRead:
+    return clear_personal_memory_command(db, current_user)
+
+
+@router.delete("/profile/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_personal_profile_memory(
+    memory_id: str,
+    current_user: CurrentUser = Depends(require_auth),
+) -> Response:
+    delete_personal_profile_memory_command(current_user, memory_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/portfolio", response_model=list[MemoryPortfolioProjectRead])

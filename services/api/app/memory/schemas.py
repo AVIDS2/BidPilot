@@ -72,6 +72,31 @@ class MemoryRead(BaseModel):
     updated_at: datetime | None
 
 
+class PersonalProfileMemoryRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    text: str
+    score: float | None = None
+    categories: tuple[str, ...] = ()
+
+
+class PersonalMemoryRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    provider_enabled: bool
+    local_records: list[MemoryRead]
+    profile_records: list[PersonalProfileMemoryRead]
+
+
+class PersonalMemoryClearRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    local_deleted_count: int
+    provider_status: str
+
+
 class MemoryPortfolioProjectRead(BaseModel):
     """Safe project-level knowledge health for the Workbench portfolio."""
 

@@ -132,6 +132,10 @@ It is organized to support three goals:
 
 ### Implementation plans
 
+- `docs/superpowers/plans/2026-09-09-bidpilot-product-ia-memory-control-plane.md`
+  - product information architecture convergence, four-memory mapping, Mem0
+    boundary, user controls, and the collaborative implementation backlog
+
 - `docs/superpowers/plans/2026-09-01-kiranism-next-bidpilot-migration.md`
   - Kiranism Next frontend migration, FastAPI BFF boundary, and acceptance contract
 

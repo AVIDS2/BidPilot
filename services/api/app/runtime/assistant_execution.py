@@ -40,6 +40,7 @@ def _current_user(row: User) -> CurrentUser:
         plan=row.subscription.plan if row.subscription is not None else "starter",
         email_verified=row.email_verified,
         disabled=row.disabled,
+        memory_enabled=row.memory_enabled,
         org_id=row.org_id,
         org_slug=row.organization.slug if row.organization is not None else "",
     )
@@ -204,6 +205,7 @@ async def execute_queued_assistant_run(
             user_id=user.id,
             org_id=user.org_id,
             query=payload.message,
+            memory_enabled=user.memory_enabled,
         ),
     )
     async for _event in stream_pi_assistant_response(

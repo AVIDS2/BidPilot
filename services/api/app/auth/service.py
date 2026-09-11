@@ -113,6 +113,7 @@ def _user_to_current(db: Session, user: User, plan: str | None = None) -> Curren
         plan=plan or _get_user_plan(db, user),
         email_verified=user.email_verified,
         disabled=user.disabled,
+        memory_enabled=user.memory_enabled,
         org_id=user.org_id,
         org_slug=_get_org_slug(db, user.org_id),
     )
@@ -343,6 +344,8 @@ def update_user_command(db: Session, user_id: str, payload: UserUpdate) -> Curre
             raise ValueError("Current password is incorrect")
         _validate_password_strength(payload.new_password)
         user.password_hash = _hash_password(payload.new_password)
+    if payload.memory_enabled is not None:
+        user.memory_enabled = payload.memory_enabled
     db.commit()
     db.refresh(user)
     return _user_to_current(db, user)
@@ -531,6 +534,7 @@ def get_dev_user() -> CurrentUser:
     return CurrentUser(
         id="dev-user", email="dev@docpilot.local", display_name="Dev User",
         role="admin", plan="professional",
+        memory_enabled=True,
         org_id="00000000-0000-0000-0000-000000000001", org_slug="default",
     )
 

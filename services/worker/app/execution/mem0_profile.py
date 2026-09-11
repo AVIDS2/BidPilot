@@ -13,7 +13,7 @@ from app.memory.mem0_provider import (
     mem0_enabled,
     mem0_profile_fingerprint,
 )
-from app.models import ChatMessage, Mem0ProfileSync, RuntimeRun
+from app.models import ChatMessage, Mem0ProfileSync, RuntimeRun, User
 
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,9 @@ def capture_mem0_profile_for_run(runtime_run_id: str) -> dict[str, object]:
         run = db.get(RuntimeRun, runtime_run_id)
         if run is None or run.status != "succeeded" or not run.conversation_id:
             return {"status": "skipped", "runtime_run_id": runtime_run_id}
+        user = db.get(User, run.user_id)
+        if user is None or not user.memory_enabled:
+            return {"status": "disabled", "runtime_run_id": runtime_run_id}
         input_json = run.input_json if isinstance(run.input_json, dict) else {}
         user_message_id = input_json.get("user_message_id")
         user_message = db.get(ChatMessage, user_message_id) if isinstance(user_message_id, str) else None

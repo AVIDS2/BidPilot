@@ -184,6 +184,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(30), nullable=False, default="member")
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    memory_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

@@ -235,6 +235,7 @@ def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = Non
             plan=user_row.subscription.plan if user_row.subscription is not None else "starter",
             email_verified=user_row.email_verified,
             disabled=user_row.disabled,
+            memory_enabled=user_row.memory_enabled,
             org_id=user_row.org_id,
             org_slug=user_row.organization.slug if user_row.organization is not None else "",
         )
@@ -307,6 +308,7 @@ def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = Non
                     role=user.role,
                     plan=user.plan,
                     org_slug=user.org_slug,
+                    memory_enabled=user.memory_enabled,
                     secret=bridge_secret,
                 ),
             },
@@ -557,6 +559,7 @@ def import_remote_document(self, runtime_run_id: str) -> dict[str, object]:
             role=user_row.role,
             email_verified=user_row.email_verified,
             disabled=user_row.disabled,
+            memory_enabled=user_row.memory_enabled,
             org_id=user_row.org_id,
             org_slug=user_row.organization.slug if user_row.organization is not None else "",
         )

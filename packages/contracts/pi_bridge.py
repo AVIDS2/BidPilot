@@ -17,6 +17,7 @@ def encode_pi_bridge_token(
     role: str,
     plan: str,
     org_slug: str,
+    memory_enabled: bool = True,
     secret: str,
     ttl_seconds: int = 300,
 ) -> str:
@@ -32,6 +33,7 @@ def encode_pi_bridge_token(
             "role": role,
             "plan": plan,
             "org_slug": org_slug,
+            "memory_enabled": memory_enabled,
             "exp": now + timedelta(seconds=ttl_seconds),
             "iat": now,
         },

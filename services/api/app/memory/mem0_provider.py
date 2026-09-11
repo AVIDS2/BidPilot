@@ -179,6 +179,12 @@ def search_profile_memory(
     rows = response.get("results", []) if isinstance(response, dict) else []
     if not isinstance(rows, list):
         return []
+    return _profile_memories_from_rows(rows)
+
+
+def _profile_memories_from_rows(rows: object) -> list[Mem0ProfileMemory]:
+    if not isinstance(rows, list):
+        return []
     memories: list[Mem0ProfileMemory] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -193,6 +199,25 @@ def search_profile_memory(
         categories = tuple(str(item) for item in categories_value if item) if isinstance(categories_value, list) else ()
         memories.append(Mem0ProfileMemory(memory_id=memory_id, text=text[:_MAX_MESSAGE_CHARACTERS], score=score, categories=categories))
     return memories
+
+
+def list_profile_memory(*, user_id: str, org_id: str) -> list[Mem0ProfileMemory]:
+    """List the current user's bounded personal profile memories."""
+
+    client = _configured_client()
+    if client is None:
+        return []
+    try:
+        response = client.get_all(
+            filters=_scope_filters(user_id=user_id, org_id=org_id),
+            page=1,
+            page_size=50,
+        )
+    except Exception:  # noqa: BLE001 - profile memory is optional
+        logger.warning("Mem0 profile listing failed; continuing without profile memory", exc_info=True)
+        return []
+    rows = response.get("results", []) if isinstance(response, dict) else []
+    return _profile_memories_from_rows(rows)
 
 
 def capture_profile_memory(
@@ -262,6 +287,23 @@ def delete_profile_memory(*, user_id: str, org_id: str) -> dict[str, Any]:
     }
 
 
+def delete_profile_memory_item(*, memory_id: str) -> dict[str, Any]:
+    """Delete one provider-side personal profile memory by id."""
+
+    client = _configured_client()
+    if client is None:
+        return {"status": "disabled"}
+    try:
+        response = client.delete(memory_id=memory_id)
+    except Exception:  # noqa: BLE001 - deletion is user-visible but fail-safe
+        logger.warning("Mem0 profile memory deletion failed", exc_info=True)
+        return {"status": "failed"}
+    return {
+        "status": "deleted",
+        "provider_response": response if isinstance(response, dict) else {},
+    }
+
+
 def profile_context_records(memories: Sequence[Mem0ProfileMemory]) -> list[dict[str, Any]]:
     return [memory.to_context_record() for memory in memories]
 
@@ -270,6 +312,8 @@ __all__ = [
     "Mem0ProfileMemory",
     "capture_profile_memory",
     "delete_profile_memory",
+    "delete_profile_memory_item",
+    "list_profile_memory",
     "mem0_enabled",
     "mem0_profile_fingerprint",
     "profile_context_records",

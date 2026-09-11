@@ -1,8 +1,57 @@
 # BidPilot Governed Memory and Bid Wiki Design
 
-- Status: proposed for implementation
+- Status: accepted for staged implementation; product control plane remains incomplete
 - Date: 2026-07-17
 - Depends on: ADR 0001, ADR 0005, Retrieval 2.0, project capability access
+
+## 2026-09-09 product decision
+
+The engineering model uses four memory types, but the product must not expose
+four memory pages or use Mem0 as a general-purpose memory database.
+
+| Type | BidPilot mapping | Durable owner | First release rule |
+| --- | --- | --- | --- |
+| Working | current project/session/task context | Pi session, ChatMessage, RuntimeRun/Event | never promoted automatically to long-term memory |
+| Episodic | completed work, review decisions, failures, corrections | PostgreSQL conversation, run, review, and audit records | expose as `工作记录`; extract summaries only when useful and authorized |
+| Semantic | evidence-backed project facts, risks, decisions, terminology | PostgreSQL `MemoryRecord` + `MemoryEvidenceLink` | proposed -> human approved -> active; source citations required |
+| Procedural | reusable templates, writing rules, approval policies, team methods | published project/org knowledge and trusted Skills | owner/admin publishes; no autonomous org-wide writes |
+
+Personal preference memory is a separate privacy scope implemented through the
+optional Mem0 adapter. It is not a fifth business-memory category and cannot
+authorize, override, or replace any PostgreSQL fact.
+
+The current production evidence is intentionally recorded here: Mem0 is enabled
+and the local sync ledger contains submitted capture records, while the project
+memory ledger currently contains proposed records awaiting review. This is a
+working integration, not a completed user-control experience.
+
+### Research basis
+
+- [LangGraph persistence](https://docs.langchain.com/oss/python/langgraph/persistence)
+  separates thread-scoped checkpointers from cross-thread stores.
+- [Mem0 memory types](https://docs.mem0.ai/core-concepts/memory-types) defines
+  `user_id`, `agent_id`, `run_id`, and Platform-only `app_id` scopes.
+- [Mem0 entity-scoped memory](https://docs.mem0.ai/platform/features/entity-scoped-memory)
+  documents that user and assistant facts are attributed to separate entities;
+  an AND filter across both entities returns nothing.
+- [Claude Code memory](https://code.claude.com/docs/en/memory) demonstrates that
+  users need explicit memory scope, inspection, and on/off controls.
+- [Projects in ChatGPT](https://help.openai.com/en/articles/10169521-using-projects-in-chatgpt)
+  treats project context, access control, and memory settings as separate product
+  controls rather than one opaque assistant state.
+
+### Control-plane acceptance bar
+
+Memory is not complete until all of the following are true:
+
+1. A user can see, disable, inspect, and delete personal preference memory.
+2. A project member can review proposed semantic/project memories with citations.
+3. A published procedural/team method has an owner, version, scope, and archive
+   action.
+4. Episodic history is visible as business work records, not raw runtime events.
+5. Every memory recall is scope-filtered and traceable to the records used.
+6. A Mem0 outage degrades personalization only; project work and evidence
+   retrieval continue normally.
 
 ## Goal
 

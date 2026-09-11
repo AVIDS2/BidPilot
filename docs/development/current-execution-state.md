@@ -2,6 +2,29 @@
 
 ## Current Tasks
 
+### 2026-09-09 Product IA and memory control plane
+
+- [x] Investigate current navigation, knowledge, MemoryRecord, Mem0, and four-memory implementation boundaries.
+- [x] Record the product and architecture decisions in the canonical docs and staged implementation plan.
+- [x] Add the personal `个性化与记忆` control surface and privacy API.
+- [x] Persist the personal-memory switch and make it affect private-memory
+  recall and Mem0 capture while leaving project knowledge available.
+- [x] Add scoped personal-memory listing, single deletion, clear-all deletion,
+  and partial provider-failure reporting.
+- [x] Browser-check the personal-memory page, switch, deletion confirmation, and
+  Supabase theme rendering.
+- [x] Add the project workspace tab bar and keep requirements, review, and
+  delivery links scoped to the active project.
+- [x] Add the first project knowledge view with source citations and proposal
+  confirmation.
+- [ ] Make project knowledge proposals/review/source drill-down a complete user workflow.
+- [ ] Collapse runtime-shaped pages into `我的工作`, project tabs, and admin/recovery entry points.
+- [ ] Add episodic `工作记录` and procedural `团队方法` projections with scoped retrieval labels.
+- [ ] Run memory leakage, deletion, stale-memory, citation, and Playwright acceptance scenarios.
+
+The implementation plan is `docs/superpowers/plans/2026-09-09-bidpilot-product-ia-memory-control-plane.md`.
+The four-memory terminology is authoritative in `docs/product/domain-glossary.md`.
+
 - [x] 把项目、资料、需求、知识、响应、评审和交付物串成项目优先的用户流程；项目关联入口不再无条件跳转到 Agent。
 - [x] 使用现有 Kiranism/Base UI 组件完成资料上传、真实解析/索引状态、章节起草、人工审核和 DOCX/PDF 导出。
 - [x] 完成公网登录、项目创建、三类资料上传、Worker 解析索引、三章真实起草、审核批准和 DOCX/PDF 导出记录验收。

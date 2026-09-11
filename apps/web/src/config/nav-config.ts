@@ -21,7 +21,6 @@ export const navGroups: NavGroup[] = [
   {
     label: '工作流运营',
     items: [
-      { title: '收件箱', url: '/inbox', icon: 'inbox', items: [] },
       { title: '我的工作', url: '/my-work', icon: 'myWork', items: [] },
       { title: '招采雷达', url: '/radar', icon: 'radar', items: [] }
     ]
@@ -31,7 +30,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { title: '团队成员', url: '/members', icon: 'teams', items: [] },
       { title: '账户', url: '/account', icon: 'account', items: [] },
-      { title: '设置', url: '/settings/providers', icon: 'settings', items: [] }
+      { title: '设置', url: '/settings/memory', icon: 'settings', items: [] }
     ]
   },
   {

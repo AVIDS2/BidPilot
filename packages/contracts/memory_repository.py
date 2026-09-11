@@ -54,9 +54,14 @@ def _visible_memory_filters(
     user_id: str,
     project_id: str | None,
     now: datetime,
+    include_user_private: bool = True,
 ) -> tuple:
     """Apply tenancy and visibility constraints before every retrieval query."""
-    private_scope = (MemoryRecord.scope == "user_private") & (MemoryRecord.owner_user_id == user_id)
+    private_scope = (
+        (MemoryRecord.scope == "user_private") & (MemoryRecord.owner_user_id == user_id)
+        if include_user_private
+        else false()
+    )
     if project_id is None:
         visible_scope = private_scope & MemoryRecord.project_id.is_(None)
     else:
@@ -75,11 +80,26 @@ def _visible_memory_filters(
     )
 
 
-def _base_statement(*, org_id: str, user_id: str, project_id: str | None, now: datetime):
+def _base_statement(
+    *,
+    org_id: str,
+    user_id: str,
+    project_id: str | None,
+    now: datetime,
+    include_user_private: bool = True,
+):
     return (
         select(MemoryRecord)
         .options(selectinload(MemoryRecord.evidence_links))
-        .where(*_visible_memory_filters(org_id=org_id, user_id=user_id, project_id=project_id, now=now))
+        .where(
+            *_visible_memory_filters(
+                org_id=org_id,
+                user_id=user_id,
+                project_id=project_id,
+                now=now,
+                include_user_private=include_user_private,
+            )
+        )
     )
 
 
@@ -103,6 +123,7 @@ def _search_local_lexical_candidates(
     now: datetime,
     top_k: int,
     method: Literal["fts", "trigram"],
+    include_user_private: bool = True,
 ) -> list[RankedMemoryRecord]:
     """Bounded deterministic fallback used only by non-PostgreSQL test DBs."""
 
@@ -110,7 +131,13 @@ def _search_local_lexical_candidates(
     if not terms:
         return []
     statement = (
-        _base_statement(org_id=org_id, user_id=user_id, project_id=project_id, now=now)
+        _base_statement(
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            now=now,
+            include_user_private=include_user_private,
+        )
         .order_by(MemoryRecord.updated_at.desc(), MemoryRecord.id.asc())
         .limit(_local_candidate_limit(top_k))
     )
@@ -140,6 +167,7 @@ def _search_local_dense_candidates(
     query_embedding: list[float],
     now: datetime,
     top_k: int,
+    include_user_private: bool = True,
 ) -> list[RankedMemoryRecord]:
     """Small, scope-safe cosine fallback for SQLite unit tests only."""
 
@@ -147,7 +175,13 @@ def _search_local_dense_candidates(
     if not query_norm:
         return []
     statement = (
-        _base_statement(org_id=org_id, user_id=user_id, project_id=project_id, now=now)
+        _base_statement(
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            now=now,
+            include_user_private=include_user_private,
+        )
         .where(
             MemoryRecord.embedding_profile == profile_id,
             MemoryRecord.embedding.isnot(None),
@@ -180,6 +214,7 @@ def has_visible_memory(
     user_id: str,
     project_id: str | None,
     now: datetime,
+    include_user_private: bool = True,
 ) -> bool:
     """Check visibility before paying the latency cost of semantic recall."""
     stmt = select(MemoryRecord.id).where(
@@ -188,6 +223,7 @@ def has_visible_memory(
             user_id=user_id,
             project_id=project_id,
             now=now,
+            include_user_private=include_user_private,
         )
     ).limit(1)
     return db.scalar(stmt) is not None
@@ -203,6 +239,7 @@ def search_dense_memory_candidates(
     query_embedding: list[float],
     now: datetime,
     top_k: int,
+    include_user_private: bool = True,
 ) -> list[RankedMemoryRecord]:
     """Run exact-profile dense recall only after scope filtering."""
     if not query_embedding:
@@ -217,10 +254,17 @@ def search_dense_memory_candidates(
             query_embedding=query_embedding,
             now=now,
             top_k=top_k,
+            include_user_private=include_user_private,
         )
     distance = MemoryRecord.embedding.cosine_distance(query_embedding)
     stmt = (
-        _base_statement(org_id=org_id, user_id=user_id, project_id=project_id, now=now)
+        _base_statement(
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            now=now,
+            include_user_private=include_user_private,
+        )
         .add_columns(distance.label("distance"))
         .where(
             MemoryRecord.embedding_profile == profile_id,
@@ -244,6 +288,7 @@ def search_fts_memory_candidates(
     normalized_query: str,
     now: datetime,
     top_k: int,
+    include_user_private: bool = True,
 ) -> list[RankedMemoryRecord]:
     """Retrieve lexical memory candidates with a bounded CJK-aware OR fallback."""
     if not normalized_query.strip():
@@ -258,6 +303,7 @@ def search_fts_memory_candidates(
             now=now,
             top_k=top_k,
             method="fts",
+            include_user_private=include_user_private,
         )
     search_vector = func.to_tsvector(_TEXT_CONFIG, MemoryRecord.retrieval_text)
     strict_query = func.websearch_to_tsquery(_TEXT_CONFIG, normalized_query)
@@ -270,6 +316,7 @@ def search_fts_memory_candidates(
         search_vector=search_vector,
         search_query=strict_query,
         top_k=top_k,
+        include_user_private=include_user_private,
     )
     if strict_results:
         return strict_results
@@ -286,6 +333,7 @@ def search_fts_memory_candidates(
         search_vector=search_vector,
         search_query=func.websearch_to_tsquery(_TEXT_CONFIG, fallback_text),
         top_k=top_k,
+        include_user_private=include_user_private,
     )
 
 
@@ -299,10 +347,17 @@ def _run_fts_query(
     search_vector,
     search_query,
     top_k: int,
+    include_user_private: bool = True,
 ) -> list[RankedMemoryRecord]:
     rank = func.ts_rank_cd(search_vector, search_query, 32)
     stmt = (
-        _base_statement(org_id=org_id, user_id=user_id, project_id=project_id, now=now)
+        _base_statement(
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            now=now,
+            include_user_private=include_user_private,
+        )
         .add_columns(rank.label("score"))
         .where(search_vector.op("@@")(search_query))
         .order_by(rank.desc(), MemoryRecord.id.asc())
@@ -328,6 +383,7 @@ def search_trigram_memory_candidates(
     raw_query: str,
     now: datetime,
     top_k: int,
+    include_user_private: bool = True,
 ) -> list[RankedMemoryRecord]:
     """Recall exact phrases and typo-tolerant memory without weakening scope filters."""
     query = raw_query.strip()
@@ -343,12 +399,19 @@ def search_trigram_memory_candidates(
             now=now,
             top_k=top_k,
             method="trigram",
+            include_user_private=include_user_private,
         )
     phrase_match = MemoryRecord.body_markdown.ilike(f"%{query}%")
     similarity = func.similarity(MemoryRecord.body_markdown, query)
     phrase_boost = case((phrase_match, 1.0), else_=0.0)
     stmt = (
-        _base_statement(org_id=org_id, user_id=user_id, project_id=project_id, now=now)
+        _base_statement(
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            now=now,
+            include_user_private=include_user_private,
+        )
         .add_columns((phrase_boost + similarity).label("score"))
         .where(or_(phrase_match, MemoryRecord.body_markdown.op("%")(query)))
         .order_by(phrase_boost.desc(), similarity.desc(), MemoryRecord.id.asc())
@@ -368,10 +431,19 @@ def list_active_preference_memory(
     project_id: str | None,
     now: datetime,
     top_k: int,
+    include_user_private: bool = True,
 ) -> list[MemoryRecord]:
     """Return a small always-on lane for the current user's explicit preferences."""
+    if not include_user_private:
+        return []
     stmt = (
-        _base_statement(org_id=org_id, user_id=user_id, project_id=project_id, now=now)
+        _base_statement(
+            org_id=org_id,
+            user_id=user_id,
+            project_id=project_id,
+            now=now,
+            include_user_private=True,
+        )
         .where(
             MemoryRecord.scope == "user_private",
             MemoryRecord.kind == "preference",
