@@ -1691,6 +1691,7 @@ export interface MemoryRead {
   body_markdown: string;
   citations: MemoryCitationRead[];
   graph_proposal?: MemoryGraphProposalRead | null;
+  supersedes_id: string | null;
   expires_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -1777,12 +1778,17 @@ export interface MemoryGraphReviewDecisionRead {
   reviewed_at: string | null;
 }
 
-export function listProjectMemory(projectId: string, includeProposed = false) {
+export function listProjectMemory(
+  projectId: string,
+  includeProposed = false,
+  includeHistory = false
+) {
   const params = new URLSearchParams({
     project_id: projectId,
     scope: 'project_shared'
   });
   if (includeProposed) params.set('include_proposed', 'true');
+  if (includeHistory) params.set('include_history', 'true');
   return request<MemoryRead[]>(`/memory?${params.toString()}`);
 }
 
@@ -1840,6 +1846,39 @@ export function getMemoryCompilation(compilationRunId: string) {
 
 export function approveMemory(memoryId: string) {
   return request<MemoryRead>(`/memory/${memoryId}/approve`, { method: 'POST' });
+}
+
+export interface MemoryUpdatePayload {
+  title?: string;
+  body_markdown?: string;
+  expires_at?: string | null;
+}
+
+export function updateMemory(memoryId: string, data: MemoryUpdatePayload) {
+  return request<MemoryRead>(`/memory/${memoryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  });
+}
+
+export function rejectMemory(memoryId: string, reason?: string) {
+  return request<MemoryRead>(`/memory/${memoryId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {})
+  });
+}
+
+export interface MemorySupersedePayload {
+  title: string;
+  body_markdown: string;
+  expires_at?: string | null;
+}
+
+export function supersedeMemory(memoryId: string, data: MemorySupersedePayload) {
+  return request<MemoryRead>(`/memory/${memoryId}/supersede`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
 }
 
 export function reviewMemoryGraphItem(

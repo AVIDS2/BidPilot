@@ -22,6 +22,28 @@ class MemoryCreate(BaseModel):
     expires_at: datetime | None = None
 
 
+class MemoryUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    title: str | None = Field(default=None, min_length=1, max_length=240)
+    body_markdown: str | None = Field(default=None, min_length=1, max_length=12000)
+    expires_at: datetime | None = None
+
+
+class MemoryReject(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    reason: str | None = Field(default=None, max_length=2_000)
+
+
+class MemorySupersedeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    title: str = Field(min_length=1, max_length=240)
+    body_markdown: str = Field(min_length=1, max_length=12000)
+    expires_at: datetime | None = None
+
+
 class MemoryGraphEntityRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -67,6 +89,7 @@ class MemoryRead(BaseModel):
     body_markdown: str
     citations: list[MemoryCitation]
     graph_proposal: MemoryGraphProposalRead | None = None
+    supersedes_id: str | None = None
     expires_at: datetime | None
     created_at: datetime | None
     updated_at: datetime | None

@@ -92,8 +92,11 @@ receives raw Mem0 responses.
 
 - [x] Rename user-facing `编译项目记忆` to `整理项目知识` or `生成知识建议`.
 - [x] Show proposed/active/rejected records with source citations and reviewer.
-  The first project-page slice shows proposed/active records and citations.
-- [ ] Add approve, reject, edit, supersede, expiry, and source drill-down flows.
+  The project page now shows lifecycle status, source citations, and retained review history.
+- [x] Add approve, reject, edit, supersede, expiry, and source drill-down flows.
+  Proposed knowledge can be edited, confirmed, or returned; active knowledge can
+  have its expiry adjusted or be replaced by a new proposed version; citations
+  link back to the relevant project materials or requirements.
 - [ ] Keep graph extraction behind an advanced project action; graph proposals
   never become facts without review.
 - [ ] Add a project knowledge detail view; the current portfolio cards alone do

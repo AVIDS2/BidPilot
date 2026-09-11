@@ -21,7 +21,10 @@
   compatibility route.
 - [x] Audit and replace ordinary user-facing developer language across docs,
   task status, model settings, collaboration panels, and project workflows.
-- [ ] Make project knowledge proposals/review/source drill-down a complete user workflow.
+- [x] Make project knowledge proposals/review/source drill-down a complete user
+  workflow: proposed knowledge can be edited, confirmed, or returned; active
+  knowledge supports expiry changes and replacement versions; source citations
+  expand and link back to the project context.
 - [ ] Collapse runtime-shaped pages into `我的工作`, project tabs, and admin/recovery entry points.
 - [ ] Add episodic `工作记录` and procedural `团队方法` projections with scoped retrieval labels.
 - [ ] Run memory leakage, deletion, stale-memory, citation, and Playwright acceptance scenarios.

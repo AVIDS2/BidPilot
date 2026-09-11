@@ -57,6 +57,7 @@ def list_memory_records(
     project_id: str | None,
     owner_user_id: str | None,
     include_proposed: bool,
+    include_history: bool = False,
     scope: str | None = None,
 ) -> list[MemoryRecord]:
     stmt: Select[tuple[MemoryRecord]] = select(MemoryRecord).where(
@@ -69,7 +70,9 @@ def list_memory_records(
         stmt = stmt.where(MemoryRecord.owner_user_id == owner_user_id)
     if scope is not None:
         stmt = stmt.where(MemoryRecord.scope == scope)
-    if include_proposed:
+    if include_history:
+        stmt = stmt.where(MemoryRecord.status.in_(("active", "proposed", "superseded", "rejected")))
+    elif include_proposed:
         stmt = stmt.where(MemoryRecord.status.in_(("active", "proposed")))
     else:
         stmt = stmt.where(MemoryRecord.status == "active")

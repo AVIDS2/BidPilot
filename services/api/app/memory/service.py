@@ -92,6 +92,9 @@ from .schemas import (
     MemoryGraphReviewDecisionCreate,
     MemoryGraphReviewDecisionRead,
     MemoryPortfolioProjectRead,
+    MemoryReject,
+    MemorySupersedeCreate,
+    MemoryUpdate,
     PersonalMemoryClearRead,
     PersonalMemoryRead,
     PersonalProfileMemoryRead,
@@ -178,6 +181,129 @@ def approve_memory_command(db: Session, memory_id: str, current_user: CurrentUse
     db.refresh(record)
     _request_memory_embedding_index(db, record, current_user)
     return _to_read(record)
+
+
+def update_memory_command(
+    db: Session,
+    memory_id: str,
+    payload: MemoryUpdate,
+    current_user: CurrentUser,
+) -> MemoryRead:
+    record = _require_record_for_project_action(db, memory_id, current_user, capability="memory.approve")
+    if record.status not in {MemoryStatus.PROPOSED.value, MemoryStatus.ACTIVE.value}:
+        raise HTTPException(status_code=409, detail="只有待确认或已生效的项目知识可以调整")
+
+    changed_fields = payload.model_fields_set
+    if not changed_fields:
+        raise HTTPException(status_code=422, detail="至少需要调整一项项目知识")
+    content_fields = changed_fields.intersection({"title", "body_markdown"})
+    if record.status == MemoryStatus.ACTIVE.value and content_fields:
+        raise HTTPException(status_code=409, detail="已生效的项目知识只能调整有效期；内容请使用替代版本")
+    if "title" in changed_fields:
+        if payload.title is None:
+            raise HTTPException(status_code=422, detail="标题不能为空")
+        record.title = payload.title
+    if "body_markdown" in changed_fields:
+        if payload.body_markdown is None:
+            raise HTTPException(status_code=422, detail="内容不能为空")
+        record.body_markdown = payload.body_markdown
+    if "expires_at" in changed_fields:
+        record.expires_at = payload.expires_at
+
+    if content_fields:
+        record.retrieval_text = normalize_retrieval_text(f"{record.title}\n{record.body_markdown}")
+        _reset_memory_embedding(record)
+    _record_event(db, record, current_user, "memory.updated", {"fields": sorted(changed_fields)})
+    db.commit()
+    db.refresh(record)
+    return _to_read(record)
+
+
+def reject_memory_command(
+    db: Session,
+    memory_id: str,
+    payload: MemoryReject,
+    current_user: CurrentUser,
+) -> MemoryRead:
+    record = _require_record_for_project_action(db, memory_id, current_user, capability="memory.approve")
+    if record.status != MemoryStatus.PROPOSED.value:
+        raise HTTPException(status_code=409, detail="只有待确认的项目知识可以退回")
+    record.status = MemoryStatus.REJECTED.value
+    _record_event(
+        db,
+        record,
+        current_user,
+        "memory.rejected",
+        {"reason": payload.reason} if payload.reason else None,
+    )
+    db.commit()
+    db.refresh(record)
+    return _to_read(record)
+
+
+def supersede_memory_command(
+    db: Session,
+    memory_id: str,
+    payload: MemorySupersedeCreate,
+    current_user: CurrentUser,
+) -> MemoryRead:
+    record = _require_record_for_project_action(db, memory_id, current_user, capability="memory.approve")
+    if record.status != MemoryStatus.ACTIVE.value:
+        raise HTTPException(status_code=409, detail="只有已生效的项目知识可以创建替代版本")
+
+    replacement = MemoryRecord(
+        org_id=record.org_id,
+        project_id=record.project_id,
+        owner_user_id=None,
+        scope=record.scope,
+        kind=record.kind,
+        status=MemoryStatus.PROPOSED.value,
+        privacy_classification=record.privacy_classification,
+        title=payload.title,
+        body_markdown=payload.body_markdown,
+        structured_data_json=record.structured_data_json,
+        retrieval_text=normalize_retrieval_text(f"{payload.title}\n{payload.body_markdown}"),
+        embedding_status="pending",
+        origin=MemoryProposalOrigin.HUMAN.value,
+        created_by_actor_type="user",
+        created_by_actor_id=current_user.id,
+        supersedes_id=record.id,
+        expires_at=payload.expires_at,
+    )
+    db.add(replacement)
+    db.flush()
+    for link in record.evidence_links:
+        db.add(
+            _citation_link(
+                replacement.id,
+                MemoryCitation(
+                    source_type=link.source_type,
+                    source_id=link.source_id,
+                    label=link.label,
+                    locator_json=link.locator_json,
+                ),
+            )
+        )
+
+    record.status = MemoryStatus.SUPERSEDED.value
+    _reset_memory_embedding(record)
+    _record_event(
+        db,
+        record,
+        current_user,
+        "memory.superseded",
+        {"replacement_memory_id": replacement.id},
+    )
+    _record_event(
+        db,
+        replacement,
+        current_user,
+        "memory.created",
+        {"status": MemoryStatus.PROPOSED.value, "supersedes_id": record.id},
+    )
+    db.commit()
+    db.refresh(replacement)
+    return _to_read(replacement)
 
 
 def review_memory_graph_item_command(
@@ -313,6 +439,7 @@ def list_memory_query(
     project_id: str | None,
     scope: MemoryScope | None,
     include_proposed: bool,
+    include_history: bool = False,
 ) -> list[MemoryRead]:
     org_id = _org_id(current_user)
     if project_id:
@@ -327,7 +454,7 @@ def list_memory_query(
                 include_proposed=False,
             )
             return [_to_read(record) for record in records]
-        if include_proposed:
+        if include_proposed or include_history:
             require_project_capability(db, current_user=current_user, project_id=project_id, capability="memory.approve")
         shared_records = list_memory_records(
             db,
@@ -336,6 +463,7 @@ def list_memory_query(
             owner_user_id=None,
             scope=scope.value if scope is not None else MemoryScope.PROJECT_SHARED.value,
             include_proposed=include_proposed,
+            include_history=include_history,
         )
         if scope is not None:
             return [_to_read(record) for record in shared_records]
@@ -1469,10 +1597,19 @@ def _to_read(record: MemoryRecord) -> MemoryRead:
             for link in record.evidence_links
         ],
         graph_proposal=_graph_proposal_for_read(record),
+        supersedes_id=record.supersedes_id,
         expires_at=record.expires_at,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
+
+
+def _reset_memory_embedding(record: MemoryRecord) -> None:
+    record.embedding = None
+    record.embedding_profile = None
+    record.embedding_status = "pending"
+    record.embedding_updated_at = None
+    record.embedding_error_code = None
 
 
 def _graph_proposal_for_read(record: MemoryRecord) -> MemoryGraphProposalRead | None:

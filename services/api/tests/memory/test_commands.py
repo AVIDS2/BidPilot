@@ -583,6 +583,106 @@ def test_contributor_can_propose_but_owner_controls_activation(memory_client, mo
     assert hidden.status_code == 404
 
 
+def test_project_memory_can_be_edited_or_returned_with_review_history(
+    memory_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _SessionLocal, users, project, set_user = memory_client
+    monkeypatch.setattr("app.retrieval.embedding.get_embedding_profile", lambda: None)
+
+    set_user(users["contributor"])
+    proposed = client.post("/memory", json=_project_memory_payload(project.id))
+    assert proposed.status_code == 201, proposed.text
+    memory_id = proposed.json()["id"]
+
+    set_user(users["owner"])
+    edited = client.patch(
+        f"/memory/{memory_id}",
+        json={
+            "title": "修订后的部署约束",
+            "body_markdown": "投标方案必须支持私有化部署，并说明交付边界。",
+            "expires_at": "2026-12-31T23:59:59",
+        },
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["title"] == "修订后的部署约束"
+    assert edited.json()["expires_at"].startswith("2026-12-31")
+
+    returned = client.post(
+        f"/memory/{memory_id}/reject",
+        json={"reason": "请补充交付边界的依据。"},
+    )
+    assert returned.status_code == 200, returned.text
+    assert returned.json()["status"] == "rejected"
+
+    hidden_from_active_list = client.get(
+        "/memory",
+        params={"project_id": project.id, "scope": "project_shared", "include_proposed": "true"},
+    )
+    assert hidden_from_active_list.status_code == 200, hidden_from_active_list.text
+    assert memory_id not in {record["id"] for record in hidden_from_active_list.json()}
+
+    history = client.get(
+        "/memory",
+        params={
+            "project_id": project.id,
+            "scope": "project_shared",
+            "include_proposed": "true",
+            "include_history": "true",
+        },
+    )
+    assert history.status_code == 200, history.text
+    assert next(record for record in history.json() if record["id"] == memory_id)["status"] == "rejected"
+
+
+def test_active_project_memory_supports_expiry_and_superseding(
+    memory_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, SessionLocal, users, project, set_user = memory_client
+    monkeypatch.setattr("app.retrieval.embedding.get_embedding_profile", lambda: None)
+
+    set_user(users["contributor"])
+    proposed = client.post("/memory", json=_project_memory_payload(project.id))
+    assert proposed.status_code == 201, proposed.text
+    memory_id = proposed.json()["id"]
+
+    set_user(users["owner"])
+    approved = client.post(f"/memory/{memory_id}/approve")
+    assert approved.status_code == 200, approved.text
+
+    changed_expiry = client.patch(
+        f"/memory/{memory_id}",
+        json={"expires_at": "2027-01-31T23:59:59"},
+    )
+    assert changed_expiry.status_code == 200, changed_expiry.text
+    assert changed_expiry.json()["expires_at"].startswith("2027-01-31")
+
+    rejected_content_edit = client.patch(
+        f"/memory/{memory_id}",
+        json={"body_markdown": "不应该直接覆盖已经生效的内容。"},
+    )
+    assert rejected_content_edit.status_code == 409
+
+    replacement = client.post(
+        f"/memory/{memory_id}/supersede",
+        json={
+            "title": "新的部署约束",
+            "body_markdown": "新的投标方案仍需支持私有化部署。",
+            "expires_at": "2027-06-30T23:59:59",
+        },
+    )
+    assert replacement.status_code == 200, replacement.text
+    assert replacement.json()["status"] == "proposed"
+    assert replacement.json()["supersedes_id"] == memory_id
+    assert replacement.json()["citations"] == approved.json()["citations"]
+
+    with SessionLocal() as db:
+        old_record = db.get(MemoryRecord, memory_id)
+        assert old_record is not None
+        assert old_record.status == "superseded"
+
+
 def test_private_memory_is_owner_scoped_and_tombstoned_on_delete(memory_client, monkeypatch: pytest.MonkeyPatch) -> None:
     client, SessionLocal, users, _project, set_user = memory_client
     monkeypatch.setattr("app.retrieval.embedding.get_embedding_profile", lambda: None)

@@ -18,6 +18,9 @@ from .schemas import (
     MemoryGraphReviewDecisionCreate,
     MemoryGraphReviewDecisionRead,
     MemoryPortfolioProjectRead,
+    MemoryReject,
+    MemorySupersedeCreate,
+    MemoryUpdate,
     PersonalMemoryClearRead,
     PersonalMemoryRead,
     MemoryRead,
@@ -37,6 +40,9 @@ from .service import (
     start_memory_compilation_command,
     start_memory_graph_extraction_command,
     review_memory_graph_item_command,
+    reject_memory_command,
+    supersede_memory_command,
+    update_memory_command,
 )
 
 
@@ -57,6 +63,7 @@ def list_memory(
     project_id: str | None = None,
     scope: MemoryScope | None = None,
     include_proposed: bool = False,
+    include_history: bool = False,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_auth),
 ) -> list[MemoryRead]:
@@ -66,6 +73,7 @@ def list_memory(
         project_id=project_id,
         scope=scope,
         include_proposed=include_proposed,
+        include_history=include_history,
     )
 
 
@@ -176,6 +184,36 @@ def approve_memory(
     current_user: CurrentUser = Depends(require_auth),
 ) -> MemoryRead:
     return approve_memory_command(db, memory_id, current_user)
+
+
+@router.patch("/{memory_id}", response_model=MemoryRead)
+def update_memory(
+    memory_id: str,
+    payload: MemoryUpdate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> MemoryRead:
+    return update_memory_command(db, memory_id, payload, current_user)
+
+
+@router.post("/{memory_id}/reject", response_model=MemoryRead)
+def reject_memory(
+    memory_id: str,
+    payload: MemoryReject,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> MemoryRead:
+    return reject_memory_command(db, memory_id, payload, current_user)
+
+
+@router.post("/{memory_id}/supersede", response_model=MemoryRead)
+def supersede_memory(
+    memory_id: str,
+    payload: MemorySupersedeCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_auth),
+) -> MemoryRead:
+    return supersede_memory_command(db, memory_id, payload, current_user)
 
 
 @router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
