@@ -36,12 +36,12 @@ Default screens should prioritize:
 - current evidence and review status
 - next useful action
 
-The Agent workspace uses two user-facing context surfaces:
+The Copilot workspace uses two user-facing context surfaces:
 
 - **Project workspaces** group related conversations under the project they work on;
   unscoped conversations remain under `个人会话`.
 - **Work overview** shows the current project, active background work, recent
-  work, and links back to the project or the related Agent conversation. It opens from the Agent
+  work, and links back to the project or the related Copilot conversation. It opens from the Copilot
   top-right control as a compact shadcn `Popover` status card rather than a
   permanent pane. It is not a developer console: only actionable project and
   user-owned task status belongs here.
@@ -52,18 +52,17 @@ The Agent workspace uses two user-facing context surfaces:
   the bottom, new streamed content follows automatically; once the reader
   scrolls upward, the viewport is left alone and a single "回到底部" action is
   provided.
-- The Agent's contextual right surface is one user-owned panel, not a second
+- The Copilot's contextual right surface is one user-owned panel, not a second
   conversation. It uses the installed `Tabs` and `ResizablePanelGroup` to keep
   collaboration progress, response workflow, and attachment preview available
   as sibling pages. Desktop collapse/expand uses the panel's native imperative
   API so the surface remains mounted while it animates; on mobile the same tabs
   live inside the installed `Sheet`.
-- A child Agent is a branch of the current Copilot process. It has runtime
-  status and useful business progress, but no independent user history entry
-  or synthetic chat message.
+- A 协作助理 is a branch of the current Copilot process. It has useful business
+  progress, but no independent user history entry or synthetic chat message.
 - Pending messages are visible as a real queue with two explicit semantics:
-  `引导当前任务` sends an attachment-free instruction through Pi's native
-  `steer` path while the current turn is active; `发送下一条` uses the normal
+  `继续当前任务` sends an attachment-free instruction into the active task;
+  `发送下一条` uses the normal
   durable-turn path after the current runtime has settled. Queue state is
   derived from the live response boundary and a rejected request stays in the
   queue instead of becoming a fake success state.
@@ -90,7 +89,7 @@ Primary navigation has four jobs:
 
 The project workspace owns the durable workflow tabs: overview, materials,
 requirements, response, review, deliverables, and project knowledge. These are
-facts and actions about one project and must not send a user to a generic Agent
+facts and actions about one project and must not send a user to a generic Copilot
 page without preserving the project context.
 
 The following surfaces are deliberately secondary:
@@ -126,9 +125,33 @@ The UI should never claim that the assistant “remembers everything”. The fou
 engineering types map to the user terms `当前工作上下文`, `工作记录`, `项目知识`,
 and `团队方法`; `用户偏好` is the only cross-project personalization layer.
 
-The detailed runtime event view at `/runs` is an administrator-only diagnostic
-surface. Ordinary users follow a task from the Agent conversation, project
+The detailed task event view at `/runs` is an administrator-only diagnostic
+surface. Ordinary users follow a task from the Copilot conversation, project
 workspace, or `我的工作` page and should never be sent to the raw event view.
+
+### User-language audit (2026-09-11)
+
+The following terms are implementation vocabulary and must not appear in
+ordinary user-facing navigation, buttons, toasts, empty states, or page
+descriptions:
+
+| Avoid | Use |
+| --- | --- |
+| Agent / 子 Agent | Copilot / 协作助理 |
+| Pi / 运行时 | 助手服务 / 助手能力 |
+| 运行记录 / 运行 | 任务详情 / 任务进展 |
+| 队列 / 待发送 | 下一步 / 下一条消息 |
+| 引导当前任务 | 继续当前任务 |
+| 模型供应商 | 模型连接 |
+| 编译项目记忆 | 生成知识建议 |
+| 项目记忆 / Bid Wiki | 项目知识 |
+| Webhook | 业务通知 |
+| FastAPI / 服务端校验 | 系统权限校验 |
+
+`/runs`, provider identifiers, raw event names, and protocol names remain
+available only in administrator or recovery surfaces. Their presence in source
+code, API contracts, tests, and internal comments is expected and is not a
+product-copy violation.
 
 The authenticated workbench uses one consistent navigation model: a desktop
 sidebar can be collapsed with its existing control and restored by clicking the
@@ -157,7 +180,7 @@ navigation follows the same upstream composition: the mode toggle is available
 at every size, while the full theme selector follows the template's compact
 screen behavior.
 
-Every route, including the Agent transcript and public landing page, inherits
+Every route, including the Copilot transcript and public landing page, inherits
 the active Kiranism theme tokens for background, foreground, primary, muted,
 border, ring, and destructive states. Feature-specific styling may add layout
 and domain status emphasis, but it must not replace the product palette with a

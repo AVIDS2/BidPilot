@@ -35,7 +35,7 @@ export default function AdminUsersPage() {
       <PageHeader
         eyebrow='管理'
         title='用户管理'
-        description='仅管理员可查看和调整账户状态；最终权限仍由 FastAPI 校验。'
+        description='仅管理员可查看和调整账户状态；每项变更都会经过权限校验。'
       />
       <div className='flex flex-1 flex-col gap-5 px-5 py-6 lg:px-8'>
         {query.isPending ? (

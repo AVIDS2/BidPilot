@@ -1,20 +1,20 @@
 {
-  "title": "运行中心",
-  "subtitle": "跨项目查看智能体与工作流的可追溯执行状态。",
+  "title": "任务详情",
+  "subtitle": "查看项目任务的进展、结果和确认事项。",
   "refresh": "刷新",
   "recent": "最近运行",
   "recentCount": "最近 {{count}} 条可见任务",
-  "details": "运行详情",
-  "emptyTitle": "还没有可见运行",
-  "emptyDescription": "创建项目、让智能体执行操作，或启动一次起草工作流后，运行记录会出现在这里。",
-  "noSelection": "选择一条运行以查看安全的事件回放。",
-  "events": "执行记录",
-  "noEvents": "这条运行暂时没有可展示的事件。",
+  "details": "任务详情",
+  "emptyTitle": "还没有任务",
+  "emptyDescription": "创建项目并让 Copilot 开始工作后，任务进展会出现在这里。",
+  "noSelection": "选择一项任务查看进展。",
+  "events": "进展记录",
+  "noEvents": "这项任务暂时没有可展示的更新。",
   "project": "项目",
-  "noProject": "通用智能体任务",
-  "engine": "运行时",
+  "noProject": "未关联项目的任务",
+  "engine": "服务能力",
   "openProject": "打开项目",
-  "continueWithAgent": "交给智能体继续",
+  "continueWithAgent": "继续当前任务",
   "lastUpdate": "最近进展",
   "startedAt": "开始时间",
   "completedAt": "结束时间",
@@ -31,14 +31,14 @@
     "failed": "异常"
   },
   "kinds": {
-    "assistant_turn": "智能体任务",
+    "assistant_turn": "助手任务",
     "workflow_bridge": "工作流执行",
     "system_recovery": "系统恢复"
   },
   "engines": {
     "deterministic": "受控执行引擎",
-    "langgraph_operator": "智能体运行时",
-    "langgraph_workflow": "工作流运行时"
+    "langgraph_operator": "助手服务",
+    "langgraph_workflow": "项目流程"
   },
   "eventTypes": {
     "run.started": "任务已开始",
@@ -50,7 +50,7 @@
     "approval.requested": "等待审批",
     "approval.resolved": "审批已处理",
     "workflow.linked": "已连接工作流",
-    "message.completed": "智能体已回复",
+    "message.completed": "助手已回复",
     "run.completed": "任务已完成",
     "run.failed": "任务失败",
     "run.cancelled": "任务已取消"

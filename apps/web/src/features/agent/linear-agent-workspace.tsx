@@ -167,7 +167,7 @@ function AgentPreviewCanvas({
           <div className='agent-preview-placeholder'>
             <FileTextIcon size={28} />
             <strong>文件已上传并完成预解析</strong>
-            <span>当前格式在浏览器中不能直接渲染，解析结果已可供 Agent 使用。</span>
+            <span>当前格式无法直接预览，解析结果已可供 Copilot 使用。</span>
           </div>
         ) : null}
       </div>
@@ -878,7 +878,7 @@ function AgentWelcome({
     }
   ];
   return (
-    <div className='agent-welcome' aria-label='BidPilot Agent welcome'>
+    <div className='agent-welcome' aria-label='BidPilot Copilot 欢迎页'>
       <div className='agent-watermark' aria-hidden='true'>
         <i className='watermark-disk' />
         <i className='watermark-slice slice-one' />
@@ -888,7 +888,7 @@ function AgentWelcome({
       <h3>欢迎使用 BidPilot</h3>
       <AIAssistantPanel variant='linear-agent' onPreviewAttachment={onPreviewAttachment} />
       {examplesVisible ? (
-        <section className='agent-examples' aria-label='Agent examples'>
+        <section className='agent-examples' aria-label='常用任务示例'>
           <div className='examples-label'>
             <span>从这些常用任务开始</span>
             <Button

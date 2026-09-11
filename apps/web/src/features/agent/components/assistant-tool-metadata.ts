@@ -29,7 +29,7 @@ const TOOL_FALLBACK_LABELS: Record<string, string> = {
   list_pending_reviews: '查看待审核项',
   submit_review_decision: '提交章节审核决定',
   list_requirements: '查看需求',
-  list_claim_review_queue: '查看待核验主张',
+  list_claim_review_queue: '查看待核验内容',
   get_readiness_summary: '查看投标准备度',
   list_readiness_gaps: '查看就绪缺口',
   open_requirement_source: '定位需求来源',
@@ -43,7 +43,7 @@ const TOOL_FALLBACK_LABELS: Record<string, string> = {
   write_section: '写入章节内容',
   start_redraft_section: '重新起草章节',
   propose_memory_graph: '生成实体关系提案',
-  get_runtime_status: '读取执行状态',
+  get_runtime_status: '查看处理进度',
   retry_run: '重试任务',
   export_deliverable: '导出交付物',
   generate_readiness_pack: '生成投标准备度包',
@@ -53,16 +53,16 @@ const TOOL_FALLBACK_LABELS: Record<string, string> = {
   web_search: '联网搜索',
   discover_remote_documents: '发现远程资料附件',
   fetch_url_to_project: '入库远程资料',
-  search_bid_wiki: '查询 Bid Wiki',
+  search_bid_wiki: '查询项目知识',
   list_knowledge_portfolio: '查看知识资产概览',
   propose_memory: '保存个人偏好',
-  forget_memory: '遗忘记忆',
+  forget_memory: '删除个人偏好',
   search_knowledge: '检索知识库',
   open_page: '打开页面',
   upload_document: '上传文档',
   delete_project: '删除项目',
-  spawn_subagents: '委派子 Agent',
-  subagent: '执行委派任务'
+  spawn_subagents: '分派协作任务',
+  subagent: '执行协作任务'
 };
 
 const TOOL_ICONS: Record<string, LucideIcon> = {

@@ -124,7 +124,7 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow='BidPilot 工作台'
         title='总览'
-        description='从这里查看项目进度、Agent 任务和响应准备度。'
+        description='从这里查看项目进度、助手工作和响应准备度。'
         action={
           <div className='flex flex-wrap items-center justify-end gap-2'>
             <LiveSyncStatus
@@ -220,8 +220,8 @@ export default function DashboardPage() {
                     </ChartContainer>
                   ) : (
                     <EmptyState
-                      title='还没有运行数据'
-                      description='从助手发起一次项目任务后，这里会根据真实运行状态绘制。'
+                      title='还没有任务数据'
+                      description='从 Copilot 发起一次项目工作后，这里会显示真实进展。'
                     />
                   )}
                 </CardContent>
@@ -272,9 +272,7 @@ export default function DashboardPage() {
                   <div className='flex items-center justify-between gap-3'>
                     <div>
                       <h2 className='font-medium'>最近任务</h2>
-                      <p className='text-muted-foreground mt-1 text-sm'>
-                        真实 Pi/工作流运行的最新状态。
-                      </p>
+                      <p className='text-muted-foreground mt-1 text-sm'>最近任务的最新进展。</p>
                     </div>
                     <Link
                       className={buttonVariants({ size: 'sm', variant: 'ghost' })}
@@ -315,7 +313,7 @@ export default function DashboardPage() {
                     <div className='p-5'>
                       <EmptyState
                         title='还没有最近任务'
-                        description='当 Agent 开始处理项目任务后，进展会出现在这里。'
+                        description='当 Copilot 开始处理项目工作后，进展会出现在这里。'
                       />
                     </div>
                   )}
@@ -450,9 +448,9 @@ function runKindLabel(value: string) {
   return (
     (
       {
-        assistant_turn: 'Agent 任务',
+        assistant_turn: '助手任务',
         workflow_bridge: '响应工作流',
-        subagent: '后台协作任务',
+        subagent: '协作任务',
         deep_research: '深度调研',
         remote_import: '资料导入'
       } as Record<string, string>

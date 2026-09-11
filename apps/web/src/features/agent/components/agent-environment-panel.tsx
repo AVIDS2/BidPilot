@@ -60,13 +60,13 @@ interface AgentEnvironmentPanelProps {
 }
 
 function runLabel(run: RuntimeRunListItem) {
-  if (run.kind === 'subagent') return '子 Agent';
+  if (run.kind === 'subagent') return '协作助理';
   if (run.kind === 'deep_research') return '深度调研';
   if (run.kind === 'workflow_bridge') return '响应工作流';
   if (run.kind === 'remote_import') return '资料导入';
   if (run.kind === 'system_recovery') return '任务恢复';
   if (run.kind === 'assistant_turn') return '助手会话';
-  return '后台任务';
+  return '项目工作';
 }
 
 function RunIcon({ kind }: { kind: string }) {
@@ -137,7 +137,7 @@ function ActiveRunRow({
           </Badge>
         </span>
         <span className='truncate text-[11px] text-muted-foreground'>
-          {run.latest_event_summary || run.project_name || '后台工作'}
+          {run.latest_event_summary || run.project_name || '正在处理'}
         </span>
       </span>
       {opensSubagents ? (
@@ -217,7 +217,7 @@ export function AgentEnvironmentPanel({
   const currentProject = projects.find((project) => project.id === currentProjectId) ?? null;
   const activeSubagentCount = activeRuns.filter((run) => run.kind === 'subagent').length;
   const overviewSummary = activeSubagentCount
-    ? `${activeSubagentCount} 个子 Agent 正在工作`
+    ? `${activeSubagentCount} 个协作助理正在工作`
     : activeRuns.length
       ? `${activeRuns.length} 项任务需要关注`
       : '当前没有进行中的任务';
@@ -263,7 +263,7 @@ export function AgentEnvironmentPanel({
                 aria-busy='true'
                 className='flex flex-col gap-2 rounded-md bg-muted/40 px-2.5 py-2'
                 role='status'
-                aria-label='正在加载后台工作'
+                aria-label='正在加载协作进度'
               >
                 <Skeleton className='h-3 w-2/3' />
                 <Skeleton className='h-3 w-1/2' />
@@ -273,7 +273,7 @@ export function AgentEnvironmentPanel({
                 className='rounded-md bg-destructive/10 px-2.5 py-2 text-xs text-destructive'
                 role='alert'
               >
-                后台工作暂时无法读取。
+                协作进度暂时无法读取。
               </div>
             ) : activeRuns.length ? (
               <div className='flex flex-col gap-1'>
@@ -289,12 +289,12 @@ export function AgentEnvironmentPanel({
             ) : (
               <div className='flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-2 text-xs text-muted-foreground'>
                 <SparklesIcon className='size-3.5' />
-                目前没有后台工作
+                目前没有协作事项
               </div>
             )}
             {activeRuns.length > 8 ? (
               <p className='text-[11px] text-muted-foreground'>
-                还有 {activeRuns.length - 8} 项工作，可打开后台工作查看。
+                还有 {activeRuns.length - 8} 项工作，可打开协作进度查看。
               </p>
             ) : null}
           </section>

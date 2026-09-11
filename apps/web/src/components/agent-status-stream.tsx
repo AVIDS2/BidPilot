@@ -107,7 +107,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
             const errorMsg = (parsed.error_message ?? parsed.error) as string | undefined;
             next.nodes = mergeNode(next.nodes, { name, status: 'failed', error: errorMsg });
             next.currentNode = null;
-            next.error = errorMsg ?? 'Agent run failed';
+            next.error = errorMsg ?? '助手工作失败';
             break;
           }
           case 'review_result': {
@@ -137,7 +137,7 @@ export function useAgentStream(runId: string | null): AgentStreamState {
           }
           case 'run_error': {
             next.isRunning = false;
-            next.error = (parsed.error as string) ?? 'Agent run failed';
+            next.error = (parsed.error as string) ?? '助手工作失败';
             break;
           }
           case 'error': {

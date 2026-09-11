@@ -20,7 +20,7 @@
     "providerType": "接口协议",
     "providerTypeHelp": "选择 API 请求协议，而不是模型品牌。DeepSeek、OpenRouter、百炼兼容模式通常选 OpenAI-compatible；真正的 Claude/Anthropic Messages 端点才选 Anthropic Messages。",
     "label": "标签",
-    "apiKey": "API 密钥",
+    "apiKey": "访问密钥",
     "apiKeyHint": "（留空则保持现有密钥）",
     "apiKeyPlaceholderNew": "<服务端密钥>",
     "apiKeyPlaceholderEdit": "输入新密钥或留空",
@@ -48,7 +48,7 @@
     "modelsEmpty": "该提供商没有返回模型列表",
     "modelsFailed": "获取模型列表失败：{{message}}",
     "labelRequired": "标签为必填项",
-    "apiKeyRequired": "API 密钥为必填项",
+    "apiKeyRequired": "访问密钥为必填项",
     "modelRequired": "模型为必填项"
   }
 }

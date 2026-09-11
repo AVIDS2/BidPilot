@@ -215,7 +215,7 @@ function RemoteDocumentDiscovery({ item }: { item: AssistantExecutionItem }) {
         </span>
         <small>尚未下载</small>
       </header>
-      <p>确认具体文件后，Agent 才会将它保存到项目资料包并启动解析。</p>
+      <p>确认具体文件后，Copilot 会将它保存到项目资料包并启动解析。</p>
       <div className='cr-remote-material-list'>
         {candidates.map((candidate) => (
           <a href={candidate.url} key={candidate.url} rel='noreferrer' target='_blank'>
@@ -263,7 +263,7 @@ function RemoteDocumentImport({ item }: { item: AssistantExecutionItem }) {
       <header>
         <span>
           <FileCheck2Icon size={14} />
-          {queued ? '后台导入已开始' : '已加入项目资料包'}
+          {queued ? '资料正在导入' : '已加入项目资料包'}
         </span>
         <small
           className={queued || storedWithoutParsing || parsingQueued ? 'is-ready' : 'is-attention'}
@@ -938,16 +938,16 @@ function SubagentExecutionViewer({
 
   if (item.toolName !== 'spawn_subagents' || children.length === 0) return null;
   return (
-    <section className='cr-subagent-viewer' aria-label='子 Agent 执行记录'>
+    <section className='cr-subagent-viewer' aria-label='协作助理进展'>
       <header className='cr-subagent-viewer-header'>
-        <span>子 Agent</span>
+        <span>协作助理</span>
         <span>
           {selected + 1} / {children.length}
         </span>
       </header>
       {child && (
         <div className='cr-subagent-viewer-body'>
-          <strong>{child.profile || '子 Agent'} 子 Agent</strong>
+          <strong>{child.profile || '协作助理'}</strong>
           <small>
             {child.status === 'completed' || child.status === 'succeeded'
               ? '已完成'
@@ -973,7 +973,7 @@ function SubagentExecutionViewer({
             size='sm'
             variant='outline'
           >
-            查看上一个子 Agent
+            查看上一个协作助理
           </Button>
           <Button
             type='button'
@@ -982,7 +982,7 @@ function SubagentExecutionViewer({
             size='sm'
             variant='outline'
           >
-            查看下一个子 Agent
+            查看下一个协作助理
           </Button>
         </div>
       )}

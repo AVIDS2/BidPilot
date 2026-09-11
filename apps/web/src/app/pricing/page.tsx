@@ -28,13 +28,13 @@ const plans = [
   {
     name: 'Starter',
     description: '适合验证第一条投标响应链。',
-    features: ['3 个活跃项目', '资料、要求和证据基础能力', '官方 Agent 体验额度']
+    features: ['3 个活跃项目', '资料、要求和证据基础能力', 'Copilot 助手体验额度']
   },
   {
     name: 'Professional',
     description: '适合持续推进投标的响应团队。',
     featured: true,
-    features: ['更高项目与运行容量', '团队协作和评审工作区', '完整 Agent 与交付工作流']
+    features: ['更高项目与工作容量', '团队协作和评审工作区', '完整 Copilot 与交付工作流']
   },
   {
     name: 'Enterprise',
@@ -134,7 +134,7 @@ export default function PricingPage() {
           <AccordionItem value='price'>
             <AccordionTrigger>页面为什么不直接展示固定金额？</AccordionTrigger>
             <AccordionContent>
-              当前工作区额度、官方模型使用和企业定制能力由服务端账户配置决定，营销页不会虚构一个无法兑现的价格。
+              当前工作区额度、模型使用和企业定制能力会根据账户与工作区设置确定，营销页不会虚构一个无法兑现的价格。
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value='upgrade'>
@@ -146,7 +146,7 @@ export default function PricingPage() {
           <AccordionItem value='data'>
             <AccordionTrigger>升级会影响项目资料吗？</AccordionTrigger>
             <AccordionContent>
-              不会。项目、资料、证据和审核记录由 BidPilot 控制面保存，计划只决定可用额度和组织能力。
+              不会。项目、资料、证据和审核记录由 BidPilot 统一保存，计划只决定可用额度和组织能力。
             </AccordionContent>
           </AccordionItem>
         </Accordion>

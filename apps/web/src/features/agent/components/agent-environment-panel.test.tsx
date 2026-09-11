@@ -58,12 +58,12 @@ describe('AgentEnvironmentPanel', () => {
 
     expect(await screen.findByText('工作概览')).toBeInTheDocument();
     expect(screen.getByText('进行中的任务')).toBeInTheDocument();
-    expect(await screen.findByText('1 个子 Agent 正在工作')).toBeInTheDocument();
-    expect(await screen.findByText('子 Agent')).toBeInTheDocument();
+    expect(await screen.findByText('1 个协作助理正在工作')).toBeInTheDocument();
+    expect(await screen.findByText('协作助理')).toBeInTheDocument();
     expect(await screen.findByText('深度调研')).toBeInTheDocument();
     expect(screen.getByText('项目工作区')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /子 Agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /协作助理/ }));
     expect(onOpenSubagents).toHaveBeenCalledWith('run-1');
     expect(onOpenRun).not.toHaveBeenCalled();
   });
@@ -78,7 +78,7 @@ describe('AgentEnvironmentPanel', () => {
 
     await screen.findByText('工作概览');
     expect(screen.queryByText('助手会话')).not.toBeInTheDocument();
-    expect(await screen.findByText('子 Agent')).toBeInTheDocument();
+    expect(await screen.findByText('协作助理')).toBeInTheDocument();
   });
 
   it('does not turn a failed background query into a false empty state', async () => {
@@ -90,7 +90,7 @@ describe('AgentEnvironmentPanel', () => {
       </QueryClientProvider>
     );
 
-    expect(await screen.findByText('后台工作暂时无法读取。')).toBeInTheDocument();
-    expect(screen.queryByText('目前没有后台工作')).not.toBeInTheDocument();
+    expect(await screen.findByText('协作进度暂时无法读取。')).toBeInTheDocument();
+    expect(screen.queryByText('目前没有协作事项')).not.toBeInTheDocument();
   });
 });

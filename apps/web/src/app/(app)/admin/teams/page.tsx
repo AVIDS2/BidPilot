@@ -79,7 +79,7 @@ export default function AdminTeamsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新建团队</DialogTitle>
-            <DialogDescription>团队名称和 slug 会发送给 FastAPI 创建接口。</DialogDescription>
+            <DialogDescription>团队名称会用于工作区协作和权限管理。</DialogDescription>
           </DialogHeader>
           <form
             onSubmit={(event) => {

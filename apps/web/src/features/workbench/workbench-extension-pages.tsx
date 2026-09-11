@@ -158,7 +158,7 @@ function sourceKindLabel(value: string) {
       {
         rss: 'RSS 来源',
         json_feed: 'JSON Feed 来源',
-        webhook: 'Webhook 来源'
+        webhook: '通知来源'
       } as Record<string, string>
     )[value] || '公开来源'
   );
@@ -236,7 +236,7 @@ export function InboxPage() {
     mutationFn: cancelRuntimeWorkflow,
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['runtime-runs'] });
-      toast.success('已请求停止运行，终态会由服务端事件确认。');
+      toast.success('已请求停止，完成状态会在任务进展中更新。');
     },
     onError: () => toast.error('当前任务无法停止，请稍后重试。')
   });
@@ -256,7 +256,7 @@ export function InboxPage() {
       <PageHeader
         eyebrow='工作流运营'
         title='收件箱'
-        description='把需要你处理的 Agent 运行、审批和失败事项集中在一处。'
+        description='把需要你处理的助手工作、审批和失败事项集中在一处。'
         action={
           <Link className={buttonVariants({ variant: 'outline' })} href='/my-work'>
             查看我的工作 <ArrowUpRight data-icon='inline-end' />
@@ -295,7 +295,7 @@ export function InboxPage() {
               <div className='p-5'>
                 <EmptyState
                   title={filter === 'all' ? '收件箱是空的' : '没有匹配事项'}
-                  description='新的 Agent 运行、审批或失败状态会在服务端产生后出现在这里。'
+                  description='新的助手工作、审批或失败状态会出现在这里。'
                 />
               </div>
             ) : (
@@ -316,7 +316,7 @@ export function InboxPage() {
                         }
                       >
                         <p className='truncate text-sm font-medium'>
-                          {run.latest_event_summary || 'Agent 任务'}
+                          {run.latest_event_summary || '助手任务'}
                         </p>
                         <p className='text-muted-foreground mt-1 truncate text-xs'>
                           {run.project_name || '未关联项目'} · {formatDate(run.created_at)}
@@ -557,7 +557,7 @@ export function MyWorkPage() {
                 icon={Bell}
                 label='等待决定'
                 value={workItems.filter((item) => item.kind === 'approval').length}
-                detail='审批或失败运行'
+                detail='审批或失败任务'
               />
             </div>
             <div className='grid gap-6 xl:grid-cols-[1.1fr_0.9fr]'>
@@ -565,9 +565,7 @@ export function MyWorkPage() {
                 <CardHeader className='gap-4 border-b sm:flex-row sm:items-center sm:justify-between'>
                   <div>
                     <CardTitle>下一步</CardTitle>
-                    <CardDescription>
-                      点击事项回到对应项目，所有状态均由服务端数据计算。
-                    </CardDescription>
+                    <CardDescription>点击事项回到对应项目，状态会随项目进展更新。</CardDescription>
                   </div>
                   <Tabs value={scope} onValueChange={(value) => setScope(value as typeof scope)}>
                     <TabsList variant='line'>
@@ -880,7 +878,7 @@ export function RadarPage() {
                     <Radar className={overviewQuery.isFetching ? 'motion-safe:animate-spin' : ''} />
                     来源信号
                   </CardTitle>
-                  <CardDescription>只显示服务端已接入的公开来源。</CardDescription>
+                  <CardDescription>只显示已经接入的公开来源。</CardDescription>
                 </CardHeader>
                 <CardContent className='flex flex-col gap-4 p-5'>
                   {overview.sources.length ? (
@@ -1161,7 +1159,9 @@ export function RadarPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>接入公开来源</DialogTitle>
-            <DialogDescription>来源地址由服务端定时采集，页面不会填充演示公告。</DialogDescription>
+            <DialogDescription>
+              来源地址会按设定频率自动更新，页面不会填充演示公告。
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>
@@ -1432,62 +1432,60 @@ function AdministrationContent() {
               <Card>
                 <CardHeader>
                   <CardTitle>集成与容量</CardTitle>
-                  <CardDescription>
-                    这里不显示 Pi 私有提示词、原始工具参数或供应商密钥。
-                  </CardDescription>
+                  <CardDescription>这里不显示内部指令、原始操作参数或访问密钥。</CardDescription>
                 </CardHeader>
                 <CardContent className='flex flex-col gap-3'>
                   <Link
                     className={buttonVariants({ variant: 'outline' })}
                     href='/settings/providers'
                   >
-                    模型供应商配置 <ArrowUpRight data-icon='inline-end' />
+                    模型连接配置 <ArrowUpRight data-icon='inline-end' />
                   </Link>
                   <Link
                     className={buttonVariants({ variant: 'outline' })}
                     href='/settings/webhooks'
                   >
-                    Webhook 端点 <ArrowUpRight data-icon='inline-end' />
+                    业务通知地址 <ArrowUpRight data-icon='inline-end' />
                   </Link>
                   <Link className={buttonVariants({ variant: 'outline' })} href='/runs'>
-                    运行记录 <ArrowUpRight data-icon='inline-end' />
+                    任务详情 <ArrowUpRight data-icon='inline-end' />
                   </Link>
                 </CardContent>
               </Card>
             </div>
             <Card>
               <CardHeader>
-                <CardTitle>Pi 运行状态</CardTitle>
+                <CardTitle>助手服务状态</CardTitle>
                 <CardDescription>
-                  仅管理员可见的服务端运行时摘要；这里不暴露提示词、原始工具参数或租户密钥。
+                  仅管理员可见的服务能力摘要；这里不暴露内部指令、原始操作参数或工作区密钥。
                 </CardDescription>
               </CardHeader>
               <CardContent className='grid gap-4 sm:grid-cols-3'>
                 <RuntimeMetric
                   icon={Clock3}
-                  label='准备中的任务'
+                  label='处理中任务'
                   value={runtimeSummary.data?.queue_depth ?? '—'}
                   detail='等待开始处理的任务'
                 />
                 <RuntimeMetric
                   icon={AlertCircle}
-                  label='失败运行'
+                  label='失败任务'
                   value={runtimeSummary.data?.failed_runs ?? '—'}
                   detail='需要管理员关注的终态'
                 />
                 <RuntimeMetric
                   icon={Sparkles}
-                  label='Pi 能力'
+                  label='助手能力'
                   value={runtimeContract.data?.data.extensions.length ?? '—'}
-                  detail={`${runtimeContract.data?.data.skills.length ?? '—'} 项受信技能`}
+                  detail={`${runtimeContract.data?.data.skills.length ?? '—'} 项可用能力`}
                 />
               </CardContent>
             </Card>
             <Alert>
               <ShieldCheck />
-              <AlertTitle>服务端仍是权限和业务事实的唯一裁决点</AlertTitle>
+              <AlertTitle>系统会统一校验权限和项目事实</AlertTitle>
               <AlertDescription>
-                页面角色过滤只负责减少误触和信息暴露；每个管理员操作仍由 FastAPI 再次校验组织权限。
+                页面只负责展示适合当前角色的入口；每项管理员操作都会再次校验工作区权限。
               </AlertDescription>
             </Alert>
           </>

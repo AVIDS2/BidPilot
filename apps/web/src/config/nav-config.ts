@@ -65,7 +65,7 @@ export const navGroups: NavGroup[] = [
         access: { role: 'admin' }
       },
       {
-        title: 'Webhook',
+        title: '业务通知',
         url: '/settings/webhooks',
         icon: 'settings',
         items: [],

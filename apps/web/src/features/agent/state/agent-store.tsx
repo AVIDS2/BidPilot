@@ -1471,8 +1471,8 @@ function handleAssistantSseEvent(
               ? result.presentation_title
               : undefined,
         isRunning: workflowIsLive,
-        errorMessage: workflowIsLive ? undefined : '后台任务状态已过期，未收到完成结果。',
-        summary: workflowIsLive ? undefined : '后台任务状态已过期',
+        errorMessage: workflowIsLive ? undefined : '项目工作状态已过期，暂时没有收到完成结果。',
+        summary: workflowIsLive ? undefined : '项目工作状态已过期',
         timestamp: Date.now()
       }
     });
@@ -1546,10 +1546,10 @@ function handleAssistantSseEvent(
         status: linkedRun ? (linkedRunIsLive ? 'running' : 'failed') : 'succeeded',
         result,
         summary:
-          linkedRun && !linkedRunIsLive ? '后台任务状态已过期' : String(parsed.summary ?? ''),
+          linkedRun && !linkedRunIsLive ? '项目工作状态已过期' : String(parsed.summary ?? ''),
         isRunning: linkedRun && linkedRunIsLive,
         errorMessage:
-          linkedRun && !linkedRunIsLive ? '后台任务状态已过期，未收到完成结果。' : undefined,
+          linkedRun && !linkedRunIsLive ? '项目工作状态已过期，暂时没有收到完成结果。' : undefined,
         toolCallId,
         turnId,
         runtimeRunId,

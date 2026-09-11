@@ -38,7 +38,7 @@ export function AuthSplitLayout({
           </h1>
           <p className='text-background/65 mt-5 text-sm leading-6'>
             {isSignIn
-              ? '统一管理项目、证据和 Agent 运行结果，让团队始终围绕同一份业务事实协作。'
+              ? '统一管理项目、证据和助手工作结果，让团队始终围绕同一份业务事实协作。'
               : '从资料、要求到证据和交付，每一个决定都可以被看见、核对和回溯。'}
           </p>
         </div>
@@ -66,7 +66,7 @@ export function AuthSplitLayout({
             </h2>
             <p className='text-muted-foreground mt-2 text-sm leading-6'>
               {isSignIn
-                ? '使用邮箱进入你的项目、知识库和 Agent 工作进展。'
+                ? '使用邮箱进入你的项目、知识库和 Copilot 工作进展。'
                 : '用一个真实工作区开始管理招标资料和响应任务。'}
             </p>
           </div>

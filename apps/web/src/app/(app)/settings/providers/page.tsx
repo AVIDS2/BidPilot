@@ -105,12 +105,12 @@ export default function ProviderSettingsPage() {
     <>
       <PageHeader
         eyebrow='工作区'
-        title='模型供应商'
-        description='配置你希望用于 Agent 任务的模型连接。密钥只提交给后端，不在页面中回显。'
+        title='模型连接'
+        description='选择 Copilot 使用的模型。访问密钥只用于连接，不会在页面显示。'
         action={
           <Button onClick={() => setOpen(true)}>
             <Plus data-icon='inline-start' />
-            添加供应商
+            添加模型连接
           </Button>
         }
       />
@@ -120,7 +120,7 @@ export default function ProviderSettingsPage() {
             <div>
               <div className='flex items-center gap-2'>
                 <Cpu className='text-primary size-4' />
-                <h2 className='font-medium'>已配置供应商</h2>
+                <h2 className='font-medium'>已保存的模型连接</h2>
               </div>
               <p className='text-muted-foreground mt-1 text-sm'>当前账户可用的模型连接。</p>
             </div>
@@ -154,7 +154,7 @@ export default function ProviderSettingsPage() {
                     </Badge>
                     <Button
                       aria-label={`删除 ${config.label}`}
-                      title='删除供应商'
+                      title='删除模型连接'
                       variant='ghost'
                       size='icon-sm'
                       onClick={() => remove.mutate(config.id)}
@@ -169,9 +169,7 @@ export default function ProviderSettingsPage() {
               <div className='p-5'>
                 <Alert>
                   <AlertTitle>尚未配置</AlertTitle>
-                  <AlertDescription>
-                    添加一个 OpenAI 兼容或 Anthropic 供应商后，Agent 才能使用该连接。
-                  </AlertDescription>
+                  <AlertDescription>添加一个模型连接后，Copilot 才能开始工作。</AlertDescription>
                 </Alert>
               </div>
             )}
@@ -180,8 +178,8 @@ export default function ProviderSettingsPage() {
         <div className='grid content-start gap-6'>
           <Card>
             <CardHeader className='border-b'>
-              <h2 className='font-medium'>平台模型目录</h2>
-              <p className='text-muted-foreground mt-1 text-sm'>查看平台当前支持的模型和供应商。</p>
+              <h2 className='font-medium'>可用模型</h2>
+              <p className='text-muted-foreground mt-1 text-sm'>查看当前可以选择的模型。</p>
             </CardHeader>
             <CardContent className='p-5'>
               {catalog.isPending ? (
@@ -194,7 +192,7 @@ export default function ProviderSettingsPage() {
                 <div className='flex flex-col gap-3'>
                   <p className='text-sm'>
                     {catalog.data?.data.models.length ?? 0} 个模型 ·{' '}
-                    {catalog.data?.data.providers.length ?? 0} 个供应商
+                    {catalog.data?.data.providers.length ?? 0} 个连接
                   </p>
                   <p className='text-muted-foreground text-xs'>
                     目录来源：{catalog.data?.data.source || '—'} · 版本：
@@ -207,9 +205,9 @@ export default function ProviderSettingsPage() {
           {user?.role === 'admin' ? (
             <Card>
               <CardHeader className='border-b'>
-                <h2 className='font-medium'>Pi 运行时</h2>
+                <h2 className='font-medium'>助手服务能力</h2>
                 <p className='text-muted-foreground mt-1 text-sm'>
-                  仅管理员可查看服务端运行时能力摘要。
+                  仅管理员可查看当前助手服务的能力摘要。
                 </p>
               </CardHeader>
               <CardContent className='p-5'>
@@ -222,20 +220,20 @@ export default function ProviderSettingsPage() {
                 ) : runtime.data?.data ? (
                   <div className='flex flex-col gap-3 text-sm'>
                     <div className='flex justify-between gap-4'>
-                      <span className='text-muted-foreground'>运行时版本</span>
+                      <span className='text-muted-foreground'>服务版本</span>
                       <span>{runtime.data.data.version}</span>
                     </div>
                     <div className='flex justify-between gap-4'>
-                      <span className='text-muted-foreground'>扩展能力</span>
+                      <span className='text-muted-foreground'>可用能力</span>
                       <span>{runtime.data.data.extensions.length}</span>
                     </div>
                     <div className='flex justify-between gap-4'>
-                      <span className='text-muted-foreground'>技能</span>
+                      <span className='text-muted-foreground'>工作方法</span>
                       <span>{runtime.data.data.skills.length}</span>
                     </div>
                   </div>
                 ) : (
-                  <p className='text-muted-foreground text-sm'>暂无运行时信息。</p>
+                  <p className='text-muted-foreground text-sm'>暂无服务能力信息。</p>
                 )}
               </CardContent>
             </Card>
@@ -245,8 +243,8 @@ export default function ProviderSettingsPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>添加模型供应商</DialogTitle>
-            <DialogDescription>连接信息由 FastAPI 保存和校验，页面不会回显密钥。</DialogDescription>
+            <DialogTitle>添加模型连接</DialogTitle>
+            <DialogDescription>连接信息会被安全保存，访问密钥不会在页面显示。</DialogDescription>
           </DialogHeader>
           <form
             onSubmit={(event) => {
@@ -256,7 +254,7 @@ export default function ProviderSettingsPage() {
           >
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor='provider-type'>协议</FieldLabel>
+                <FieldLabel htmlFor='provider-type'>连接类型</FieldLabel>
                 <Select
                   value={form.provider_type}
                   onValueChange={(value) => {
@@ -288,17 +286,17 @@ export default function ProviderSettingsPage() {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor='provider-id'>供应商标识</FieldLabel>
+                <FieldLabel htmlFor='provider-id'>连接标识</FieldLabel>
                 <Input
                   id='provider-id'
                   value={form.provider_id || ''}
                   onChange={(event) => setForm({ ...form, provider_id: event.target.value })}
                   placeholder='例如 mimo'
                 />
-                <FieldDescription>用于平台模型目录中的供应商标识。</FieldDescription>
+                <FieldDescription>用于识别这条模型连接。</FieldDescription>
               </Field>
               <Field>
-                <FieldLabel htmlFor='provider-url'>兼容 API 地址</FieldLabel>
+                <FieldLabel htmlFor='provider-url'>服务地址</FieldLabel>
                 <Input
                   id='provider-url'
                   value={form.api_url || ''}
@@ -307,7 +305,7 @@ export default function ProviderSettingsPage() {
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor='provider-model'>模型 ID</FieldLabel>
+                <FieldLabel htmlFor='provider-model'>模型</FieldLabel>
                 <div className='flex items-center gap-2'>
                   {modelOptions.length ? (
                     <Select
@@ -335,7 +333,7 @@ export default function ProviderSettingsPage() {
                       className='min-w-0 flex-1'
                       value={form.model}
                       onChange={(event) => setForm({ ...form, model: event.target.value })}
-                      placeholder='先获取模型，或手动填写模型 ID'
+                      placeholder='先读取可用模型，或手动填写模型名称'
                       required
                     />
                   )}
@@ -349,18 +347,18 @@ export default function ProviderSettingsPage() {
                       data-icon='inline-start'
                       className={discover.isPending ? 'animate-spin' : undefined}
                     />
-                    {discover.isPending ? '获取中…' : '获取模型'}
+                    {discover.isPending ? '读取中…' : '读取可用模型'}
                   </Button>
                 </div>
                 <FieldDescription>
-                  服务端会请求该供应商的模型目录；密钥不会发送到浏览器以外的第三方。
+                  系统会读取该连接支持的模型；访问密钥只用于本次请求。
                 </FieldDescription>
                 {modelDiscoveryMessage && (
                   <p className='text-muted-foreground text-xs'>{modelDiscoveryMessage}</p>
                 )}
               </Field>
               <Field>
-                <FieldLabel htmlFor='provider-key'>API 密钥</FieldLabel>
+                <FieldLabel htmlFor='provider-key'>访问密钥</FieldLabel>
                 <Input
                   id='provider-key'
                   type='password'

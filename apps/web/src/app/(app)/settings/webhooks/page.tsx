@@ -60,12 +60,12 @@ export default function WebhookSettingsPage() {
       <>
         <PageHeader
           eyebrow='设置'
-          title='Webhooks'
-          description='把明确的业务事件发送到你管理的外部系统。签名密钥只在创建或轮换时返回。'
+          title='业务通知'
+          description='把项目机会和工作进展发送到你管理的其他系统。'
           action={
             <Button onClick={() => setOpen(true)}>
               <Plus data-icon='inline-start' />
-              添加端点
+              添加通知地址
             </Button>
           }
         />
@@ -76,13 +76,13 @@ export default function WebhookSettingsPage() {
             <QueryError message={query.error instanceof Error ? query.error.message : undefined} />
           ) : !endpoints.length ? (
             <EmptyState
-              title='还没有 Webhook'
-              description='添加端点后，项目业务事件可以被推送到外部系统。'
+              title='还没有通知地址'
+              description='添加地址后，项目机会和工作进展可以自动发送到其他系统。'
             />
           ) : (
             <Card>
               <CardHeader className='border-b'>
-                <h2 className='font-medium'>已配置端点</h2>
+                <h2 className='font-medium'>已配置通知地址</h2>
               </CardHeader>
               <CardContent className='divide-y p-0'>
                 {endpoints.map((endpoint) => (
@@ -123,7 +123,7 @@ export default function WebhookSettingsPage() {
           )}
           <Card>
             <CardHeader className='border-b'>
-              <h2 className='font-medium'>支持的事件</h2>
+              <h2 className='font-medium'>可发送的提醒</h2>
             </CardHeader>
             <CardContent className='flex flex-wrap gap-2 p-5'>
               {supportedEvents.map((event) => (
@@ -137,10 +137,8 @@ export default function WebhookSettingsPage() {
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>添加 Webhook 端点</DialogTitle>
-              <DialogDescription>
-                默认订阅全部支持的事件，具体投递状态可在服务端记录中查看。
-              </DialogDescription>
+              <DialogTitle>添加通知地址</DialogTitle>
+              <DialogDescription>保存后会接收当前支持的项目提醒。</DialogDescription>
             </DialogHeader>
             <form
               onSubmit={(event) => {
@@ -160,7 +158,7 @@ export default function WebhookSettingsPage() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor='webhook-url'>目标 URL</FieldLabel>
+                  <FieldLabel htmlFor='webhook-url'>接收地址</FieldLabel>
                   <Input
                     id='webhook-url'
                     type='url'
@@ -176,7 +174,7 @@ export default function WebhookSettingsPage() {
                   取消
                 </Button>
                 <Button type='submit' disabled={create.isPending || !name.trim() || !url.trim()}>
-                  保存端点
+                  保存地址
                 </Button>
               </DialogFooter>
               {create.error && (

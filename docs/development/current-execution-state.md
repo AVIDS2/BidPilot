@@ -19,6 +19,8 @@
   confirmation.
 - [x] Merge unread notifications into `我的工作`; keep `/inbox` only as a
   compatibility route.
+- [x] Audit and replace ordinary user-facing developer language across docs,
+  task status, model settings, collaboration panels, and project workflows.
 - [ ] Make project knowledge proposals/review/source drill-down a complete user workflow.
 - [ ] Collapse runtime-shaped pages into `我的工作`, project tabs, and admin/recovery entry points.
 - [ ] Add episodic `工作记录` and procedural `团队方法` projections with scoped retrieval labels.

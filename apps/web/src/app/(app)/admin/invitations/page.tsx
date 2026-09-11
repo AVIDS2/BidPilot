@@ -42,7 +42,7 @@ export default function InvitationsPage() {
       <PageHeader
         eyebrow='管理'
         title='邀请'
-        description='邀请成员加入当前工作区，状态以服务端记录为准。'
+        description='邀请成员加入当前工作区，状态会在这里持续更新。'
         action={
           <Button onClick={() => setOpen(true)}>
             <Plus data-icon='inline-start' />

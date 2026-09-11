@@ -515,7 +515,7 @@ export function ProjectResponsePanel({
         <CardHeader className='border-b'>
           <CardTitle>下一步入口</CardTitle>
           <CardDescription>
-            每个入口都回到对应的业务页面，不需要通过 Agent 才能查看事实。
+            每个入口都回到对应的业务页面，不需要通过 Copilot 才能查看事实。
           </CardDescription>
         </CardHeader>
         <CardContent className='grid gap-3 p-5 sm:grid-cols-3'>

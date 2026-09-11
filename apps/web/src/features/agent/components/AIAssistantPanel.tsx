@@ -1838,10 +1838,10 @@ export function AIAssistantPanel({
           </div>
         )}
         {queuedPrompts.length > 0 && (
-          <section className='bp-linear-agent-queue' aria-label='待发送消息'>
+          <section className='bp-linear-agent-queue' aria-label='下一步消息'>
             <header>
               <span className='flex items-center gap-1.5'>
-                <span>待发送</span>
+                <span>下一步</span>
                 <small>{queuedPrompts.length}</small>
               </span>
               <Button
@@ -1850,13 +1850,13 @@ export function AIAssistantPanel({
                 variant='ghost'
                 className='h-7 gap-1 px-2 text-[11px]'
                 disabled={isDrainingQueue}
-                title={canSteerCurrentRun ? '使用 Pi 引导当前任务' : '发送下一条消息'}
+                title={canSteerCurrentRun ? '继续当前任务' : '发送下一条消息'}
                 onClick={() =>
                   void (canSteerCurrentRun ? steerQueuedPrompt() : drainNextQueuedPrompt())
                 }
               >
                 <SendIcon aria-hidden='true' />
-                {canSteerCurrentRun ? '引导当前任务' : '发送下一条'}
+                {canSteerCurrentRun ? '继续当前任务' : '发送下一条'}
               </Button>
             </header>
             <ol>
@@ -1869,7 +1869,7 @@ export function AIAssistantPanel({
                     type='button'
                     className='bp-linear-agent-queue-copy'
                     onClick={() => handleEditQueuedPrompt(queued.id)}
-                    title='编辑待发送消息'
+                    title='编辑下一步'
                     size='sm'
                     variant='ghost'
                   >
@@ -1880,8 +1880,8 @@ export function AIAssistantPanel({
                       <Button
                         type='button'
                         onClick={() => void steerQueuedPrompt(queued.id)}
-                        title='使用 Pi 引导当前任务'
-                        aria-label='引导当前任务'
+                        title='继续当前任务'
+                        aria-label='继续当前任务'
                         size='sm'
                         variant='ghost'
                         className='h-7 gap-1 px-2 text-[11px]'
@@ -1905,8 +1905,8 @@ export function AIAssistantPanel({
                     <Button
                       type='button'
                       onClick={() => handleEditQueuedPrompt(queued.id)}
-                      title='编辑待发送消息'
-                      aria-label='编辑待发送消息'
+                      title='编辑下一步'
+                      aria-label='编辑下一步'
                       size='icon-xs'
                       variant='ghost'
                     >
@@ -1915,8 +1915,8 @@ export function AIAssistantPanel({
                     <Button
                       type='button'
                       onClick={() => handleCancelQueuedPrompt(queued.id)}
-                      title='取消待发送消息'
-                      aria-label='取消待发送消息'
+                      title='移除下一步'
+                      aria-label='移除下一步'
                       size='icon-xs'
                       variant='ghost'
                     >
@@ -1933,7 +1933,7 @@ export function AIAssistantPanel({
           value={input}
           rows={1}
           aria-label={t('inputPlaceholder')}
-          placeholder={t('inputPlaceholder', { defaultValue: 'Ask BidPilot...' })}
+          placeholder={t('inputPlaceholder', { defaultValue: '告诉 Copilot 下一步要做什么…' })}
           onChange={(event) => {
             setInput(event.target.value);
             requestAnimationFrame(resizeComposer);
@@ -2363,7 +2363,7 @@ export function AIAssistantPanel({
                     {queuedPrompts.length > 0 && (
                       <div className='flex items-center justify-between gap-2 text-xs text-muted-foreground'>
                         <span className='flex items-center gap-1.5'>
-                          <span>待发送</span>
+                          <span>下一步</span>
                           <span className='rounded-full bg-muted px-1.5 py-0.5 text-[10px]'>
                             {queuedPrompts.length}
                           </span>
@@ -2374,7 +2374,7 @@ export function AIAssistantPanel({
                           variant='ghost'
                           className='h-7 gap-1 px-2 text-[11px]'
                           disabled={isDrainingQueue}
-                          title={canSteerCurrentRun ? '使用 Pi 引导当前任务' : '发送下一条消息'}
+                          title={canSteerCurrentRun ? '继续当前任务' : '发送下一条消息'}
                           onClick={() =>
                             void (canSteerCurrentRun
                               ? steerQueuedPrompt()
@@ -2382,7 +2382,7 @@ export function AIAssistantPanel({
                           }
                         >
                           <SendIcon aria-hidden='true' />
-                          {canSteerCurrentRun ? '引导当前任务' : '发送下一条'}
+                          {canSteerCurrentRun ? '继续当前任务' : '发送下一条'}
                         </Button>
                       </div>
                     )}
@@ -2407,7 +2407,7 @@ export function AIAssistantPanel({
                           <Clock3Icon className='size-4 shrink-0' aria-hidden='true' />
                           <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
                             <span className='text-[10px]'>
-                              {canSteerCurrentRun ? '可引导当前任务' : '待发送'}
+                              {canSteerCurrentRun ? '可继续当前任务' : '下一步'}
                             </span>
                             <span className='line-clamp-2 min-w-0 text-foreground'>
                               {queued.displayContent}
@@ -2419,8 +2419,8 @@ export function AIAssistantPanel({
                                 type='button'
                                 size='icon-sm'
                                 variant='ghost'
-                                aria-label='引导当前任务'
-                                title='使用 Pi 引导当前任务'
+                                aria-label='继续当前任务'
+                                title='继续当前任务'
                                 onClick={() => void steerQueuedPrompt(queued.id)}
                               >
                                 <SendIcon aria-hidden='true' />
@@ -2430,8 +2430,8 @@ export function AIAssistantPanel({
                               type='button'
                               size='icon-sm'
                               variant='ghost'
-                              aria-label='编辑待发送消息'
-                              title='编辑待发送消息'
+                              aria-label='编辑下一步'
+                              title='编辑下一步'
                               onClick={() => handleEditQueuedPrompt(queued.id)}
                             >
                               <PencilIcon aria-hidden='true' />
@@ -2440,8 +2440,8 @@ export function AIAssistantPanel({
                               type='button'
                               size='icon-sm'
                               variant='ghost'
-                              aria-label='取消待发送消息'
-                              title='取消待发送消息'
+                              aria-label='移除下一步'
+                              title='移除下一步'
                               onClick={() => handleCancelQueuedPrompt(queued.id)}
                             >
                               <XIcon aria-hidden='true' />

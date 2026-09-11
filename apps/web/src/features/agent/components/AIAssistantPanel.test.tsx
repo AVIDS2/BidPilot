@@ -1391,7 +1391,7 @@ describe('AIAssistantPanel', () => {
 
     const importStep = screen.getByTestId('assistant-activity-step-import-remote-queued');
     fireEvent.click(within(importStep).getByRole('button'));
-    expect(await screen.findByText('后台导入已开始')).toBeInTheDocument();
+    expect(await screen.findByText('资料正在导入')).toBeInTheDocument();
     expect(screen.getByText('下载中，完成后自动入库')).toBeInTheDocument();
     expect(screen.getByText('远程资料下载任务')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '原始公开来源' })).toHaveAttribute(

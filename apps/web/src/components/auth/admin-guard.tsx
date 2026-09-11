@@ -25,7 +25,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
           <ShieldX />
           <AlertTitle>这是管理员区域</AlertTitle>
           <AlertDescription className='flex flex-wrap items-center gap-3'>
-            当前账户只能访问自己的工作区数据和操作。管理员诊断、用户、团队和 Webhook
+            当前账户只能访问自己的工作区数据和操作。管理员诊断、用户、团队和业务通知
             控制不会展示给普通成员。
             <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href='/dashboard'>
               返回工作台

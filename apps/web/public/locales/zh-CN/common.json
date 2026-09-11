@@ -6,11 +6,11 @@
   },
   "nav": {
     "dashboard": "仪表盘",
-    "agent": "智能体",
-    "knowledge": "知识资产",
-    "runs": "运行",
+    "agent": "助手",
+    "knowledge": "项目知识",
+    "runs": "任务详情",
     "workbench": "工作区",
-    "execution": "执行",
+    "execution": "任务进展",
     "administration": "管理",
     "projects": "项目",
     "pricing": "定价",
@@ -35,7 +35,7 @@
     "deliverables": "交付物",
     "members": "成员",
     "responseTeam": "响应团队",
-    "aiProviders": "AI 服务商"
+    "aiProviders": "模型连接"
   },
   "actions": {
     "save": "保存",

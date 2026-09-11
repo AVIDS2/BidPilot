@@ -1,10 +1,10 @@
 {
   "title": "BidPilot Copilot",
   "subtitle": "您的投标响应助理",
-  "inputPlaceholder": "问我任何问题...",
+  "inputPlaceholder": "告诉 Copilot 下一步要做什么…",
   "thinking": "思考中",
   "trace": {
-    "publicExplanation": "执行说明",
+    "publicExplanation": "工作进展",
     "processing": "正在处理"
   },
   "model": {
@@ -61,10 +61,10 @@
     "typedConfirmationPlaceholder": "完整名称",
     "typedConfirmationHint": "请输入：{{value}}",
     "workflowStarted": "工作流已启动",
-    "workflowQueued": "正在等待工作流进度",
+    "workflowQueued": "正在准备下一步",
     "nodesCompleted": "已完成 {{completed}} / {{total}} 个步骤",
-    "runId": "运行 ID",
-    "currentNode": "当前节点：{{node}}",
+    "runId": "任务编号",
+    "currentNode": "当前步骤：{{node}}",
     "review": "审核：{{result}} / {{score}}",
     "reviewPassed": "通过",
     "reviewFailed": "未通过",
@@ -92,14 +92,14 @@
     "summarySingleFailed": "{{label}}失败",
     "summarySingleCancelled": "{{label}}已取消",
     "summaryCancelled": "工作流已取消",
-    "summaryDone": "已处理 {{tools}} 项操作",
-    "summaryDoneWithWorkflows": "已处理 {{tools}} 项操作，启动 {{workflows}} 个工作流",
-    "summaryDoneWorkflowsOnly": "已启动 {{workflows}} 个工作流",
-    "summaryRunning": "正在处理 {{tools}} 项操作",
-    "summaryRunningWithWorkflows": "正在处理 {{tools}} 项操作，启动 {{workflows}} 个工作流",
-    "summaryRunningWorkflowsOnly": "正在运行 {{workflows}} 个工作流",
-    "taskSummary": "任务执行 · {{turns}} 个回合",
-    "turnLabel": "执行回合 {{index}}",
+    "summaryDone": "已完成 {{tools}} 项工作",
+    "summaryDoneWithWorkflows": "已完成 {{tools}} 项工作，推进 {{workflows}} 个项目流程",
+    "summaryDoneWorkflowsOnly": "已推进 {{workflows}} 个项目流程",
+    "summaryRunning": "正在处理 {{tools}} 项工作",
+    "summaryRunningWithWorkflows": "正在处理 {{tools}} 项工作，推进 {{workflows}} 个项目流程",
+    "summaryRunningWorkflowsOnly": "正在推进 {{workflows}} 个项目流程",
+    "taskSummary": "工作进展 · {{turns}} 个阶段",
+    "turnLabel": "第 {{index}} 个阶段",
     "groupSummary": "{{count}} 项操作 {{status}}",
     "expand": "展开执行细节",
     "collapse": "收起执行细节",
@@ -120,7 +120,7 @@
       "default": "平台操作",
       "search_projects": "搜索项目",
       "create_demo_workspace": "创建演示工作区",
-      "get_runtime_status": "读取执行状态",
+      "get_runtime_status": "查看处理进度",
       "open_page": "打开页面",
       "create_project": "创建项目",
       "get_project_summary": "读取项目概览",
@@ -129,7 +129,7 @@
       "list_pending_reviews": "查看待审核项",
       "submit_review_decision": "提交章节审核决定",
       "list_requirements": "查看需求",
-      "list_claim_review_queue": "查看待核验主张",
+      "list_claim_review_queue": "查看待核验内容",
       "get_readiness_summary": "查看投标准备度",
       "list_readiness_gaps": "查看就绪缺口",
       "open_requirement_source": "定位需求来源",
@@ -149,10 +149,10 @@
       "semantic_search": "检索资料",
       "web_search": "联网搜索",
       "fetch_url_to_project": "下载网页到项目",
-      "search_bid_wiki": "查询 Bid Wiki",
+      "search_bid_wiki": "查询项目知识",
       "list_knowledge_portfolio": "查看知识资产概览",
       "propose_memory": "保存个人偏好",
-      "forget_memory": "遗忘记忆",
+      "forget_memory": "删除个人偏好",
       "search_knowledge": "检索知识库",
       "upload_document": "上传文档",
       "delete_project": "删除项目"
@@ -171,7 +171,7 @@
       "exporter": "生成交付物",
       "supervisor": "协调任务",
       "rfp_parser": "解析需求",
-      "memory_context": "加载记忆上下文",
+      "memory_context": "加载当前项目知识",
       "knowledge_retriever": "检索证据",
       "content_plan": "规划内容",
       "quality_reviewer": "质量审核",
@@ -189,9 +189,9 @@
       "openedRoute": "已打开 {{route}}",
       "returnedCount": "返回 {{count}} 条结果",
       "foundProjects": "找到 {{count}} 个项目",
-      "runningRuns": "当前 {{count}} 个运行任务",
+      "runningRuns": "当前 {{count}} 项进行中的工作",
       "status": "状态：{{status}}",
-      "runCreated": "运行已创建",
+      "runCreated": "任务已开始",
       "completed": "已完成",
       "processing": "处理中",
       "cancelled": "工作流已取消",
@@ -276,9 +276,9 @@
     "closeHistory": "关闭历史会话",
     "renameConversation": "重命名会话",
     "renameConversationHint": "双击重命名",
-    "enterToQueue": "回车暂存",
-    "queuedPrompt": "已暂存",
-    "running": "运行中"
+    "enterToQueue": "回车加入下一步",
+    "queuedPrompt": "已加入下一步",
+    "running": "处理中"
   },
   "history": {
     "today": "今天",
@@ -288,13 +288,13 @@
     "searchPlaceholder": "搜索对话...",
     "noResults": "没有匹配的对话",
     "delete": "删除对话",
-    "running": "运行中"
+    "running": "处理中"
   },
   "floating": {
     "ariaLabel": "BidPilot Copilot 助理",
     "openPanel": "打开面板",
     "commandPalette": "命令面板",
-    "aiChat": "AI 对话"
+    "aiChat": "与 Copilot 对话"
   },
   "commands": {
     "groups": {
@@ -306,8 +306,8 @@
     "searchKnowledge": "搜索知识库",
     "exportDoc": "导出文档",
     "viewStatus": "查看状态",
-    "aiChat": "AI 对话",
-    "aiSuggest": "AI 建议",
+    "aiChat": "与 Copilot 对话",
+    "aiSuggest": "操作建议",
     "aiSuggestPrompt": "给我当前页面的操作建议",
     "help": "帮助"
   },
@@ -323,7 +323,7 @@
     "dashboardOverviewPrompt": "给我一个平台状态和最近活动的概览",
     "userManagement": "用户管理帮助",
     "userManagementPrompt": "如何管理用户和权限？",
-    "providerSetup": "供应商配置帮助",
+    "providerSetup": "模型连接帮助",
     "providerSetupPrompt": "帮我配置一个AI供应商"
   }
 }

@@ -60,7 +60,7 @@ const WORKFLOW_STEPS: WorkflowStep[] = [
   },
   {
     id: 'memory_context',
-    label: '加载项目记忆',
+    label: '加载项目知识',
     description: '读取已授权的项目知识与历史决策',
     position: { x: 320, y: 285 },
     icon: FileSearchIcon

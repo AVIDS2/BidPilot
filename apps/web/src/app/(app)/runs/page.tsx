@@ -52,8 +52,8 @@ function RunsContent() {
     <>
       <PageHeader
         eyebrow='投标工作流'
-        title='任务记录'
-        description='查看你有权限访问的任务状态、公开进度和完成结果。'
+        title='任务详情'
+        description='查看项目任务的进展、结果和需要你确认的事项。'
         action={
           <LiveSyncStatus
             active={Boolean(runs.data)}
@@ -71,8 +71,8 @@ function RunsContent() {
           <QueryError message={runs.error instanceof Error ? runs.error.message : undefined} />
         ) : !runs.data?.length ? (
           <EmptyState
-            title='还没有运行记录'
-            description='从助手发起一次项目任务后，真实运行事件会保存在这里。'
+            title='还没有任务'
+            description='从 Copilot 发起项目工作后，进展和结果会保存在这里。'
           />
         ) : (
           <div className='grid gap-6 xl:grid-cols-[1.1fr_0.9fr]'>
@@ -81,7 +81,7 @@ function RunsContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>运行</TableHead>
+                      <TableHead>任务</TableHead>
                       <TableHead>项目</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead className='text-right'>操作</TableHead>
@@ -143,20 +143,15 @@ function RunsContent() {
             </Card>
             <Card>
               <CardHeader className='border-b'>
-                <h2 className='font-medium'>事件时间线</h2>
+                <h2 className='font-medium'>进展记录</h2>
                 <p className='text-muted-foreground mt-1 text-sm'>
-                  {selectedRunId
-                    ? `运行 ${selectedRunId.slice(0, 8)}…`
-                    : '选择一条运行记录查看事件。'}
+                  {selectedRunId ? `运行 ${selectedRunId.slice(0, 8)}…` : '选择一项任务查看进展。'}
                 </p>
               </CardHeader>
               <CardContent className='p-0'>
                 {!selectedRunId ? (
                   <div className='p-5'>
-                    <EmptyState
-                      title='选择运行记录'
-                      description='事件详情只在选择具体运行后加载。'
-                    />
+                    <EmptyState title='选择一项任务' description='选择后查看任务的进展和结果。' />
                   </div>
                 ) : events.isPending ? (
                   <div className='p-5'>
@@ -184,7 +179,7 @@ function RunsContent() {
                   </div>
                 ) : (
                   <div className='p-5'>
-                    <EmptyState title='没有事件' description='该运行尚未产生可展示的公开事件。' />
+                    <EmptyState title='暂无进展' description='该任务还没有可展示的更新。' />
                   </div>
                 )}
               </CardContent>
@@ -258,9 +253,9 @@ function runKindLabel(value: string) {
   return (
     (
       {
-        assistant_turn: 'Agent 任务',
+        assistant_turn: '助手任务',
         workflow_bridge: '响应工作流',
-        subagent: '后台协作任务',
+        subagent: '协作任务',
         deep_research: '深度调研',
         remote_import: '资料导入'
       } as Record<string, string>

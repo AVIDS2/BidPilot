@@ -24,20 +24,18 @@ const sections = [
   {
     icon: FileCheck2,
     title: '2. 形成要求与证据链',
-    description:
-      '要求清单记录来源定位、重要程度、覆盖状态和核验结果；业务事实以服务端项目数据为准。'
+    description: '把每条要求和对应依据放在一起，清楚知道哪里已经覆盖，哪里还需要补充。'
   },
   {
     icon: Sparkles,
-    title: '3. 让 Pi Agent 执行工作',
+    title: '3. 让 Copilot 推进工作',
     description:
-      'Agent 通过 Pi 原生事件和服务端业务工具推进任务，页面只呈现真实的思考、工具、审批和终态事件。'
+      '告诉 Copilot 你要完成什么，它会在项目范围内查资料、整理内容，并在需要你决定时停下来。'
   },
   {
     icon: ShieldCheck,
     title: '4. 评审后再交付',
-    description:
-      '章节、证据、评审线程和导出状态保留在同一条项目链路中，管理员权限和用户工作流分开校验。'
+    description: '章节、依据、评审和导出文件都留在同一个项目里，确认无误后直接交付。'
   }
 ];
 
@@ -80,7 +78,7 @@ export default function DocsPage() {
       <Section
         subtitle='产品说明'
         title='从资料到可交付响应的一条工作路径。'
-        description='了解 BidPilot 如何组织项目资料、要求、证据、Agent 任务和最终交付。'
+        description='了解 BidPilot 如何把资料、要求、协作和交付组织成一条清晰的项目路径。'
       >
         <div className='grid gap-4 md:grid-cols-2'>
           {sections.map(({ icon: Icon, title, description }) => (
@@ -102,7 +100,7 @@ export default function DocsPage() {
             ['项目', '/projects', '建立资料和响应工作区'],
             ['招采雷达', '/radar', '研判公开机会并转换项目'],
             ['我的工作', '/my-work', '处理缺口和待审批事项'],
-            ['Agent', '/agent', '发起受控的项目任务']
+            ['Copilot 助手', '/agent', '从当前项目开始下一步工作']
           ].map(([label, href, detail]) => (
             <Link
               className='group rounded-xl border p-4 transition-colors hover:bg-muted/40'

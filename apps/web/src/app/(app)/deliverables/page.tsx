@@ -84,7 +84,7 @@ export default function DeliverablesPage() {
         ) : !query.data?.length ? (
           <EmptyState
             title='还没有交付物'
-            description='Agent 完成章节起草和审核后，交付物会出现在这里。'
+            description='Copilot 完成章节起草和审核后，交付物会出现在这里。'
           />
         ) : (
           <Card>

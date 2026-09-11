@@ -50,9 +50,9 @@ export default function KnowledgePage() {
     mutationFn: () => startMemoryCompilation({ project_id: projectId }),
     onSuccess: () => {
       void portfolio.refetch();
-      toast.success('知识库正在更新，完成后会显示在这里。');
+      toast.success('知识建议正在生成，完成后会显示在这里。');
     },
-    onError: () => toast.error('项目记忆暂时无法编译，请先确认资料已经处理完成。')
+    onError: () => toast.error('知识建议暂时无法生成，请先确认资料已经准备好。')
   });
   const visiblePortfolio = hasExplicitSelection
     ? portfolio.data?.filter((item) => item.project_id === projectId)
@@ -62,7 +62,7 @@ export default function KnowledgePage() {
       <PageHeader
         eyebrow='投标工作流'
         title='知识库'
-        description='按项目检索已处理的资料、共享记忆和可追溯来源。'
+        description='按项目检索资料、项目知识和可追溯依据。'
         action={
           <div className='flex flex-wrap items-center justify-end gap-2'>
             <LiveSyncStatus
@@ -97,7 +97,7 @@ export default function KnowledgePage() {
                   <div>
                     <CardTitle>检索项目知识</CardTitle>
                     <CardDescription>
-                      从已解析的资料和已生效记忆中查找依据，不需要先打开 Agent。
+                      从已处理的资料和已确认知识中查找依据，不需要先打开 Copilot。
                     </CardDescription>
                   </div>
                   <Button
@@ -175,7 +175,7 @@ export default function KnowledgePage() {
                       </div>
                       <div className='text-muted-foreground flex items-center gap-2 text-xs'>
                         <BookOpen className='size-3.5' />
-                        {item.latest_compilation_status || '尚未编译'}
+                        {item.latest_compilation_status || '尚未生成建议'}
                         <span className='ml-auto'>{formatDate(item.latest_compilation_at)}</span>
                       </div>
                       <Link
