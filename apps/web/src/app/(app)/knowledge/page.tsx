@@ -184,7 +184,7 @@ export default function KnowledgePage() {
                           size: 'sm',
                           variant: 'outline'
                         })}
-                        href={`/projects/${item.project_id}?tab=materials`}
+                        href={`/projects/${item.project_id}?tab=knowledge`}
                       >
                         打开项目 <ArrowUpRight data-icon='inline-end' />
                       </Link>
