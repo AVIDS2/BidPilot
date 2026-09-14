@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "BidPilot Runtime Architecture",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1500, 760],
+    "repository": {
+      "url": "https://github.com/AVIDS2/BidPilot",
+      "provider": "github",
+      "revision": "fd2cc21061c6f73e83a2cc52c52e7ca179d5dd48"
+    },
+    "views": [
+      {
+        "id": "interactive-path",
+        "label": "Copilot 交互主链路",
+        "focus": ["user", "web", "api", "pi", "model-providers"],
+        "note": "浏览器通过控制面进入 Pi；Pi 不持有业务数据库和对象存储凭据。"
+      },
+      {
+        "id": "async-document-path",
+        "label": "资料到交付的异步链路",
+        "focus": ["web", "api", "redis", "worker", "langgraph", "postgres", "object-storage"],
+        "note": "解析、检索、起草、审核恢复和导出通过 Celery 与 LangGraph 持久化执行。"
+      },
+      {
+        "id": "truth-and-boundaries",
+        "label": "业务真相与边界",
+        "focus": ["api", "worker", "postgres", "object-storage", "model-providers"],
+        "note": "PostgreSQL 保存业务事实；原始资料与交付制品进入私有对象存储；Provider 只通过 adapter 接入。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "投标团队用户",
+      "tag": "human",
+      "pos": [20, 80],
+      "size": [170, 86]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "BidPilot Web 工作台",
+      "tag": "apps/web",
+      "sources": [
+        { "path": "apps/web/src/app.tsx", "line": 1, "end_line": 28, "label": "应用壳与查询缓存" },
+        { "path": "apps/web/src/app.tsx", "line": 101, "end_line": 139, "label": "业务路由与工作台入口" }
+      ],
+      "pos": [250, 80],
+      "size": [220, 86]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "FastAPI 控制面",
+      "tag": "services/api",
+      "sources": [
+        { "path": "services/api/app/main.py", "line": 19, "end_line": 59, "label": "路由域与控制面模块" },
+        { "path": "services/api/app/main.py", "line": 239, "end_line": 281, "label": "受保护业务路由与 Pi bridge" }
+      ],
+      "pos": [550, 80],
+      "size": [240, 92]
+    },
+    {
+      "id": "pi",
+      "type": "backend",
+      "label": "Pi Copilot Sidecar",
+      "tag": "services/pi-agent",
+      "sources": [
+        { "path": "services/pi-agent/src/server.ts", "line": 73, "end_line": 81, "label": "内部 HTTP sidecar" },
+        { "path": "services/pi-agent/src/runtime.ts", "line": 367, "end_line": 400, "label": "Pi session 与受控 tools" }
+      ],
+      "pos": [870, 80],
+      "size": [220, 92]
+    },
+    {
+      "id": "model-providers",
+      "type": "external",
+      "label": "模型与向量 Provider",
+      "tag": "external providers",
+      "sources": [
+        { "path": "services/worker/app/adapters/embedding.py", "line": 1, "end_line": 19, "label": "向量 adapter 合同" },
+        { "path": "services/worker/app/adapters/llm.py", "line": 1, "end_line": 20, "label": "工作流 LLM adapter" }
+      ],
+      "pos": [1170, 80],
+      "size": [250, 92]
+    },
+    {
+      "id": "redis",
+      "type": "messagebus",
+      "label": "Redis / Celery Outbox",
+      "tag": "queue + cache",
+      "sources": [
+        { "path": "services/worker/app/celery_app.py", "line": 1, "end_line": 44, "label": "Celery broker 与失败队列" },
+        { "path": "docker-compose.production.yml", "line": 21, "end_line": 40, "label": "生产 Redis 容器" }
+      ],
+      "pos": [560, 300],
+      "size": [220, 86]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Celery Worker",
+      "tag": "services/worker",
+      "sources": [
+        { "path": "services/worker/app/tasks.py", "line": 12, "end_line": 50, "label": "任务边界与执行模块" },
+        { "path": "services/worker/app/celery_app.py", "line": 46, "end_line": 78, "label": "周期恢复与维护任务" }
+      ],
+      "pos": [850, 300],
+      "size": [240, 92]
+    },
+    {
+      "id": "langgraph",
+      "type": "backend",
+      "label": "LangGraph 工作流",
+      "tag": "execution detail",
+      "sources": [
+        { "path": "services/worker/app/graph/builder.py", "line": 1, "end_line": 47, "label": "图构建与工作流节点" }
+      ],
+      "pos": [1170, 300],
+      "size": [280, 92]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL + pgvector",
+      "tag": "business source of truth",
+      "sources": [
+        { "path": "docker-compose.production.yml", "line": 1, "end_line": 18, "label": "生产 PostgreSQL / pgvector" },
+        { "path": "services/api/app/main.py", "line": 82, "end_line": 95, "label": "API 生命周期与运行资源" }
+      ],
+      "pos": [850, 520],
+      "size": [240, 92]
+    },
+    {
+      "id": "object-storage",
+      "type": "cloud",
+      "label": "MinIO / S3",
+      "tag": "private objects",
+      "sources": [
+        { "path": "docker-compose.production.yml", "line": 42, "end_line": 54, "label": "生产 MinIO 容器" },
+        { "path": "services/worker/app/adapters/storage.py", "line": 1, "end_line": 18, "label": "项目级对象存储 adapter" }
+      ],
+      "pos": [450, 520],
+      "size": [220, 92]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "VPS / Docker Compose",
+      "wraps": ["web", "api", "pi", "redis", "worker", "langgraph", "postgres", "object-storage"],
+      "pad": 28
+    },
+    {
+      "kind": "security-group",
+      "label": "受控服务端",
+      "wraps": ["api", "pi", "redis", "worker", "langgraph", "postgres", "object-storage"],
+      "pad": 18
+    }
+  ],
+  "connections": [
+    { "id": "user-web", "from": "user", "to": "web", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "web-api", "from": "web", "to": "api", "label": "REST / SSE", "variant": "emphasis", "labelAt": [450, 300] },
+    { "id": "api-pi", "from": "api", "to": "pi", "label": "signed NDJSON bridge", "variant": "security", "labelDy": -40 },
+    { "id": "pi-models", "from": "pi", "to": "model-providers", "label": "provider-native model turn", "variant": "dashed", "labelDy": -40 },
+    { "id": "api-redis", "from": "api", "to": "redis", "label": "enqueue / outbox", "fromSide": "bottom", "toSide": "top", "route": "orthogonal-v", "labelAt": [670, 250] },
+    { "id": "redis-worker", "from": "redis", "to": "worker", "label": "Celery task", "variant": "emphasis" },
+    { "id": "worker-langgraph", "from": "worker", "to": "langgraph", "label": "execute / resume", "labelDy": -40 },
+    { "id": "api-postgres", "from": "api", "to": "postgres", "label": "durable commands / reads", "fromSide": "top", "toSide": "top", "route": "orthogonal-v", "labelAt": [430, 260], "via": [[670, 20], [500, 20], [500, 500], [970, 500]] },
+    { "id": "worker-postgres", "from": "worker", "to": "postgres", "label": "persist outcomes / events", "fromSide": "bottom", "toSide": "top", "route": "orthogonal-v", "labelAt": [870, 450] },
+    { "id": "langgraph-postgres", "from": "langgraph", "to": "postgres", "label": "checkpoint only", "variant": "dashed", "fromSide": "bottom", "toSide": "bottom", "route": "orthogonal-v", "via": [[1310, 700], [970, 700]] },
+    { "id": "api-object-storage", "from": "api", "to": "object-storage", "label": "authorized object access", "fromSide": "left", "toSide": "top", "route": "orthogonal-h", "labelAt": [400, 350], "via": [[520, 126], [520, 480], [560, 480]] },
+    { "id": "worker-object-storage", "from": "worker", "to": "object-storage", "label": "read sources / write exports", "fromSide": "top", "toSide": "bottom", "route": "orthogonal-h", "via": [[970, 220], [1480, 220], [1480, 720], [560, 720]] },
+    { "id": "worker-models", "from": "worker", "to": "model-providers", "label": "LLM / embedding adapter", "variant": "dashed", "fromSide": "top", "toSide": "top", "route": "orthogonal-v", "labelAt": [1350, 190], "via": [[970, 240], [1460, 240], [1460, 30], [1295, 30]] }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "真实业务主链路",
+      "items": [
+        "用户进入 Web 工作台；Web 只消费 REST / SSE，不持有 provider key。",
+        "API 负责身份、权限、审批、幂等、审计和业务写入。",
+        "Pi 是交互式 Copilot 运行时，不能绕过 API 写 PostgreSQL 或 MinIO。"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "异步执行与恢复",
+      "items": [
+        "解析、索引、检索、起草、验证和导出由 Celery Worker 承担。",
+        "LangGraph 只负责执行图和 checkpoint；业务结果回写 PostgreSQL。",
+        "Redis 负责队列、outbox 和短期协调，不是业务事实库。"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "边界与证据",
+      "items": [
+        "PostgreSQL 是项目、证据、版本、审核和运行事件的唯一业务真相。",
+        "MinIO / S3 保存私有源文件与批准后交付制品。",
+        "MiMo 与 OpenRouter 只能通过 provider adapter 接入；图中关系不代表运行时实时可用。"
+      ]
+    }
+  ]
+}

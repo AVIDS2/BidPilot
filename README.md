@@ -271,6 +271,22 @@ flowchart TB
     W --> V[OpenRouter embeddings]
 ```
 
+### 可核验运行时架构
+
+下面这张图使用官方 [Archify](https://github.com/tt-a1i/archify) JSON-IR
+流程生成，经过 `showcase` 校验和真实浏览器验收，并绑定源规格中声明的
+BidPilot 仓库 revision。
+
+<p align="center">
+  <a href="docs/architecture/bidpilot-runtime.architecture.html">
+    <img src="docs/architecture/bidpilot-runtime.architecture.visual-check.1440x900.light.png" alt="BidPilot 运行时架构图" width="100%">
+  </a>
+</p>
+
+交互版本：[打开 Archify 运行时架构图](docs/architecture/bidpilot-runtime.architecture.html)。
+
+源规格与验收证据：[typed JSON](docs/architecture/bidpilot-runtime.architecture.json) · [浏览器验收报告](docs/architecture/bidpilot-runtime.architecture.visual-check.json) · [架构总览](docs/architecture/overview.md)。
+
 | 层 | 责任 | 不负责什么 |
 | --- | --- | --- |
 | `apps/web` | Next.js 产品界面、同源 BFF、REST/SSE 投影和响应式工作区 | 不持有 provider key，不直接访问数据库、Worker 或 Pi |
