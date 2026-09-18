@@ -1,5 +1,20 @@
 # Progress Log
 
+## 2026-09-18 approval mode semantics
+
+- Reproduced the public assistant behavior with a real project task: the UI
+  showed `替我审批`, but creating a deliverable still paused for confirmation.
+- Aligned the runtime contract with the product meaning of `替我审批`:
+  routine reversible writes now execute without an interaction pause, while
+  costing, export, and destructive actions retain explicit confirmation.
+- Updated the user-facing hint, capability matrix, harness runtime notes,
+  interview script, and acceptance scenario. The existing server-side
+  authorization, quota, idempotency, audit, and typed-deletion safeguards are
+  unchanged.
+- Verification: policy contract, Ruff, Python compile, Web AIAssistantPanel
+  tests (`42 passed`), TypeScript, Web lint, and production build passed. The
+  public deployment still contains the previous policy until the next release.
+
 ## 2026-08-31 workbench branding and responsive navigation
 
 - Replaced the stale browser favicon with the current BidPilot Logo and added
@@ -558,3 +573,11 @@
   isolation probe passed. Runtime pytest remained gated because the repository
   requires an explicitly configured dedicated PostgreSQL database ending in
   `_test`; no business database was substituted.
+# 2026-08-31 SaaS UI 源码复用迁移启动
+
+- 创建隔离分支 `codex/saas-ui-adoption`。
+- 选择 Kiranism 作为工作台/用户仪表盘/表格/表单组合来源，ixartz 作为着陆页和 SaaS 页面组织来源，官方 shadcn 文档作为最终组件 API 标准。
+- 保留现有 Vite + React Router、FastAPI、PostgreSQL、Pi Agent 和认证 API；不引入 Clerk，不复制 Midday AGPL 代码。
+- 已通过 shadcn CLI 核对当前项目为 Tailwind v4、`base-nova`、Base UI、Lucide，并确认现有官方组件集合可承载迁移。
+- 详细任务和逐批验收见 `docs/superpowers/plans/2026-08-31-bidpilot-saas-ui-adoption.md`。
+- 新增基座判断：Open SaaS 的价值来自 Wasp 全栈控制面，Kiranism 的 AI Chat 是 scripted demo；不能把二者的 AI 页面当成现成 Pi 后端。下一步先做可逆基座兼容性验证和 Agent Surface 封装。

@@ -14,6 +14,14 @@ Give future implementation sessions one quick status file so work can resume wit
 - active phase: `Pi production convergence` — local closure complete; public deployment remains a separate release decision
 - next intended workstream: real-provider/staging soak, load and failure-recovery evaluation, then release promotion
 
+## SaaS UI 源码复用迁移（2026-08-31）
+
+- isolated branch: `codex/saas-ui-adoption`
+- source plan: `docs/superpowers/plans/2026-08-31-bidpilot-saas-ui-adoption.md`
+- decision: base choice is pending a reversible compatibility spike; preserve FastAPI/PostgreSQL/Pi as the business and agent authority until a Wasp/Next migration is proven
+- current status: upstream/license and shadcn Base UI baseline checked; initial Vite landing/auth changes are uncommitted on the isolated branch
+- next task: package an `AgentSurface` boundary, then actually build/run the minimal Open SaaS and Kiranism bases and compare auth/API/AI integration costs
+
 ## Phase 0 completion summary
 
 - Task 1: repository layout and root tooling — done

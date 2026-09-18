@@ -248,7 +248,7 @@ Steps:
 
 1. ask a normal knowledge question containing action-like words and verify no
    tool is forced
-2. ask to create a fully named project under `risky_only`
+2. ask to create a fully named project under `request_approval`
 3. inspect the paused action and `RuntimeApproval`
 4. approve through the assistant confirmation contract and resume the same run
 

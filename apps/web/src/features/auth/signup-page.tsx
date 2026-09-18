@@ -1,32 +1,49 @@
 import { useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "@/lib/auth";
+import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { toast } from "sonner";
-import { EyeIcon, EyeOffIcon, Loader2Icon } from "lucide-react";
-import { TurnstileWidget, isTurnstileConfigured, resetTurnstile, type TurnstileWidgetHandle } from "@/components/security/turnstile-widget";
-import { isStrongPassword } from "@/lib/password";
-import { Input } from "@/components/ui/input";
+
 import { Button } from "@/components/ui/button";
-import { BrandLogo } from "@/components/brand";
-import { ProductElectricFrame, ProductGlareCard, ProductReveal, ProductShinyText } from "@/components/reactbits-product";
-import { AuthTrustRail } from "./auth-trust-rail";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  TurnstileWidget,
+  isTurnstileConfigured,
+  resetTurnstile,
+  type TurnstileWidgetHandle,
+} from "@/components/security/turnstile-widget";
+import { isStrongPassword } from "@/lib/password";
+import { useAuth } from "@/lib/auth";
+import { AuthShell } from "./auth-shell";
 import { getRegistrationErrorKey } from "./registration-errors";
 import { readRegistrationDraft, saveRegistrationDraft } from "./registration-draft";
 
 export function SignupPage() {
   const [searchParams] = useSearchParams();
-  const invToken = searchParams.get("invitation") || "";
+  const invitationFromUrl = searchParams.get("invitation") || "";
   const savedDraft = readRegistrationDraft();
-
   const [email, setEmail] = useState(savedDraft?.email ?? "");
   const [displayName, setDisplayName] = useState(savedDraft?.displayName ?? "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [invitationToken, setInvitationToken] = useState(invToken || savedDraft?.invitationToken || "");
-  const createOrg = !invitationToken;
+  const [invitationToken, setInvitationToken] = useState(
+    invitationFromUrl || savedDraft?.invitationToken || "",
+  );
   const [orgName, setOrgName] = useState(savedDraft?.orgName ?? "");
   const [orgSlug, setOrgSlug] = useState(savedDraft?.orgSlug ?? "");
   const [loading, setLoading] = useState(false);
@@ -35,11 +52,21 @@ export function SignupPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation("auth");
+  const hasInvitation = Boolean(invitationToken);
 
-  const hasInvitation = !!invitationToken;
+  const getVerificationToken = async () => {
+    const verificationToken = isTurnstileConfigured()
+      ? await turnstileRef.current?.execute()
+      : null;
+    if (isTurnstileConfigured() && !verificationToken) {
+      toast.error(t("turnstile.required"));
+      return null;
+    }
+    return verificationToken;
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (password !== confirmPassword) {
       toast.error(t("toast.passwordsMismatch"));
       return;
@@ -48,35 +75,29 @@ export function SignupPage() {
       toast.error(t("toast.passwordTooShort"));
       return;
     }
-    if (createOrg && !invitationToken) {
-      if (!orgName || !orgSlug) {
-        toast.error(t("signup.missingOrgFields"));
-        return;
-      }
+    if (!hasInvitation && (!orgName || !orgSlug)) {
+      toast.error(t("signup.missingOrgFields"));
+      return;
     }
+
     setLoading(true);
     try {
-      const verificationToken = isTurnstileConfigured()
-        ? await turnstileRef.current?.execute()
-        : null;
-      if (isTurnstileConfigured() && !verificationToken) {
-        toast.error(t("turnstile.required"));
-        return;
-      }
+      const verificationToken = await getVerificationToken();
+      if (isTurnstileConfigured() && !verificationToken) return;
       await register(
         email,
         displayName,
         password,
         invitationToken || undefined,
-        createOrg ? orgName || undefined : undefined,
-        createOrg ? orgSlug || undefined : undefined,
+        hasInvitation ? undefined : orgName || undefined,
+        hasInvitation ? undefined : orgSlug || undefined,
         verificationToken,
       );
       saveRegistrationDraft({ displayName, email, invitationToken, orgName, orgSlug });
       toast.success(t("toast.accountCreated"));
       navigate("/verify-email-prompt", { state: { email } });
-    } catch (err: unknown) {
-      toast.error(t(getRegistrationErrorKey(err)));
+    } catch (error: unknown) {
+      toast.error(t(getRegistrationErrorKey(error)));
     } finally {
       resetTurnstile(turnstileWidgetId);
       setLoading(false);
@@ -84,294 +105,169 @@ export function SignupPage() {
   };
 
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-6 py-12">
-      {/* 影视画框标注 */}
-      <div className="absolute inset-0 pointer-events-none z-10">
-        <span className="absolute top-6 left-6 text-[10px] text-foreground/20 font-mono">
-          BidPilot v1.0
-        </span>
-        <span className="absolute top-6 right-6 text-[10px] text-foreground/20 font-mono">
-          [16:9]
-        </span>
-        <span className="absolute bottom-6 left-6 text-[10px] text-foreground/20 font-mono">
-          OVERSCAN: 1920 x 1080
-        </span>
-        <span className="absolute bottom-6 right-6 text-[10px] text-foreground/20 font-mono">
-          100%
-        </span>
-      </div>
-
-      {/* 背景纹理 */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="rgba(132,204,22,0.03)"/><circle cx="75" cy="75" r="1" fill="rgba(132,204,22,0.03)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>')`,
-        }}
-      />
-
-      <div className="relative z-20 grid w-full max-w-6xl items-center gap-8 lg:grid-cols-[minmax(0,34rem)_minmax(22rem,1fr)]">
-      <div className="w-full max-w-lg justify-self-center lg:justify-self-end">
-        {/* Logo */}
-        <ProductReveal blur={false} className="text-center mb-10">
-          <Link
-            to="/"
-            className="inline-flex transition-colors duration-300 hover:text-primary"
-          >
-            <BrandLogo markClassName="size-10" textClassName="text-3xl" />
+    <AuthShell
+      eyebrow={t("signup.title")}
+      title={t("signup.title")}
+      description={t("signup.subtitle")}
+      footer={
+        <p className="text-sm text-muted-foreground">
+          {t("signup.hasAccount")} {" "}
+          <Link className="font-medium text-foreground underline-offset-4 hover:underline" to="/login">
+            {t("signup.signIn")}
           </Link>
-          <p className="mt-3 text-sm text-muted-foreground">
-            <ProductShinyText text="AI-Powered Bid Execution" muted />
-          </p>
-        </ProductReveal>
-
-        {/* 表单卡片 */}
-        <ProductGlareCard intense>
-          <div className="w-full p-8 rounded-xl bg-card border border-border shadow-sm">
-            <form onSubmit={handleSubmit} className="space-y-5">
-            {/* 显示名称 */}
-            <div className="space-y-2">
-              <label
-                htmlFor="display-name"
-                className="block text-sm font-medium text-foreground"
-              >
-                {t("signup.displayNameLabel")}
-              </label>
-              <Input
-                id="display-name"
-                type="text"
-                placeholder={t("signup.displayNamePlaceholder")}
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                required
-                className="h-10"
-              />
-            </div>
-
-            {/* 邮箱 */}
-            <div className="space-y-2">
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-foreground"
-              >
-                {t("signup.emailLabel")}
-              </label>
-              <Input
-                id="email"
-                type="email"
-                placeholder={t("signup.emailPlaceholder")}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="h-10"
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("signup.emailDescription")}
-              </p>
-            </div>
-
-            {/* 组织区域 */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-foreground">
-                {t("signup.orgLabel")}
-              </label>
-              <p className="text-xs text-muted-foreground">
-                {t("signup.orgDescription")}
-              </p>
-
-              {!hasInvitation && (
-                <div className="space-y-4 mt-3">
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="org-name"
-                      className="block text-xs font-medium text-muted-foreground"
-                    >
-                      {t("signup.orgNameLabel")}
-                    </label>
-                    <Input
-                      id="org-name"
-                      type="text"
-                      placeholder={t("signup.orgNamePlaceholder")}
-                      value={orgName}
-                      onChange={(e) => setOrgName(e.target.value)}
-                      required={createOrg}
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="org-slug"
-                      className="block text-xs font-medium text-muted-foreground"
-                    >
-                      {t("signup.orgSlugLabel")}
-                    </label>
-                    <Input
-                      id="org-slug"
-                      type="text"
-                      placeholder={t("signup.orgSlugPlaceholder")}
-                      value={orgSlug}
-                      onChange={(e) =>
-                        setOrgSlug(
-                          e.target.value
-                            .replace(/[^a-z0-9-]/g, "")
-                            .toLowerCase()
-                        )
-                      }
-                      required={createOrg}
-                      className="h-10"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t("signup.orgSlugDescription")}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {hasInvitation && (
-                <div className="p-4 mt-3 rounded-lg bg-muted border border-border space-y-2">
-                  <label
-                    htmlFor="invitation-token"
-                    className="block text-xs font-medium text-muted-foreground"
-                  >
-                    {t("signup.invitationTokenLabel")}
-                  </label>
-                  <Input
-                    id="invitation-token"
-                    type="text"
-                    placeholder={t("signup.invitationTokenPlaceholder")}
-                    value={invitationToken}
-                    onChange={(e) => setInvitationToken(e.target.value)}
-                    className="h-10"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t("signup.invitationTokenDescription")}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* 密码 */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-foreground"
-                >
-                  {t("signup.passwordLabel")}
-                </label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="h-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    tabIndex={-1}
-                  >
-                    {showPassword ? (
-                      <EyeOffIcon className="size-4" />
-                    ) : (
-                      <EyeIcon className="size-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label
-                  htmlFor="confirm-password"
-                  className="block text-sm font-medium text-foreground"
-                >
-                  {t("signup.confirmPasswordLabel")}
-                </label>
-                <div className="relative">
-                  <Input
-                    id="confirm-password"
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    className="h-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    tabIndex={-1}
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOffIcon className="size-4" />
-                    ) : (
-                      <EyeIcon className="size-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground -mt-2">
-              {t("signup.passwordHint")}
-            </p>
-
-            <TurnstileWidget
-              ref={turnstileRef}
-              action="signup"
-              onWidgetIdChange={setTurnstileWidgetId}
-              className="min-h-[65px]"
+        </p>
+      }
+    >
+      <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+        <FieldGroup className="gap-4">
+          <Field>
+            <FieldLabel htmlFor="display-name">{t("signup.displayNameLabel")}</FieldLabel>
+            <Input
+              id="display-name"
+              type="text"
+              placeholder={t("signup.displayNamePlaceholder")}
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              autoComplete="name"
+              required
             />
+          </Field>
 
-            {/* 提交按钮 */}
-            <ProductElectricFrame active={loading} radius={10} className="w-full">
-              <Button
-                type="submit"
-                disabled={loading || !email || !displayName || !password}
-                className="w-full h-10"
-              >
-                {loading && <Loader2Icon className="animate-spin" />}
-                {t("signup.submit")}
-              </Button>
-            </ProductElectricFrame>
-            </form>
-          </div>
-        </ProductGlareCard>
+          <Field>
+            <FieldLabel htmlFor="email">{t("signup.emailLabel")}</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              placeholder={t("signup.emailPlaceholder")}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="email"
+              required
+            />
+            <FieldDescription>{t("signup.emailDescription")}</FieldDescription>
+          </Field>
 
-        {/* 底部链接 */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            {t("signup.hasAccount")}{" "}
-            <Link
-              to="/login"
-              className="text-foreground hover:text-primary transition-colors duration-300 font-medium"
-            >
-              {t("signup.signIn")}
-            </Link>
-          </p>
-        </div>
+          <Field>
+            <FieldLabel htmlFor="org-name">{t("signup.orgLabel")}</FieldLabel>
+            <FieldDescription>{t("signup.orgDescription")}</FieldDescription>
+            {!hasInvitation ? (
+              <FieldGroup className="gap-4 pt-1">
+                <Field>
+                  <FieldLabel htmlFor="org-name">{t("signup.orgNameLabel")}</FieldLabel>
+                  <Input
+                    id="org-name"
+                    type="text"
+                    placeholder={t("signup.orgNamePlaceholder")}
+                    value={orgName}
+                    onChange={(event) => setOrgName(event.target.value)}
+                    autoComplete="organization"
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="org-slug">{t("signup.orgSlugLabel")}</FieldLabel>
+                  <Input
+                    id="org-slug"
+                    type="text"
+                    placeholder={t("signup.orgSlugPlaceholder")}
+                    value={orgSlug}
+                    onChange={(event) => setOrgSlug(event.target.value.replace(/[^a-z0-9-]/g, "").toLowerCase())}
+                    autoComplete="off"
+                    required
+                  />
+                  <FieldDescription>{t("signup.orgSlugDescription")}</FieldDescription>
+                </Field>
+              </FieldGroup>
+            ) : (
+              <div className="rounded-lg border bg-muted/40 p-3">
+                <FieldLabel htmlFor="invitation-token">{t("signup.invitationTokenLabel")}</FieldLabel>
+                <Input
+                  id="invitation-token"
+                  className="mt-2"
+                  type="text"
+                  placeholder={t("signup.invitationTokenPlaceholder")}
+                  value={invitationToken}
+                  onChange={(event) => setInvitationToken(event.target.value)}
+                  autoComplete="off"
+                />
+                <FieldDescription className="mt-2">{t("signup.invitationTokenDescription")}</FieldDescription>
+              </div>
+            )}
+          </Field>
 
-        {/* 条款 */}
-        <p className="mt-6 text-center text-xs text-muted-foreground/60">
-          {t("login.termsText")}{" "}
-          <a
-            href="#"
-            className="text-muted-foreground hover:text-primary transition-colors duration-300"
-          >
+          <Separator />
+
+          <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="password">{t("signup.passwordLabel")}</FieldLabel>
+              <InputGroup className="h-9">
+                <InputGroupInput
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+                <InputGroupButton
+                  aria-label={showPassword ? "Hide characters" : "Show characters"}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  size="icon-sm"
+                  type="button"
+                >
+                  {showPassword ? <EyeOffIcon aria-hidden="true" /> : <EyeIcon aria-hidden="true" />}
+                </InputGroupButton>
+              </InputGroup>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="confirm-password">{t("signup.confirmPasswordLabel")}</FieldLabel>
+              <InputGroup className="h-9">
+                <InputGroupInput
+                  id="confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+                <InputGroupButton
+                  aria-label={showConfirmPassword ? "Hide characters" : "Show characters"}
+                  onClick={() => setShowConfirmPassword((visible) => !visible)}
+                  size="icon-sm"
+                  type="button"
+                >
+                  {showConfirmPassword ? <EyeOffIcon aria-hidden="true" /> : <EyeIcon aria-hidden="true" />}
+                </InputGroupButton>
+              </InputGroup>
+            </Field>
+          </FieldGroup>
+          <FieldDescription>{t("signup.passwordHint")}</FieldDescription>
+        </FieldGroup>
+
+        <TurnstileWidget
+          ref={turnstileRef}
+          action="signup"
+          onWidgetIdChange={setTurnstileWidgetId}
+          className="min-h-16"
+        />
+
+        <Button className="w-full" disabled={loading || !email || !displayName || !password} type="submit">
+          {loading ? <Spinner data-icon="inline-start" /> : null}
+          {t("signup.submit")}
+        </Button>
+
+        <p className="text-center text-xs leading-5 text-muted-foreground">
+          {t("login.termsText")} {" "}
+          <a className="underline-offset-4 hover:underline" href="#terms">
             {t("login.termsOfService")}
           </a>{" "}
-          {t("login.and")}{" "}
-          <a
-            href="#"
-            className="text-muted-foreground hover:text-primary transition-colors duration-300"
-          >
+          {t("login.and")} {" "}
+          <a className="underline-offset-4 hover:underline" href="#privacy">
             {t("login.privacyPolicy")}
           </a>
           .
         </p>
-      </div>
-      <AuthTrustRail />
-      </div>
-    </div>
+      </form>
+    </AuthShell>
   );
 }

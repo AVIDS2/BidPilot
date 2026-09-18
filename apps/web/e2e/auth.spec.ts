@@ -15,9 +15,12 @@ test.beforeEach(async ({ page }) => {
 
 // --- Static page tests (no API needed) ---
 
-test("shows landing page for unauthenticated users", async ({ page }) => {
+test("shows landing page for unauthenticated users", async ({ page }, testInfo) => {
   await page.goto("/");
   await expect(page.getByRole("link", { name: /Get Started/i }).first()).toBeVisible();
+  if (testInfo.project.name === "mobile-chromium") {
+    await page.getByRole("button", { name: "Navigation" }).click();
+  }
   await expect(page.getByRole("link", { name: "Login", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign Up", exact: true })).toBeVisible();
 });

@@ -5,7 +5,11 @@
     "description": "Generate evidence-backed proposals in minutes, not days.",
     "getStarted": "Start Free Trial",
     "viewPricing": "See How It Works",
-    "scrollHint": "Scroll to content"
+    "noCreditCard": "Start with a real project workspace. No credit card required.",
+    "previewLabel": "BidPilot project workspace",
+    "previewAlt": "BidPilot project workspace with tender response projects",
+    "previewTrust": "Source materials stay connected to the work",
+    "previewStatus": "Ready for your first project"
   },
   "socialProof": {
     "label": "Trusted by procurement teams worldwide",
@@ -18,6 +22,7 @@
     ]
   },
   "howItWorks": {
+    "eyebrow": "A focused workflow",
     "heading": "How It Works",
     "subheading": "Three steps from RFP to submission-ready draft.",
     "steps": {
@@ -36,6 +41,7 @@
     }
   },
   "features": {
+    "eyebrow": "Built for delivery",
     "heading": "Core Capabilities",
     "subheading": "Everything you need to win more bids with less effort.",
     "extraction": {
@@ -55,8 +61,10 @@
     }
   },
   "pricing": {
+    "eyebrow": "Simple plans",
     "heading": "Pricing",
     "subheading": "Start free. Scale when your pipeline does.",
+    "recommended": "Recommended",
     "tiers": {
       "starter": {
         "label": "Starter",
@@ -101,5 +109,23 @@
     "heading": "Win your next bid",
     "subheading": "Start generating evidence-backed proposals in minutes.",
     "cta": "Start Free Trial"
+  },
+  "faq": {
+    "eyebrow": "Questions",
+    "heading": "A clear path from source files to a finished response.",
+    "items": [
+      {
+        "question": "What does BidPilot organize for a team?",
+        "answer": "Each project keeps source documents, extracted requirements, evidence, response drafts, reviews and deliverables in one durable workspace."
+      },
+      {
+        "question": "Can I use my own AI provider?",
+        "answer": "Yes. Provider settings are managed in the authenticated workspace, while the Pi runtime remains behind the platform's governed capability boundary."
+      },
+      {
+        "question": "Is the generated response auditable?",
+        "answer": "The workflow is designed around source attribution, review decisions and activity records so teams can inspect why a response was produced."
+      }
+    ]
   }
 }

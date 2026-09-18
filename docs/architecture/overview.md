@@ -134,3 +134,12 @@ The architecture is considered stable if the following survive framework churn:
 - queue and job contracts
 - audit event format
 - frontend interaction model
+
+## Archify evidence artifact
+
+The current runtime map is generated with the official `tt-a1i/archify`
+JSON-IR workflow, then validated, delivered, and browser-checked against the
+repository revision declared in the source file:
+
+- [Interactive runtime architecture](bidpilot-runtime.architecture.html)
+- [Archify source specification](bidpilot-runtime.architecture.json)

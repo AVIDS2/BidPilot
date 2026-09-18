@@ -1181,6 +1181,8 @@ export function AIAssistantPanel({
   const [configMenuOpen, setConfigMenuOpen] = useState<ConfigMenu>(null);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([]);
+  const [stopIntentPending, setStopIntentPending] = useState(false);
+  const [queueRetryTick, setQueueRetryTick] = useState(0);
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfig[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const focusComposer = useCallback(() => {
@@ -1196,9 +1198,13 @@ export function AIAssistantPanel({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const queueDrainingRef = useRef(false);
+  // React state updates are asynchronous. Keep the stop intent synchronous so
+  // an Enter press immediately after clicking stop is treated as a new message.
+  const stopIntentRef = useRef(false);
   const isBusy = isAssistantBusy(state.status);
   const isStreaming = state.isStreaming;
   const isStopping = state.cancellationRequested;
+  const isStopPending = isStopping || stopIntentPending;
   const isUploadingAttachments = attachments.some(
     (attachment) => attachment.status === "uploading",
   );
@@ -1209,6 +1215,19 @@ export function AIAssistantPanel({
     Boolean(input.trim() || attachments.length > 0) &&
     !isUploadingAttachments &&
     !hasFailedAttachments;
+
+  const requestStop = useCallback(() => {
+    stopIntentRef.current = true;
+    setStopIntentPending(true);
+    stopAssistantResponse();
+  }, [stopAssistantResponse]);
+
+  useEffect(() => {
+    if (!isStreaming && !isStopping) {
+      stopIntentRef.current = false;
+      setStopIntentPending(false);
+    }
+  }, [isStopping, isStreaming]);
   const selectedProvider = useMemo(
     () =>
       providerConfigs.find(
@@ -1487,8 +1506,12 @@ export function AIAssistantPanel({
     setInput("");
     setAttachments([]);
 
-    if (isBusy) {
+    if (isBusy || isStopPending) {
       setQueuedPrompts((current) => [...current, queuedPrompt]);
+      // The queued item now owns the user's intent. Keep the synchronous flag
+      // available only for the immediate key/button race.
+      stopIntentRef.current = false;
+      setStopIntentPending(false);
       return;
     }
 
@@ -1504,6 +1527,7 @@ export function AIAssistantPanel({
     attachments,
     input,
     isBusy,
+    isStopPending,
     isUploadingAttachments,
     sendMessage,
     state.reasoningEffort,
@@ -1545,13 +1569,13 @@ export function AIAssistantPanel({
     if (
       queueDrainingRef.current ||
       isAssistantBusy(state.status) ||
+      isStopPending ||
       queuedPrompts.length === 0
     )
       return;
 
     const nextPrompt = queuedPrompts[0];
     queueDrainingRef.current = true;
-    setQueuedPrompts((current) => current.slice(1));
     void sendMessage(nextPrompt.prompt, {
       displayContent: nextPrompt.displayContent,
       attachments: nextPrompt.attachments,
@@ -1559,10 +1583,21 @@ export function AIAssistantPanel({
       providerConfigId: nextPrompt.providerConfigId,
       reasoningEffort: nextPrompt.reasoningEffort,
       approvalMode: nextPrompt.approvalMode,
+    }).then((accepted) => {
+      if (accepted) {
+        // Remove only after the provider accepted the request. A cancellation
+        // race can otherwise consume the next user message while the request
+        // boundary is still locked.
+        setQueuedPrompts((current) => current.filter((item) => item.id !== nextPrompt.id));
+        return;
+      }
+      // The old stream may still be running its final cleanup. Keep the item
+      // visible and retry after the lock has had a chance to clear.
+      window.setTimeout(() => setQueueRetryTick((tick) => tick + 1), 250);
     }).finally(() => {
       queueDrainingRef.current = false;
     });
-  }, [queuedPrompts, sendMessage, state.status]);
+  }, [isStopPending, queuedPrompts, queueRetryTick, sendMessage, state.status]);
 
   const handleQuickAction = useCallback(
     (text: string) => {
@@ -1768,8 +1803,8 @@ export function AIAssistantPanel({
           onKeyDown={(event) => {
             if (event.key !== "Enter" || event.shiftKey) return;
             event.preventDefault();
-            if (isStreaming) {
-              if (!isStopping) stopAssistantResponse();
+            if (isStreaming && !isStopPending && !stopIntentRef.current) {
+              requestStop();
               return;
             }
             handleSend();
@@ -1828,13 +1863,13 @@ export function AIAssistantPanel({
             <Button
               type="button"
               className="bp-linear-agent-send"
-              onClick={isStopping ? undefined : isStreaming ? stopAssistantResponse : handleSend}
-              disabled={isStopping || (!isStreaming && !canSend)}
-              aria-label={isStopping ? t("actions.stopRequested") : isStreaming ? t("actions.stopGenerating") : t("actions.send")}
+              onClick={isStopPending ? (canSend ? handleSend : undefined) : isStreaming ? requestStop : handleSend}
+              disabled={(!isStreaming && !canSend) || (isStopPending && !canSend)}
+              aria-label={isStopPending && canSend ? "停止后发送" : isStopPending ? t("actions.stopRequested") : isStreaming ? t("actions.stopGenerating") : t("actions.send")}
               size="icon-sm"
               variant="ghost"
             >
-              {isStopping ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : isStreaming ? <SquareIcon aria-hidden="true" fill="currentColor" /> : isUploadingAttachments ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : <SendIcon aria-hidden="true" />}
+              {isStopPending && canSend ? <SendIcon aria-hidden="true" /> : isStopPending ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : isStreaming ? <SquareIcon aria-hidden="true" fill="currentColor" /> : isUploadingAttachments ? <Loader2Icon aria-hidden="true" className="animate-spin" /> : <SendIcon aria-hidden="true" />}
             </Button>
           </div>
         </div>
@@ -2269,7 +2304,9 @@ export function AIAssistantPanel({
                     <PromptInputActions className="shrink-0">
                       <PromptInputAction
                         tooltip={
-                          isStopping
+                          isStopPending && canSend
+                            ? "停止后发送"
+                            : isStopPending
                             ? t("actions.stopRequested")
                             : isStreaming
                             ? t("actions.stopGenerating")
@@ -2278,10 +2315,12 @@ export function AIAssistantPanel({
                       >
                         <Button
                           type="button"
-                          onClick={isStopping ? undefined : isStreaming ? stopAssistantResponse : handleSend}
-                          disabled={isStopping || (!isStreaming && !canSend)}
+                          onClick={isStopPending ? (canSend ? handleSend : undefined) : isStreaming ? requestStop : handleSend}
+                          disabled={(!isStreaming && !canSend) || (isStopPending && !canSend)}
                           aria-label={
-                            isStopping
+                            isStopPending && canSend
+                              ? "停止后发送"
+                              : isStopPending
                               ? t("actions.stopRequested")
                               : isStreaming
                               ? t("actions.stopGenerating")
@@ -2289,7 +2328,9 @@ export function AIAssistantPanel({
                           }
                           className={cn(
                             "relative flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 disabled:opacity-35",
-                            isStopping
+                            isStopPending && canSend
+                              ? "bg-primary text-primary-foreground shadow-[0_10px_28px_oklch(0_0_0/0.18)] hover:scale-[1.03] active:scale-95"
+                              : isStopPending
                               ? "bg-muted text-muted-foreground"
                               : isStreaming
                               ? "bg-foreground text-background shadow-[0_8px_20px_oklch(0_0_0/0.2)] hover:scale-[1.03] active:scale-95"
@@ -2300,7 +2341,9 @@ export function AIAssistantPanel({
                           size="icon"
                           variant="ghost"
                         >
-                          {isStopping ? (
+                          {isStopPending && canSend ? (
+                            <SendIcon className="w-4 h-4" />
+                          ) : isStopPending ? (
                             <Loader2Icon className="size-4 animate-spin" />
                           ) : isStreaming ? (
                             <>
@@ -2322,7 +2365,7 @@ export function AIAssistantPanel({
                     {isStreaming ? (
                       <>
                         <Loader2Icon className="size-3 animate-spin" />
-                        {isStopping ? t("actions.stopRequested") : t("panel.running")}
+                        {isStopPending ? t("actions.stopRequested") : t("panel.running")}
                       </>
                     ) : (
                       <>

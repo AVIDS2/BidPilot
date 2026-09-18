@@ -118,6 +118,8 @@ It is organized to support three goals:
 
 ### Research
 
+- `docs/research/readme-product-narrative-study.md`
+  - public product README research, source projects, and BidPilot mapping
 - `docs/research/ai-tender-platform-competitive-scan.md`
   - public capability scan of domestic AI tender/proposal products and BidPilot gap matrix
 - `docs/research/pi-capability-optimization-2026-08-25.md`
@@ -131,6 +133,9 @@ It is organized to support three goals:
   - BidPilot tender-specific read-only wrapper and output constraints
 
 ### Implementation plans
+
+- `docs/superpowers/plans/2026-08-31-bidpilot-saas-ui-adoption.md`
+  - Kiranism/ixartz SaaS UI 源码复用迁移、许可登记和验收任务
 
 - `docs/superpowers/plans/2026-04-18-docpilot-phase-0-foundation.md`
   - repository bootstrap, environments, shared contracts, and local dev stack

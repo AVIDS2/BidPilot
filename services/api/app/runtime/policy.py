@@ -63,6 +63,12 @@ def evaluate_policy(definition: CapabilityDefinition, *, approval_mode: Approval
     if approval_mode == "full_access":
         return _allow_decision(definition, "full_access")
 
+    if approval_mode == "risky_only" and definition.risk_level is RuntimeRiskLevel.LOW_RISK_WRITE:
+        # "替我审批" handles routine, reversible changes without interrupting
+        # the conversation. Costing and destructive capabilities still pause
+        # below, so this mode does not become unrestricted execution.
+        return _allow_decision(definition, "assistant_approved_low_risk_write")
+
     if approval_mode in {"request_approval", "custom"} and definition.risk_level not in {
         RuntimeRiskLevel.READ,
         RuntimeRiskLevel.NAVIGATE,

@@ -19,6 +19,7 @@ def test_operator_metadata_marks_delete_project_destructive() -> None:
     assert policy.requires_typed_confirmation is True
     assert tool_requires_approval("search_projects", "request_approval") is False
     assert tool_requires_approval("create_project", "request_approval") is True
+    assert tool_requires_approval("create_project", "risky_only") is False
     assert tool_requires_approval("create_project", "full_access") is False
     assert tool_requires_approval("create_project", "custom") is True
     assert tool_requires_approval("delete_project", "full_access") is True
@@ -32,7 +33,7 @@ def test_demo_workspace_is_a_governed_low_risk_capability() -> None:
     assert policy is not None
     assert policy.label_zh == "创建演示工作区"
     assert policy.risk_level == "low_risk_write"
-    assert tool_requires_approval("create_demo_workspace", "risky_only") is True
+    assert tool_requires_approval("create_demo_workspace", "risky_only") is False
     assert tool_requires_approval("create_demo_workspace", "full_access") is False
 
 

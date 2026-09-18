@@ -30,7 +30,7 @@ approval, review, or export.
 
 | Lifecycle stage | User outcome | Operator capability / route | Durable result | Default governance |
 | --- | --- | --- | --- | --- |
-| Create workspace | A bid project with the BidPilot template is created | `create_project` | `Project`, owner `ProjectMember`, standard deliverable and sections, audit event | Confirmation in `risky_only`; runtime action is idempotent |
+| Create workspace | A bid project with the BidPilot template is created | `create_project` | `Project`, owner `ProjectMember`, standard deliverable and sections, audit event | Auto-approved as a routine write in `risky_only`; runtime action is idempotent |
 | Add source material | Files become governed project evidence | `POST /assistant/attachments` then `attach_uploaded_documents` | Private `AssistantAttachment` staging record, copied `SourceDocument`, bundle, ingest job, usage/audit record | Upload requires authenticated ownership; project handoff is confirmation-gated and quota-checked |
 | Inspect context | See projects, files, sections, requirements, evidence, versions, and run state | Read capabilities such as `search_projects`, `list_documents`, `list_requirements`, `list_evidence`, `get_runtime_status` | No mutation; only access-filtered read models | Project membership is enforced before every scoped read |
 | Assess compliance | Identify readiness score, missing evidence, mandatory gaps, and source locations | `get_readiness_summary`, `list_readiness_gaps`, `open_requirement_source` | Requirement Ledger and evidence links remain authoritative | Read-only; source locators are returned through a bounded public result |
@@ -70,8 +70,8 @@ project and process these files.”
 ## Approval and Access Rules
 
 - `request_approval`: every mutation pauses for confirmation.
-- `risky_only`: reads run directly; writes, provider-costing work, and exports
-  require confirmation.
+- `risky_only` / `替我审批`: reads and routine reversible writes run directly;
+  provider-costing work, exports, and destructive actions require confirmation.
 - `full_access`: low-risk actions can proceed without the interaction pause,
   but authorization, quotas, audit records, and typed confirmation for
   destructive deletion remain mandatory.

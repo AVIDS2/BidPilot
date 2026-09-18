@@ -1,478 +1,335 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, FileText, PenTool, ShieldCheck } from "lucide-react";
-import { CinematicHero } from "@/components/hero/CinematicHero";
-import BlurText from "@/components/BlurText";
-import AnimatedContent from "@/components/AnimatedContent";
-import StarBorder from "@/components/StarBorder";
-import GlareHover from "@/components/GlareHover";
-import DecryptedText from "@/components/DecryptedText";
-import CountUp from "@/components/CountUp";
-import { useAuth } from "@/lib/auth";
+import {
+  ArrowRightIcon,
+  CheckIcon,
+  FileCheck2Icon,
+  FileSearch2Icon,
+  GitBranchIcon,
+  MessagesSquareIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
+} from "lucide-react";
 
-// Hero区域 - 使用CinematicHero + BlurText逐字动画
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { BrandLogo } from "@/components/brand";
+import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
+
+type IconType = typeof FileSearch2Icon;
+
+function Section({
+  id,
+  eyebrow,
+  title,
+  description,
+  children,
+  className = "",
+}: {
+  id?: string;
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section id={id} className={`border-b py-20 sm:py-24 ${className}`}>
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="max-w-2xl">
+          {eyebrow ? <p className="text-sm font-medium text-primary">{eyebrow}</p> : null}
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h2>
+          {description ? <p className="mt-4 text-base leading-7 text-muted-foreground">{description}</p> : null}
+        </div>
+        <div className="mt-10">{children}</div>
+      </div>
+    </section>
+  );
+}
+
 function HeroSection() {
   const { t } = useTranslation("landing");
   const { isAuthenticated } = useAuth();
-  const ctaHref = isAuthenticated ? "/dashboard" : "/signup";
+  const ctaPath = isAuthenticated ? "/dashboard" : "/signup";
 
   return (
-    <CinematicHero variant="mixed">
-      {/* 区域标签 - DecryptedText解密效果 */}
-      <DecryptedText
-        text={t("hero.label")}
-        speed={60}
-        maxIterations={6}
-        animateOn="view"
-        className="text-sm font-medium tracking-widest uppercase"
-        parentClassName="inline-block"
-        style={{ color: "var(--landing-accent)" }}
-      />
+    <section className="border-b">
+      <div className="mx-auto grid w-full max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-2 lg:gap-16 lg:px-8 lg:py-28">
+        <div className="max-w-2xl">
+          <Badge variant="outline" className="gap-1.5">
+            <SparklesIcon aria-hidden="true" data-icon="inline-start" />
+            {t("hero.label")}
+          </Badge>
+          <h1 className="mt-6 text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
+            {t("hero.title")}
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
+            {t("hero.description")}
+          </p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Link className={buttonVariants({ size: "lg" })} to={ctaPath}>
+              {t("hero.getStarted")}
+              <ArrowRightIcon data-icon="inline-end" />
+            </Link>
+            <Link className={buttonVariants({ size: "lg", variant: "outline" })} to="/pricing">
+              {t("hero.viewPricing")}
+            </Link>
+          </div>
+          <p className="mt-5 text-xs text-muted-foreground">{t("hero.noCreditCard")}</p>
+        </div>
 
-      {/* 标题 - BlurText逐词blur入场，绝对视觉焦点 */}
-      <BlurText
-        text={t("hero.title")}
-        delay={150}
-        animateBy="words"
-        direction="bottom"
-        threshold={0}
-        stepDuration={0.6}
-        className="mt-7 max-w-[12ch] text-[clamp(3.15rem,16vw,5.25rem)] font-medium leading-[0.9] tracking-[-0.055em] text-white drop-shadow-[0_4px_32px_rgba(99,102,241,0.2)] sm:mt-8 sm:max-w-[10ch] md:text-8xl md:leading-[0.85]"
-      />
-
-      {/* 副标题 */}
-      <p className="mt-6 max-w-[20rem] text-lg leading-relaxed text-white/80 drop-shadow-sm sm:max-w-2xl sm:text-xl md:text-2xl">
-        {t("hero.description")}
-      </p>
-
-      {/* CTA 按钮 - StarBorder包裹主CTA，加半透明底板提升可读性 */}
-      <div className="mt-10 grid w-full max-w-[22rem] grid-cols-2 gap-3 sm:mt-12 sm:flex sm:max-w-none sm:gap-6">
-        <StarBorder
-          as="a"
-          color="rgba(139, 92, 246, 0.92)"
-          speed="5s"
-          thickness={1}
-          className="inline-flex min-h-24 w-full sm:min-h-0"
-          href={ctaHref}
-        >
-          <span className="flex w-full items-center justify-between gap-3 px-6 py-5 text-xl font-medium leading-tight backdrop-blur-sm sm:justify-start sm:px-8 sm:py-4 sm:text-lg">
-            {t("hero.getStarted")}
-            <span className="text-sm">→</span>
-          </span>
-        </StarBorder>
-        <Link
-          to="/pricing"
-          className="inline-flex min-h-24 items-center justify-center gap-3 px-5 py-5 text-center text-xl font-medium leading-tight text-white backdrop-blur-sm transition-all duration-300 hover:border-white/30 hover:bg-white/5 sm:min-h-0 sm:px-8 sm:py-4 sm:text-lg"
-          style={{
-            border: "1px solid var(--landing-hairline)",
-          }}
-        >
-          {t("hero.viewPricing")}
-        </Link>
-      </div>
-
-      {/* 滚动提示 */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-        <div className="flex flex-col items-center gap-2 text-white/30">
-          <span className="text-xs tracking-widest uppercase">{t("hero.scrollHint")}</span>
-          <div className="w-px h-8 animate-pulse" style={{ background: "var(--landing-accent)" }} />
+        <div className="relative min-w-0">
+          <div className="overflow-hidden rounded-xl border bg-card shadow-lg">
+            <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-3">
+              <span className="size-2 rounded-full bg-primary" />
+              <span className="text-xs font-medium text-muted-foreground">{t("hero.previewLabel")}</span>
+            </div>
+            <img
+              src="/marketing/projects.png"
+              alt={t("hero.previewAlt")}
+              className="block aspect-[16/10] w-full object-cover object-top"
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <ShieldCheckIcon aria-hidden="true" />
+              {t("hero.previewTrust")}
+            </span>
+            <span>{t("hero.previewStatus")}</span>
+          </div>
         </div>
       </div>
-    </CinematicHero>
+    </section>
   );
 }
 
-// 社会证明区域 — 统计数字 + logos
-function SocialProofSection() {
+function ProofSection() {
   const { t } = useTranslation("landing");
-  const logos = t("socialProof.logos", { returnObjects: true }) as string[];
   const stats = t("socialProof.stats", { returnObjects: true }) as Array<{ value: string; label: string }>;
 
-  // 从统计值中提取数字部分给CountUp
-  const parseStatValue = (val: string): { num: number; prefix: string; suffix: string; isNumeric: boolean } => {
-    const match = val.match(/^([^\d]*)(\d+)(.*)$/);
-    if (match) {
-      return { prefix: match[1], num: parseInt(match[2]), suffix: match[3], isNumeric: true };
-    }
-    return { prefix: "", num: 0, suffix: val, isNumeric: false };
-  };
+  return (
+    <section className="border-b bg-muted/30">
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-2 divide-x divide-y px-4 sm:grid-cols-4 sm:divide-y-0 sm:px-6 lg:px-8">
+        {stats.map((stat) => (
+          <div key={stat.label} className="flex min-h-28 flex-col justify-center px-4 py-6 first:pl-0 sm:px-6">
+            <strong className="text-2xl font-semibold tracking-tight sm:text-3xl">{stat.value}</strong>
+            <span className="mt-1 text-xs text-muted-foreground sm:text-sm">{stat.label}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WorkflowSection() {
+  const { t } = useTranslation("landing");
+  const steps: Array<{ key: "upload" | "generate" | "review"; icon: IconType; number: string }> = [
+    { key: "upload", icon: FileSearch2Icon, number: "01" },
+    { key: "generate", icon: SparklesIcon, number: "02" },
+    { key: "review", icon: FileCheck2Icon, number: "03" },
+  ];
 
   return (
-    <section
-      className="py-20"
-      style={{
-        background: "var(--landing-canvas)",
-        borderTop: "1px solid var(--landing-hairline)",
-        borderBottom: "1px solid var(--landing-hairline)",
-      }}
+    <Section
+      id="workflow"
+      eyebrow={t("howItWorks.eyebrow")}
+      title={t("howItWorks.heading")}
+      description={t("howItWorks.subheading")}
     >
-      <div className="max-w-7xl mx-auto px-8">
-        {/* 统计数字 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16">
-          {stats.map((stat, index) => {
-            const { prefix, num, suffix, isNumeric } = parseStatValue(stat.value);
-            return (
-              <AnimatedContent key={index} delay={index * 0.1} distance={30} duration={0.6}>
-                <div className="text-center">
-                  <p
-                    className="text-4xl md:text-5xl font-medium tracking-tight mb-2"
-                    style={{ color: "var(--landing-text-primary)" }}
-                  >
-                    {isNumeric ? (
-                      <>
-                        {prefix}
-                        <CountUp to={num} duration={2} delay={index * 0.15} />
-                        {suffix}
-                      </>
-                    ) : (
-                      stat.value
-                    )}
-                  </p>
-                  <p
-                    className="text-sm tracking-wide"
-                    style={{ color: "var(--landing-text-tertiary)" }}
-                  >
-                    {stat.label}
-                  </p>
+      <div className="grid gap-4 md:grid-cols-3">
+        {steps.map(({ key, icon: Icon, number }) => (
+          <Card key={key} className="relative overflow-hidden">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Icon aria-hidden="true" />
                 </div>
-              </AnimatedContent>
-            );
-          })}
-        </div>
-
-        {/* logos */}
-        <AnimatedContent distance={20} duration={0.5}>
-          <p
-            className="text-sm font-medium tracking-widest uppercase text-center mb-8"
-            style={{ color: "var(--landing-text-tertiary)" }}
-          >
-            {t("socialProof.label")}
-          </p>
-        </AnimatedContent>
-        <div className="flex flex-wrap items-center justify-center gap-x-16 gap-y-6">
-          {logos.map((name, index) => (
-            <AnimatedContent key={name} delay={index * 0.06} distance={15} duration={0.4}>
-              <span
-                className="text-sm font-medium tracking-wider uppercase transition-colors duration-300 hover:text-white"
-                style={{ color: "var(--landing-text-tertiary)" }}
-              >
-                {name}
-              </span>
-            </AnimatedContent>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// How It Works 区域
-function HowItWorksSection() {
-  const { t } = useTranslation("landing");
-  const steps = [
-    { key: "upload", icon: FileText, num: 1 },
-    { key: "generate", icon: PenTool, num: 2 },
-    { key: "review", icon: ShieldCheck, num: 3 },
-  ];
-
-  return (
-    <section className="py-32" style={{ background: "var(--landing-canvas)" }}>
-      <div className="max-w-7xl mx-auto px-8">
-        <AnimatedContent distance={40} duration={0.8}>
-          <h2
-            className="text-4xl md:text-5xl font-medium leading-tight tracking-tight mb-4"
-            style={{ color: "var(--landing-text-primary)" }}
-          >
-            {t("howItWorks.heading")}
-          </h2>
-          <p className="text-xl max-w-2xl mb-16" style={{ color: "var(--landing-text-secondary)" }}>
-            {t("howItWorks.subheading")}
-          </p>
-        </AnimatedContent>
-
-        <div className="relative">
-          {/* 时间线连接线 */}
-          <div
-            className="absolute left-[19px] top-0 bottom-0 w-px"
-            style={{ background: "var(--landing-border-inner)" }}
-          />
-
-          {steps.map((step, index) => (
-            <AnimatedContent key={step.key} delay={index * 0.15} distance={60} direction="horizontal" duration={0.7}>
-              <div className="relative flex gap-8 pb-16 last:pb-0">
-                {/* 步骤编号 */}
-                <div
-                  className="relative z-10 flex items-center justify-center w-10 h-10 text-sm font-medium"
-                  style={{
-                    background: "var(--landing-surface-1)",
-                    border: "1px solid var(--landing-border-inner)",
-                    color: "var(--landing-accent)",
-                  }}
-                >
-                  {step.num}
-                </div>
-
-                {/* 内容 */}
-                <div className="flex-1 pt-2">
-                  <div className="flex items-center gap-3 mb-3">
-                    <step.icon className="w-5 h-5" style={{ color: "var(--landing-accent)" }} />
-                    <h3 className="text-xl font-medium" style={{ color: "var(--landing-text-primary)" }}>
-                      {t(`howItWorks.steps.${step.key}.title`)}
-                    </h3>
-                  </div>
-                  <p className="text-base leading-relaxed max-w-lg" style={{ color: "var(--landing-text-secondary)" }}>
-                    {t(`howItWorks.steps.${step.key}.description`)}
-                  </p>
-                </div>
+                <span className="font-mono text-xs text-muted-foreground">{number}</span>
               </div>
-            </AnimatedContent>
-          ))}
-        </div>
+              <CardTitle className="mt-5">{t(`howItWorks.steps.${key}.title`)}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm leading-6 text-muted-foreground">{t(`howItWorks.steps.${key}.description`)}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
-    </section>
+    </Section>
   );
 }
 
-// Features 区域 - 使用GlareHover
-function FeaturesSection() {
+function CapabilitiesSection() {
   const { t } = useTranslation("landing");
-  const features = [
-    { key: "extraction", icon: FileText },
-    { key: "drafts", icon: PenTool },
-    { key: "audit", icon: ShieldCheck },
+  const capabilities: Array<{ key: "extraction" | "drafts" | "audit"; icon: IconType; image: string }> = [
+    { key: "extraction", icon: FileSearch2Icon, image: "/marketing/projects.png" },
+    { key: "drafts", icon: MessagesSquareIcon, image: "/marketing/agent-run.png" },
+    { key: "audit", icon: ShieldCheckIcon, image: "/marketing/knowledge.png" },
   ];
 
   return (
-    <section className="py-32" style={{ background: "var(--landing-canvas)" }}>
-      <div className="max-w-7xl mx-auto px-8">
-        <AnimatedContent distance={40} duration={0.8}>
-          <h2
-            className="text-4xl md:text-5xl font-medium leading-tight tracking-tight mb-4"
-            style={{ color: "var(--landing-text-primary)" }}
-          >
-            {t("features.heading")}
-          </h2>
-          <p className="text-xl max-w-2xl mb-16" style={{ color: "var(--landing-text-secondary)" }}>
-            {t("features.subheading")}
-          </p>
-        </AnimatedContent>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {features.map((feature, index) => (
-            <AnimatedContent key={feature.key} delay={index * 0.12} distance={50} duration={0.7}>
-              <GlareHover
-                width="100%"
-                height="auto"
-                background="var(--landing-surface-1)"
-                borderRadius="0px"
-                borderColor="var(--landing-hairline)"
-                glareColor="#38BDF8"
-                glareOpacity={0.15}
-                glareSize={300}
-                transitionDuration={700}
-                className="!h-full"
-              >
-                <div className="p-8 h-full">
-                  {/* 图标 */}
-                  <div
-                    className="w-12 h-12 flex items-center justify-center mb-6"
-                    style={{
-                      background: "var(--landing-accent-soft)",
-                      border: "1px solid var(--landing-border-inner)",
-                    }}
-                  >
-                    <feature.icon className="w-6 h-6" style={{ color: "var(--landing-accent)" }} />
-                  </div>
-
-                  {/* 标题 */}
-                  <h3 className="text-xl font-medium mb-3" style={{ color: "var(--landing-text-primary)" }}>
-                    {t(`features.${feature.key}.title`)}
-                  </h3>
-
-                  {/* 描述 */}
-                  <p className="text-base leading-relaxed mb-6" style={{ color: "var(--landing-text-secondary)" }}>
-                    {t(`features.${feature.key}.description`)}
-                  </p>
-
-                  {/* Learn more */}
-                  <span
-                    className="inline-flex items-center gap-2 text-sm font-medium transition-colors duration-300 group-hover:text-white"
-                    style={{ color: "var(--landing-accent)" }}
-                  >
-                    {t(`features.${feature.key}.learnMore`)}
-                    <ArrowRight className="w-4 h-4" />
-                  </span>
-                </div>
-              </GlareHover>
-            </AnimatedContent>
-          ))}
-        </div>
+    <Section
+      id="capabilities"
+      eyebrow={t("features.eyebrow")}
+      title={t("features.heading")}
+      description={t("features.subheading")}
+      className="bg-muted/20"
+    >
+      <div className="grid gap-6 lg:grid-cols-3">
+        {capabilities.map(({ key, icon: Icon, image }) => (
+          <Card key={key} className="overflow-hidden">
+            <div className="border-b bg-muted/30 p-2">
+              <img
+                src={image}
+                alt={t(`features.${key}.title`)}
+                className="aspect-[16/9] w-full rounded-lg border object-cover object-top"
+              />
+            </div>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Icon aria-hidden="true" className="text-primary" />
+                <CardTitle className="text-lg">{t(`features.${key}.title`)}</CardTitle>
+              </div>
+              <CardDescription className="leading-6">{t(`features.${key}.description`)}</CardDescription>
+            </CardHeader>
+            <CardFooter>
+              <Link className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline" to="/signup">
+                {t(`features.${key}.learnMore`)}
+                <ArrowRightIcon aria-hidden="true" />
+              </Link>
+            </CardFooter>
+          </Card>
+        ))}
       </div>
-    </section>
+    </Section>
   );
 }
 
-// Pricing 区域
 function PricingSection() {
   const { t } = useTranslation("landing");
   const tiers = ["starter", "team", "enterprise"] as const;
 
   return (
-    <section className="py-32" style={{ background: "var(--landing-canvas)" }}>
-      <div className="max-w-7xl mx-auto px-8">
-        <AnimatedContent distance={40} duration={0.8}>
-          <h2
-            className="text-4xl md:text-5xl font-medium leading-tight tracking-tight mb-4"
-            style={{ color: "var(--landing-text-primary)" }}
-          >
-            {t("pricing.heading")}
-          </h2>
-          <p className="text-xl max-w-2xl mb-16" style={{ color: "var(--landing-text-secondary)" }}>
-            {t("pricing.subheading")}
-          </p>
-        </AnimatedContent>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {tiers.map((tier, index) => {
-            const highlighted = tier === "team";
-            return (
-              <AnimatedContent key={tier} delay={index * 0.12} distance={50} duration={0.7}>
-                <div
-                  className="p-8 transition-all duration-300 hover:-translate-y-1 h-full"
-                  style={{
-                    background: "var(--landing-surface-1)",
-                    border: highlighted
-                      ? "1px solid var(--landing-border-inner)"
-                      : "1px solid var(--landing-hairline)",
-                  }}
-                >
-                  {/* 标签 */}
-                  <span
-                    className="inline-block px-3 py-1 text-xs font-medium tracking-widest uppercase mb-6"
-                    style={{
-                      background: highlighted ? "var(--landing-accent-soft)" : "var(--landing-hairline)",
-                      color: highlighted ? "var(--landing-accent)" : "var(--landing-text-secondary)",
-                      border: highlighted
-                        ? "1px solid var(--landing-border-inner)"
-                        : "1px solid var(--landing-hairline)",
-                    }}
-                  >
-                    {t(`pricing.tiers.${tier}.label`)}
-                  </span>
-
-                  {/* 价格 */}
-                  <p className="text-5xl font-medium tracking-tight mb-2" style={{ color: "var(--landing-text-primary)" }}>
-                    {t(`pricing.tiers.${tier}.price`)}
-                  </p>
-
-                  {/* 描述 */}
-                  <p className="text-sm mb-8" style={{ color: "var(--landing-text-tertiary)" }}>
-                    {t(`pricing.tiers.${tier}.sub`)}
-                  </p>
-
-                  {/* 功能列表 */}
-                  <ul className="space-y-4 mb-8">
-                    {(
-                      t(`pricing.tiers.${tier}.features`, { returnObjects: true }) as string[]
-                    ).map((feat) => (
-                      <li key={feat} className="flex items-start gap-3">
-                        <span
-                          className="mt-1 w-4 h-4 flex items-center justify-center text-xs"
-                          style={{ color: "var(--landing-accent)" }}
-                        >
-                          ✓
-                        </span>
-                        <span className="text-sm" style={{ color: "var(--landing-text-secondary)" }}>
-                          {feat}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* CTA — Enterprise用mailto，其他跳signup */}
-                  {tier === "enterprise" ? (
-                    <a
-                      href="mailto:sales@bidpilot.ai?subject=BidPilot%20Enterprise%20Inquiry"
-                      className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
-                      style={{
-                        background: "transparent",
-                        color: "var(--landing-text-primary)",
-                        border: "1px solid var(--landing-hairline)",
-                      }}
-                    >
-                      {t(`pricing.tiers.${tier}.cta`)}
-                    </a>
-                  ) : (
-                    <Link
-                      to="/signup"
-                      className="block w-full text-center py-4 text-sm font-medium transition-all duration-300 hover:scale-[0.98]"
-                      style={{
-                        background: highlighted ? "var(--landing-accent)" : "transparent",
-                        color: highlighted ? "var(--landing-canvas)" : "var(--landing-text-primary)",
-                        border: highlighted ? "none" : "1px solid var(--landing-hairline)",
-                      }}
-                    >
-                      {t(`pricing.tiers.${tier}.cta`)}
-                    </Link>
-                  )}
+    <Section id="pricing" eyebrow={t("pricing.eyebrow")} title={t("pricing.heading")} description={t("pricing.subheading")}>
+      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+        {tiers.map((tier) => {
+          const recommended = tier === "team";
+          const features = t(`pricing.tiers.${tier}.features`, { returnObjects: true }) as string[];
+          return (
+            <Card key={tier} className={recommended ? "border-primary shadow-md" : undefined}>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle>{t(`pricing.tiers.${tier}.label`)}</CardTitle>
+                  {recommended ? <Badge>{t("pricing.recommended")}</Badge> : null}
                 </div>
-              </AnimatedContent>
-            );
-          })}
-        </div>
+                <CardDescription className="min-h-12 leading-6">{t(`pricing.tiers.${tier}.sub`)}</CardDescription>
+                <p className="pt-3 text-3xl font-semibold tracking-tight">{t(`pricing.tiers.${tier}.price`)}</p>
+              </CardHeader>
+              <CardContent className="flex-1">
+                <Separator className="mb-5" />
+                <ul className="grid gap-3 text-sm text-muted-foreground">
+                  {features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2">
+                      <CheckIcon aria-hidden="true" className="mt-0.5 shrink-0 text-primary" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+              <CardFooter>
+                {tier === "enterprise" ? (
+                  <a className={cn(buttonVariants({ variant: "outline" }), "w-full")} href="mailto:sales@bidpilot.ai">
+                    {t(`pricing.tiers.${tier}.cta`)}
+                  </a>
+                ) : (
+                  <Link className={cn(buttonVariants({ variant: recommended ? "default" : "outline" }), "w-full")} to="/signup">
+                    {t(`pricing.tiers.${tier}.cta`)}
+                  </Link>
+                )}
+              </CardFooter>
+            </Card>
+          );
+        })}
       </div>
-    </section>
+    </Section>
   );
 }
 
-// Final CTA 区域 - StarBorder
+function FaqSection() {
+  const { t } = useTranslation("landing");
+  const items = useMemo(
+    () => t("faq.items", { returnObjects: true }) as Array<{ question: string; answer: string }>,
+    [t],
+  );
+
+  return (
+    <Section id="faq" eyebrow={t("faq.eyebrow")} title={t("faq.heading")}>
+      <Accordion className="max-w-3xl" defaultValue={items[0] ? ["faq-0"] : undefined}>
+        {items.map((item, index) => (
+          <AccordionItem key={item.question} value={`faq-${index}`}>
+            <AccordionTrigger>{item.question}</AccordionTrigger>
+            <AccordionContent>
+              <p className="leading-6 text-muted-foreground">{item.answer}</p>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    </Section>
+  );
+}
+
 function FinalCtaSection() {
   const { t } = useTranslation("landing");
-
   return (
-    <section className="py-32" style={{ background: "var(--landing-canvas)" }}>
-      <div className="max-w-7xl mx-auto px-8 text-center">
-        <AnimatedContent distance={40} duration={0.8}>
-          <h2
-            className="text-4xl md:text-6xl font-medium leading-tight tracking-tight mb-6"
-            style={{ color: "var(--landing-text-primary)" }}
-          >
-            {t("finalCta.heading")}
-          </h2>
-          <p className="text-xl max-w-2xl mx-auto mb-12" style={{ color: "var(--landing-text-secondary)" }}>
-            {t("finalCta.subheading")}
-          </p>
-        </AnimatedContent>
-        <AnimatedContent delay={0.2} distance={30} duration={0.6}>
-          <StarBorder
-            as="a"
-            color="rgba(56, 189, 248, 0.88)"
-            speed="5s"
-            thickness={1}
-            className="inline-block"
-            href="/signup"
-          >
-            <span className="flex items-center gap-3 text-lg font-medium px-10 py-5">
-              {t("finalCta.cta")}
-              <span className="text-sm">→</span>
-            </span>
-          </StarBorder>
-        </AnimatedContent>
+    <section className="border-b">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-start gap-6 px-4 py-20 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+        <div>
+          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">{t("finalCta.heading")}</h2>
+          <p className="mt-3 text-base text-muted-foreground">{t("finalCta.subheading")}</p>
+        </div>
+        <Link className={buttonVariants({ size: "lg" })} to="/signup">
+          {t("finalCta.cta")}
+          <ArrowRightIcon data-icon="inline-end" />
+        </Link>
       </div>
     </section>
   );
 }
 
-// 导出落地页
+function LandingFooter() {
+  const { t } = useTranslation("common");
+  return (
+    <footer>
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+        <BrandLogo markClassName="size-6" textClassName="text-base" />
+        <div className="flex flex-wrap items-center gap-4">
+          <Link className="hover:text-foreground" to="/docs">{t("nav.docs")}</Link>
+          <Link className="hover:text-foreground" to="/pricing">{t("nav.pricing")}</Link>
+          <a className="inline-flex items-center gap-1.5 hover:text-foreground" href="https://github.com/AVIDS2/BidPilot" rel="noreferrer" target="_blank">
+            <GitBranchIcon aria-hidden="true" />
+            GitHub
+          </a>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
 export function LandingPage() {
   return (
-    <div className="landing-page-shell min-h-screen" style={{ background: "var(--landing-canvas)" }}>
+    <div className="min-h-svh bg-background text-foreground">
       <HeroSection />
-      <SocialProofSection />
-      <HowItWorksSection />
-      <FeaturesSection />
+      <ProofSection />
+      <WorkflowSection />
+      <CapabilitiesSection />
       <PricingSection />
+      <FaqSection />
       <FinalCtaSection />
+      <LandingFooter />
     </div>
   );
 }

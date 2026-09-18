@@ -21,11 +21,36 @@ import redis.asyncio as redis
 logger = logging.getLogger(__name__)
 _CHANNEL_PREFIX = "docpilot:assistant:live:"
 _DEFAULT_TIMEOUT_SECONDS = 900.0
+_DEFAULT_CONNECT_TIMEOUT_SECONDS = 1.0
 
 
 def _redis_url() -> str | None:
     value = os.getenv("DOCPILOT_REDIS_URL", "").strip()
     return value or None
+
+
+def _connect_timeout_seconds() -> float:
+    try:
+        value = float(
+            os.getenv(
+                "DOCPILOT_ASSISTANT_LIVE_CONNECT_TIMEOUT_SECONDS",
+                str(_DEFAULT_CONNECT_TIMEOUT_SECONDS),
+            )
+        )
+    except ValueError:
+        value = _DEFAULT_CONNECT_TIMEOUT_SECONDS
+    return min(max(value, 0.25), 5.0)
+
+
+def _redis_client() -> redis.Redis:
+    timeout = _connect_timeout_seconds()
+    return redis.from_url(
+        _redis_url() or "",
+        decode_responses=True,
+        socket_connect_timeout=timeout,
+        socket_timeout=timeout,
+        retry_on_timeout=False,
+    )
 
 
 def live_channel(run_id: str) -> str:
@@ -38,7 +63,7 @@ async def publish_live_frame(run_id: str, frame: str) -> None:
     url = _redis_url()
     if not url or not frame:
         return
-    client = redis.from_url(url, decode_responses=True)
+    client = _redis_client()
     try:
         await client.publish(live_channel(run_id), frame)
     except Exception:  # noqa: BLE001 - live delivery must not fail the run
@@ -88,7 +113,7 @@ async def open_live_run(run_id: str) -> AsyncIterator[LiveRunSubscription | None
     if not url:
         yield None
         return
-    client = redis.from_url(url, decode_responses=True)
+    client = _redis_client()
     pubsub = client.pubsub()
     try:
         await pubsub.subscribe(live_channel(run_id))

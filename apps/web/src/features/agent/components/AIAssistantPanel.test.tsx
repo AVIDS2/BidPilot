@@ -418,6 +418,83 @@ describe("AIAssistantPanel", () => {
     });
   });
 
+  it("keeps a prompt submitted during cancellation and sends it after the old run settles", async () => {
+    const { cancelRuntimeWorkflow } = await import("@/lib/api");
+    vi.mocked(cancelRuntimeWorkflow).mockResolvedValue({
+      id: "assistant-runtime-queue-race",
+      kind: "assistant_turn",
+      status: "cancel_requested",
+      project_id: null,
+      conversation_id: "c-queue-race",
+      execution_run_id: null,
+      engine: "pi",
+      trace_id: "trace-queue-race",
+      parent_run_id: null,
+    });
+
+    const encoder = new TextEncoder();
+    let firstStreamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let assistantFetchCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        assistantFetchCount += 1;
+        if (assistantFetchCount > 1) {
+          return Promise.resolve({
+            ok: true,
+            body: streamFrom(
+              [
+                'event: assistant.start\ndata: {"conversation_id":"c-queue-race","runtime_run_id":"run-next","state":"thinking"}',
+                'event: assistant.message\ndata: {"runtime_run_id":"run-next","content":"第二条消息已送达。","state":"completed"}',
+                'event: assistant.end\ndata: {"conversation_id":"c-queue-race","runtime_run_id":"run-next","state":"completed"}',
+              ].join("\n\n") + "\n\n",
+            ),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          body: new ReadableStream<Uint8Array>({
+            start(controller) {
+              firstStreamController = controller;
+              controller.enqueue(
+                encoder.encode(
+                  'event: assistant.start\ndata: {"conversation_id":"c-queue-race","runtime_run_id":"run-old","state":"thinking"}\n\n',
+                ),
+              );
+            },
+          }),
+        });
+      }),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByText("Open assistant"));
+    const input = screen.getByPlaceholderText("Ask me anything...");
+    fireEvent.change(input, { target: { value: "第一条消息" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Stop generating" }));
+    await waitFor(() => {
+      expect(cancelRuntimeWorkflow).toHaveBeenCalledWith("run-old");
+    });
+
+    fireEvent.change(input, { target: { value: "第二条消息" } });
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
+    expect(screen.getByText(/第二条消息/)).toBeInTheDocument();
+
+    firstStreamController?.enqueue(
+      encoder.encode(
+        'event: assistant.end\ndata: {"conversation_id":"c-queue-race","runtime_run_id":"run-old","state":"cancelled"}\n\n',
+      ),
+    );
+    firstStreamController?.close();
+
+    await waitFor(() => {
+      expect(screen.getByText("第二条消息已送达。")).toBeInTheDocument();
+    });
+    expect(assistantFetchCount).toBe(2);
+  });
+
   it("keeps a live tool run collapsed until the reader opens it", async () => {
     let requestSignal: AbortSignal | undefined;
     const encoder = new TextEncoder();

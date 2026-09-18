@@ -1,116 +1,92 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "@/lib/auth";
+import { MenuIcon } from "lucide-react";
+
 import { BrandLogo } from "@/components/brand";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 
 export function Nav() {
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [isHidden, setIsHidden] = useState(false);
-  const [lastScrollY, setLastScrollY] = useState(0);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { isAuthenticated } = useAuth();
   const { t } = useTranslation("common");
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      setIsScrolled(currentScrollY > 50);
-      setIsHidden(currentScrollY > lastScrollY && currentScrollY > 100);
-      setLastScrollY(currentScrollY);
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [lastScrollY]);
-
   return (
-    <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-        isScrolled
-          ? "bg-background/80 backdrop-blur-md"
-          : "bg-transparent"
-      } ${isHidden ? "-translate-y-full" : "translate-y-0"}`}
-    >
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-5 sm:px-8 sm:py-6">
-        {/* Logo */}
-        <Link
-          to="/"
-          className="min-w-0 text-2xl transition-colors duration-300 hover:text-primary"
-        >
-          <BrandLogo markClassName="size-7 sm:size-8" textClassName="text-xl sm:text-2xl" />
+    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
+      <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <Link to="/" aria-label="BidPilot home" className="shrink-0">
+          <BrandLogo markClassName="size-7" textClassName="text-lg" />
         </Link>
 
-        {/* Navigation links */}
-        <div className="hidden items-center gap-8 md:flex">
-          <Link
-            to="/"
-            className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300"
-          >
+        <nav className="hidden items-center gap-1 md:flex" aria-label={t("nav.navigation")}>
+          <Link className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" to="/">
             {t("nav.home")}
           </Link>
-          <Link
-            to="/pricing"
-            className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300"
-          >
+          <Link className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" to="/pricing">
             {t("nav.pricing")}
           </Link>
-          <Link
-            to="/docs"
-            className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300"
-          >
+          <Link className="rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" to="/docs">
             {t("nav.docs")}
           </Link>
+        </nav>
+
+        <div className="hidden items-center gap-2 md:flex">
           {isAuthenticated ? (
-            <Link
-              to="/dashboard"
-              className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98]"
-            >
-              {t("nav.enterPlatform")}
-            </Link>
+            <Link className={buttonVariants()} to="/dashboard">{t("nav.enterPlatform")}</Link>
           ) : (
             <>
-              <Link
-                to="/login"
-                className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300"
-              >
-                {t("nav.login")}
-              </Link>
-              <Link
-                to="/signup"
-                className="inline-flex items-center text-sm font-medium px-5 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98]"
-              >
-                {t("nav.signup")}
-              </Link>
+              <Link className={buttonVariants({ variant: "ghost" })} to="/login">{t("nav.login")}</Link>
+              <Link className={buttonVariants()} to="/signup">{t("nav.signup")}</Link>
             </>
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 md:hidden">
-          {isAuthenticated ? (
-            <Link
-              to="/dashboard"
-              className="inline-flex items-center px-3.5 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98]"
-            >
-              {t("nav.enterPlatform")}
-            </Link>
-          ) : (
-            <>
-              <Link
-                to="/login"
-                className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300"
-              >
-                {t("nav.login")}
-              </Link>
-              <Link
-                to="/signup"
-                className="inline-flex items-center px-3.5 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300 hover:scale-[0.98]"
-              >
-                {t("nav.signup")}
-              </Link>
-            </>
-          )}
+        <div className="md:hidden">
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger render={<Button aria-label={t("nav.navigation")} size="icon-sm" variant="ghost" />}>
+              <MenuIcon aria-hidden="true" />
+            </SheetTrigger>
+            <SheetContent className="w-[min(22rem,calc(100vw-1rem))]" side="right">
+              <SheetHeader>
+                <SheetTitle>{t("nav.navigation")}</SheetTitle>
+                <SheetDescription>{t("app.tagline")}</SheetDescription>
+              </SheetHeader>
+              <nav className="flex flex-col gap-1 px-4" aria-label={t("nav.navigation")}>
+                <Link className="rounded-md px-3 py-2.5 text-sm font-medium hover:bg-muted" onClick={() => setMobileOpen(false)} to="/">
+                  {t("nav.home")}
+                </Link>
+                <Link className="rounded-md px-3 py-2.5 text-sm font-medium hover:bg-muted" onClick={() => setMobileOpen(false)} to="/pricing">
+                  {t("nav.pricing")}
+                </Link>
+                <Link className="rounded-md px-3 py-2.5 text-sm font-medium hover:bg-muted" onClick={() => setMobileOpen(false)} to="/docs">
+                  {t("nav.docs")}
+                </Link>
+              </nav>
+              <SheetFooter>
+                {isAuthenticated ? (
+                  <Link className={cn(buttonVariants(), "w-full")} to="/dashboard">{t("nav.enterPlatform")}</Link>
+                ) : (
+                  <div className="grid gap-2">
+                    <Link className={cn(buttonVariants({ variant: "outline" }), "w-full")} to="/login">{t("nav.login")}</Link>
+                    <Link className={cn(buttonVariants(), "w-full")} to="/signup">{t("nav.signup")}</Link>
+                  </div>
+                )}
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
-    </nav>
+    </header>
   );
 }

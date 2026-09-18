@@ -45,8 +45,9 @@ Create the synthetic demo project. Then ask the Assistant:
 - the replay behavior: the same `client_request_id` is one durable run, rather
   than two messages/model calls/tool executions.
 
-**Explain:** reads may run directly in `risky_only` mode, but a write/costing
-action gets a durable approval. Approval does not grant access; project
+**Explain:** reads and routine reversible writes may run directly in
+`risky_only` mode, while costing, export, and destructive actions get a durable
+approval. Approval does not grant access; project
 membership is still checked in the domain service.
 
 ## 2. Ingest evidence (two minutes)
