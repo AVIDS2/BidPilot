@@ -312,7 +312,9 @@ remain behind the governed `read_skill` capability. This preserves Pi's
 progressive-disclosure model without giving the sidecar a general filesystem
 reader or loading all business instructions into every prompt.
 
-`approval_mode=full_access` / `Auto-run` is a business confirmation policy. It
+`approval_mode=risky_only` / `替我审批` lets the assistant handle routine,
+reversible writes without interrupting the current task. Costing, export, and
+destructive operations remain explicit confirmation boundaries. This policy
 does not change the sandbox profile, grant host access, reveal credentials, or
 allow direct writes. The sidecar has no database or object-storage credentials;
 every business observation and mutation crosses the short-lived, run-scoped API
@@ -508,6 +510,9 @@ action or exposing its stored parameters.
   `RuntimeApproval` is the durable approval record; text confirmation is only
   a UI/input method, never the authority itself.
 - Destructive actions can require typed confirmation even in `full_access`.
+- `approval_mode=risky_only` / `替我审批` skips the interaction pause for
+  routine reversible writes, but does not approve costing, export, or destructive
+  operations on the user's behalf.
 - `approval_mode=full_access` means that optional confirmation prompts may be
   skipped. It never bypasses account authorization, tenant boundaries, plan
   quotas, required inputs, idempotency, or destructive-action safeguards. The

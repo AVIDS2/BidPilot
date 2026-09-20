@@ -355,6 +355,26 @@ async def stream_operator_assistant_response(
     # carries the ephemeral Pi event stream directly to this browser request.
     # PostgreSQL replay remains the reconnect fallback, not the normal path.
     async with open_live_run(run.id) as live:
+        # The durable outbox row already exists. Send the browser's first
+        # lifecycle frame before the broker wake-up so a slow broker cannot
+        # make the assistant appear frozen.
+        yield _sse(
+            "assistant.start",
+            {
+                "conversation_id": conversation_id,
+                "runtime_run_id": run.id,
+                "user_message_id": user_message.id,
+                "state": "queued",
+            },
+        )
+        yield _sse(
+            "assistant.runtime_state",
+            {
+                "runtime_run_id": run.id,
+                "phase": "queued",
+                "state": "queued",
+            },
+        )
         enqueue_assistant_run(db, user, run)
         # The queued worker owns the rest of this long-lived stream. Release
         # the request's SQLAlchemy connection before waiting on Redis events.

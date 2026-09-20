@@ -13,7 +13,7 @@ from contracts.runtime import RuntimePolicyOutcome, RuntimeRiskLevel
         ("search_projects", RuntimeRiskLevel.READ, False),
         ("list_knowledge_portfolio", RuntimeRiskLevel.READ, False),
         ("get_readiness_summary", RuntimeRiskLevel.READ, False),
-        ("create_project", RuntimeRiskLevel.LOW_RISK_WRITE, True),
+        ("create_project", RuntimeRiskLevel.LOW_RISK_WRITE, False),
         ("start_draft_section", RuntimeRiskLevel.COSTING, True),
         ("propose_memory_graph", RuntimeRiskLevel.COSTING, True),
         ("delete_project", RuntimeRiskLevel.DESTRUCTIVE, True),
@@ -31,10 +31,14 @@ def test_registry_policy_metadata(
     assert decision.requires_approval is requires_approval_in_risky_only
 
 
-def test_full_access_keeps_hard_confirmation_for_destructive_actions() -> None:
+def test_assistant_approval_runs_routine_writes_but_keeps_hard_confirmation() -> None:
+    routine_decision = evaluate_policy(get_capability_definition("create_deliverable"), approval_mode="risky_only")
+    costing_decision = evaluate_policy(get_capability_definition("start_draft_section"), approval_mode="risky_only")
     create_decision = evaluate_policy(get_capability_definition("create_project"), approval_mode="full_access")
     delete_decision = evaluate_policy(get_capability_definition("delete_project"), approval_mode="full_access")
 
+    assert routine_decision.outcome is RuntimePolicyOutcome.ALLOW
+    assert costing_decision.outcome is RuntimePolicyOutcome.REQUIRE_APPROVAL
     assert create_decision.outcome is RuntimePolicyOutcome.ALLOW
     assert delete_decision.outcome is RuntimePolicyOutcome.REQUIRE_APPROVAL
     assert delete_decision.requires_typed_confirmation is True

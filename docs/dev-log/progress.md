@@ -1,5 +1,15 @@
 # Progress Log
 
+## 2026-09-20 production approval policy release
+
+- Prepared the latest master-based release with the verified `替我审批`
+  contract: routine reversible writes run directly; costing, export, and
+  destructive actions remain explicit confirmation boundaries.
+- Added the Redis live-stream connect timeout and queued lifecycle frames before
+  broker wake-up so a slow broker cannot hide the first visible state.
+- Production promotion is guarded by readiness, migration, and checkpoint
+  one-shot services before API and Worker startup.
+
 ## 2026-09-06 navigation, encoding, and provider discovery repair
 
 - Reproduced the user-reported browser behavior with Playwright instead of

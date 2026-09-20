@@ -70,8 +70,8 @@ project and process these files.”
 ## Approval and Access Rules
 
 - `request_approval`: every mutation pauses for confirmation.
-- `risky_only`: reads run directly; writes, provider-costing work, and exports
-  require confirmation.
+- `risky_only` / `替我审批`: reads and routine reversible writes run directly;
+  provider-costing work, exports, and destructive actions require confirmation.
 - `full_access`: low-risk actions can proceed without the interaction pause,
   but authorization, quotas, audit records, and typed confirmation for
   destructive deletion remain mandatory.
