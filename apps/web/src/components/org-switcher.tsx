@@ -23,7 +23,10 @@ export function OrgSwitcher() {
   const { state, isMobile, toggleSidebar } = useSidebar();
   const router = useRouter();
   const { user } = useAuth();
-  const workspaceName = user?.org_slug || '个人工作区';
+  const workspaceName =
+    user?.org_name ||
+    (user?.org_slug?.startsWith('personal-') ? '个人工作区' : user?.org_slug) ||
+    '个人工作区';
 
   if (state === 'collapsed' && !isMobile) {
     return (

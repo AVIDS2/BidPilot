@@ -1423,6 +1423,18 @@ def _execute_action(
     execute = executor or _legacy_executor(action.capability_name)
     try:
         execution_arguments = dict(action.arguments_json or {})
+        if (
+            action.capability_name == "delete_project"
+            and run.policy_snapshot_json.get("approval_mode") == "full_access"
+        ):
+            # Automatic execution has no UI confirmation step. Supply the
+            # server-resolved value only at the trusted execution boundary so
+            # the destructive domain command keeps its normal validation.
+            expected_name = _expected_confirmation_text(
+                db, action.capability_name, execution_arguments
+            )
+            if expected_name:
+                execution_arguments["confirmation_text"] = expected_name
         if action.capability_name in {
             "start_draft_section",
             "start_redraft_section",
@@ -1436,7 +1448,11 @@ def _execute_action(
         public_result = PublicCapabilityResult(
             public_result.summary,
             public_result.payload,
-            observation_payload=redact_arguments(raw_result),
+            observation_payload=(
+                public_result.payload
+                if action.capability_name == "search_projects"
+                else redact_arguments(raw_result)
+            ),
         )
     except Exception as exc:
         failure = classify_capability_failure(exc)

@@ -1,5 +1,18 @@
 # Progress Log
 
+## 2026-09-21: align automatic execution and trace presentation
+
+- `full_access` / `自动执行` now allows registered capabilities, including
+  destructive actions, to proceed without a browser approval card. Authorization,
+  quotas, audit, required inputs, and server-side delete validation remain active.
+- Memory preference calls now declare `body_markdown` as a required capability
+  argument, normalize common structured aliases, and pause for the missing content
+  instead of surfacing a generic input-invalid failure.
+- Timeline trace disclosure keeps only the grid row transition; press translation,
+  opacity fade, and vertical slide are removed.
+- Workspace navigation shows the organization name rather than a personal slug;
+  duplicate project search no longer puts short IDs into user-facing copy.
+
 ## 2026-09-20 production approval policy release
 
 - Prepared the latest master-based release with the verified `替我审批`

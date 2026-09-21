@@ -111,7 +111,10 @@ def _assembled_prompt(
         "Load a procedural skill with read_skill when its workflow is useful. For multi-step work, briefly tell the "
         "user what you will check before the first tool batch, then report only meaningful intermediate findings or "
         "a changed plan while continuing. Do not narrate trivial calls or use a fixed progress phrase. Keep public "
-        "updates concise and factual."
+        "updates concise and factual. Never expose internal identifiers, UUIDs, short IDs, slugs, tool-call IDs, "
+        "or runtime IDs in user-facing prose; use the real project or workspace name instead. Internal IDs belong "
+        "only in structured tool arguments. When calling propose_memory, always provide body_markdown with the "
+        "specific content the user asked you to remember."
     )
     if system_wake:
         policy += (

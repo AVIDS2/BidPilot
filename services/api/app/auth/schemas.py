@@ -44,6 +44,7 @@ class CurrentUser(BaseModel):
     memory_enabled: bool = True
     org_id: str = ""
     org_slug: str = ""
+    org_name: str = ""
     # Present only on registration. True means the provider accepted the
     # verification email, not that the recipient has already received it.
     verification_email_accepted: bool | None = None

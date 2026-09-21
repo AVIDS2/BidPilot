@@ -31,7 +31,7 @@ def test_registry_policy_metadata(
     assert decision.requires_approval is requires_approval_in_risky_only
 
 
-def test_assistant_approval_runs_routine_writes_but_keeps_hard_confirmation() -> None:
+def test_assistant_approval_modes_match_their_product_labels() -> None:
     routine_decision = evaluate_policy(get_capability_definition("create_deliverable"), approval_mode="risky_only")
     costing_decision = evaluate_policy(get_capability_definition("start_draft_section"), approval_mode="risky_only")
     create_decision = evaluate_policy(get_capability_definition("create_project"), approval_mode="full_access")
@@ -40,8 +40,8 @@ def test_assistant_approval_runs_routine_writes_but_keeps_hard_confirmation() ->
     assert routine_decision.outcome is RuntimePolicyOutcome.ALLOW
     assert costing_decision.outcome is RuntimePolicyOutcome.REQUIRE_APPROVAL
     assert create_decision.outcome is RuntimePolicyOutcome.ALLOW
-    assert delete_decision.outcome is RuntimePolicyOutcome.REQUIRE_APPROVAL
-    assert delete_decision.requires_typed_confirmation is True
+    assert delete_decision.outcome is RuntimePolicyOutcome.ALLOW
+    assert delete_decision.requires_typed_confirmation is False
 
 
 def test_public_formatter_owns_user_facing_summary() -> None:
@@ -52,7 +52,7 @@ def test_public_formatter_owns_user_facing_summary() -> None:
     assert result.payload == {"count": 2}
 
 
-def test_search_projects_formatter_exposes_ids_for_name_collisions() -> None:
+def test_search_projects_formatter_keeps_internal_ids_out_of_user_copy() -> None:
     result = format_public_result(
         "search_projects",
         {
@@ -78,11 +78,17 @@ def test_search_projects_formatter_exposes_ids_for_name_collisions() -> None:
     )
 
     assert "同名" in result.summary
-    assert "aaaaaaaa" in result.summary
-    assert "bbbbbbbb" in result.summary
+    assert "aaaaaaaa" not in result.summary
+    assert "bbbbbbbb" not in result.summary
     assert result.payload["count"] == 2
     assert result.payload["projects"][0]["id"].startswith("aaaaaaaa")
-    assert result.payload["projects"][0]["short_id"] == "aaaaaaaa"
+    assert "short_id" not in result.payload["projects"][0]
+
+
+def test_propose_memory_requires_the_content_to_remember() -> None:
+    from app.runtime.registry import missing_required_capability_arguments
+
+    assert missing_required_capability_arguments("propose_memory", {}) == ("body_markdown",)
 
 
 def test_knowledge_portfolio_formatter_exposes_only_safe_aggregate_fields() -> None:

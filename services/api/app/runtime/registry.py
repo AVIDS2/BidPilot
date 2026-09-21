@@ -260,6 +260,7 @@ _REQUIRED_ARGUMENT_FIELDS: dict[str, tuple[str, ...]] = {
     "semantic_search": ("project_id", "query"),
     "start_deep_research": ("query",),
     "run_section_campaign": ("project_id",),
+    "propose_memory": ("body_markdown",),
 }
 
 
@@ -348,8 +349,8 @@ def format_approval_request(capability_name: str, arguments: dict[str, Any]) -> 
     if capability_name == "delete_project":
         name = arguments.get("project_name") or arguments.get("name")
         if isinstance(name, str) and name.strip():
-            return f"删除项目「{name.strip()}」后无法恢复。请输入完整项目名称确认继续。"
-        return "删除项目后无法恢复。请输入完整项目名称确认继续。"
+            return f"删除项目「{name.strip()}」后无法恢复。确认继续吗？"
+        return "删除项目后无法恢复。确认继续吗？"
     return "该操作会改变平台数据。确认继续吗？"
 
 
@@ -359,14 +360,14 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
     if capability_name == "search_projects":
         projects = _public_items(
             result.get("items") or result.get("projects"),
-            ("id", "short_id", "name", "status", "created_at", "name_collision", "scenario_package"),
+            ("id", "name", "status", "created_at", "name_collision", "scenario_package"),
         )
         payload: dict[str, Any] = {"count": count}
         if projects:
             payload["projects"] = projects
         if any(item.get("name_collision") for item in projects):
             lines = [
-                f"- {item.get('name')} · id={item.get('short_id') or str(item.get('id') or '')[:8]}"
+                f"- {item.get('name')}"
                 + (
                     f" · 创建于 {str(item.get('created_at'))[:10]}"
                     if item.get("created_at")
@@ -375,7 +376,7 @@ def format_public_result(capability_name: str, result: dict[str, Any]) -> Public
                 for item in projects
                 if isinstance(item, dict)
             ]
-            summary = f"找到 {count} 个项目（存在同名，请用 id/short_id 区分，不要编造 (1)/(2) 标签）：\n" + "\n".join(lines)
+            summary = f"找到 {count} 个同名项目，请根据名称和创建时间选择目标：\n" + "\n".join(lines)
         else:
             summary = f"找到 {count} 个项目。"
         return PublicCapabilityResult(summary, payload)

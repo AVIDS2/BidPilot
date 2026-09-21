@@ -57,11 +57,11 @@ def evaluate_policy(definition: CapabilityDefinition, *, approval_mode: Approval
     if approval_mode not in {"request_approval", "risky_only", "full_access", "custom"}:
         raise ValueError(f"Invalid approval mode: {approval_mode}")
 
-    if definition.risk_level is RuntimeRiskLevel.DESTRUCTIVE or definition.requires_typed_confirmation:
-        return _approval_decision(definition, "destructive_action")
-
     if approval_mode == "full_access":
         return _allow_decision(definition, "full_access")
+
+    if definition.risk_level is RuntimeRiskLevel.DESTRUCTIVE or definition.requires_typed_confirmation:
+        return _approval_decision(definition, "destructive_action")
 
     if approval_mode == "risky_only" and definition.risk_level is RuntimeRiskLevel.LOW_RISK_WRITE:
         # "替我审批" handles routine, reversible changes without interrupting

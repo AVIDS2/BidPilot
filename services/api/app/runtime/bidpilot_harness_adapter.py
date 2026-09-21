@@ -276,6 +276,8 @@ class BidPilotToolExecutor:
             message = (
                 "请告诉我项目名称。"
                 if call.name == "create_project" and missing == ("name",)
+                else "请告诉我想让我记住的具体内容。"
+                if call.name == "propose_memory" and missing == ("body_markdown",)
                 else f"还需要补充：{'、'.join(missing)}"
             )
             set_task_state(
@@ -724,6 +726,12 @@ class BidPilotToolExecutor:
 
     def _normalize_arguments(self, capability_name: str, raw_arguments: Mapping[str, Any]) -> dict[str, Any]:
         arguments = dict(raw_arguments)
+        if capability_name == "propose_memory" and not str(arguments.get("body_markdown") or "").strip():
+            for alias in ("content", "text", "memory", "preference"):
+                candidate = arguments.get(alias)
+                if isinstance(candidate, str) and candidate.strip():
+                    arguments["body_markdown"] = candidate.strip()
+                    break
         schema = self.parameter_schemas.get(capability_name, {})
         properties = schema.get("properties") if isinstance(schema, Mapping) else None
         if (

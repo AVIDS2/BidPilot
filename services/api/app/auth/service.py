@@ -103,6 +103,11 @@ def _get_org_slug(db: Session, org_id: str) -> str:
     return org.slug if org else ""
 
 
+def _get_org_name(db: Session, org_id: str) -> str:
+    org = db.get(Organization, org_id)
+    return org.name if org else ""
+
+
 def _user_to_current(db: Session, user: User, plan: str | None = None) -> CurrentUser:
     """Build CurrentUser from a User ORM object."""
     return CurrentUser(
@@ -116,6 +121,7 @@ def _user_to_current(db: Session, user: User, plan: str | None = None) -> Curren
         memory_enabled=user.memory_enabled,
         org_id=user.org_id,
         org_slug=_get_org_slug(db, user.org_id),
+        org_name=_get_org_name(db, user.org_id),
     )
 
 
@@ -535,7 +541,7 @@ def get_dev_user() -> CurrentUser:
         id="dev-user", email="dev@docpilot.local", display_name="Dev User",
         role="admin", plan="professional",
         memory_enabled=True,
-        org_id="00000000-0000-0000-0000-000000000001", org_slug="default",
+        org_id="00000000-0000-0000-0000-000000000001", org_slug="default", org_name="个人工作区",
     )
 
 

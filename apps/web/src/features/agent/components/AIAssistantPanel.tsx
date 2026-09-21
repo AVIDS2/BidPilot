@@ -1307,6 +1307,13 @@ export function AIAssistantPanel({
     Boolean(state.pendingInput);
   const canSteerCurrentRun = isStreaming && !isStopping;
   const [isDrainingQueue, setIsDrainingQueue] = useState(false);
+  useEffect(() => {
+    // A local next-message belongs to the visible conversation. Do not carry
+    // it into a newly selected thread where it could be sent to the wrong run.
+    setQueuedPrompts([]);
+    queueDrainingRef.current = false;
+    setIsDrainingQueue(false);
+  }, [state.currentConversationId]);
   const isUploadingAttachments = attachments.some(
     (attachment) => attachment.status === 'uploading'
   );

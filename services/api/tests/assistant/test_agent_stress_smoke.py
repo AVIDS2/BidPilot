@@ -48,8 +48,9 @@ def test_smoke_A_recon_tools_registered_and_safe_formatters() -> None:
             ]
         },
     )
-    assert "aaaaaaaa" in search.summary or search.payload.get("count") == 1
-    assert search.payload["projects"][0]["short_id"] == "aaaaaaaa"
+    assert "aaaaaaaa" not in search.summary
+    assert search.payload["projects"][0]["id"].startswith("aaaaaaaa")
+    assert "short_id" not in search.payload["projects"][0]
 
     portfolio = format_public_result(
         "list_knowledge_portfolio",
@@ -77,8 +78,8 @@ def test_smoke_C_pending_confirmation_policy_for_delete() -> None:
     assert decision.requires_typed_confirmation is True
 
     full = evaluate_policy(definition, approval_mode="full_access")
-    assert full.outcome is RuntimePolicyOutcome.REQUIRE_APPROVAL
-    assert full.requires_typed_confirmation is True
+    assert full.outcome is RuntimePolicyOutcome.ALLOW
+    assert full.requires_typed_confirmation is False
 
 
 def test_smoke_D_outline_and_write_keep_section_keys() -> None:

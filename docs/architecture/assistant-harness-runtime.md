@@ -71,8 +71,9 @@ User text is data for the model, never server-side control flow. Production
 code must not select a Skill, tool, retry policy, execution budget, or runtime
 by substring/regex matching against the message. Pi selects tools through
 provider-native tool calls; the API validates the structured call. The exact
-project-name comparison used for destructive deletion is a typed confirmation
-protocol, not an intent router.
+project-name comparison used for destructive deletion is a server-side domain
+validation boundary, not an intent router; `full_access` supplies the
+server-resolved value without asking the browser to repeat it.
 
 Production configuration must set `DOCPILOT_ASSISTANT_ENGINE=pi` and provide
 `DOCPILOT_PI_AGENT_URL`, `DOCPILOT_PI_TOOL_BRIDGE_URL`, and a dedicated
@@ -509,14 +510,15 @@ action or exposing its stored parameters.
 - Costing, write, and destructive capabilities go through runtime policy.
   `RuntimeApproval` is the durable approval record; text confirmation is only
   a UI/input method, never the authority itself.
-- Destructive actions can require typed confirmation even in `full_access`.
+- Destructive actions retain server-side validation in every mode, but
+  `full_access` does not create an approval pause or require browser text input.
 - `approval_mode=risky_only` / `替我审批` skips the interaction pause for
   routine reversible writes, but does not approve costing, export, or destructive
   operations on the user's behalf.
-- `approval_mode=full_access` means that optional confirmation prompts may be
-  skipped. It never bypasses account authorization, tenant boundaries, plan
-  quotas, required inputs, idempotency, or destructive-action safeguards. The
-  product label is `Auto-run` / `自动执行` so this boundary is explicit.
+- `approval_mode=full_access` means every registered capability runs without an
+  interaction pause. It never bypasses account authorization, tenant
+  boundaries, plan quotas, required inputs, idempotency, or server-side
+  destructive validation. The product label is `自动执行`.
 - A workflow started by a capability creates a `RuntimeRun(kind=workflow_bridge)`
   linked to its parent assistant turn and to the worker `ExecutionRun`.
 

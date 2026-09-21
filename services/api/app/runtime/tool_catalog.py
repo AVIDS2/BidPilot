@@ -407,8 +407,11 @@ _TOOL_PARAMETER_SCHEMAS: dict[str, dict[str, Any]] = {
     "propose_memory": {
         "type": "object",
         "properties": {
-            "body_markdown": {"type": "string"},
-            "title": {"type": "string"},
+            "body_markdown": {
+                "type": "string",
+                "description": "用户明确要求助手记住的具体内容，必须原样保留用户意图。",
+            },
+            "title": {"type": "string", "description": "可选的简短记忆标题。"},
             "scope": {"type": "string"},
             "kind": {"type": "string"},
         },

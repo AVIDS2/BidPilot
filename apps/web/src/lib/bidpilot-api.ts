@@ -114,6 +114,7 @@ export interface ProjectRead {
   status: string;
   org_id?: string;
   org_slug?: string;
+  org_name?: string;
 }
 
 export function listProjects() {

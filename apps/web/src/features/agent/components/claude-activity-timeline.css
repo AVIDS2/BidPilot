@@ -38,7 +38,7 @@
 }
 
 .assistant-claude-timeline .timeline-disclosure:active {
-  transform: none;
+  transform: none !important;
 }
 
 .assistant-claude-timeline .cr-tool-group {
@@ -309,18 +309,6 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  opacity: 0;
-  transform: translateY(-3px);
-  transition:
-    opacity 0.16s ease,
-    transform 0.24s cubic-bezier(0.165, 0.84, 0.44, 1);
-}
-
-.assistant-claude-timeline .cr-tool-grid.is-open > .cr-tool-grid-inner,
-.assistant-claude-timeline .cr-command-grid.is-open > .cr-command-grid-inner,
-.assistant-claude-timeline .cr-runtime-grid.is-open > .cr-runtime-grid-inner {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .assistant-claude-timeline .cr-run-detail {

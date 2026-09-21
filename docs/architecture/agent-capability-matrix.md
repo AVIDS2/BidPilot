@@ -38,7 +38,7 @@ approval, review, or export.
 | Review decision | Approve or return a section with a human decision | `submit_review_decision` | Review decision/thread, section state, audit history | Requires a reviewer-capable project member and confirmation in `risky_only` |
 | Create readiness pack | Produce structured project readiness artifacts | `generate_readiness_pack` | Versioned `ReadinessPack`, DOCX/XLSX artifacts, audit evidence | Confirmation in `risky_only`; authenticated download only |
 | Export delivery | Render an approved deliverable | `export_deliverable` | Approved-section export artifact and audit event | Costing action; approved content only; authenticated download only |
-| Clean up | Remove a project from active work | `delete_project` | Soft-deleted project state and audit evidence | Destructive; always requires typed project-name confirmation |
+| Clean up | Remove a project from active work | `delete_project` | Soft-deleted project state and audit evidence | Typed confirmation in approval modes; `full_access` executes directly after server-side project resolution |
 
 ## Public Result Contract
 
@@ -72,9 +72,10 @@ project and process these files.”
 - `request_approval`: every mutation pauses for confirmation.
 - `risky_only` / `替我审批`: reads and routine reversible writes run directly;
   provider-costing work, exports, and destructive actions require confirmation.
-- `full_access`: low-risk actions can proceed without the interaction pause,
-  but authorization, quotas, audit records, and typed confirmation for
-  destructive deletion remain mandatory.
+- `full_access` / `自动执行`: all registered capabilities execute without an
+  interaction pause. Authorization, tenant boundaries, quotas, audit records,
+  required inputs, and server-side destructive validation still apply; the
+  browser does not collect a project-name confirmation.
 - `custom`: reserved for a future organization policy profile; it must map to
   explicit server-side policy, never browser-only switches.
 

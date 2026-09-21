@@ -23,6 +23,7 @@ export interface CurrentUser {
   memory_enabled?: boolean;
   org_id?: string;
   org_slug?: string;
+  org_name?: string;
   verification_email_accepted?: boolean | null;
 }
 

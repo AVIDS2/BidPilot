@@ -21,7 +21,7 @@ def test_operator_metadata_marks_delete_project_destructive() -> None:
     assert tool_requires_approval("create_project", "request_approval") is True
     assert tool_requires_approval("create_project", "full_access") is False
     assert tool_requires_approval("create_project", "custom") is True
-    assert tool_requires_approval("delete_project", "full_access") is True
+    assert tool_requires_approval("delete_project", "full_access") is False
 
 
 def test_demo_workspace_is_a_governed_low_risk_capability() -> None:
