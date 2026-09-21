@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   CheckCircle2Icon,
-  ChevronDownIcon,
   CircleDashedIcon,
   CircleXIcon,
   DownloadIcon,
@@ -456,7 +455,7 @@ function StepSymbol({ item }: { item: AssistantExecutionItem }) {
     );
   }
   return (
-    <span className='cr-step-symbol cr-step-symbol-active' aria-hidden='true'>
+    <span className='cr-step-symbol' aria-hidden='true'>
       <Loader2Icon size={13} />
     </span>
   );
@@ -468,7 +467,7 @@ function NodeSymbol({ node }: { node: WorkflowNodeProgress }) {
   if (node.status === 'failed')
     return <CircleXIcon className='cr-node-symbol is-failed' size={14} />;
   if (node.status === 'running')
-    return <Loader2Icon className='cr-node-symbol cr-node-spinner is-running' size={14} />;
+    return <Loader2Icon className='cr-node-symbol is-running' size={14} />;
   return <CircleDashedIcon className='cr-node-symbol is-pending' size={14} />;
 }
 
@@ -523,7 +522,6 @@ function RuntimeTimeline({
             {completed}/{nodes.length}
           </small>
         </span>
-        <ChevronDownIcon size={14} />
       </Button>
       <div className={`cr-runtime-grid${open ? ' is-open' : ''}`}>
         <div className='cr-runtime-grid-inner'>
@@ -840,7 +838,6 @@ function ToolStep({
             <Icon className='cr-step-icon' size={13} />
             <span className={active ? 'cr-live-label' : undefined}>{label}</span>
           </span>
-          <ChevronDownIcon size={14} />
         </Button>
       </div>
       <div className={`cr-command-grid${open ? ' is-open' : ''}`}>
@@ -1202,10 +1199,6 @@ function TaskTurn({
         <span>
           <span className={active ? 'cr-live-label' : undefined}>{actionTitle}</span>
           {secondarySummary && <small>{secondarySummary}</small>}
-        </span>
-        <span className={`cr-group-status is-${tone}`}>
-          {active && <Loader2Icon className='cr-group-spinner' size={13} />}
-          <ChevronDownIcon size={14} />
         </span>
       </Button>
       <div className={`cr-command-grid${open ? ' is-open' : ''}`}>

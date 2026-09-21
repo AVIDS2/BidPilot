@@ -9,7 +9,8 @@
   argument, normalize common structured aliases, and pause for the missing content
   instead of surfacing a generic input-invalid failure.
 - Timeline trace disclosure keeps only the grid row transition; press translation,
-  opacity fade, and vertical slide are removed.
+  opacity fade, vertical slide, disclosure arrows, and spinner animations are
+  removed. Active labels use a one-way left-to-right gradient loop.
 - Workspace navigation shows the organization name rather than a personal slug;
   duplicate project search no longer puts short IDs into user-facing copy.
 

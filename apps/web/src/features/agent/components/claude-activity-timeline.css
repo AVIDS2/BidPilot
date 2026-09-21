@@ -77,37 +77,6 @@
   color: var(--cr-text-soft);
 }
 
-.assistant-claude-timeline .cr-tool-summary > .cr-group-status {
-  display: flex;
-  min-width: max-content;
-  align-items: center;
-  gap: 6px;
-  color: var(--cr-text-soft);
-  font-size: 12px;
-  white-space: nowrap;
-  word-break: keep-all;
-  overflow-wrap: normal;
-}
-
-.assistant-claude-timeline .cr-group-status > svg:last-child,
-.assistant-claude-timeline .cr-run-step-button > svg:last-child,
-.assistant-claude-timeline .cr-runtime-summary > svg:last-child {
-  flex: 0 0 auto;
-  transition:
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 120ms ease;
-}
-
-.assistant-claude-timeline .cr-tool-summary[aria-expanded='true'] .cr-group-status > svg:last-child,
-.assistant-claude-timeline
-  .cr-task-turn-summary[aria-expanded='true']
-  .cr-group-status
-  > svg:last-child,
-.assistant-claude-timeline .cr-run-step-button[aria-expanded='true'] > svg:last-child,
-.assistant-claude-timeline .cr-runtime-summary[aria-expanded='true'] > svg:last-child {
-  transform: rotate(180deg);
-}
-
 .assistant-claude-timeline .cr-subagent-viewer {
   margin: 0 0 10px 24px;
   border-left: 1px solid var(--cr-line);
@@ -166,64 +135,9 @@
   color: var(--cr-text);
 }
 
-.assistant-claude-timeline .cr-group-status.is-running,
-.assistant-claude-timeline .cr-group-status.is-failed {
-  color: var(--cr-text-soft);
-}
-
-/* A completed checkmark already communicates success. Keep the secondary
-   status quiet until the reader intentionally opens or inspects that row. */
-.assistant-claude-timeline[data-status='succeeded']
-  .cr-tool-summary[aria-expanded='false']
-  .cr-group-status,
-.assistant-claude-timeline
-  .cr-task-turn.is-succeeded
-  .cr-task-turn-summary[aria-expanded='false']
-  .cr-group-status {
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity 120ms ease,
-    visibility 0s linear 120ms;
-}
-
-.assistant-claude-timeline[data-status='succeeded'] .cr-tool-summary:hover .cr-group-status,
-.assistant-claude-timeline[data-status='succeeded'] .cr-tool-summary:focus-visible .cr-group-status,
-.assistant-claude-timeline[data-status='succeeded']
-  .cr-tool-summary[aria-expanded='true']
-  .cr-group-status,
-.assistant-claude-timeline .cr-task-turn.is-succeeded .cr-task-turn-summary:hover .cr-group-status,
-.assistant-claude-timeline
-  .cr-task-turn.is-succeeded
-  .cr-task-turn-summary:focus-visible
-  .cr-group-status,
-.assistant-claude-timeline
-  .cr-task-turn.is-succeeded
-  .cr-task-turn-summary[aria-expanded='true']
-  .cr-group-status {
-  visibility: visible;
-  opacity: 1;
-  pointer-events: auto;
-  transition-delay: 0s;
-}
-
-.assistant-claude-timeline .cr-group-status.is-failed,
 .assistant-claude-timeline .cr-step-status.is-failed,
 .assistant-claude-timeline .cr-node-error {
   color: var(--destructive);
-}
-
-.assistant-claude-timeline .cr-group-spinner,
-.assistant-claude-timeline .cr-step-symbol-active svg,
-.assistant-claude-timeline .cr-node-spinner {
-  animation: claude-timeline-spin 1s linear infinite;
-}
-
-@keyframes claude-timeline-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @keyframes claude-timeline-runtime-line {
@@ -266,12 +180,11 @@
 /* The event itself carries the live signal. Keep generic status words out of
    the chronology and animate only the label belonging to the active row. */
 @keyframes claude-timeline-live-label {
-  0%,
-  100% {
-    background-position: 100% 50%;
-  }
-  50% {
+  from {
     background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
   }
 }
 
@@ -286,7 +199,7 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  animation: claude-timeline-live-label 2.4s ease-in-out infinite;
+  animation: claude-timeline-live-label 2.4s linear infinite;
 }
 
 .assistant-claude-timeline .cr-tool-grid,
@@ -1024,16 +937,8 @@
   color: var(--cr-text-soft);
 }
 
-.assistant-claude-timeline .cr-runtime-summary > svg {
-  color: var(--cr-text-soft);
-  opacity: 0;
-}
-
-.assistant-claude-timeline .cr-runtime-summary:hover,
-.assistant-claude-timeline .cr-runtime-summary:hover > svg,
-.assistant-claude-timeline .cr-runtime-summary[aria-expanded='true'] > svg {
+.assistant-claude-timeline .cr-runtime-summary:hover {
   color: var(--cr-text);
-  opacity: 1;
 }
 
 .assistant-claude-timeline .cr-runtime-count {
@@ -1185,7 +1090,7 @@
 }
 
 .assistant-claude-timeline .cr-deep-research-runtime.is-live header > span {
-  animation: claude-timeline-live-label 2.4s ease-in-out infinite;
+  animation: claude-timeline-live-label 2.4s linear infinite;
 }
 
 .assistant-claude-timeline .cr-deep-research-stages {
@@ -1208,7 +1113,7 @@
 .assistant-claude-timeline .cr-deep-research-stages li.is-active {
   color: var(--primary);
   border-color: var(--ring);
-  animation: claude-timeline-live-label 2.4s ease-in-out infinite;
+  animation: claude-timeline-live-label 2.4s linear infinite;
 }
 .assistant-claude-timeline .cr-deep-research-stages li.is-complete {
   color: var(--primary);
@@ -1314,9 +1219,6 @@
     transition: none;
   }
 
-  .assistant-claude-timeline .cr-group-spinner,
-  .assistant-claude-timeline .cr-step-symbol-active svg,
-  .assistant-claude-timeline .cr-node-spinner,
   .assistant-claude-timeline .cr-runtime-timeline.is-running::before,
   .assistant-claude-timeline .cr-runtime-node.is-running .cr-runtime-marker::after {
     animation: none;
