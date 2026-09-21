@@ -50,6 +50,7 @@ describe('ClaudeActivityTimeline', () => {
     const taskSummary = container.querySelector('.cr-task-turn-summary')!;
 
     expect(taskSummary).toHaveAttribute('aria-expanded', 'false');
+    expect(taskSummary).toHaveClass('timeline-disclosure');
     expect(container.querySelector('.cr-task-turn-summary .cr-live-label')).toBeInTheDocument();
     expect(screen.queryByTestId('assistant-runtime-workflow-running')).not.toBeInTheDocument();
 

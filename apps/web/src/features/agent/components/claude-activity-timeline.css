@@ -24,6 +24,23 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Timeline disclosures are inline chronology controls, not cards or buttons
+   that should move when pressed. Keep the shared Button semantics while
+   removing its filled expanded state and press translation in this surface. */
+.assistant-claude-timeline .timeline-disclosure,
+.assistant-claude-timeline .timeline-disclosure:hover,
+.assistant-claude-timeline .timeline-disclosure[aria-expanded='true'],
+.assistant-claude-timeline .timeline-disclosure[aria-expanded='true']:hover {
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.assistant-claude-timeline .timeline-disclosure:active {
+  transform: none;
+}
+
 .assistant-claude-timeline .cr-tool-group {
   margin: 0;
   padding: 4px 0;

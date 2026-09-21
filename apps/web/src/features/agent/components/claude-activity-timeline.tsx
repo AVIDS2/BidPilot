@@ -510,7 +510,7 @@ function RuntimeTimeline({
     <section className='cr-analysis-runtime' data-testid={`assistant-runtime-${item.id}`}>
       <Button
         type='button'
-        className='cr-runtime-summary'
+        className='cr-runtime-summary timeline-disclosure'
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
         size='default'
@@ -828,7 +828,7 @@ function ToolStep({
         <StepSymbol item={item} />
         <Button
           type='button'
-          className='cr-run-step-button'
+          className='cr-run-step-button timeline-disclosure'
           aria-expanded={open}
           aria-busy={active || undefined}
           aria-label={open ? `Hide ${label} details` : `Show ${label} details`}
@@ -1192,7 +1192,7 @@ function TaskTurn({
     <section className={`cr-task-turn is-${tone}${active ? ' is-live' : ''}`} data-status={tone}>
       <Button
         type='button'
-        className={`cr-task-turn-summary${active ? ' is-live' : ''}`}
+        className={`cr-task-turn-summary timeline-disclosure${active ? ' is-live' : ''}`}
         aria-expanded={open}
         aria-busy={active || undefined}
         onClick={() => setOpen((current) => !current)}
