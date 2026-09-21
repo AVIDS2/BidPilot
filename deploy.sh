@@ -171,13 +171,13 @@ if [[ "$use_full_compose" -eq 1 ]]; then
   # any new container is started. Keep storage services running, free memory
   # from application containers, then build each image in a deterministic
   # sequence. A failed build restores the previous application containers.
-  application_services=(api worker worker-beat pi-agent web)
+  application_services=(api worker assistant-worker worker-beat pi-agent web)
   docker compose stop "${application_services[@]}" || true
   restore_application_services() {
     docker compose up -d --no-build "${application_services[@]}" || true
   }
   trap restore_application_services ERR
-  for service in pi-agent api worker worker-beat web readiness migrate checkpoints; do
+  for service in pi-agent api worker assistant-worker worker-beat web readiness migrate checkpoints; do
     echo "building_service=$service"
     docker compose build "$service"
   done

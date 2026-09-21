@@ -36,9 +36,13 @@ celery_app.conf.update(
     # Dead-letter queue: failed tasks go to 'dead_letter' queue
     task_queues={
         "celery": {},
+        "assistant": {},
         "dead_letter": {},
     },
     task_default_queue="celery",
+    task_routes={
+        "worker.run_assistant_turn": {"queue": "assistant"},
+    },
     # On failure, route to dead_letter queue
     task_on_failure=_record_dead_letter,
 )

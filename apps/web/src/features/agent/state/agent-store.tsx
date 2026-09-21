@@ -2212,7 +2212,9 @@ function waitForAssistantRuntimePoll(signal: AbortSignal, milliseconds = 2_000):
 }
 
 export function isAssistantBusy(status: AssistantStatus) {
-  return ['queued', 'thinking', 'executing_tool', 'running_workflow'].includes(status);
+  // A background workflow is a separate durable run. It must not block a new
+  // conversational turn or make the composer look like it is still waiting.
+  return ['queued', 'thinking', 'executing_tool'].includes(status);
 }
 
 function toStoredChatMessages(items: ChatMessageRead[]): ChatMessage[] {

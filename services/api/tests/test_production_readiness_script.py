@@ -382,13 +382,19 @@ def test_production_compose_reads_infrastructure_credentials_from_server_env() -
     assert "readiness:\n        condition: service_completed_successfully" in compose
     assert "/health/ready" in compose
     assert "condition: service_healthy" in compose
-    worker_section = compose.split("  worker:\n", 1)[1].split("  worker-beat:", 1)[0]
+    worker_section = compose.split("  worker:\n", 1)[1].split("  assistant-worker:", 1)[0]
+    assistant_worker_section = compose.split("  assistant-worker:\n", 1)[1].split("  worker-beat:", 1)[0]
     assert 'USE_LANGGRAPH: "true"' in worker_section
     assert 'cpus: "${DOCPILOT_WORKER_CPUS:-1.5}"' in worker_section
     assert 'mem_limit: "${DOCPILOT_WORKER_MEMORY_LIMIT:-1536m}"' in worker_section
     assert "--concurrency=${DOCPILOT_CELERY_CONCURRENCY:-2}" in worker_section
     assert "--prefetch-multiplier=1" in worker_section
     assert "--max-tasks-per-child=${DOCPILOT_CELERY_MAX_TASKS_PER_CHILD:-50}" in worker_section
+    assert "container_name: bidpilot-assistant-worker" in assistant_worker_section
+    assert 'cpus: "${DOCPILOT_ASSISTANT_WORKER_CPUS:-0.75}"' in assistant_worker_section
+    assert 'mem_limit: "${DOCPILOT_ASSISTANT_WORKER_MEMORY_LIMIT:-768m}"' in assistant_worker_section
+    assert "--queues=assistant" in assistant_worker_section
+    assert "--concurrency=${DOCPILOT_ASSISTANT_CELERY_CONCURRENCY:-1}" in assistant_worker_section
     assert "POSTGRES_PASSWORD: bidpilot" not in compose
     assert "MINIO_ROOT_PASSWORD: bidpilot123" not in compose
 

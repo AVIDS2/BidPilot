@@ -13,6 +13,17 @@
   settings. Deployment still requires sequential image builds with application
   containers stopped during the build phase.
 
+## 2026-09-21: isolate assistant execution and repair pending sends
+
+- Added a dedicated production `assistant-worker` consuming the `assistant`
+  Celery queue with one process. Document and workflow jobs stay on the general
+  Worker lane, so a busy ingestion queue cannot add an unbounded first-token
+  delay to Copilot turns.
+- Pending composer messages now leave the list as soon as sending is accepted,
+  retry visibly when a request race rejects them, and keep all send/edit/remove
+  actions visible on touch screens. Background workflows and paused input or
+  approval states no longer masquerade as an active assistant response.
+
 ## 2026-09-21: align automatic execution and trace presentation
 
 - `full_access` / `自动执行` now allows registered capabilities, including

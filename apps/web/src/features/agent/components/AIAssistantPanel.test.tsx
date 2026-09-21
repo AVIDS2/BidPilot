@@ -146,6 +146,72 @@ describe('AIAssistantPanel', () => {
     expect(screen.getByTestId('linear-agent-composer')).not.toHaveClass('focus-within:ring-2');
   });
 
+  it('removes a pending message when the settled assistant accepts it', async () => {
+    let firstController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    let streamCalls = 0;
+    const encoder = new TextEncoder();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (!String(input).includes('/assistant/stream')) {
+          return Promise.resolve({ ok: true, body: streamFrom('') });
+        }
+        streamCalls += 1;
+        if (streamCalls === 1) {
+          return Promise.resolve({
+            ok: true,
+            body: new ReadableStream<Uint8Array>({
+              start(controller) {
+                firstController = controller;
+                controller.enqueue(
+                  encoder.encode(
+                    'event: assistant.start\ndata: {"conversation_id":"c-queue","runtime_run_id":"run-queue","state":"thinking"}\n\n'
+                  )
+                );
+              }
+            })
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          body: streamFrom(
+            [
+              'event: assistant.start\ndata: {"conversation_id":"c-queue","runtime_run_id":"run-queue-2","state":"thinking"}',
+              'event: assistant.message\ndata: {"content":"第二条已发送。","state":"completed"}',
+              'event: assistant.end\ndata: {"conversation_id":"c-queue","full_response":"第二条已发送。"}'
+            ].join('\n\n') + '\n\n'
+          )
+        });
+      })
+    );
+
+    render(
+      <AIAssistantProvider>
+        <AIAssistantPanel variant='linear-agent' />
+      </AIAssistantProvider>
+    );
+
+    const input = screen.getByRole('textbox', { name: 'Ask me anything...' });
+    fireEvent.change(input, { target: { value: '第一条' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(streamCalls).toBe(1));
+
+    fireEvent.change(input, { target: { value: '第二条' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', shiftKey: false });
+    expect(screen.getByText('待发送')).toBeInTheDocument();
+    expect(screen.getByText('第二条')).toBeInTheDocument();
+
+    firstController?.enqueue(
+      encoder.encode(
+        'event: assistant.end\ndata: {"conversation_id":"c-queue","runtime_run_id":"run-queue","full_response":"第一条已完成。"}\n\n'
+      )
+    );
+    firstController?.close();
+
+    await waitFor(() => expect(streamCalls).toBe(2));
+    await waitFor(() => expect(screen.queryByText('待发送')).not.toBeInTheDocument());
+  });
+
   it('keeps an approval pause actionable when the SSE closes without assistant.end', async () => {
     vi.stubGlobal(
       'fetch',

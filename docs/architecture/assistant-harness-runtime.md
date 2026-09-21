@@ -35,9 +35,12 @@ the installed `ResizablePanelGroup`; mobile uses the installed `Sheet`. A side
 surface can be closed without navigating away from the conversation.
 
 Queue entries are local pending user messages, not runtime runs. The composer
-queues only while the response is genuinely active or paused for confirmation /
-input, keeps an entry when a request boundary rejects it because of a race, and
-offers an explicit next-message action when the conversation is settled.
+queues only while a model/tool turn is genuinely active. Confirmation and
+missing-input pauses are direct continuation states, and background workflow
+runs do not block a new conversational turn. A pending entry is removed as
+soon as its request is accepted, restored with a visible retry action when a
+request boundary rejects it because of a race, and can be sent explicitly when
+the conversation is settled.
 
 ## Purpose
 
@@ -131,7 +134,9 @@ recovery path, not the normal live rendering path. Terminal status is taken
 from `RuntimeRun`, not inferred from a closed socket.
 
 The Worker task is idempotent through the outbox delivery lease and the run
-ID. A transient API/Pi transport failure releases the outbox row for retry;
+ID. Production dispatch routes `worker.run_assistant_turn` to the dedicated
+`assistant` Celery queue so document ingestion and drafting work cannot occupy
+the only assistant execution slots. A transient API/Pi transport failure releases the outbox row for retry;
 the internal execution endpoint rejects a second active loop for the same
 run. While a Pi session is active, `POST /assistant/runs/{run_id}/messages`
 passes the user instruction to the sidecar's official `AgentSession.steer()`

@@ -394,7 +394,7 @@ def run_subagent(self, runtime_run_id: str, *, outbox_event_id: str | None = Non
         db.close()
 
 
-@celery_app.task(name="worker.run_assistant_turn", bind=True, max_retries=8)
+@celery_app.task(name="worker.run_assistant_turn", bind=True, max_retries=8, queue="assistant")
 def run_assistant_turn(self, runtime_run_id: str, *, outbox_event_id: str | None = None) -> dict[str, object]:
     """Drive one queued Pi assistant turn without a browser connection."""
 

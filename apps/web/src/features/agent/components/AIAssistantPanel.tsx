@@ -1299,20 +1299,20 @@ export function AIAssistantPanel({
   const isBusy = isAssistantBusy(state.status);
   const isStreaming = state.isStreaming;
   const isStopping = state.cancellationRequested;
-  const isResponseActive =
-    isBusy ||
-    isStreaming ||
-    isStopping ||
-    Boolean(state.pendingConfirmation) ||
-    Boolean(state.pendingInput);
-  const canSteerCurrentRun = isStreaming && !isStopping;
+  const isResponseActive = isBusy || (isStreaming && !isStopping) || isStopping;
+  const canSteerCurrentRun =
+    isStreaming &&
+    !isStopping &&
+    (state.status === 'thinking' || state.status === 'executing_tool');
   const [isDrainingQueue, setIsDrainingQueue] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
   useEffect(() => {
     // A local next-message belongs to the visible conversation. Do not carry
     // it into a newly selected thread where it could be sent to the wrong run.
     setQueuedPrompts([]);
     queueDrainingRef.current = false;
     setIsDrainingQueue(false);
+    setQueueError(null);
   }, [state.currentConversationId]);
   const isUploadingAttachments = attachments.some(
     (attachment) => attachment.status === 'uploading'
@@ -1584,6 +1584,7 @@ export function AIAssistantPanel({
 
     setInput('');
     setAttachments([]);
+    setQueueError(null);
 
     if (isResponseActive) {
       setQueuedPrompts((current) => [...current, queuedPrompt]);
@@ -1642,33 +1643,55 @@ export function AIAssistantPanel({
     });
   }, []);
 
+  const drainQueuedPrompt = useCallback(
+    async (id?: string) => {
+      if (queueDrainingRef.current || isResponseActive || queuedPrompts.length === 0) {
+        return false;
+      }
+
+      const nextPrompt = id
+        ? queuedPrompts.find((item) => item.id === id)
+        : queuedPrompts[0];
+      if (!nextPrompt) return false;
+      queueDrainingRef.current = true;
+      setIsDrainingQueue(true);
+      setQueueError(null);
+      // Remove as soon as the request is handed to the assistant. Waiting for
+      // the whole streamed turn here made a successfully sent item look stuck.
+      setQueuedPrompts((current) => current.filter((item) => item.id !== nextPrompt.id));
+      try {
+        const accepted =
+          (await sendMessage(nextPrompt.prompt, {
+            displayContent: nextPrompt.displayContent,
+            attachments: nextPrompt.attachments,
+            requestAttachments: nextPrompt.requestAttachments,
+            providerConfigId: nextPrompt.providerConfigId,
+            reasoningEffort: nextPrompt.reasoningEffort,
+            approvalMode: nextPrompt.approvalMode
+          })) !== false;
+        if (!accepted) {
+          setQueuedPrompts((current) =>
+            current.some((item) => item.id === nextPrompt.id)
+              ? current
+              : [nextPrompt, ...current]
+          );
+          setQueueError('这条消息还没有发出去，请点击“现在发送”重试。');
+        }
+        return accepted;
+      } finally {
+        queueDrainingRef.current = false;
+        setIsDrainingQueue(false);
+      }
+    },
+    [isResponseActive, queuedPrompts, sendMessage]
+  );
+
   const drainNextQueuedPrompt = useCallback(async () => {
     if (queueDrainingRef.current || isResponseActive || queuedPrompts.length === 0) {
       return false;
     }
-
-    const nextPrompt = queuedPrompts[0];
-    queueDrainingRef.current = true;
-    setIsDrainingQueue(true);
-    try {
-      const accepted =
-        (await sendMessage(nextPrompt.prompt, {
-          displayContent: nextPrompt.displayContent,
-          attachments: nextPrompt.attachments,
-          requestAttachments: nextPrompt.requestAttachments,
-          providerConfigId: nextPrompt.providerConfigId,
-          reasoningEffort: nextPrompt.reasoningEffort,
-          approvalMode: nextPrompt.approvalMode
-        })) !== false;
-      if (accepted) {
-        setQueuedPrompts((current) => current.filter((item) => item.id !== nextPrompt.id));
-      }
-      return accepted;
-    } finally {
-      queueDrainingRef.current = false;
-      setIsDrainingQueue(false);
-    }
-  }, [isResponseActive, queuedPrompts, sendMessage]);
+    return drainQueuedPrompt(queuedPrompts[0].id);
+  }, [drainQueuedPrompt, isResponseActive, queuedPrompts]);
 
   const steerQueuedPrompt = useCallback(
     async (id?: string) => {
@@ -1679,10 +1702,17 @@ export function AIAssistantPanel({
       if (nextPrompt.requestAttachments.length > 0) return false;
       queueDrainingRef.current = true;
       setIsDrainingQueue(true);
+      setQueueError(null);
+      setQueuedPrompts((current) => current.filter((item) => item.id !== nextPrompt.id));
       try {
         const accepted = await sendRuntimeMessage(nextPrompt.prompt, 'steer');
-        if (accepted) {
-          setQueuedPrompts((current) => current.filter((item) => item.id !== nextPrompt.id));
+        if (!accepted) {
+          setQueuedPrompts((current) =>
+            current.some((item) => item.id === nextPrompt.id)
+              ? current
+              : [nextPrompt, ...current]
+          );
+          setQueueError('当前任务还没有接受这条指令，请稍后再试。');
         }
         return accepted;
       } finally {
@@ -1694,9 +1724,9 @@ export function AIAssistantPanel({
   );
 
   useEffect(() => {
-    if (isResponseActive || queuedPrompts.length === 0) return;
+    if (isResponseActive || queueError || queuedPrompts.length === 0) return;
     void drainNextQueuedPrompt();
-  }, [drainNextQueuedPrompt, isResponseActive, queuedPrompts.length]);
+  }, [drainNextQueuedPrompt, isResponseActive, queueError, queuedPrompts.length]);
 
   const handleQuickAction = useCallback(
     (text: string) => {
@@ -1845,10 +1875,10 @@ export function AIAssistantPanel({
           </div>
         )}
         {queuedPrompts.length > 0 && (
-          <section className='bp-linear-agent-queue' aria-label='下一步消息'>
+          <section className='bp-linear-agent-queue' aria-label='待发送消息'>
             <header>
               <span className='flex items-center gap-1.5'>
-                <span>下一步</span>
+                <span>待发送</span>
                 <small>{queuedPrompts.length}</small>
               </span>
               <Button
@@ -1856,16 +1886,29 @@ export function AIAssistantPanel({
                 size='sm'
                 variant='ghost'
                 className='h-7 gap-1 px-2 text-[11px]'
-                disabled={isDrainingQueue}
-                title={canSteerCurrentRun ? '继续当前任务' : '发送下一条消息'}
+                disabled={isDrainingQueue || (isResponseActive && !canSteerCurrentRun)}
+                title={
+                  canSteerCurrentRun
+                    ? '继续当前任务'
+                    : isResponseActive
+                      ? '当前回答完成后自动发送'
+                      : '现在发送下一条'
+                }
                 onClick={() =>
                   void (canSteerCurrentRun ? steerQueuedPrompt() : drainNextQueuedPrompt())
                 }
               >
                 <SendIcon aria-hidden='true' />
-                {canSteerCurrentRun ? '继续当前任务' : '发送下一条'}
+                {isDrainingQueue
+                  ? '发送中…'
+                  : canSteerCurrentRun
+                    ? '继续当前任务'
+                    : isResponseActive
+                      ? '等待当前回答'
+                      : '现在发送'}
               </Button>
             </header>
+            {queueError ? <p className='bp-linear-agent-queue-error'>{queueError}</p> : null}
             <ol>
               {queuedPrompts.map((queued, index) => (
                 <li key={queued.id}>
@@ -1894,7 +1937,21 @@ export function AIAssistantPanel({
                         className='h-7 gap-1 px-2 text-[11px]'
                       >
                         <SendIcon aria-hidden='true' />
-                        引导
+                        继续处理
+                      </Button>
+                    ) : null}
+                    {!isResponseActive && !canSteerCurrentRun ? (
+                      <Button
+                        type='button'
+                        onClick={() => void drainQueuedPrompt(queued.id)}
+                        title='现在发送'
+                        aria-label='现在发送'
+                        size='sm'
+                        variant='ghost'
+                        className='h-7 gap-1 px-2 text-[11px]'
+                      >
+                        <SendIcon aria-hidden='true' />
+                        现在发送
                       </Button>
                     ) : null}
                     {index > 0 && (

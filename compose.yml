@@ -187,6 +187,7 @@ services:
       - app.celery_app
       - worker
       - --loglevel=info
+      - --queues=celery,assistant
       - --concurrency=${DOCPILOT_CELERY_CONCURRENCY:-2}
       - --prefetch-multiplier=1
       - --max-tasks-per-child=${DOCPILOT_CELERY_MAX_TASKS_PER_CHILD:-50}

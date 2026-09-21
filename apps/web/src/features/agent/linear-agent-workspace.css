@@ -1123,6 +1123,7 @@
 .bidpilot-linear-agent .bp-linear-agent-queue header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   color: var(--linear-text-soft);
   font-size: 11px;
@@ -1148,8 +1149,9 @@
 .bidpilot-linear-agent .bp-linear-agent-queue li {
   display: grid;
   min-width: 0;
-  grid-template-columns: 17px minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: start;
   gap: 7px;
   border-radius: 5px;
   padding: 3px 4px;
@@ -1168,6 +1170,10 @@
   font-size: 10px;
 }
 .bidpilot-linear-agent .bp-linear-agent-queue-copy {
+  grid-column: 2;
+  grid-row: 1;
+  display: block;
+  width: 100%;
   min-width: 0;
   overflow: hidden;
   border: 0;
@@ -1181,25 +1187,34 @@
   white-space: nowrap;
 }
 .bidpilot-linear-agent .bp-linear-agent-queue-actions {
+  grid-column: 2;
+  grid-row: 2;
   display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: 1px;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-.bidpilot-linear-agent .bp-linear-agent-queue li:hover .bp-linear-agent-queue-actions,
-.bidpilot-linear-agent .bp-linear-agent-queue li:focus-within .bp-linear-agent-queue-actions {
   opacity: 1;
 }
 .bidpilot-linear-agent .bp-linear-agent-queue-actions button {
-  display: grid;
-  width: 22px;
-  height: 22px;
+  display: inline-flex;
+  width: auto;
+  min-width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   place-items: center;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: var(--linear-text-soft);
+  white-space: nowrap;
+}
+.bidpilot-linear-agent .bp-linear-agent-queue-error {
+  margin: 0;
+  color: var(--linear-danger, #b33a31);
+  font-size: 11px;
+  line-height: 1.4;
 }
 .bidpilot-linear-agent .bp-linear-agent-queue-actions button:hover {
   background: var(--linear-surface-muted);

@@ -15,6 +15,7 @@ Stack:
 - web
 - api
 - worker
+- assistant-worker (dedicated low-concurrency Pi turn lane)
 - worker-beat (scheduled retention and maintenance tasks)
 - postgres
 - redis
@@ -77,15 +78,19 @@ building, and restores them if a build fails. Local development must use direct
 Node/Python processes; Docker is reserved for this VPS production topology.
 
 The production Compose profile also caps the application resource footprint:
-the Worker defaults to two Celery child processes, a prefetch multiplier of one,
-and child recycling after 50 tasks. API, Worker, Worker Beat, Pi Agent, and Web
-have explicit CPU and memory limits so a document or build spike cannot consume
+the general Worker defaults to two Celery child processes, while the dedicated
+Assistant Worker owns `worker.run_assistant_turn` on a one-process `assistant`
+queue. Both lanes use a prefetch multiplier of one and recycle children after
+50 tasks. API, Worker, Assistant Worker, Worker Beat, Pi Agent, and Web have
+explicit CPU and memory limits so a document or build spike cannot consume
 the host's entire memory budget. The defaults can be adjusted on the VPS without
 editing the repository through these variables:
 
 - `DOCPILOT_CELERY_CONCURRENCY`
 - `DOCPILOT_CELERY_MAX_TASKS_PER_CHILD`
 - `DOCPILOT_WORKER_MEMORY_LIMIT` / `DOCPILOT_WORKER_CPUS`
+- `DOCPILOT_ASSISTANT_WORKER_MEMORY_LIMIT` / `DOCPILOT_ASSISTANT_WORKER_CPUS`
+- `DOCPILOT_ASSISTANT_CELERY_CONCURRENCY`
 - `DOCPILOT_API_MEMORY_LIMIT` / `DOCPILOT_API_CPUS`
 - `DOCPILOT_PI_AGENT_MEMORY_LIMIT` / `DOCPILOT_PI_AGENT_CPUS`
 - `DOCPILOT_WORKER_BEAT_MEMORY_LIMIT` / `DOCPILOT_WORKER_BEAT_CPUS`

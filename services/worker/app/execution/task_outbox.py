@@ -34,7 +34,10 @@ def _send_task(task_name: str, *, args: list, kwargs: dict, task_id: str) -> Non
     """Load Celery only at publish time to avoid task-autodiscovery cycles."""
     from app.celery_app import celery_app
 
-    celery_app.send_task(task_name, args=args, kwargs=kwargs, task_id=task_id)
+    options = {"args": args, "kwargs": kwargs, "task_id": task_id}
+    if task_name == "worker.run_assistant_turn":
+        options["queue"] = "assistant"
+    celery_app.send_task(task_name, **options)
 
 
 def dispatch_task_outbox_event(event_id: str) -> dict[str, str]:

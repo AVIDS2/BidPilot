@@ -199,9 +199,48 @@ services:
       - app.celery_app
       - worker
       - --loglevel=info
+      - --queues=celery
       - --concurrency=${DOCPILOT_CELERY_CONCURRENCY:-2}
       - --prefetch-multiplier=1
       - --max-tasks-per-child=${DOCPILOT_CELERY_MAX_TASKS_PER_CHILD:-50}
+
+  assistant-worker:
+    build:
+      context: ./repo
+      dockerfile: services/worker/Dockerfile
+    container_name: bidpilot-assistant-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DOCPILOT_ENV: production
+      DOCPILOT_AUTH_REQUIRED: "true"
+      DOCPILOT_LANGGRAPH_CHECKPOINTER: postgres
+      DOCPILOT_AGENT_CHECKPOINTER: postgres
+      USE_LANGGRAPH: "true"
+      DOCPILOT_PI_INTERNAL_SECRET: ${DOCPILOT_PI_INTERNAL_SECRET:?DOCPILOT_PI_INTERNAL_SECRET is required}
+      DOCPILOT_INTERNAL_UNLIMITED_USAGE: ${DOCPILOT_INTERNAL_UNLIMITED_USAGE:-false}
+    depends_on:
+      checkpoints:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    cpus: "${DOCPILOT_ASSISTANT_WORKER_CPUS:-0.75}"
+    mem_limit: "${DOCPILOT_ASSISTANT_WORKER_MEMORY_LIMIT:-768m}"
+    command:
+      - /app/.venv/bin/celery
+      - -A
+      - app.celery_app
+      - worker
+      - --loglevel=info
+      - --queues=assistant
+      - --concurrency=${DOCPILOT_ASSISTANT_CELERY_CONCURRENCY:-1}
+      - --prefetch-multiplier=1
+      - --max-tasks-per-child=${DOCPILOT_ASSISTANT_CELERY_MAX_TASKS_PER_CHILD:-50}
 
   worker-beat:
     build:
