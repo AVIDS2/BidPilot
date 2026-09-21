@@ -181,6 +181,15 @@ services:
         condition: service_started
       minio:
         condition: service_started
+    command:
+      - /app/.venv/bin/celery
+      - -A
+      - app.celery_app
+      - worker
+      - --loglevel=info
+      - --concurrency=${DOCPILOT_CELERY_CONCURRENCY:-2}
+      - --prefetch-multiplier=1
+      - --max-tasks-per-child=${DOCPILOT_CELERY_MAX_TASKS_PER_CHILD:-50}
 
   web:
     build:

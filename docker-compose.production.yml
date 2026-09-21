@@ -111,6 +111,8 @@ services:
       NODE_ENV: production
       PI_AGENT_PORT: "8787"
       DOCPILOT_PI_INTERNAL_SECRET: ${DOCPILOT_PI_INTERNAL_SECRET:?DOCPILOT_PI_INTERNAL_SECRET is required}
+    cpus: "${DOCPILOT_PI_AGENT_CPUS:-0.5}"
+    mem_limit: "${DOCPILOT_PI_AGENT_MEMORY_LIMIT:-512m}"
     expose:
       - "8787"
     healthcheck:
@@ -151,6 +153,8 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:3101:8000"
+    cpus: "${DOCPILOT_API_CPUS:-1.0}"
+    mem_limit: "${DOCPILOT_API_MEMORY_LIMIT:-1g}"
     healthcheck:
       test:
         - CMD
@@ -187,6 +191,17 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+    cpus: "${DOCPILOT_WORKER_CPUS:-1.5}"
+    mem_limit: "${DOCPILOT_WORKER_MEMORY_LIMIT:-1536m}"
+    command:
+      - /app/.venv/bin/celery
+      - -A
+      - app.celery_app
+      - worker
+      - --loglevel=info
+      - --concurrency=${DOCPILOT_CELERY_CONCURRENCY:-2}
+      - --prefetch-multiplier=1
+      - --max-tasks-per-child=${DOCPILOT_CELERY_MAX_TASKS_PER_CHILD:-50}
 
   worker-beat:
     build:
@@ -203,6 +218,8 @@ services:
       DOCPILOT_AGENT_CHECKPOINTER: postgres
       DOCPILOT_INTERNAL_UNLIMITED_USAGE: ${DOCPILOT_INTERNAL_UNLIMITED_USAGE:-false}
     command: ["/app/.venv/bin/celery", "-A", "app.celery_app", "beat", "--loglevel=info"]
+    cpus: "${DOCPILOT_WORKER_BEAT_CPUS:-0.25}"
+    mem_limit: "${DOCPILOT_WORKER_BEAT_MEMORY_LIMIT:-256m}"
     depends_on:
       checkpoints:
         condition: service_completed_successfully
@@ -226,6 +243,8 @@ services:
       NODE_ENV: production
       DOCPILOT_API_URL: http://api:8000
       NEXT_PUBLIC_APP_URL: ${DOCPILOT_APP_URL:-https://bidpilot.rglens.com}
+    cpus: "${DOCPILOT_WEB_CPUS:-0.75}"
+    mem_limit: "${DOCPILOT_WEB_MEMORY_LIMIT:-512m}"
     ports:
       - "127.0.0.1:3100:3000"
 

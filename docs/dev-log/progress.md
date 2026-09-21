@@ -1,5 +1,18 @@
 # Progress Log
 
+## 2026-09-21: cap production worker resource usage
+
+- Production Compose now runs the Celery Worker with two child processes by
+  default, one-task prefetch, and bounded child recycling. The same explicit
+  worker command is used by the local Compose reference and the Worker image
+  default, so direct container starts do not silently scale to the host CPU count.
+- API, Worker, Worker Beat, Pi Agent, and Web now have configurable Compose CPU
+  and memory limits. The defaults are sized for the shared 8GB VPS and can be
+  overridden in the server-only `.env` without committing resource policy.
+- Added production Compose contract assertions for the concurrency and resource
+  settings. Deployment still requires sequential image builds with application
+  containers stopped during the build phase.
+
 ## 2026-09-21: align automatic execution and trace presentation
 
 - `full_access` / `自动执行` now allows registered capabilities, including

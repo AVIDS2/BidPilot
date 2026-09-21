@@ -71,10 +71,25 @@ build on the reviewed local commit instead of pulling an older remote branch;
 the normal invocation still fast-forwards from `origin/master`.
 
 The production script builds application images sequentially because the pilot
-VPS has limited memory and no swap. It keeps PostgreSQL, Redis, and MinIO up,
-stops only the application containers while building, and restores them if a
-build fails. Local development must use direct Node/Python processes; Docker is
-reserved for this VPS production topology.
+VPS has limited memory and must not depend on swap as a build strategy. It keeps
+PostgreSQL, Redis, and MinIO up, stops only the application containers while
+building, and restores them if a build fails. Local development must use direct
+Node/Python processes; Docker is reserved for this VPS production topology.
+
+The production Compose profile also caps the application resource footprint:
+the Worker defaults to two Celery child processes, a prefetch multiplier of one,
+and child recycling after 50 tasks. API, Worker, Worker Beat, Pi Agent, and Web
+have explicit CPU and memory limits so a document or build spike cannot consume
+the host's entire memory budget. The defaults can be adjusted on the VPS without
+editing the repository through these variables:
+
+- `DOCPILOT_CELERY_CONCURRENCY`
+- `DOCPILOT_CELERY_MAX_TASKS_PER_CHILD`
+- `DOCPILOT_WORKER_MEMORY_LIMIT` / `DOCPILOT_WORKER_CPUS`
+- `DOCPILOT_API_MEMORY_LIMIT` / `DOCPILOT_API_CPUS`
+- `DOCPILOT_PI_AGENT_MEMORY_LIMIT` / `DOCPILOT_PI_AGENT_CPUS`
+- `DOCPILOT_WORKER_BEAT_MEMORY_LIMIT` / `DOCPILOT_WORKER_BEAT_CPUS`
+- `DOCPILOT_WEB_MEMORY_LIMIT` / `DOCPILOT_WEB_CPUS`
 
 Pi releases are fail-closed: when `DOCPILOT_ASSISTANT_ENGINE=pi`, deployment
 must use the complete production Compose topology, including the healthy

@@ -28,4 +28,4 @@ WORKDIR /app/services/worker
 
 ENV PYTHONPATH=/app/packages
 
-CMD ["/app/.venv/bin/celery", "-A", "app.celery_app", "worker", "--loglevel=info"]
+CMD ["/app/.venv/bin/celery", "-A", "app.celery_app", "worker", "--loglevel=info", "--concurrency=2", "--prefetch-multiplier=1", "--max-tasks-per-child=50"]

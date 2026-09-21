@@ -384,6 +384,11 @@ def test_production_compose_reads_infrastructure_credentials_from_server_env() -
     assert "condition: service_healthy" in compose
     worker_section = compose.split("  worker:\n", 1)[1].split("  worker-beat:", 1)[0]
     assert 'USE_LANGGRAPH: "true"' in worker_section
+    assert 'cpus: "${DOCPILOT_WORKER_CPUS:-1.5}"' in worker_section
+    assert 'mem_limit: "${DOCPILOT_WORKER_MEMORY_LIMIT:-1536m}"' in worker_section
+    assert "--concurrency=${DOCPILOT_CELERY_CONCURRENCY:-2}" in worker_section
+    assert "--prefetch-multiplier=1" in worker_section
+    assert "--max-tasks-per-child=${DOCPILOT_CELERY_MAX_TASKS_PER_CHILD:-50}" in worker_section
     assert "POSTGRES_PASSWORD: bidpilot" not in compose
     assert "MINIO_ROOT_PASSWORD: bidpilot123" not in compose
 
