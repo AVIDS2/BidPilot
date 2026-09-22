@@ -71,6 +71,29 @@ and run the same script with `DOCPILOT_SKIP_PULL=1`. This keeps the production
 build on the reviewed local commit instead of pulling an older remote branch;
 the normal invocation still fast-forwards from `origin/master`.
 
+### SSH handshake troubleshooting
+
+If TCP port 22 is reachable but SSH stops before printing the server banner,
+check the local route before diagnosing the VPS. A transparent proxy or a
+virtual adapter can accept the socket and then discard the SSH handshake while
+HTTPS continues to work. Compare the source interface with:
+
+```powershell
+Test-NetConnection 38.14.254.50 -Port 22 -InformationLevel Detailed
+```
+
+When a virtual adapter is selected, bind SSH to the physical network interface
+address for the deployment session:
+
+```powershell
+ssh -F NUL -b <physical-interface-ip> root@38.14.254.50
+```
+
+Do not treat a successful TCP probe alone as an SSH health check; the decisive
+check is receiving an `SSH-2.0-OpenSSH...` banner and completing public-key
+authentication. Keep deployment to one SSH session while a production build is
+running on the resource-constrained VPS.
+
 The production script builds application images sequentially because the pilot
 VPS has limited memory and must not depend on swap as a build strategy. It keeps
 PostgreSQL, Redis, and MinIO up, stops only the application containers while
