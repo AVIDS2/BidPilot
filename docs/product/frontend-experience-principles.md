@@ -103,6 +103,31 @@ The following surfaces are deliberately secondary:
 - provider settings, webhooks, members, billing, and memory controls belong in
   a settings center with task-oriented labels.
 
+### AI knowledge workspace research (2026-09-22)
+
+The knowledge surface was reworked after comparing mature AI knowledge products,
+not generic wiki dashboards:
+
+- [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm) (MIT) supplies the
+  closest product pattern for an AI workspace: a scoped knowledge space,
+  source-backed retrieval, and an agent-facing context boundary.
+- [RAGFlow](https://github.com/infiniflow/ragflow) (Apache-2.0) is the reference
+  for document-first ingestion, parsing/index status, chunk citations, and
+  retrieval quality. Its full deployment is too heavy for the current pilot
+  VPS, so BidPilot keeps its own parser and pgvector path.
+- [Dify Knowledge API](https://docs.dify.ai/en/api-reference/guides/knowledge)
+  is the reference for the product contract: a knowledge collection manages
+  documents and indexing, then exposes retrieval results with source metadata.
+- FastGPT was reviewed for Chinese enterprise knowledge-base workflows, but its
+  repository license is not a permissive OSS license for direct source reuse.
+
+The implementation decision is to adopt the mature AI knowledge interaction
+model while preserving BidPilot's control plane: the page is a three-pane
+workspace with project scope, a scan-friendly source table, and an optional
+retrieval/status inspector. It calls the existing `bundles`, `documents`,
+`retrieval`, and governed `memory` APIs. No second database, shadow vector
+store, or chat-only knowledge surface is introduced.
+
 No page should explain the implementation in its default copy. A user needs to
 know what happened, what it affects, and what they can do next. Terms such as
 `queued`, `queue`, `Mem0`, `checkpointer`, `Store`, `RuntimeRun`, and `embedding`
