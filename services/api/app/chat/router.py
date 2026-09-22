@@ -154,6 +154,7 @@ def get_chat_history(
         items=[
             ChatMessageRead(
                 id=m.id,
+                durable_id=m.id,
                 role=m.role,
                 content=m.content,
                 created_at=m.created_at.isoformat() if m.created_at else None,
@@ -202,6 +203,7 @@ def fork_chat_conversation(
             conversation_id=conversation_id,
             user_id=user.id,
             checkpoint_message_id=payload.checkpoint_message_id,
+            checkpoint_content=payload.checkpoint_content,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -219,6 +221,7 @@ def fork_chat_conversation(
         items=[
             ChatMessageRead(
                 id=m.id,
+                durable_id=m.id,
                 role=m.role,
                 content=m.content,
                 created_at=m.created_at.isoformat() if m.created_at else None,

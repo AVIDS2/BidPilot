@@ -49,7 +49,7 @@
     "needs_input": "Waiting for input",
     "needs_confirmation": "Waiting for your confirmation",
     "executing_tool": "Executing tool",
-    "running_workflow": "Running workflow",
+    "running_workflow": "Working on project",
     "completed": "Done",
     "failed": "Failed"
   },
@@ -60,11 +60,11 @@
     "typedConfirmationLabel": "Type the full name to confirm",
     "typedConfirmationPlaceholder": "Full name",
     "typedConfirmationHint": "Type: {{value}}",
-    "workflowStarted": "Workflow started",
-    "workflowQueued": "Waiting for workflow progress",
-    "nodesCompleted": "{{completed}} of {{total}} steps completed",
+    "workflowStarted": "Working on your task",
+    "workflowQueued": "Getting ready",
+    "nodesCompleted": "{{completed}} of {{total}} steps",
     "runId": "Run ID",
-    "currentNode": "Current node: {{node}}",
+    "currentNode": "Working on: {{node}}",
     "review": "Review: {{result}} / {{score}}",
     "reviewPassed": "passed",
     "reviewFailed": "failed",
@@ -85,18 +85,18 @@
   },
   "activity": {
     "summaryTools": "Ran {{tools}} tools",
-    "summaryWithWorkflows": "Ran {{tools}} tools, started {{workflows}} workflows",
+    "summaryWithWorkflows": "Processed {{tools}} actions, advanced {{workflows}} project flows",
     "summarySingleRunning": "{{label}} running",
     "summarySingleDone": "{{label}} completed",
     "summaryCompletedWord": "completed",
     "summarySingleFailed": "{{label}} failed",
     "summarySingleCancelled": "{{label}} cancelled",
-    "summaryCancelled": "Workflow cancelled",
+    "summaryCancelled": "Processing stopped",
     "summaryDone": "Processed {{tools}} actions",
-    "summaryDoneWithWorkflows": "Processed {{tools}} actions, started {{workflows}} workflows",
+    "summaryDoneWithWorkflows": "Processed {{tools}} actions, advanced {{workflows}} project flows",
     "summaryDoneWorkflowsOnly": "Started {{workflows}} workflows",
     "summaryRunning": "Processing {{tools}} actions",
-    "summaryRunningWithWorkflows": "Processing {{tools}} actions, started {{workflows}} workflows",
+    "summaryRunningWithWorkflows": "Processing {{tools}} items, advancing {{workflows}} project flows",
     "summaryRunningWorkflowsOnly": "Running {{workflows}} workflows",
     "taskSummary": "Task activity · {{turns}} turns",
     "turnLabel": "Turn {{index}}",
@@ -106,8 +106,8 @@
     "showToolDetails": "Show {{label}} details",
     "hideToolDetails": "Hide {{label}} details",
     "countTools": "{{tools}} actions",
-    "countWithWorkflows": "{{tools}} actions · {{workflows}} workflows",
-    "workflowProgress": "Workflow steps",
+    "countWithWorkflows": "{{tools}} actions · {{workflows}} project flows",
+    "workflowProgress": "Progress",
     "providerNeedsAttention": "Model configuration needs attention",
     "status": {
       "pending": "pending",
@@ -142,7 +142,7 @@
       "start_draft_section": "Start section draft",
       "write_section": "Write section content",
       "start_redraft_section": "Redraft section",
-      "propose_memory_graph": "Generate entity-relation proposal",
+      "propose_memory_graph": "Organize related knowledge",
       "retry_run": "Retry task",
       "export_deliverable": "Export deliverable",
       "generate_readiness_pack": "Generate bid readiness pack",
@@ -151,14 +151,14 @@
       "fetch_url_to_project": "Save webpage to project",
       "search_bid_wiki": "Search Bid Wiki",
       "list_knowledge_portfolio": "View knowledge portfolio",
-      "propose_memory": "Save personal preference",
-      "forget_memory": "Forget memory",
+      "propose_memory": "Remember this",
+      "forget_memory": "Forget this",
       "search_knowledge": "Search knowledge base",
       "upload_document": "Upload document",
       "delete_project": "Delete project"
     },
     "workflow": {
-      "default": "Workflow"
+      "default": "Project work"
     },
     "node": {
       "document_analyzer": "Analyze materials",
@@ -171,13 +171,13 @@
       "exporter": "Generate deliverable",
       "supervisor": "Coordinate task",
       "rfp_parser": "Parse requirements",
-      "memory_context": "Load memory context",
-      "knowledge_retriever": "Retrieve evidence",
+      "memory_context": "Use existing information",
+      "knowledge_retriever": "Find supporting details",
       "content_plan": "Plan content",
       "quality_reviewer": "Review quality",
       "human_approval": "Wait for approval",
       "persist_result": "Save result",
-      "memory_proposals": "Propose memory updates"
+      "memory_proposals": "Organize what to remember"
     },
     "field": {
       "route": "Page",
@@ -194,8 +194,8 @@
       "runCreated": "Run created",
       "completed": "Completed",
       "processing": "Processing",
-      "cancelled": "Workflow cancelled",
-      "cancellationRequested": "Cancellation requested"
+      "cancelled": "Processing stopped",
+      "cancellationRequested": "Stop requested"
     },
     "download": {
       "docx": "Download DOCX",
@@ -203,10 +203,10 @@
       "xlsx": "Download XLSX",
       "failed": "Download failed. Please try again."
     },
-    "cancelWorkflow": "Cancel workflow",
-    "cancelling": "Cancelling...",
-    "cancelFailed": "Unable to request cancellation. Please try again.",
-    "cancellationRequested": "Cancellation requested. Stopping at a safe boundary.",
+    "cancelWorkflow": "Stop processing",
+    "cancelling": "Stopping…",
+    "cancelFailed": "Unable to stop processing. Please try again.",
+    "cancellationRequested": "Stop requested. The task will stop at a safe point.",
     "providerRetry": "The model service is temporarily unavailable. Retrying {{attempt}}/{{maxAttempts}}.",
     "openProviderSettings": "Open model settings",
     "failure": {

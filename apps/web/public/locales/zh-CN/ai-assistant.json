@@ -49,7 +49,7 @@
     "needs_input": "等待补充信息",
     "needs_confirmation": "等待你的确认",
     "executing_tool": "正在调用工具",
-    "running_workflow": "工作流运行中",
+    "running_workflow": "正在处理项目",
     "completed": "已完成",
     "failed": "执行失败"
   },
@@ -60,11 +60,11 @@
     "typedConfirmationLabel": "输入完整名称以确认",
     "typedConfirmationPlaceholder": "完整名称",
     "typedConfirmationHint": "请输入：{{value}}",
-    "workflowStarted": "工作流已启动",
-    "workflowQueued": "正在准备下一步",
-    "nodesCompleted": "已完成 {{completed}} / {{total}} 个步骤",
+    "workflowStarted": "正在处理你的任务",
+    "workflowQueued": "正在准备",
+    "nodesCompleted": "已完成 {{completed}} / {{total}} 步",
     "runId": "任务编号",
-    "currentNode": "当前步骤：{{node}}",
+    "currentNode": "正在处理：{{node}}",
     "review": "审核：{{result}} / {{score}}",
     "reviewPassed": "通过",
     "reviewFailed": "未通过",
@@ -85,18 +85,18 @@
   },
   "activity": {
     "summaryTools": "已运行 {{tools}} 个工具",
-    "summaryWithWorkflows": "已运行 {{tools}} 个工具，已启动 {{workflows}} 个工作流",
+    "summaryWithWorkflows": "已完成 {{tools}} 项处理，推进 {{workflows}} 个项目流程",
     "summarySingleRunning": "正在{{label}}",
     "summarySingleDone": "{{label}}已完成",
     "summaryCompletedWord": "已完成",
     "summarySingleFailed": "{{label}}失败",
     "summarySingleCancelled": "{{label}}已取消",
-    "summaryCancelled": "工作流已取消",
+    "summaryCancelled": "当前处理已停止",
     "summaryDone": "已完成 {{tools}} 项工作",
-    "summaryDoneWithWorkflows": "已完成 {{tools}} 项工作，推进 {{workflows}} 个项目流程",
+    "summaryDoneWithWorkflows": "已完成 {{tools}} 项处理，推进 {{workflows}} 个项目流程",
     "summaryDoneWorkflowsOnly": "已推进 {{workflows}} 个项目流程",
     "summaryRunning": "正在处理 {{tools}} 项工作",
-    "summaryRunningWithWorkflows": "正在处理 {{tools}} 项工作，推进 {{workflows}} 个项目流程",
+    "summaryRunningWithWorkflows": "正在处理 {{tools}} 项内容，推进 {{workflows}} 个项目流程",
     "summaryRunningWorkflowsOnly": "正在推进 {{workflows}} 个项目流程",
     "taskSummary": "工作进展 · {{turns}} 个阶段",
     "turnLabel": "第 {{index}} 个阶段",
@@ -106,8 +106,8 @@
     "showToolDetails": "查看 {{label}} 的详细信息",
     "hideToolDetails": "收起 {{label}} 的详细信息",
     "countTools": "{{tools}} 项操作",
-    "countWithWorkflows": "{{tools}} 项操作 · {{workflows}} 个工作流",
-    "workflowProgress": "工作流步骤",
+    "countWithWorkflows": "{{tools}} 项处理 · {{workflows}} 个项目流程",
+    "workflowProgress": "处理步骤",
     "providerNeedsAttention": "模型配置需要处理",
     "status": {
       "pending": "等待中",
@@ -142,7 +142,7 @@
       "start_draft_section": "启动章节起草",
       "write_section": "写入章节内容",
       "start_redraft_section": "重新起草章节",
-      "propose_memory_graph": "生成实体关系提案",
+      "propose_memory_graph": "整理相关知识",
       "retry_run": "重试任务",
       "export_deliverable": "导出交付物",
       "generate_readiness_pack": "生成投标准备度包",
@@ -151,14 +151,14 @@
       "fetch_url_to_project": "下载网页到项目",
       "search_bid_wiki": "查询项目知识",
       "list_knowledge_portfolio": "查看知识资产概览",
-      "propose_memory": "保存个人偏好",
-      "forget_memory": "删除个人偏好",
+      "propose_memory": "记住这条信息",
+      "forget_memory": "忘记这条信息",
       "search_knowledge": "检索知识库",
       "upload_document": "上传文档",
       "delete_project": "删除项目"
     },
     "workflow": {
-      "default": "工作流"
+      "default": "项目处理"
     },
     "node": {
       "document_analyzer": "分析资料",
@@ -171,13 +171,13 @@
       "exporter": "生成交付物",
       "supervisor": "协调任务",
       "rfp_parser": "解析需求",
-      "memory_context": "加载当前项目知识",
-      "knowledge_retriever": "检索证据",
+      "memory_context": "参考已有信息",
+      "knowledge_retriever": "查找相关依据",
       "content_plan": "规划内容",
       "quality_reviewer": "质量审核",
       "human_approval": "等待审批",
       "persist_result": "保存结果",
-      "memory_proposals": "生成记忆提案"
+      "memory_proposals": "整理可记住的信息"
     },
     "field": {
       "route": "页面",
@@ -194,8 +194,8 @@
       "runCreated": "任务已开始",
       "completed": "已完成",
       "processing": "处理中",
-      "cancelled": "工作流已取消",
-      "cancellationRequested": "已收到取消请求"
+      "cancelled": "当前处理已停止",
+      "cancellationRequested": "已收到停止请求"
     },
     "download": {
       "docx": "下载 DOCX",
@@ -203,10 +203,10 @@
       "xlsx": "下载 XLSX",
       "failed": "下载失败，请重试。"
     },
-    "cancelWorkflow": "取消工作流",
-    "cancelling": "正在取消...",
-    "cancelFailed": "暂时无法取消工作流，请重试。",
-    "cancellationRequested": "已收到取消请求，将在安全边界停止工作流。",
+    "cancelWorkflow": "停止当前处理",
+    "cancelling": "正在停止…",
+    "cancelFailed": "暂时无法停止当前处理，请重试。",
+    "cancellationRequested": "已收到停止请求，将在安全节点停止。",
     "providerRetry": "模型服务暂时不可用，正在进行第 {{attempt}}/{{maxAttempts}} 次重试。",
     "openProviderSettings": "打开模型服务设置",
     "failure": {

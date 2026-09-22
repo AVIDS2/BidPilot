@@ -2127,6 +2127,7 @@ export interface PiRuntimeContract {
 // Chat
 export interface ChatMessageRead {
   id: string;
+  durable_id?: string | null;
   role: 'user' | 'assistant';
   content: string;
   created_at: string | null;
@@ -2174,10 +2175,17 @@ export function getChatConversationMessages(conversationId: string) {
   return request<ChatHistoryRead>(`/chat/conversations/${conversationId}/messages`);
 }
 
-export function forkChatConversation(conversationId: string, checkpointMessageId: string) {
+export function forkChatConversation(
+  conversationId: string,
+  checkpointMessageId: string,
+  checkpointContent?: string
+) {
   return request<ChatConversationForkRead>(`/chat/conversations/${conversationId}/fork`, {
     method: 'POST',
-    body: JSON.stringify({ checkpoint_message_id: checkpointMessageId })
+    body: JSON.stringify({
+      checkpoint_message_id: checkpointMessageId,
+      checkpoint_content: checkpointContent
+    })
   });
 }
 

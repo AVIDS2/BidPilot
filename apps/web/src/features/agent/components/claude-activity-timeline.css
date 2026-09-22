@@ -165,26 +165,14 @@
   }
 }
 
-@keyframes claude-timeline-task-breathe {
-  0%,
-  100% {
-    background-position: 100% 0;
-    box-shadow: inset 2px 0 0 color-mix(in oklch, var(--primary) 18%, transparent);
-  }
-  50% {
-    background-position: 0 0;
-    box-shadow: inset 2px 0 0 color-mix(in oklch, var(--primary) 72%, transparent);
-  }
-}
-
 /* The event itself carries the live signal. Keep generic status words out of
    the chronology and animate only the label belonging to the active row. */
 @keyframes claude-timeline-live-label {
   from {
-    background-position: 0% 50%;
+    background-position: 100% 50%;
   }
   to {
-    background-position: 100% 50%;
+    background-position: 0% 50%;
   }
 }
 

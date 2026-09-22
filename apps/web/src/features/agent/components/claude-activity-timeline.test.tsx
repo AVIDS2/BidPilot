@@ -200,7 +200,7 @@ describe('ClaudeActivityTimeline', () => {
     expect(screen.queryByText('工具输入与返回')).not.toBeInTheDocument();
   });
 
-  it('shows a concrete failure message and stable error code', () => {
+  it('shows a concrete customer-facing failure message without internal codes', () => {
     const failedTool: AssistantExecutionItem = {
       id: 'failed-download',
       kind: 'tool',
@@ -218,7 +218,7 @@ describe('ClaudeActivityTimeline', () => {
     if (detail) fireEvent.click(detail);
 
     expect(screen.getByText('远程服务器拒绝了附件下载请求。')).toBeInTheDocument();
-    expect(screen.getByText('错误代码：remote_download_forbidden')).toBeInTheDocument();
+    expect(screen.queryByText('错误代码：remote_download_forbidden')).not.toBeInTheDocument();
   });
 
   it('opens a section workflow in the conversation canvas', () => {

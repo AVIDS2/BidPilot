@@ -288,6 +288,33 @@ class TestChatService:
                 checkpoint_message_id=assistant_message.id,
             )
 
+    def test_fork_conversation_resolves_a_stale_checkpoint_id_by_user_content(
+        self,
+        test_db,
+        chat_test_user_id,
+    ) -> None:
+        from app.chat.service import (
+            create_conversation,
+            fork_conversation_from_checkpoint,
+            save_message,
+        )
+
+        source = create_conversation(test_db, chat_test_user_id, None)
+        save_message(test_db, source.id, "user", "先查看项目")
+        checkpoint = save_message(test_db, source.id, "user", "重新检查资料")
+        save_message(test_db, source.id, "assistant", "我会检查资料。")
+
+        branch, copied = fork_conversation_from_checkpoint(
+            test_db,
+            conversation_id=source.id,
+            user_id=chat_test_user_id,
+            checkpoint_message_id="stale-live-message-id",
+            checkpoint_content=checkpoint.content,
+        )
+
+        assert branch.checkpoint_message_id == checkpoint.id
+        assert [message.content for message in copied] == ["先查看项目"]
+
     def test_stream_chat_response_redacts_provider_exception(
         self,
         test_db,

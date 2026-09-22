@@ -1210,10 +1210,10 @@ function handleAssistantSseEvent(
         typeof parsed.summary === 'string' && parsed.summary.trim()
           ? parsed.summary
           : titles.length > 0
-            ? `执行计划：${titles.join('、')}。`
-            : '已更新执行计划。',
+            ? `接下来处理：${titles.join('、')}。`
+            : '已安排接下来的处理步骤。',
       turnId: typeof parsed.turn_id === 'string' ? parsed.turn_id : undefined,
-      title: '执行计划',
+      title: '处理步骤',
       source: 'harness'
     });
     dispatch({
@@ -2220,7 +2220,7 @@ export function isAssistantBusy(status: AssistantStatus) {
 function toStoredChatMessages(items: ChatMessageRead[]): ChatMessage[] {
   return items.map((item, index) => ({
     id: item.id,
-    durableId: item.id,
+    durableId: item.durable_id ?? item.id,
     runtimeRunId: item.runtime_run_id ?? undefined,
     role: item.role,
     content: item.content,
@@ -3347,8 +3347,35 @@ export function AIAssistantProvider({
         return;
       }
 
+      let branch: Awaited<ReturnType<typeof forkChatConversation>>;
       try {
-        const branch = await forkChatConversation(sourceConversationId, checkpointMessageId);
+        branch = await forkChatConversation(sourceConversationId, checkpointMessageId, nextContent);
+      } catch (error) {
+        // Reconcile a stale live id against the persisted message before
+        // showing an error. This keeps retry usable after a refresh or a
+        // reconnect that restored the transcript from a different response.
+        try {
+          const history = await getChatConversationMessages(sourceConversationId);
+          const fallback = [...history.items]
+            .reverse()
+            .find((item) => item.role === 'user' && item.content.trim() === nextContent);
+          if (!fallback) throw error;
+          branch = await forkChatConversation(
+            sourceConversationId,
+            fallback.durable_id ?? fallback.id,
+            nextContent
+          );
+        } catch (retryError) {
+          console.error('Failed to create assistant conversation branch:', retryError);
+          dispatch({
+            type: 'SET_SESSION_ERROR',
+            message: '这条消息暂时无法重新开始。会话内容没有丢失，请刷新后再试。'
+          });
+          return;
+        }
+      }
+
+      try {
         const messages = toStoredChatMessages(branch.items);
         setSessionStoredValue('lastAssistantConversationId', branch.conversation.id);
         currentConversationIdRef.current = branch.conversation.id;
@@ -3356,15 +3383,21 @@ export function AIAssistantProvider({
         dispatch({ type: 'REPLACE_MESSAGES', messages });
         dispatch({ type: 'SET_STATUS', status: 'idle' });
         dispatch({ type: 'OPEN', mode: 'panel' });
-        await sendAssistantRequest(nextContent, {
+        const accepted = await sendAssistantRequest(nextContent, {
           displayContent: nextContent,
           conversationId: branch.conversation.id
         });
+        if (!accepted) {
+          dispatch({
+            type: 'SET_SESSION_ERROR',
+            message: '新的对话分支已经准备好，但消息还没有发出，请重新发送。'
+          });
+        }
       } catch (error) {
-        console.error('Failed to create assistant checkpoint branch:', error);
+        console.error('Failed to send assistant branch message:', error);
         dispatch({
           type: 'SET_SESSION_ERROR',
-          message: '无法从该检查点创建新对话，请稍后重试。'
+          message: '新的对话分支已经准备好，但消息还没有发出，请重新发送。'
         });
       }
     },

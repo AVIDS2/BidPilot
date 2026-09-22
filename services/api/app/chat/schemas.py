@@ -26,6 +26,7 @@ class ChatMessageRead(ChatMessage):
     """A persisted message exposed to the conversation surface."""
 
     id: str
+    durable_id: str | None = None
     created_at: str | None
     runtime_run_id: str | None = None
     attachments: list[ChatMessageAttachmentRead] = []
@@ -62,6 +63,7 @@ class ChatConversationForkRequest(BaseModel):
     """Create a new durable branch immediately before a user checkpoint."""
 
     checkpoint_message_id: str
+    checkpoint_content: str | None = None
 
 
 class ChatHistoryRead(BaseModel):

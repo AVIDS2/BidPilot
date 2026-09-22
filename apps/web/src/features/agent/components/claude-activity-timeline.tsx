@@ -394,7 +394,7 @@ function ResultFacts({ item }: { item: AssistantExecutionItem }) {
   const error =
     publicText(item.errorMessage) ||
     (item.status === 'failed' ? displaySummary(item, () => '') : '');
-  if (!facts.length && !error && !item.errorCode) return null;
+  if (!facts.length && !error) return null;
   return (
     <div
       className={`cr-result-facts${item.status === 'failed' ? ' is-failed' : ''}`}
@@ -411,7 +411,6 @@ function ResultFacts({ item }: { item: AssistantExecutionItem }) {
         </dl>
       )}
       {error && <p>{error}</p>}
-      {item.errorCode && <small>错误代码：{item.errorCode}</small>}
     </div>
   );
 }

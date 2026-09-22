@@ -1,5 +1,16 @@
 # Progress Log
 
+## 2026-09-22: product-facing assistant cleanup
+
+- Corrected the live-response gradient to move continuously from the visual
+  left edge to the right edge, then restart from the left without bouncing back.
+- Checkpoint retry now returns durable message IDs, accepts a content fallback
+  for stale live IDs, and distinguishes branch creation failure from a message
+  that was not accepted by the new branch.
+- Removed run IDs and raw error codes from ordinary execution cards, and
+  replaced internal runtime wording such as Skill, entity-relation proposal,
+  workflow, and memory proposal with customer-facing task language.
+
 ## 2026-09-21: cap production worker resource usage
 
 - Production Compose now runs the Celery Worker with two child processes by

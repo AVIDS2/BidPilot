@@ -452,6 +452,7 @@ def fork_conversation_from_checkpoint(
     conversation_id: str,
     user_id: str,
     checkpoint_message_id: str,
+    checkpoint_content: str | None = None,
 ) -> tuple[ChatConversation, list[ChatMessageModel]]:
     """Create a durable branch immediately before one of the user's messages."""
     source = get_conversation(db, conversation_id, user_id)
@@ -467,6 +468,17 @@ def fork_conversation_from_checkpoint(
         ),
         None,
     )
+    if checkpoint_index is None and checkpoint_content:
+        normalized_content = checkpoint_content.strip()
+        checkpoint_index = next(
+            (
+                index
+                for index in range(len(source_messages) - 1, -1, -1)
+                if source_messages[index].role == "user"
+                and source_messages[index].content.strip() == normalized_content
+            ),
+            None,
+        )
     if checkpoint_index is None:
         raise ValueError("Checkpoint message does not belong to this conversation")
 

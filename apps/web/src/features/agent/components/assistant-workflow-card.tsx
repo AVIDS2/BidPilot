@@ -26,7 +26,6 @@ function nodeIcon(node: WorkflowNodeProgress) {
 
 export function AssistantWorkflowCard({ item }: { item: AssistantExecutionItem }) {
   const { t } = useTranslation('ai-assistant');
-  const runId = item.runId || (typeof item.result?.run_id === 'string' ? item.result.run_id : null);
   const nodes = item.nodes ?? [];
   const completedCount = nodes.filter((node) => node.status === 'completed').length;
   const progressLabel =
@@ -91,17 +90,6 @@ export function AssistantWorkflowCard({ item }: { item: AssistantExecutionItem }
                   background: tone
                 }}
               />
-            </div>
-          )}
-          {runId && (
-            <div
-              className='mt-3 truncate rounded-lg px-2.5 py-1.5 font-mono text-[10px]'
-              style={{
-                background: 'color-mix(in oklab, var(--background) 78%, transparent)',
-                color: 'var(--muted-foreground)'
-              }}
-            >
-              {t('execution.runId')}: {runId}
             </div>
           )}
           {item.currentNode && (

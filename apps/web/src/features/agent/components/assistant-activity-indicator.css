@@ -12,15 +12,14 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  animation: assistant-thinking-shimmer 2.2s ease-in-out infinite;
+  animation: assistant-thinking-shimmer 2.2s linear infinite;
 }
 
 @keyframes assistant-thinking-shimmer {
-  0%,
-  100% {
+  from {
     background-position: 100% 50%;
   }
-  50% {
+  to {
     background-position: 0% 50%;
   }
 }
